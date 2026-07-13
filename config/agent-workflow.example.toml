@@ -1,0 +1,26 @@
+[paths]
+source_root = "~/src"
+worktree_root = "~/.local/share/agent-workflow/worktrees"
+prompt_pack_root = "~/prompt-packs"
+state_root = "~/.local/state/agent-workflow"
+
+[terminal]
+backend = "tmux"
+stall_minutes = 10
+capture_lines = 50
+
+[git]
+branch_prefix = "impl/"
+require_clean_source = true
+preserve_failed_worktrees = true
+
+[pack]
+archive_level = 19
+write_sha256 = true
+validate_before_archive = true
+
+[executors.codex]
+command = ["codex", "exec", "--full-auto", "-"]
+
+[executors.claude]
+command = ["claude", "--print"]

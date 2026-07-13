@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/source-baseline/v1",
+  "type": "object",
+  "required": ["schema", "generated_at", "components"],
+  "properties": {
+    "schema": {"const": "agent-workflow/source-baseline/v1"},
+    "generated_at": {"type": "string"},
+    "components": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["path", "head", "branch", "dirty"],
+        "properties": {
+          "path": {"type": "string"},
+          "head": {"type": "string"},
+          "branch": {"type": "string"},
+          "dirty": {"type": "boolean"}
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "schema": "agent-workflow/source-baseline/v1",
+  "generated_at": "",
+  "components": {
+    "primary": {
+      "path": "",
+      "head": "",
+      "branch": "",
+      "dirty": false
+    }
+  }
+}

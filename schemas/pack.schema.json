@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/pack/v1",
+  "type": "object",
+  "required": ["schema", "pack_id", "workflow"],
+  "properties": {
+    "schema": {"const": "agent-workflow/pack/v1"},
+    "pack_id": {"type": "string"},
+    "workflow": {
+      "type": "object",
+      "required": ["name", "minimum_version", "terminal_backend"],
+      "properties": {
+        "name": {"const": "agent-workflow"},
+        "minimum_version": {"type": "string"},
+        "terminal_backend": {"const": "tmux"}
+      }
+    }
+  }
+}

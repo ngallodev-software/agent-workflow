@@ -1,0 +1,8 @@
+phase: 1
+name: example-phase-1
+mandatory_order: [P1-00]
+tasks:
+  - id: P1-00
+    tier: C
+    session: example-p1-00-baseline
+    prompt: tickets/P1-00-baseline.md

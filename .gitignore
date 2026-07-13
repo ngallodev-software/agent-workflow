@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+.coverage
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.agent-workflow/
+.delegations/
+*.tar.zst
+*.sha256
+scripts.orig/	
+templates.orig/
