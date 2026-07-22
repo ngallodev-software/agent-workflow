@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/lifecycle-receipt/v1",
+  "type": "object",
+  "required": ["schema", "session_id", "action", "actor", "reason", "created_at", "final_receipt_sha256"],
+  "properties": {
+    "schema": {"const": "agent-workflow/lifecycle-receipt/v1"},
+    "session_id": {"type": "string"},
+    "action": {"enum": ["reviewed", "accepted", "rejected"]},
+    "actor": {"type": "string", "minLength": 1},
+    "reason": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string"},
+    "final_receipt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "score_receipt_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+    "revision": {"type": ["string", "null"]},
+    "reviewer_independent": {"type": "boolean"}
+  },
+  "additionalProperties": false
+}

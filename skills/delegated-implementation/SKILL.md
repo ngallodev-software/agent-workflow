@@ -1,3 +1,8 @@
+---
+name: delegated-implementation
+description: Execute bounded implementation tickets from an agent-workflow prompt pack with strict scope, evidence, and test controls.
+---
+
 # Delegated implementation
 
 Use this skill when executing a bounded implementation ticket from an agent-workflow prompt pack.

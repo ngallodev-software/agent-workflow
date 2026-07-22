@@ -1,8 +1,8 @@
-phase: {{PHASE_NUMBER}}
-name: {{PHASE_NAME}}
-mandatory_order: [P{{PHASE_NUMBER}}-00]
+phase: "{{PHASE_NUMBER}}"
+name: "{{PHASE_NAME}}"
+mandatory_order: ["P{{PHASE_NUMBER}}-00"]
 tasks:
-  - id: P{{PHASE_NUMBER}}-00
+  - id: "P{{PHASE_NUMBER}}-00"
     tier: C
-    session: {{PACK_SLUG}}-p{{PHASE_NUMBER}}-00-baseline
-    prompt: tickets/P{{PHASE_NUMBER}}-00-baseline-and-preflight.md
+    session: "{{PACK_SLUG}}-p{{PHASE_NUMBER}}-00-baseline"
+    prompt: "tickets/P{{PHASE_NUMBER}}-00-baseline-and-preflight.md"

@@ -1,0 +1,1 @@
+{"schema":"agent-workflow/public-fixture/v1","id":"scope-boundary","oracle_id":"scope-boundary-v1","acceptance":[["python3","validate.py"]],"writable_paths":["allowed.txt"]}

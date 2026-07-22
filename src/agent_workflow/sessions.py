@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import platform
 import shlex
 import shutil
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -12,8 +14,13 @@ from . import tmux
 from .assets import asset_path
 from .config import Settings
 from .errors import WorkflowError
+from .eval.commands import collect_commands, specs_from_data
+from .eval.scope import ScopePolicy, collect_scope
+from .evaluation import validate_evaluation
+from .executors import ExecutorPlan, executor_version, prepare_executor
 from .git import snapshot
 from .process import run
+from .receipts import initial_completion, initial_provenance, update_provenance
 from .state import (
     TERMINAL_STATUSES,
     list_statuses,
@@ -29,70 +36,6 @@ from .util import (
     utc_now,
     validate_id,
 )
-
-_STATUS_HELPER = r'''#!/usr/bin/env python3
-from __future__ import annotations
-import json
-import os
-import sys
-import tempfile
-from datetime import datetime, timezone
-from pathlib import Path
-
-path = Path(sys.argv[1])
-status = sys.argv[2]
-exit_code = int(sys.argv[3]) if len(sys.argv) > 3 and sys.argv[3] else None
-try:
-    data = json.loads(path.read_text(encoding="utf-8"))
-except Exception:
-    data = {}
-now = datetime.now(timezone.utc).isoformat()
-data["status"] = status
-data["updated_at"] = now
-if status == "running":
-    data.setdefault("started_at", now)
-if status in {"completed", "failed", "interrupted", "killed"}:
-    data["finished_at"] = now
-if exit_code is not None:
-    data["exit_code"] = exit_code
-fd, tmp = tempfile.mkstemp(prefix=".status.", dir=path.parent)
-try:
-    with os.fdopen(fd, "w", encoding="utf-8") as stream:
-        json.dump(data, stream, indent=2, sort_keys=True)
-        stream.write("\n")
-        stream.flush()
-        os.fsync(stream.fileno())
-    os.replace(tmp, path)
-finally:
-    try:
-        os.unlink(tmp)
-    except FileNotFoundError:
-        pass
-'''
-
-
-def _resolve_command(
-    settings: Settings,
-    executor: str | None,
-    explicit: list[str] | None,
-) -> list[str]:
-    if explicit:
-        return explicit
-    if not executor:
-        raise WorkflowError(
-            "provide --executor NAME or an explicit command after --"
-        )
-    try:
-        command = settings.executors[executor]
-    except KeyError as exc:
-        known = ", ".join(sorted(settings.executors)) or "none"
-        raise WorkflowError(
-            f"unknown executor {executor!r}; configured executors: {known}"
-        ) from exc
-    if not command:
-        raise WorkflowError(f"executor {executor!r} has an empty command")
-    return list(command)
-
 
 def _ignore_delegations(workdir: Path) -> None:
     try:
@@ -137,41 +80,37 @@ def _write_runner(
     state_dir: Path,
     workdir: Path,
     command: list[str],
+    *,
+    session_id: str = "unknown-session",
+    prompt_source: Path | None = None,
+    prompt_pack_root: Path | None = None,
+    stream_format: str = "text",
 ) -> Path:
     prompt = state_dir / "prompt.md"
-    log = state_dir / "output.log"
-    status = state_dir / "status.json"
-    helper = state_dir / "update_status.py"
-    helper.write_text(_STATUS_HELPER, encoding="utf-8")
-    helper.chmod(0o755)
-
+    launch_prompt = state_dir / "launch-prompt.md"
+    if not launch_prompt.exists() and prompt.exists():
+        shutil.copy2(prompt, launch_prompt)
+    prompt_source = prompt_source or prompt
     runner = state_dir / "run.sh"
     command_text = shlex.join(command)
+    source_root = Path(__file__).resolve().parents[1]
     runner.write_text(
         "#!/usr/bin/env bash\n"
         "set -Eeuo pipefail\n"
-        f"STATUS_FILE={shlex.quote(str(status))}\n"
-        f"STATUS_HELPER={shlex.quote(str(helper))}\n"
-        f"PROMPT_FILE={shlex.quote(str(prompt))}\n"
-        f"LOG_FILE={shlex.quote(str(log))}\n"
-        f"WORKDIR={shlex.quote(str(workdir))}\n"
-        "finalize() {\n"
-        "  rc=$?\n"
-        "  if [[ $rc -eq 0 ]]; then final_status=completed; "
-        "elif [[ $rc -eq 130 || $rc -eq 143 ]]; then final_status=interrupted; "
-        "else final_status=failed; fi\n"
-        "  python3 \"$STATUS_HELPER\" \"$STATUS_FILE\" "
-        "\"$final_status\" \"$rc\" || true\n"
-        "}\n"
-        "trap finalize EXIT\n"
-        "python3 \"$STATUS_HELPER\" \"$STATUS_FILE\" running\n"
-        "cd \"$WORKDIR\"\n"
-        "set +e\n"
-        f"cat \"$PROMPT_FILE\" | {command_text} 2>&1 | "
-        "tee -a \"$LOG_FILE\"\n"
-        "rc=${PIPESTATUS[1]}\n"
-        "set -e\n"
-        "exit \"$rc\"\n",
+        f"readonly AGENT_WORKFLOW_SESSION_ID={shlex.quote(session_id)}\n"
+        f"readonly AGENT_WORKFLOW_PROMPT_SOURCE={shlex.quote(str(prompt_source))}\n"
+        f"readonly AGENT_WORKFLOW_COMPLETION_PATH={shlex.quote(str(state_dir / 'completion.md'))}\n"
+        f"readonly AGENT_WORKFLOW_COMPLETION_JSON_PATH={shlex.quote(str(state_dir / 'completion.json'))}\n"
+        f"readonly AGENT_WORKFLOW_PROVENANCE_PATH={shlex.quote(str(state_dir / 'run-provenance.json'))}\n"
+        f"readonly AGENT_WORKFLOW_PROMPT_PACK_ROOT={shlex.quote(str(prompt_pack_root or ''))}\n"
+        "export AGENT_WORKFLOW_SESSION_ID AGENT_WORKFLOW_PROMPT_SOURCE "
+        "AGENT_WORKFLOW_COMPLETION_PATH AGENT_WORKFLOW_COMPLETION_JSON_PATH "
+        "AGENT_WORKFLOW_PROVENANCE_PATH AGENT_WORKFLOW_PROMPT_PACK_ROOT\n"
+        f"export PYTHONPATH={shlex.quote(str(source_root))}${{PYTHONPATH:+:$PYTHONPATH}}\n"
+        "exec python3 -m agent_workflow.runner "
+        f"--run-dir {shlex.quote(str(state_dir))} "
+        f"--workdir {shlex.quote(str(workdir))} "
+        f"--stream-format {shlex.quote(stream_format)} -- {command_text}\n",
         encoding="utf-8",
     )
     runner.chmod(0o755)
@@ -188,6 +127,51 @@ def _write_runner(
     return runner
 
 
+def _discover_prompt_pack_root(prompt_source: Path) -> Path | None:
+    for candidate in prompt_source.parents:
+        if (candidate / "pack.yaml").is_file():
+            return candidate
+    return None
+
+
+def _write_launch_prompt(
+    state_dir: Path,
+    *,
+    session_id: str,
+    prompt_source: Path,
+    prompt_pack_root: Path | None,
+) -> Path:
+    completion_path = state_dir / "completion.md"
+    completion_json_path = state_dir / "completion.json"
+    context = [
+        "# Agent-workflow launch context",
+        "The complete ticket is included below. Do not reread prompt_source unless the ticket explicitly requests it.",
+        "Use these durable paths only when the ticket references pack files or its completion report.",
+        f"- session_id: `{session_id}`",
+        f"- prompt_source: `{prompt_source}`",
+    ]
+    if prompt_pack_root is not None:
+        context.append(f"- prompt_pack_root: `{prompt_pack_root}`")
+    context.extend(
+        [
+            f"- completion_path: `{completion_path}`",
+            f"- completion_json_path: `{completion_json_path}`",
+            "- Update the JSON completion contract before exiting; the Markdown file remains the human-readable report.",
+            "- Matching environment variables use the `AGENT_WORKFLOW_` prefix.",
+            "",
+            "---",
+            "",
+        ]
+    )
+    launch_prompt = state_dir / "launch-prompt.md"
+    launch_prompt.write_text(
+        "\n".join(context)
+        + (state_dir / "prompt.md").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    return launch_prompt
+
+
 def launch(
     settings: Settings,
     *,
@@ -200,6 +184,13 @@ def launch(
     pack_id: str | None = None,
     retry_of: str | None = None,
     allow_dirty: bool = False,
+    structured: bool = False,
+    saved_stream_format: str | None = None,
+    saved_executor: str | None = None,
+    prompt_source_override: Path | None = None,
+    prompt_pack_root_override: Path | None = None,
+    evaluation_path: Path | None = None,
+    tier: str | None = None,
 ) -> dict[str, Any]:
     validate_id(session_id, "session ID")
     if ticket_id:
@@ -245,23 +236,46 @@ def launch(
     else:
         state_dir.mkdir(parents=True)
 
-    command = _resolve_command(settings, executor, explicit_command)
+    executor_plan = prepare_executor(
+        settings, executor, explicit_command, structured=structured
+    )
+    if saved_stream_format is not None:
+        executor_plan = ExecutorPlan(
+            saved_executor,
+            executor_plan.argv,
+            saved_stream_format,
+        )
+    command = list(executor_plan.argv)
     if not shutil.which(command[0]):
         raise WorkflowError(f"executor command not found on PATH: {command[0]}")
 
     prompt_copy = state_dir / "prompt.md"
     shutil.copy2(prompt_path, prompt_copy)
+    prompt_source = prompt_source_override or prompt_path
+    prompt_pack_root = (
+        prompt_pack_root_override
+        if prompt_pack_root_override is not None
+        else _discover_prompt_pack_root(prompt_source)
+    )
     (state_dir / "output.log").touch()
     atomic_write_json(
         state_dir / "command.json",
         {
+            "schema": "agent-workflow/command/v1",
             "argv": command,
             "shell": shlex.join(command),
-            "executor": executor,
+            "executor": executor_plan.name,
+            "stream_format": executor_plan.stream_format,
         },
     )
     (state_dir / "completion.md").write_bytes(
         asset_path("prompt-pack-root/templates/TICKET_COMPLETION.md").read_bytes()
+    )
+    launch_prompt = _write_launch_prompt(
+        state_dir,
+        session_id=session_id,
+        prompt_source=prompt_source,
+        prompt_pack_root=prompt_pack_root,
     )
 
     git_info: dict[str, Any]
@@ -307,30 +321,153 @@ def launch(
         },
     )
 
+    completion_path = state_dir / "completion.json"
+    atomic_write_json(
+        completion_path,
+        initial_completion(
+            session_id=session_id,
+            ticket_id=ticket_id,
+            pack_id=pack_id,
+            base_revision=git_info["source_revision"],
+        ),
+    )
+    events_path = state_dir / "executor-events.jsonl"
+    stderr_path = state_dir / "executor-stderr.log"
+    events_path.touch()
+    stderr_path.touch()
+    config_sha256 = (
+        sha256_file(settings.config_path)
+        if settings.config_path and settings.config_path.is_file()
+        else None
+    )
+    pack_manifest = prompt_pack_root / "MANIFEST.sha256" if prompt_pack_root else None
+    provenance_path = state_dir / "run-provenance.json"
+    atomic_write_json(
+        provenance_path,
+        initial_provenance(
+            session_id=session_id,
+            executor=executor_plan.name,
+            argv=command,
+            stream_format=executor_plan.stream_format,
+            executor_version=(
+                executor_version(executor_plan)
+                if executor_plan.name is not None
+                else None
+            ),
+            prompt_sha256=sha256_file(prompt_copy),
+            launch_prompt_sha256=sha256_file(launch_prompt),
+            config_sha256=config_sha256,
+            pack_manifest_sha256=(
+                sha256_file(pack_manifest)
+                if pack_manifest is not None and pack_manifest.is_file()
+                else None
+            ),
+            source_revision=git_info["source_revision"],
+            worktree=workdir,
+            environment={
+                "python": platform.python_version(),
+                "platform": platform.platform(),
+                "implementation": sys.implementation.name,
+            },
+        ),
+    )
+    if evaluation_path is not None:
+        evaluation = validate_evaluation(
+            expand_path(evaluation_path),
+            pack_root=prompt_pack_root,
+        )
+        if ticket_id and ticket_id not in evaluation.task_ids:
+            raise WorkflowError(
+                f"evaluation plan does not include launched ticket: {ticket_id}"
+            )
+        commands = evaluation.data.get("acceptance_commands", [])
+        scope_data = evaluation.data.get("scope", {})
+        runtime = {
+            "schema": "agent-workflow/evaluation-runtime/v1",
+            "evaluation_path": str(evaluation.path),
+            "evaluation_sha256": evaluation.sha256,
+            "timeout_seconds": evaluation.data["timeout_seconds"],
+            "acceptance_commands": commands,
+            "scope": scope_data,
+            "scorers": evaluation.data["scorers"],
+            "oracle_refs": evaluation.data.get("oracle_refs", {}),
+            "statistics_policy": evaluation.data.get(
+                "statistics_policy", "agent-workflow/statistics/v1"
+            ),
+            "ticket_id": ticket_id,
+        }
+        update_provenance(
+            state_dir,
+            budgets=evaluation.data.get("budgets", {}),
+            evaluation_sha256=evaluation.sha256,
+        )
+        atomic_write_json(state_dir / "evaluation-runtime.json", runtime)
+        if commands:
+            collect_commands(
+                workdir,
+                specs_from_data(commands),
+                phase="baseline",
+                receipt_dir=state_dir / "collections",
+            )
+        policy = ScopePolicy(
+            authorized_root=workdir,
+            writable_paths=tuple(scope_data.get("writable_paths", ())),
+            writable_trees=tuple(scope_data.get("writable_trees", ())),
+            disposable_trees=tuple(scope_data.get("disposable_trees", ())),
+        )
+        collect_scope(
+            workdir,
+            phase="baseline",
+            policy=policy,
+            receipt_dir=state_dir / "scope",
+        )
+
     now = utc_now()
     status: dict[str, Any] = {
-        "schema": "agent-workflow/session-status/v1",
+        "schema": "agent-workflow/session-status/v2",
         "session_id": session_id,
         "ticket_id": ticket_id,
+        "tier": tier,
         "pack_id": pack_id,
         "retry_of": retry_of,
         "status": "prepared",
+        "disposition": None,
         "created_at": now,
         "updated_at": now,
         "workdir": str(workdir),
         "prompt_path": str(prompt_copy),
-        "prompt_source": str(prompt_path),
+        "prompt_source": str(prompt_source),
+        "executor": executor_plan.name,
         "prompt_sha256": sha256_file(prompt_copy),
+        "prompt_pack_root": str(prompt_pack_root) if prompt_pack_root else None,
+        "launch_prompt_path": str(launch_prompt),
+        "launch_prompt_sha256": sha256_file(launch_prompt),
         "log_path": str(state_dir / "output.log"),
         "command_path": str(state_dir / "command.json"),
         "completion_path": str(state_dir / "completion.md"),
+        "completion_json_path": str(completion_path),
+        "provenance_path": str(provenance_path),
+        "events_path": str(events_path),
+        "stderr_path": str(stderr_path),
+        "final_receipt_path": None,
+        "evaluation_path": (
+            str(expand_path(evaluation_path)) if evaluation_path else None
+        ),
         "source_baseline_path": str(baseline_path),
         "tmux_session": session_id,
         **git_info,
     }
     write_status(settings, session_id, status)
     _link_worktree_state(workdir, session_id, state_dir)
-    runner = _write_runner(state_dir, workdir, command)
+    runner = _write_runner(
+        state_dir,
+        workdir,
+        command,
+        session_id=session_id,
+        prompt_source=prompt_source,
+        prompt_pack_root=prompt_pack_root,
+        stream_format=executor_plan.stream_format,
+    )
     update_status(
         settings,
         session_id,
@@ -374,19 +511,32 @@ def observe(
         terminal_error = str(exc)
 
     log_path = Path(str(data.get("log_path", "")))
+    state_dir = log_path.parent
     seconds_since_log_growth: float | None = None
     if log_path.exists():
         seconds_since_log_growth = max(0.0, time.time() - log_path.stat().st_mtime)
+    heartbeat_path = state_dir / "heartbeat.json"
+    seconds_since_heartbeat: float | None = None
+    if heartbeat_path.is_file():
+        seconds_since_heartbeat = max(
+            0.0, time.time() - heartbeat_path.stat().st_mtime
+        )
 
     durable = str(data.get("status", "unknown"))
     active = {"prepared", "launched", "running", "interruption_requested"}
     if alive is None:
         observed = "terminal_unavailable"
     elif alive and durable in active:
-        if (
-            seconds_since_log_growth is not None
-            and seconds_since_log_growth >= settings.stall_minutes * 60
-        ):
+        threshold = settings.stall_minutes * 60
+        log_stale = (
+            seconds_since_log_growth is None
+            or seconds_since_log_growth >= threshold
+        )
+        heartbeat_stale = (
+            seconds_since_heartbeat is None
+            or seconds_since_heartbeat >= threshold
+        )
+        if log_stale and heartbeat_stale:
             observed = "possibly_stalled"
         else:
             observed = "running"
@@ -395,11 +545,35 @@ def observe(
     else:
         observed = durable
 
+    events_path = state_dir / "events.jsonl"
+    last_event = None
+    if events_path.is_file():
+        lines = [line for line in events_path.read_text(encoding="utf-8").splitlines() if line]
+        if lines:
+            try:
+                last_event = json.loads(lines[-1])
+            except json.JSONDecodeError:
+                last_event = {"error": "invalid final lifecycle event"}
+    failure_category = (
+        "orphaned"
+        if observed == "orphaned"
+        else "stalled"
+        if observed == "possibly_stalled"
+        else "terminal_unavailable"
+        if observed == "terminal_unavailable"
+        else data.get("failure_category")
+    )
+    safe_actions = [f"agent-workflow status {session_id} --json"]
+    if observed in {"orphaned", "failed", "interrupted", "killed"}:
+        safe_actions.append(f"agent-workflow restart {session_id}")
+    elif observed == "possibly_stalled":
+        safe_actions.append(f"agent-workflow interrupt {session_id}")
     result = {
         **data,
         "tmux_alive": alive,
         "terminal_error": terminal_error,
         "observed_state": observed,
+        "failure_category": failure_category,
         "pane_pid": pane.pid if pane else data.get("pane_pid"),
         "pane_command": pane.command if pane else data.get("pane_command"),
         "seconds_since_log_growth": (
@@ -407,6 +581,26 @@ def observe(
             if seconds_since_log_growth is not None
             else None
         ),
+        "seconds_since_heartbeat": (
+            round(seconds_since_heartbeat, 1)
+            if seconds_since_heartbeat is not None
+            else None
+        ),
+        "signals": {
+            "tmux_alive": alive,
+            "pane_dead": pane.dead if pane else None,
+            "log_exists": log_path.is_file(),
+            "heartbeat_exists": heartbeat_path.is_file(),
+        },
+        "last_event": last_event,
+        "paths": {
+            "status": str(state_dir / "status.json"),
+            "log": str(log_path),
+            "heartbeat": str(heartbeat_path),
+            "events": str(events_path),
+        },
+        "safe_actions": safe_actions,
+        "next_action": safe_actions[-1],
     }
     if capture_lines and alive:
         result["capture"] = tmux.capture(session_id, capture_lines)
@@ -456,6 +650,9 @@ def kill(settings: Settings, session_id: str) -> dict[str, Any]:
     read_status(settings, session_id)
     if tmux.session_exists(session_id):
         tmux.kill(session_id)
+    current = read_status(settings, session_id)
+    if str(current.get("status")) in TERMINAL_STATUSES:
+        return current
     return update_status(
         settings,
         session_id,
@@ -507,4 +704,18 @@ def restart(
         pack_id=old.get("pack_id"),
         retry_of=session_id,
         allow_dirty=True,
+        saved_stream_format=str(command_data.get("stream_format", "text")),
+        saved_executor=command_data.get("executor"),
+        prompt_source_override=Path(str(old.get("prompt_source", old["prompt_path"]))),
+        prompt_pack_root_override=(
+            Path(str(old["prompt_pack_root"]))
+            if old.get("prompt_pack_root")
+            else None
+        ),
+        evaluation_path=(
+            Path(str(old["evaluation_path"]))
+            if old.get("evaluation_path")
+            else None
+        ),
+        tier=old.get("tier"),
     )

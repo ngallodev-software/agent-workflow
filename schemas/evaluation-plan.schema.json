@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/evaluation-plan/v1",
+  "type": "object",
+  "required": ["schema", "dataset_split", "task_ids", "repetitions", "timeout_seconds", "scorers", "sandbox"],
+  "properties": {
+    "schema": {"const": "agent-workflow/evaluation-plan/v1"},
+    "dataset_split": {"enum": ["development", "validation", "holdout"]},
+    "task_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "repetitions": {"type": "integer", "minimum": 1},
+    "timeout_seconds": {"type": "integer", "minimum": 1},
+    "max_retries": {"type": "integer", "minimum": 0, "default": 0},
+    "scorers": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "acceptance_commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "argv"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "argv": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+          "cwd": {"type": "string", "default": "."},
+          "timeout_seconds": {"type": "integer", "minimum": 1, "default": 300},
+          "result_format": {"enum": ["exit-code", "junit"], "default": "exit-code"},
+          "junit_path": {"type": ["string", "null"]}
+        },
+        "additionalProperties": false
+      }
+    },
+    "scope": {
+      "type": "object",
+      "properties": {
+        "writable_paths": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+        "writable_trees": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+        "disposable_trees": {"type": "array", "uniqueItems": true, "items": {"type": "string"}}
+      },
+      "additionalProperties": false
+    },
+    "budgets": {
+      "type": "object",
+      "properties": {
+        "max_wall_seconds": {"type": "integer", "minimum": 1},
+        "max_input_tokens": {"type": "integer", "minimum": 1},
+        "max_output_tokens": {"type": "integer", "minimum": 1},
+        "max_cost": {"type": "number", "minimum": 0},
+        "currency": {"type": "string", "minLength": 3, "maxLength": 3}
+      },
+      "additionalProperties": false
+    },
+    "sandbox": {"enum": ["docker"]},
+    "oracle_refs": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["id", "sha256"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "statistics_policy": {"type": "string", "default": "agent-workflow/statistics/v1"}
+  },
+  "additionalProperties": false
+}

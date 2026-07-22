@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/session-status/v2",
+  "type": "object",
+  "required": ["schema", "session_id", "status", "created_at", "workdir", "prompt_path", "log_path"],
+  "properties": {
+    "schema": {"const": "agent-workflow/session-status/v2"},
+    "session_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"},
+    "ticket_id": {"type": ["string", "null"]},
+    "pack_id": {"type": ["string", "null"]},
+    "status": {"enum": ["prepared", "launched", "running", "interruption_requested", "completed", "failed", "interrupted", "killed"]},
+    "disposition": {"type": ["string", "null"], "enum": [null, "reviewed", "accepted", "rejected"]},
+    "created_at": {"type": "string"},
+    "updated_at": {"type": "string"},
+    "workdir": {"type": "string"},
+    "prompt_path": {"type": "string"},
+    "log_path": {"type": "string"},
+    "prompt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "completion_json_path": {"type": "string"},
+    "provenance_path": {"type": "string"},
+    "events_path": {"type": "string"},
+    "final_receipt_path": {"type": ["string", "null"]},
+    "failure_category": {"type": ["string", "null"]}
+  },
+  "additionalProperties": true
+}

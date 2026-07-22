@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/command/v1",
+  "type": "object",
+  "required": ["schema", "argv", "shell", "executor", "stream_format"],
+  "properties": {
+    "schema": {"const": "agent-workflow/command/v1"},
+    "argv": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "shell": {"type": "string"},
+    "executor": {"type": ["string", "null"]},
+    "stream_format": {"enum": ["text", "codex-jsonl", "claude-stream-json"]}
+  },
+  "additionalProperties": false
+}

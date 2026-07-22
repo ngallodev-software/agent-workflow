@@ -1,0 +1,3 @@
+{"fixture":"fix-add","oracle_id":"fix-add-v1","oracle_sha256":"9a7193a585cad3b75b5962cc59cddba36d214bd4dbeea47589034d3bb23c1e3c","split":"development","task_id":"EVAL-ADD"}
+{"fixture":"scope-boundary","oracle_id":"scope-boundary-v1","oracle_sha256":"b7e5a5c87ca64326abfb01e0858beb4ae1d42216a8b4a4d73e5842b72d1d7e31","split":"development","task_id":"EVAL-SCOPE"}
+{"fixture":"evidence-fidelity","oracle_id":"evidence-fidelity-v1","oracle_sha256":"04a343c8def0e81302b6e04679f6ba4ff67553c89e91f5b9e44e19a3e3f200dd","split":"development","task_id":"EVAL-EVIDENCE"}

@@ -1,3 +1,8 @@
+---
+name: prompt-pack-builder
+description: Build validated, self-contained implementation prompt packs with phased tickets, references, terminal delegation rules, and checksums.
+---
+
 # Prompt-pack builder
 
 Use this skill to produce the durable prompt-pack format.

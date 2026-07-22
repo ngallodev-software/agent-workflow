@@ -37,6 +37,9 @@ def create(
         raise WorkflowError(f"worktree destination already exists: {destination}")
     if branch_exists(snap.root, branch):
         raise WorkflowError(f"branch already exists: {branch}")
+    base_revision = run(
+        ["git", "-C", str(snap.root), "rev-parse", "--verify", f"{base_ref}^{{commit}}"]
+    ).stdout.strip()
     destination.parent.mkdir(parents=True, exist_ok=True)
     run(
         [
@@ -57,7 +60,7 @@ def create(
         "destination": str(destination),
         "branch": branch,
         "base_ref": base_ref,
-        "base_revision": snap.head,
+        "base_revision": base_revision,
         "worktree_revision": created.head,
     }
 

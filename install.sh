@@ -18,20 +18,30 @@ while [[ $# -gt 0 ]]; do
   esac
   shift
 done
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BIN_DIR="$HOME/.local/bin"
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/agent-workflow"
 CONFIG_FILE="$CONFIG_DIR/config.toml"
 command -v python3 >/dev/null || { echo "python3 is required" >&2; exit 127; }
 python3 -c 'import sys; sys.exit("agent-workflow requires Python 3.11+") if sys.version_info < (3,11) else None'
+if ! python3 -c 'import jsonschema' >/dev/null 2>&1; then
+  echo "jsonschema>=4.18,<5 is required; install the wheel or run: python3 -m pip install 'jsonschema>=4.18,<5'" >&2
+  exit 1
+fi
 mkdir -p "$BIN_DIR" "$CONFIG_DIR"
 safe_link() {
   local source="$1" destination="$2"
-  if [[ ( -e "$destination" || -L "$destination" ) && ! -L "$destination" ]]; then
+  if [[ -L "$destination" ]]; then
+    if [[ "$(readlink "$destination")" != "$source" ]]; then
+      echo "refusing to replace unrelated symlink: $destination" >&2
+      exit 2
+    fi
+    unlink "$destination"
+  elif [[ -e "$destination" ]]; then
     echo "refusing to replace non-symlink path: $destination" >&2
     exit 2
   fi
-  ln -sfnT "$source" "$destination"
+  ln -s "$source" "$destination"
 }
 safe_link "$ROOT/bin/agent-workflow" "$BIN_DIR/agent-workflow"
 if [[ ! -e "$CONFIG_FILE" ]]; then

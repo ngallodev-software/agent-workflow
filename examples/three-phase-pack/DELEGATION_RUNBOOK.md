@@ -13,9 +13,18 @@ agent-workflow worktree create /path/to/repository P0-01 HEAD
 
 ```bash
 agent-workflow launch   project-p0-01-components   /path/to/worktree   /path/to/pack/phase-0/tickets/P0-01.md   --ticket P0-01   --pack project-phases-0-2   --executor codex
+agent-workflow launch   project-p0-02-components   /path/to/worktree   /path/to/pack/phase-0/tickets/P0-02.md   --ticket P0-02   --pack project-phases-0-2   --executor claude
 ```
 
 The prompt is passed to the command over standard input.
+
+## Workflow skills
+
+| Purpose | Codex | Claude |
+|---|---|---|
+| Build a prompt pack | `$prompt-pack-builder` | `/prompt-pack-builder` |
+| Implement one ticket | `$delegated-implementation` | `/delegated-implementation` |
+| Review a completed phase | `$phase-gate-review` | `/phase-gate-review` |
 
 ## Observe and foreground
 

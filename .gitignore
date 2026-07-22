@@ -12,5 +12,7 @@ build/
 .delegations/
 *.tar.zst
 *.sha256
-scripts.orig/	
+!MANIFEST.sha256
+!examples/three-phase-pack/MANIFEST.sha256
+scripts.orig/
 templates.orig/

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/run-provenance/v1",
+  "type": "object",
+  "required": ["schema", "session_id", "executor", "argv", "prompt_sha256", "source_revision", "environment", "started_at"],
+  "properties": {
+    "schema": {"const": "agent-workflow/run-provenance/v1"},
+    "session_id": {"type": "string"},
+    "executor": {"type": ["string", "null"]},
+    "argv": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "stream_format": {"enum": ["text", "codex-jsonl", "claude-stream-json"]},
+    "executor_version": {"type": ["string", "null"]},
+    "model": {"type": ["string", "null"]},
+    "prompt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "launch_prompt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "config_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+    "pack_manifest_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+    "source_revision": {"type": ["string", "null"]},
+    "worktree": {"type": "string"},
+    "environment": {"type": "object"},
+    "budgets": {"type": "object"},
+    "evaluation_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+    "usage": {"type": ["object", "null"]},
+    "started_at": {"type": "string"},
+    "first_output_at": {"type": ["string", "null"]},
+    "finished_at": {"type": ["string", "null"]},
+    "exit_code": {"type": ["integer", "null"]}
+  },
+  "additionalProperties": false
+}

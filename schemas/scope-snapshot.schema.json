@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/scope-snapshot/v1",
+  "type": "object",
+  "required": ["schema", "phase", "root", "captured_at", "policy", "repositories", "inventory", "excluded"],
+  "properties": {
+    "schema": {"const": "agent-workflow/scope-snapshot/v1"},
+    "phase": {"enum": ["baseline", "post"]},
+    "root": {"type": "string"},
+    "captured_at": {"type": "string"},
+    "policy": {"type": "object"},
+    "repositories": {"type": "array", "items": {"type": "object"}},
+    "inventory": {"type": "array", "items": {"type": "object"}},
+    "excluded": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": false
+}

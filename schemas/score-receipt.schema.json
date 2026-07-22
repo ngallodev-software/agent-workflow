@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/score-receipt/v1",
+  "type": "object",
+  "required": ["schema", "scorer", "final_receipt_sha256", "verdict", "facts", "evidence"],
+  "properties": {
+    "schema": {"const": "agent-workflow/score-receipt/v1"},
+    "scorer": {"type": "object", "required": ["id", "version"], "properties": {"id": {"type": "string"}, "version": {"type": "string"}}, "additionalProperties": false},
+    "final_receipt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "verdict": {"enum": ["pass", "fail", "invalid"]},
+    "facts": {"type": "object"},
+    "evidence": {"type": "array", "items": {"type": "object", "required": ["path", "sha256"], "properties": {"path": {"type": "string"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}, "additionalProperties": false}}
+  },
+  "additionalProperties": false
+}

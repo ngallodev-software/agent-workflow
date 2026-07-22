@@ -37,13 +37,14 @@ class CliParsingTests(unittest.TestCase):
                 "--",
                 "codex",
                 "exec",
-                "--full-auto",
+                "--sandbox",
+                "workspace-write",
                 "-",
             ],
         )
         self.assertEqual(
             args.explicit_command,
-            ["codex", "exec", "--full-auto", "-"],
+            ["codex", "exec", "--sandbox", "workspace-write", "-"],
         )
 
     def test_global_json_can_follow_subcommand(self):

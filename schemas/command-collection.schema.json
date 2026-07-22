@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/command-collection/v1",
+  "type": "object",
+  "required": ["schema", "id", "phase", "argv", "cwd", "exit_code", "timed_out", "duration_seconds", "result_format", "stdout_sha256", "stderr_sha256", "junit"],
+  "properties": {
+    "schema": {"const": "agent-workflow/command-collection/v1"},
+    "id": {"type": "string"},
+    "phase": {"enum": ["baseline", "post"]},
+    "argv": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "cwd": {"type": "string"},
+    "exit_code": {"type": "integer"},
+    "timed_out": {"type": "boolean"},
+    "duration_seconds": {"type": "number", "minimum": 0},
+    "result_format": {"enum": ["junit", "exit-code"]},
+    "stdout_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "stderr_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "junit": {"type": ["object", "null"]}
+  },
+  "additionalProperties": false
+}

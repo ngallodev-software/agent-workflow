@@ -4,16 +4,30 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-workflow"
-version = "0.1.0"
+version = "0.1.1"
 description = "Terminal-first, observable workflow for bounded coding-agent delegation"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = ["jsonschema>=4.18,<5"]
 classifiers = [
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.11",
   "Operating System :: POSIX",
 ]
+
+[project.optional-dependencies]
+eval = [
+  "inspect-ai==0.3.247",
+  "inspect-swe==0.2.66",
+]
+stats = ["scipy>=1.11,<2"]
+otel = [
+  "opentelemetry-api>=1.30,<2",
+  "opentelemetry-sdk>=1.30,<2",
+  "opentelemetry-exporter-otlp-proto-http>=1.30,<2",
+]
+mlflow = ["mlflow>=3,<4"]
+completion = ["shtab>=1.7,<2"]
 
 [project.scripts]
 agent-workflow = "agent_workflow.cli:main"
@@ -27,3 +41,10 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 agent_workflow = ["assets/**/*"]
+
+[tool.setuptools.data-files]
+"share/agent-workflow/schemas" = ["schemas/*.json"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

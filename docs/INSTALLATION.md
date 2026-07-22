@@ -33,4 +33,8 @@ cd /lump/apps/agent-workflow
 ~/.claude/skills/
 ```
 
+Codex discovers the shared workflow skills through `~/.agents/skills`; Claude
+uses `~/.claude/skills`. See `DELEGATION_RUNBOOK.md` for invocation names and
+paired executor launch examples.
+
 XDG environment variables override config, state, and data roots.

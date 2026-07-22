@@ -1,3 +1,8 @@
+---
+name: phase-gate-review
+description: Independently review completed implementation phases, rerun acceptance gates, and issue an evidence-based accept or reject decision.
+---
+
 # Independent phase-gate review
 
 Use this skill after all implementation tickets in a phase have completion reports.

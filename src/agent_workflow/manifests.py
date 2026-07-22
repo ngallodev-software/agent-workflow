@@ -10,6 +10,8 @@ except ImportError:  # pragma: no cover - covered through forced fallback test
     yaml = None
 
 from .miniyaml import MiniYamlError, load_task_manifest
+from .evaluation import validate_evaluation
+from .errors import WorkflowError
 from .util import sha256_file
 
 
@@ -44,9 +46,7 @@ def _load_yaml(path: Path, report: ValidationReport) -> dict[str, Any] | None:
         else:
             value = load_task_manifest(text)
     except (OSError, MiniYamlError, ValueError) as exc:
-        report.errors.append(
-            f"{path.relative_to(report.root)}: invalid YAML: {exc}"
-        )
+        report.errors.append(f"{path.relative_to(report.root)}: invalid YAML: {exc}")
         return None
     except Exception as exc:
         if yaml is not None and exc.__class__.__module__.startswith("yaml"):
@@ -56,9 +56,7 @@ def _load_yaml(path: Path, report: ValidationReport) -> dict[str, Any] | None:
             return None
         raise
     if not isinstance(value, dict):
-        report.errors.append(
-            f"{path.relative_to(report.root)}: expected YAML mapping"
-        )
+        report.errors.append(f"{path.relative_to(report.root)}: expected YAML mapping")
         return None
     return value
 
@@ -102,9 +100,7 @@ def validate_pack(root: Path, verify_checksums: bool = True) -> ValidationReport
             path = phase_dir / rel
             exists = path.is_dir() if rel == "tickets" else path.is_file()
             if not exists:
-                report.errors.append(
-                    f"missing phase item: {path.relative_to(root)}"
-                )
+                report.errors.append(f"missing phase item: {path.relative_to(root)}")
         manifest_path = phase_dir / "task-manifest.yaml"
         if not manifest_path.is_file():
             continue
@@ -127,14 +123,10 @@ def validate_pack(root: Path, verify_checksums: bool = True) -> ValidationReport
                 report.errors.append(f"{location}: expected mapping")
                 continue
             missing = [
-                key
-                for key in ("id", "tier", "session", "prompt")
-                if not task.get(key)
+                key for key in ("id", "tier", "session", "prompt") if not task.get(key)
             ]
             if missing:
-                report.errors.append(
-                    f"{location}: missing {', '.join(missing)}"
-                )
+                report.errors.append(f"{location}: missing {', '.join(missing)}")
                 continue
             task_id = str(task["id"])
             session = str(task["session"])
@@ -146,20 +138,23 @@ def validate_pack(root: Path, verify_checksums: bool = True) -> ValidationReport
             if session in sessions:
                 report.errors.append(f"duplicate session ID across pack: {session}")
             sessions.add(session)
-            prompt_path = phase_dir / prompt_rel
-            if not prompt_path.is_file():
+            prompt_path = (phase_dir / prompt_rel).resolve()
+            try:
+                prompt_display = prompt_path.relative_to(root)
+            except ValueError:
                 report.errors.append(
-                    f"{location}: prompt not found: {prompt_path.relative_to(root)}"
+                    f"{location}: prompt escapes pack root: {prompt_rel}"
                 )
+                continue
+            if not prompt_path.is_file():
+                report.errors.append(f"{location}: prompt not found: {prompt_display}")
             else:
-                text = prompt_path.read_text(
-                    encoding="utf-8", errors="replace"
-                ).lower()
+                text = prompt_path.read_text(encoding="utf-8", errors="replace").lower()
                 concepts = ["writable", "acceptance", "test", "stop"]
                 absent = [concept for concept in concepts if concept not in text]
                 if absent:
                     report.warnings.append(
-                        f"{prompt_path.relative_to(root)}: prompt may lack explicit "
+                        f"{prompt_display}: prompt may lack explicit "
                         + ", ".join(absent)
                     )
 
@@ -181,8 +176,20 @@ def validate_pack(root: Path, verify_checksums: bool = True) -> ValidationReport
                         f"{manifest_path.relative_to(root)}: unordered tickets: {omitted}"
                     )
 
+    evaluation_path = root / "evals" / "evaluation.json"
+    if evaluation_path.is_file():
+        try:
+            validate_evaluation(
+                evaluation_path,
+                pack_root=root,
+                task_ids=ticket_ids,
+            )
+        except WorkflowError as exc:
+            report.errors.append(str(exc))
+
     checksum_file = root / "MANIFEST.sha256"
     if verify_checksums and checksum_file.is_file():
+        listed: dict[str, str] = {}
         for line_number, line in enumerate(
             checksum_file.read_text(encoding="utf-8").splitlines(), 1
         ):
@@ -194,19 +201,25 @@ def validate_pack(root: Path, verify_checksums: bool = True) -> ValidationReport
                     f"MANIFEST.sha256:{line_number}: invalid checksum line"
                 )
                 continue
-            target = root / rel
-            if not target.is_file():
+            if rel in listed:
                 report.errors.append(
-                    f"MANIFEST.sha256:{line_number}: missing file: {rel}"
+                    f"MANIFEST.sha256:{line_number}: duplicate path: {rel}"
                 )
-            elif sha256_file(target) != checksum:
-                report.errors.append(
-                    f"MANIFEST.sha256:{line_number}: checksum mismatch: {rel}"
-                )
+            listed[rel] = checksum
+
+        actual = {
+            path.relative_to(root).as_posix(): sha256_file(path)
+            for path in _checksum_files(root, checksum_file)
+        }
+        for rel in sorted(actual.keys() - listed.keys()):
+            report.errors.append(f"MANIFEST.sha256: missing file: {rel}")
+        for rel in sorted(listed.keys() - actual.keys()):
+            report.errors.append(f"MANIFEST.sha256: lists nonexistent file: {rel}")
+        for rel in sorted(actual.keys() & listed.keys()):
+            if actual[rel] != listed[rel]:
+                report.errors.append(f"MANIFEST.sha256: checksum mismatch: {rel}")
     elif verify_checksums:
-        report.warnings.append(
-            "MANIFEST.sha256 is absent; archive command will generate it"
-        )
+        report.errors.append("MANIFEST.sha256: missing")
 
     for path in root.rglob("*"):
         if path.is_symlink():
@@ -219,15 +232,23 @@ def validate_pack(root: Path, verify_checksums: bool = True) -> ValidationReport
     return report
 
 
+def _checksum_files(root: Path, output: Path) -> list[Path]:
+    return [
+        path
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+        and path != output
+        and not path.is_symlink()
+        and "__pycache__" not in path.parts
+        and path.suffix != ".pyc"
+    ]
+
+
 def write_checksum_manifest(root: Path) -> Path:
     root = root.resolve()
     output = root / "MANIFEST.sha256"
     lines: list[str] = []
-    for path in sorted(root.rglob("*")):
-        if not path.is_file() or path == output or path.is_symlink():
-            continue
-        lines.append(
-            f"{sha256_file(path)}  {path.relative_to(root).as_posix()}"
-        )
+    for path in _checksum_files(root, output):
+        lines.append(f"{sha256_file(path)}  {path.relative_to(root).as_posix()}")
     output.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return output

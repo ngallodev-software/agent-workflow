@@ -1,36 +1,45 @@
 # Release Validation
 
-Release: `agent-workflow` 0.1.0  
-Validation date: 2026-07-13
+Release: `agent-workflow` 0.1.1
+Validation date: 2026-07-17
 
-## Completed checks
+## Automated gates
 
-- Python source compiled with `python3 -m compileall -q src`.
-- All shell launchers, installers, compatibility wrappers, and portable prompt-pack scripts passed `bash -n`.
-- Sixteen focused unit and integration-seam tests passed.
-- Tests cover CLI parsing, global-option placement, configuration loading, constrained-YAML fallback parsing, prompt-pack validation, deterministic scaffold structure, generated-runner execution and status recording, durable launch evidence, and Git worktree creation/removal.
-- The source-link installer was exercised in an isolated temporary `HOME`.
-- A generated three-phase prompt pack was validated, archived twice, and compared for deterministic output.
-- The release archive was tested with `zstd -t`, extracted, verified against its internal `MANIFEST.sha256`, and tested again from the extracted tree.
+- `bash scripts/release-check.sh`: passed.
+- `pytest -q`: 72 passed.
+- `ruff check src tests scripts`: passed.
+- `shellcheck install.sh uninstall.sh bin/agent-workflow scripts/*.sh`: passed.
+- Python compilation covered `src`, `tests`, and `scripts`.
+- Release audit validated TOML, YAML, JSON, schemas, Markdown links, skill frontmatter, versions, executable modes, explicit portable-asset mirrors, placeholders, and full manifest coverage, including removal of duplicate `.orig` trees.
+- Example three-phase pack validated with a complete internal checksum manifest.
 
-## Environment limitation
+## Install and artifact gates
 
-The build environment did not contain `tmux`, so a live detached-terminal launch was not possible here. The tmux boundary is isolated behind a small adapter. Launch preparation was tested with that adapter mocked, and the generated runner itself was executed for real to verify prompt piping, output logging, exit-code propagation, and atomic status finalization.
+- Installer/uninstaller tests passed in isolated temporary homes, including preservation of unrelated files and symlinks.
+- Wheel `agent_workflow-0.1.1-py3-none-any.whl` built without isolation, installed with dependencies in a fresh virtual environment, loaded all 14 packaged schemas, and reported version `0.1.1` from both CLI and import.
+- The `eval` extra installed in an isolated virtual environment at pinned `inspect-ai==0.3.247` and `inspect-swe==0.2.66`; both public Codex/Claude task factories constructed successfully and the minimal Docker image built successfully.
+- Generated Bash completion contained the current `swebench-prediction` command.
+- Example pack archived twice to byte-identical `.tar.zst` files, passed `zstd -t`, extracted, and revalidated from the extracted tree.
 
-Run the following after installing on the target machine:
+## Live executor gates
 
-```bash
-agent-workflow doctor
-agent-workflow launch smoke-test /path/to/clean/worktree /tmp/smoke-prompt.md -- bash -lc 'cat >/dev/null; echo smoke-ok'
-agent-workflow status smoke-test --capture
-agent-workflow attach smoke-test
-```
+Both configured executors received bounded no-write tasks through real tmux-backed structured `agent-workflow launch` runs:
 
-A very fast command may finish before attachment; its durable log and status should still be available.
+| Executor | Session | Command | Result |
+|---|---|---|---|
+| Codex 0.144.5 | `aw-live-codex-0717b` | `codex exec --sandbox workspace-write --skip-git-repo-check --json -` | returned `CODEX_LAUNCH_OK`; completed, exit 0 |
+| Claude Code 2.1.212 | `aw-live-claude-0717c` | `claude --print --verbose --output-format stream-json` | returned `CLAUDE_LAUNCH_OK`; completed, exit 0 |
 
-## Release check
+Each run preserved raw structured events and separate stderr, then produced a verified 12-artifact final seal. Original prompt copies and SHA-256 receipts remained separate from generated launch context. Offline doctor reported both executors installed with supported structured-output flags.
 
-From the source repository:
+## Evaluation gates
+
+- Missing required collectors, fabricated or empty score sets, receipt-manifest rewrites, escaping symlinks, nested repositories, ignored-file mutations, unknown task/oracle references, and unpaired winner claims fail closed.
+- Baseline/post collection order, committed/staged/unstaged/untracked attribution, JUnit pass-to-fail regression attribution, evidence-fidelity claims, budget timeout, missing-executor recovery, evaluated retry provenance, high-risk independent review, and byte-stable rescoring have focused regression tests.
+- Three public development fixtures fail under no-op and pass their reference change. External oracle IDs and hashes are pinned; canaries and hidden checks remain outside the repository.
+- Inspect, official SWE-bench harness execution, OTel export, and MLflow backend runs remain explicit experimental/operator-run lanes; this validation covers their import/format seams, not paid models or external services.
+
+## Run the release gate
 
 ```bash
 ./scripts/release-check.sh

@@ -6,9 +6,10 @@ It provides:
 
 - one isolated Git worktree per ticket;
 - one fresh, named `tmux` session per delegation;
-- persistent prompts, commands, logs, source baselines, and status records;
+- schema-validated, sealed prompts, commands, event streams, provenance, patches, and completion records;
 - foreground, tail, inspect, interrupt, terminate, kill, and restart controls;
-- conservative potential-stall detection based on terminal state and log inactivity;
+- multi-signal health diagnostics based on terminal, heartbeat, lifecycle, and log state;
+- deterministic evaluation collectors, scorers, ledgers, comparisons, and review receipts;
 - prompt-pack scaffolding, structural validation, checksums, and deterministic `.tar.zst` archives;
 - reusable ticket-completion and phase-gate templates;
 - skills for prompt-pack construction, delegated implementation, and independent review.
@@ -22,9 +23,11 @@ It intentionally does **not** provide automatic merging, automatic agent killing
 - Git
 - `tmux`
 - Bash
-- `tar` and `zstd` for `.tar.zst` creation
+- Python package `jsonschema>=4.18,<5` (installed with the wheel and checked by the symlink installer)
+- GNU `tar` (with `--sort`, `--mtime`, and ownership-normalization options) and
+  `zstd` for deterministic `.tar.zst` creation
 
-Task manifests use a constrained YAML shape. PyYAML is used when available; a built-in parser keeps installation dependency-free and offline-capable.
+Task manifests use a constrained YAML shape. PyYAML is used when available; a built-in parser keeps manifest parsing offline-capable. JSON Schema validation uses `jsonschema`.
 
 ## Install
 
@@ -62,16 +65,14 @@ Edit `~/.config/agent-workflow/config.toml`. A machine with projects under `/lum
 
 ```toml
 [paths]
-source_root = "/lump/apps"
 worktree_root = "/lump/worktrees"
-prompt_pack_root = "~/prompt-packs"
 
 [terminal]
 backend = "tmux"
 stall_minutes = 10
 
 [executors.codex]
-command = ["codex", "exec", "--full-auto", "-"]
+command = ["codex", "exec", "--sandbox", "workspace-write", "--skip-git-repo-check", "-"]
 
 [executors.claude]
 command = ["claude", "--print"]
@@ -88,10 +89,17 @@ agent-workflow launch   example-p0-01   /lump/worktrees/example/p0-01   ./phase-
 Or provide an explicit command:
 
 ```bash
-agent-workflow launch example-p0-01 /path/to/worktree ticket.md --   codex exec --full-auto -
+agent-workflow launch example-p0-01 /path/to/worktree ticket.md -- \
+  codex exec --sandbox workspace-write --skip-git-repo-check -
 ```
 
 By default, Git worktrees must be clean at launch. Use `--allow-dirty` only for an intentional continuation or recovery; retries automatically preserve and reuse the existing worktree.
+
+Use `--executor codex` or `--executor claude` to select a configured executor.
+Add `--structured` to preserve raw Codex JSONL or Claude stream-JSON while rendering normalized operator output. Retries preserve the saved executor identity, stream format, original prompt source, and pack root.
+Installed workflow skills are invoked as `$prompt-pack-builder`,
+`$delegated-implementation`, and `$phase-gate-review` in Codex, or with `/`
+instead of `$` in Claude.
 
 Observe and foreground:
 
@@ -117,6 +125,24 @@ agent-workflow pack validate ./my-project-prompt-pack
 agent-workflow pack archive ./my-project-prompt-pack ./my-project-prompt-pack.tar.zst
 ```
 
+## Deterministic evaluation
+
+```bash
+agent-workflow eval validate ./evals/evaluation.json --pack ./prompt-pack
+agent-workflow launch eval-p0-01 /path/to/worktree ticket.md \
+  --ticket P0-01 --executor codex --structured \
+  --evaluation ./evals/evaluation.json
+agent-workflow eval score eval-p0-01
+agent-workflow eval report eval-p0-01 --format markdown
+agent-workflow ledger ./prompt-pack
+agent-workflow review eval-p0-01 --actor reviewer --reason "gates checked"
+agent-workflow accept eval-p0-01 --actor reviewer --reason "approved" --revision SHA
+```
+
+Baseline commands and scope are captured before the agent; post scope is captured before post commands. Collector artifacts are sealed before scoring. Evaluator-only oracle material remains outside the checkout and is addressed by ID and SHA-256.
+
+Inspect AI, statistics, OpenTelemetry, MLflow, and generated shell completions are optional extras. Their adapters are intentionally experimental seams: the Inspect seam reuses the public `inspect_swe` Codex and Claude agents inside an Inspect-owned Docker sandbox, while paid model trials and external backend/harness validation remain operator-run gates.
+
 ## State and evidence
 
 Authoritative records are stored under:
@@ -125,7 +151,7 @@ Authoritative records are stored under:
 ~/.local/state/agent-workflow/runs/<session-id>/
 ```
 
-Each worktree receives a discoverability symlink at `.delegations/<session-id>`. Deleting a worktree therefore does not delete the authoritative prompt, command, log, or status record.
+Each worktree receives a discoverability symlink at `.delegations/<session-id>`. Deleting a worktree therefore does not delete the authoritative evidence bundle. `final-receipt.json` hashes every required artifact; `events.jsonl` and immutable review receipts record later lifecycle actions without rewriting sealed agent evidence.
 
 ## Compatibility scripts
 

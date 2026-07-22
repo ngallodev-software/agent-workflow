@@ -1,0 +1,1 @@
+{"schema":"agent-workflow/public-fixture/v1","id":"evidence-fidelity","oracle_id":"evidence-fidelity-v1","acceptance":[["python3","validate.py"]],"writable_paths":["value.txt"]}

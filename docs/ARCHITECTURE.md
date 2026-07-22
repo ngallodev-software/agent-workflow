@@ -24,11 +24,24 @@ The authoritative state root is XDG-based:
         ├── status.json
         ├── source-baseline.json
         ├── prompt.md
+        ├── launch-prompt.md
         ├── command.json
+        ├── run-provenance.json
+        ├── executor-events.jsonl
+        ├── executor-stderr.log
         ├── output.log
         ├── completion.md
+        ├── completion.json
+        ├── patch.diff
+        ├── final-status.json
+        ├── final-receipt.json
+        ├── heartbeat.json
+        ├── events.jsonl
+        ├── collections/       # evaluation runs only
+        ├── scope/             # evaluation runs only
+        ├── receipts/          # review lifecycle only
         ├── run.sh
-        └── update_status.py
+        └── scores/            # generated after sealing
 ```
 
 A worktree-local `.delegations/<session-id>` symlink points to the durable run directory. The tool adds `.delegations/` to Git's local exclude metadata, so observability does not create a source change. Worktree cleanup therefore does not destroy evidence.
@@ -37,13 +50,15 @@ A worktree-local `.delegations/<session-id>` symlink points to the durable run d
 
 The CLI creates one detached tmux session whose process is a generated runner. The runner:
 
-1. atomically marks the run `running`;
-2. changes to the worktree;
-3. pipes the immutable prompt copy to the selected executor;
-4. tees output to the persistent log;
-5. records completion, interruption, or failure on exit.
+1. atomically marks the run `running` and emits a lifecycle event;
+2. starts the executor as its own process group and forwards interrupts;
+3. passes `launch-prompt.md` on stdin and preserves stdout JSONL plus stderr separately;
+4. writes heartbeat records and enforces evaluation time/token budgets;
+5. captures post-agent scope before running post-agent acceptance commands;
+6. finalizes provenance, captures the patch, validates every core contract, and seals the fixed artifact set;
+7. records the final-receipt hash in mutable status and makes sealed evidence read-only.
 
-Commands are stored as argv arrays and rendered using shell-safe quoting. The generated script is checked with `bash -n` before tmux launches it.
+The generated `run.sh` is a thin, shell-quoted invocation of the Python runner and is checked with `bash -n`. Process ownership, stream parsing, collection, and sealing exist only in reusable Python modules.
 
 ## State model
 
@@ -54,13 +69,19 @@ prepared -> launched -> running -> completed
 operator kill -------------------------------------------> killed
 ```
 
+Review is an independent dimension: `null -> reviewed -> accepted|rejected`. Review receipts reference immutable final-receipt and deterministic score-set hashes; execution success never implies acceptance.
+
 `possibly_stalled`, `orphaned`, and `terminal_unavailable` are observed states, not durable lifecycle states.
 
 ## Security posture
 
 - Session IDs are restricted to safe filesystem/tmux characters.
-- Status writes are atomic.
+- Status writes are atomic and lifecycle transitions are append/fsync-before-snapshot events.
 - Prompt SHA-256 and source revision are recorded before execution.
 - The workflow stores no external-service credentials.
 - No automatic merge, branch deletion, or failed-worktree cleanup occurs.
 - Interrupt, terminate, and kill preserve logs and source trees.
+
+## Evaluation topology
+
+The accepted topology is documented in `docs/adr/0001-inspect-evaluation-topology.md`: host `agent-workflow` owns tmux and local evidence, while Inspect owns the Docker sandbox, model bridge, transcripts, and adapter lifecycle. Public `inspect_swe.codex_cli()` and `inspect_swe.claude_code()` adapters are reused whole; private Inspect internals are not copied.
