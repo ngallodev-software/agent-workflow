@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from .config import Settings
@@ -25,6 +26,18 @@ def _insert_before_stdin(argv: list[str], values: list[str]) -> list[str]:
     return argv + values
 
 
+def _infer_executor(argv: list[str]) -> str | None:
+    """Identify supported executors from an explicit command's executable."""
+    if not argv:
+        return None
+    executable = Path(argv[0]).name.lower()
+    if executable == "codex":
+        return "codex"
+    if executable in {"claude", "claude-code"}:
+        return "claude"
+    return None
+
+
 def prepare_executor(
     settings: Settings,
     executor: str | None,
@@ -33,7 +46,20 @@ def prepare_executor(
     structured: bool = False,
 ) -> ExecutorPlan:
     if explicit:
-        return ExecutorPlan(None, tuple(explicit), "text")
+        executor = _infer_executor(explicit)
+        argv = list(explicit)
+        stream_format = "text"
+        if structured and executor == "codex":
+            if "--json" not in argv:
+                argv = _insert_before_stdin(argv, ["--json"])
+            stream_format = "codex-jsonl"
+        elif structured and executor == "claude":
+            if "--print" in argv and "--verbose" not in argv:
+                argv.append("--verbose")
+            if "--output-format" not in argv:
+                argv.extend(["--output-format", "stream-json"])
+            stream_format = "claude-stream-json"
+        return ExecutorPlan(executor, tuple(argv), stream_format)
     if not executor:
         raise WorkflowError(
             "provide --executor NAME or an explicit command after --"

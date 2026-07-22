@@ -30,7 +30,26 @@ class ExecutorEventTests(unittest.TestCase):
         self.assertEqual(event_usage(codex), codex["usage"])
         self.assertEqual(event_text(claude, "claude-stream-json"), ["ok"])
 
-    def test_explicit_commands_remain_unmodified(self):
+    def test_unknown_explicit_commands_remain_unmodified(self):
         plan = prepare_executor(defaults(), None, ["cat"], structured=True)
+        self.assertEqual(plan.name, None)
         self.assertEqual(plan.argv, ("cat",))
         self.assertEqual(plan.stream_format, "text")
+
+    def test_explicit_known_executors_preserve_structured_format(self):
+        codex = prepare_executor(
+            defaults(), None, ["/usr/local/bin/codex", "exec", "-"], structured=True
+        )
+        claude = prepare_executor(
+            defaults(), None, ["claude", "--print"], structured=True
+        )
+
+        self.assertEqual(codex.name, "codex")
+        self.assertEqual(codex.argv, ("/usr/local/bin/codex", "exec", "--json", "-"))
+        self.assertEqual(codex.stream_format, "codex-jsonl")
+        self.assertEqual(claude.name, "claude")
+        self.assertEqual(
+            claude.argv,
+            ("claude", "--print", "--verbose", "--output-format", "stream-json"),
+        )
+        self.assertEqual(claude.stream_format, "claude-stream-json")

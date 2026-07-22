@@ -122,6 +122,46 @@ class SessionLaunchTests(unittest.TestCase):
             )
             create_session.assert_called_once()
 
+    def test_explicit_codex_launch_records_structured_executor(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            workdir = root / "worktree"
+            workdir.mkdir()
+            prompt = root / "ticket.md"
+            prompt.write_text("# Ticket\n", encoding="utf-8")
+            codex = root / "codex"
+            codex.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            codex.chmod(0o755)
+            settings = defaults(root / "missing-config.toml")
+            settings = settings.__class__(
+                **{**settings.__dict__, "state_root": root / "state"}
+            )
+            with (
+                patch("agent_workflow.sessions.tmux.session_exists", return_value=False),
+                patch("agent_workflow.sessions.tmux.create_session"),
+                patch("agent_workflow.sessions.tmux.pane_info", return_value=None),
+                patch("agent_workflow.sessions.executor_version", return_value="test"),
+            ):
+                result = launch(
+                    settings,
+                    session_id="explicit-codex",
+                    workdir=workdir,
+                    prompt_path=prompt,
+                    explicit_command=[str(codex), "exec", "-"],
+                    structured=True,
+                )
+            command = json.loads(Path(result["command_path"]).read_text(encoding="utf-8"))
+            provenance = json.loads(
+                (Path(result["command_path"]).parent / "run-provenance.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(command["executor"], "codex")
+            self.assertEqual(command["stream_format"], "codex-jsonl")
+            self.assertEqual(command["argv"], [str(codex), "exec", "--json", "-"])
+            self.assertEqual(provenance["executor"], "codex")
+            self.assertEqual(provenance["stream_format"], "codex-jsonl")
+
     def test_launch_process_receives_durable_task_context(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

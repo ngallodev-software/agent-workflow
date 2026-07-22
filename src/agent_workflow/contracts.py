@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import site
 import sys
 from functools import lru_cache
 from pathlib import Path
@@ -12,6 +13,7 @@ from .errors import WorkflowError
 def _schema_roots() -> tuple[Path, ...]:
     return (
         Path(__file__).resolve().parents[2] / "schemas",
+        Path(site.getuserbase()) / "share" / "agent-workflow" / "schemas",
         Path(sys.prefix) / "share" / "agent-workflow" / "schemas",
     )
 
