@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/completion-collection/v1",
+  "type": "object",
+  "required": ["schema", "session_id", "adapter", "adapter_version", "source_path", "source_sha256", "canonical_mapping", "canonical_sha256", "validation_status", "validation_errors", "collected_at", "stored_path"],
+  "properties": {
+    "schema": {"const": "agent-workflow/completion-collection/v1"},
+    "session_id": {"type": "string"},
+    "adapter": {"const": "native"},
+    "adapter_version": {"const": "1"},
+    "source_path": {"type": ["string", "null"]},
+    "source_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+    "canonical_mapping": {"type": ["string", "null"], "enum": ["identity", null]},
+    "canonical_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+    "validation_status": {"enum": ["valid", "missing", "invalid"]},
+    "validation_errors": {"type": "array", "items": {"type": "string"}},
+    "collected_at": {"type": "string"},
+    "stored_path": {"type": ["string", "null"]}
+  },
+  "additionalProperties": false
+}

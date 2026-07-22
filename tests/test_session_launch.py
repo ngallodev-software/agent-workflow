@@ -120,6 +120,11 @@ class SessionLaunchTests(unittest.TestCase):
                 (workdir / ".delegations" / "sample-p0-01").resolve(),
                 run_dir.resolve(),
             )
+            handoff = workdir / ".agent-workflow-handoff" / "sample-p0-01"
+            self.assertTrue(handoff.is_dir())
+            self.assertFalse(handoff.is_symlink())
+            self.assertFalse(handoff.resolve().is_relative_to(run_dir.resolve()))
+            self.assertEqual(result["handoff_dir"], str(handoff.resolve()))
             create_session.assert_called_once()
 
     def test_explicit_codex_launch_records_structured_executor(self):
@@ -175,11 +180,18 @@ class SessionLaunchTests(unittest.TestCase):
             result_path = root / "received.json"
             receiver = (
                 "import json, os, pathlib, sys; "
+                "handoff = pathlib.Path(os.environ['AGENT_WORKFLOW_HANDOFF_DIR']); "
+                "handoff.joinpath('completion.json').write_text(json.dumps({"
+                "'schema': 'agent-workflow/completion/v1', "
+                "'session_id': os.environ['AGENT_WORKFLOW_SESSION_ID'], "
+                "'ticket_id': None, 'pack_id': None, 'result': 'completed', "
+                "'base_revision': None, 'head_revision': None, 'changed_files': [], "
+                "'criteria': [], 'commands': [], 'unresolved': [], 'usage': None})); "
                 f"pathlib.Path({str(result_path)!r}).write_text(json.dumps({{"
                 "'session_id': os.environ['AGENT_WORKFLOW_SESSION_ID'], "
                 "'prompt_source': os.environ['AGENT_WORKFLOW_PROMPT_SOURCE'], "
                 "'pack_root': os.environ['AGENT_WORKFLOW_PROMPT_PACK_ROOT'], "
-                "'completion_path': os.environ['AGENT_WORKFLOW_COMPLETION_PATH'], "
+                "'handoff_dir': os.environ['AGENT_WORKFLOW_HANDOFF_DIR'], "
                 "'stdin': sys.stdin.read()}, sort_keys=True))"
             )
             settings = defaults(root / "missing-config.toml")
@@ -205,8 +217,13 @@ class SessionLaunchTests(unittest.TestCase):
             self.assertEqual(received["session_id"], "context-p0-01")
             self.assertEqual(received["prompt_source"], str(prompt))
             self.assertEqual(received["pack_root"], str(pack))
-            self.assertEqual(received["completion_path"], result["completion_path"])
-            self.assertTrue(Path(received["completion_path"]).is_file())
+            self.assertEqual(received["handoff_dir"], result["handoff_dir"])
+            self.assertTrue(Path(received["handoff_dir"]).is_dir())
+            self.assertFalse(
+                Path(received["handoff_dir"]).is_relative_to(
+                    Path(result["completion_json_path"]).parent
+                )
+            )
             self.assertIn("session_id: `context-p0-01`", received["stdin"])
             self.assertIn("# Original ticket", received["stdin"])
             self.assertEqual(
@@ -220,6 +237,9 @@ class SessionLaunchTests(unittest.TestCase):
                 )
             )
             self.assertTrue(Path(final_status["final_receipt_path"]).is_file())
+            self.assertEqual(final_status["completion_validation_status"], "valid")
+            completion = json.loads(Path(result["completion_json_path"]).read_text(encoding="utf-8"))
+            self.assertEqual(completion["result"], "completed")
 
     def test_kill_preserves_terminal_durable_status(self):
         with tempfile.TemporaryDirectory() as tmp:

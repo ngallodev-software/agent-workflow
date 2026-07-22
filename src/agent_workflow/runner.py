@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import signal
+import stat
 import subprocess
 import threading
 import time
@@ -18,6 +20,135 @@ from .eval.scope import ScopePolicy, collect_scope
 from .executors import event_text, event_usage, parse_event
 from .receipts import make_read_only, seal_run, update_provenance
 from .util import atomic_write_json, sha256_file, utc_now
+
+
+MAX_COMPLETION_HANDOFF_BYTES = 1024 * 1024
+
+
+def _read_handoff_completion(path: Path) -> bytes:
+    """Read one bounded regular file without following an executor-controlled link."""
+    try:
+        mode = path.lstat().st_mode
+    except FileNotFoundError:
+        raise
+    except OSError as exc:
+        raise WorkflowError(f"cannot inspect completion handoff: {exc}") from exc
+    if stat.S_ISLNK(mode) or not stat.S_ISREG(mode):
+        raise WorkflowError("completion handoff must be a regular non-symlink file")
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as exc:
+        raise WorkflowError(f"cannot open completion handoff safely: {exc}") from exc
+    try:
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode):
+            raise WorkflowError("completion handoff must be a regular file")
+        if info.st_size > MAX_COMPLETION_HANDOFF_BYTES:
+            raise WorkflowError(
+                f"completion handoff exceeds {MAX_COMPLETION_HANDOFF_BYTES} bytes"
+            )
+        chunks: list[bytes] = []
+        remaining = MAX_COMPLETION_HANDOFF_BYTES + 1
+        while remaining:
+            chunk = os.read(descriptor, min(1024 * 1024, remaining))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        data = b"".join(chunks)
+        if len(data) > MAX_COMPLETION_HANDOFF_BYTES:
+            raise WorkflowError(
+                f"completion handoff exceeds {MAX_COMPLETION_HANDOFF_BYTES} bytes"
+            )
+        return data
+    finally:
+        os.close(descriptor)
+
+
+def _require_real_handoff_dir(handoff: Path, workdir: Path) -> None:
+    try:
+        relative = handoff.relative_to(workdir)
+    except ValueError as exc:
+        raise WorkflowError("completion handoff escapes worktree") from exc
+    current = workdir
+    for component in relative.parts:
+        current = current / component
+        try:
+            mode = current.lstat().st_mode
+        except OSError as exc:
+            raise WorkflowError(f"cannot inspect completion handoff directory: {exc}") from exc
+        if stat.S_ISLNK(mode) or not stat.S_ISDIR(mode):
+            raise WorkflowError("completion handoff directory must not contain symlinks")
+
+
+def _collect_completion(run_dir: Path, workdir: Path) -> dict[str, Any]:
+    """Collect native executor evidence before downstream collectors and sealing."""
+    status = _read_status(run_dir / "status.json")
+    handoff_value = status.get("handoff_dir")
+    handoff = Path(handoff_value) if isinstance(handoff_value, str) else None
+    source = handoff / "completion.json" if handoff is not None else None
+    receipt: dict[str, Any] = {
+        "schema": "agent-workflow/completion-collection/v1",
+        "session_id": str(status["session_id"]),
+        "adapter": "native",
+        "adapter_version": "1",
+        "source_path": str(source) if source is not None else None,
+        "source_sha256": None,
+        "canonical_mapping": None,
+        "canonical_sha256": None,
+        "validation_status": "missing",
+        "validation_errors": [],
+        "collected_at": utc_now(),
+        "stored_path": None,
+    }
+    try:
+        if handoff is None:
+            raise FileNotFoundError("launch has no completion handoff")
+        _require_real_handoff_dir(handoff, workdir)
+        assert source is not None
+        data = _read_handoff_completion(source)
+    except FileNotFoundError as exc:
+        receipt["validation_errors"] = [str(exc)]
+    except WorkflowError as exc:
+        receipt["validation_status"] = "invalid"
+        receipt["validation_errors"] = [str(exc)]
+    else:
+        receipt["source_sha256"] = hashlib.sha256(data).hexdigest()
+        try:
+            value = json.loads(data.decode("utf-8"))
+            if not isinstance(value, dict):
+                raise WorkflowError("completion handoff must be a JSON object")
+            if value.get("session_id") != status["session_id"]:
+                raise WorkflowError("completion handoff session_id does not match run")
+            from .contracts import validate_instance
+
+            validate_instance(
+                value,
+                "agent-workflow/completion/v1",
+                artifact=str(source),
+            )
+            completion_path = run_dir / "completion.json"
+            temporary = completion_path.with_name(f".{completion_path.name}.handoff")
+            temporary.write_bytes(data)
+            os.replace(temporary, completion_path)
+            receipt["validation_status"] = "valid"
+            receipt["stored_path"] = "completion.json"
+            receipt["canonical_mapping"] = "identity"
+            receipt["canonical_sha256"] = hashlib.sha256(
+                completion_path.read_bytes()
+            ).hexdigest()
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, WorkflowError) as exc:
+            receipt["validation_status"] = "invalid"
+            receipt["validation_errors"] = [str(exc)]
+    receipt_path = run_dir / "collections" / "completion.json"
+    atomic_write_json(receipt_path, receipt)
+    _update_status(
+        run_dir / "status.json",
+        completion_collection_path=str(receipt_path),
+        completion_validation_status=receipt["validation_status"],
+    )
+    return receipt
 
 
 def _read_status(path: Path) -> dict[str, Any]:
@@ -179,6 +310,8 @@ def execute(
             finished_at=finished_at,
             exit_code=127,
         )
+        _capture_patch(workdir, run_dir, run_dir / "patch.diff")
+        _collect_completion(run_dir, workdir)
         current = _read_status(status_path)
         final_status = {
             **current,
@@ -190,7 +323,6 @@ def execute(
             ),
             "updated_at": finished_at,
         }
-        _capture_patch(workdir, run_dir, run_dir / "patch.diff")
         atomic_write_json(run_dir / "final-status.json", final_status)
         receipt = seal_run(run_dir, session_id=str(current["session_id"]))
         receipt_hash = sha256_file(run_dir / "final-receipt.json")
@@ -311,6 +443,8 @@ def execute(
             pump_errors.append("stream pump did not stop after descriptor close")
     if pump_errors:
         return_code = return_code or 1
+
+    _collect_completion(run_dir, workdir)
 
     if isinstance(runtime, dict):
         try:

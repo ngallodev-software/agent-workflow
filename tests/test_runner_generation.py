@@ -4,7 +4,7 @@ import unittest
 import json
 from pathlib import Path
 
-from agent_workflow.runner import _capture_patch
+from agent_workflow.runner import MAX_COMPLETION_HANDOFF_BYTES, _capture_patch, _collect_completion
 from agent_workflow.sessions import _write_runner
 from run_fixtures import write_run_contracts
 
@@ -29,6 +29,114 @@ class RunnerTests(unittest.TestCase):
             )
 
 class RunnerExecutionTests(unittest.TestCase):
+    def test_runner_collects_valid_handoff_before_seal(self):
+        import subprocess
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state, work = root / "state", root / "work"
+            state.mkdir()
+            work.mkdir()
+            write_run_contracts(state, session_id="handoff-valid", include_final=False)
+            handoff = work / ".agent-workflow-handoff" / "handoff-valid"
+            handoff.mkdir(parents=True)
+            status_path = state / "status.json"
+            status = json.loads(status_path.read_text(encoding="utf-8"))
+            status["handoff_dir"] = str(handoff)
+            status_path.write_text(json.dumps(status), encoding="utf-8")
+            writer = (
+                "import json, os, pathlib; p=pathlib.Path(os.environ['AGENT_WORKFLOW_HANDOFF_DIR']); "
+                "p.joinpath('completion.json').write_text(json.dumps({'schema':'agent-workflow/completion/v1',"
+                "'session_id':'handoff-valid','ticket_id':None,'pack_id':None,'result':'completed',"
+                "'base_revision':None,'head_revision':None,'changed_files':[],'criteria':[],'commands':[],"
+                "'unresolved':[],'usage':None}))"
+            )
+            runner = _write_runner(
+                state, work, ["python3", "-c", writer], handoff_dir=handoff
+            )
+            self.assertNotIn("AGENT_WORKFLOW_PROVENANCE_PATH", runner.read_text(encoding="utf-8"))
+            self.assertEqual(subprocess.run([str(runner)], check=False).returncode, 0)
+            completion = json.loads((state / "completion.json").read_text(encoding="utf-8"))
+            collection = json.loads((state / "collections" / "completion.json").read_text(encoding="utf-8"))
+            self.assertEqual(completion["result"], "completed")
+            self.assertEqual(collection["validation_status"], "valid")
+            self.assertEqual(collection["adapter_version"], "1")
+            self.assertEqual(collection["canonical_mapping"], "identity")
+            self.assertEqual(collection["canonical_sha256"], collection["source_sha256"])
+            final = json.loads((state / "final-receipt.json").read_text(encoding="utf-8"))
+            self.assertIn("collections/completion.json", {item["path"] for item in final["artifacts"]})
+
+    def test_invalid_handoff_preserves_placeholder_and_seals(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state, work = root / "state", root / "work"
+            state.mkdir()
+            work.mkdir()
+            write_run_contracts(state, session_id="handoff-invalid", include_final=False)
+            handoff = work / ".agent-workflow-handoff" / "handoff-invalid"
+            handoff.mkdir(parents=True)
+            (handoff / "completion.json").symlink_to(work / "outside.json")
+            status_path = state / "status.json"
+            status = json.loads(status_path.read_text(encoding="utf-8"))
+            status["handoff_dir"] = str(handoff)
+            status_path.write_text(json.dumps(status), encoding="utf-8")
+            collection = _collect_completion(state, work)
+            self.assertEqual(collection["validation_status"], "invalid")
+            self.assertEqual(
+                json.loads((state / "completion.json").read_text(encoding="utf-8"))["result"],
+                "blocked",
+            )
+
+    def test_oversized_handoff_is_invalid(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state, work = root / "state", root / "work"
+            state.mkdir()
+            work.mkdir()
+            write_run_contracts(state, session_id="handoff-large", include_final=False)
+            handoff = work / ".agent-workflow-handoff" / "handoff-large"
+            handoff.mkdir(parents=True)
+            (handoff / "completion.json").write_bytes(b"x" * (MAX_COMPLETION_HANDOFF_BYTES + 1))
+            status_path = state / "status.json"
+            status = json.loads(status_path.read_text(encoding="utf-8"))
+            status["handoff_dir"] = str(handoff)
+            status_path.write_text(json.dumps(status), encoding="utf-8")
+            self.assertEqual(_collect_completion(state, work)["validation_status"], "invalid")
+
+    def test_missing_malformed_and_escaping_handoffs_seal_with_receipts(self):
+        import subprocess
+
+        cases = (("missing", "missing"), ("malformed", "invalid"), ("escape", "invalid"))
+        for name, expected in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                state, work = root / "state", root / "work"
+                state.mkdir()
+                work.mkdir()
+                session_id = f"handoff-{name}"
+                write_run_contracts(state, session_id=session_id, include_final=False)
+                handoff = work / ".agent-workflow-handoff" / session_id
+                handoff.mkdir(parents=True)
+                if name == "malformed":
+                    (handoff / "completion.json").write_text("{not json", encoding="utf-8")
+                if name == "escape":
+                    handoff = state
+                status_path = state / "status.json"
+                status = json.loads(status_path.read_text(encoding="utf-8"))
+                status["handoff_dir"] = str(handoff)
+                status_path.write_text(json.dumps(status), encoding="utf-8")
+                runner = _write_runner(state, work, ["true"])
+                self.assertEqual(subprocess.run([str(runner)], check=False).returncode, 0)
+                collection = json.loads(
+                    (state / "collections" / "completion.json").read_text(encoding="utf-8")
+                )
+                self.assertEqual(collection["validation_status"], expected)
+                self.assertIsNone(collection["canonical_mapping"])
+                self.assertIsNone(collection["canonical_sha256"])
+                completion = json.loads((state / "completion.json").read_text(encoding="utf-8"))
+                self.assertEqual(completion["result"], "blocked")
+                self.assertTrue((state / "final-receipt.json").is_file())
+
     def test_missing_executor_fails_and_seals_evidence(self):
         import subprocess
 

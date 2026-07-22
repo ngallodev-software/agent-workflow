@@ -22,6 +22,7 @@ SEALED_ARTIFACTS = (
     "output.log",
     "final-status.json",
     "patch.diff",
+    "collections/completion.json",
 )
 SEALED_TREES = ("collections", "scope")
 SEALED_OPTIONAL_ARTIFACTS = ("evaluation-runtime.json",)
@@ -135,6 +136,7 @@ def seal_run(run_dir: Path, *, session_id: str) -> dict[str, Any]:
         for name in SEALED_OPTIONAL_ARTIFACTS
         if (path := run_dir / name).is_file()
     )
+    listed_paths = {item["path"] for item in artifacts}
     for tree in SEALED_TREES:
         tree_root = run_dir / tree
         if tree_root.is_dir() and not tree_root.is_symlink():
@@ -142,6 +144,7 @@ def seal_run(run_dir: Path, *, session_id: str) -> dict[str, Any]:
                 _artifact_receipt(path, run_dir)
                 for path in sorted(tree_root.rglob("*"))
                 if path.is_file()
+                and path.relative_to(run_dir).as_posix() not in listed_paths
             )
     required = set(SEALED_ARTIFACTS)
     present = {item["path"] for item in artifacts}
@@ -154,6 +157,7 @@ def seal_run(run_dir: Path, *, session_id: str) -> dict[str, Any]:
         "completion.json": "agent-workflow/completion/v1",
         "run-provenance.json": "agent-workflow/run-provenance/v1",
         "final-status.json": "agent-workflow/session-status/v2",
+        "collections/completion.json": "agent-workflow/completion-collection/v1",
     }.items():
         read_contract(run_dir / name, schema)
     receipt = {

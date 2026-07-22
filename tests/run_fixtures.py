@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from agent_workflow.receipts import initial_completion, initial_provenance
-from agent_workflow.util import atomic_write_json
+from agent_workflow.util import atomic_write_json, sha256_file
 
 
 def write_run_contracts(
@@ -48,6 +48,23 @@ def write_run_contracts(
         ),
     )
     atomic_write_json(
+        root / "collections" / "completion.json",
+        {
+            "schema": "agent-workflow/completion-collection/v1",
+            "session_id": session_id,
+            "adapter": "native",
+            "adapter_version": "1",
+            "source_path": None,
+            "source_sha256": None,
+            "canonical_mapping": "identity",
+            "canonical_sha256": sha256_file(root / "completion.json"),
+            "validation_status": "valid",
+            "validation_errors": [],
+            "collected_at": "2026-01-01T00:00:00+00:00",
+            "stored_path": "completion.json",
+        },
+    )
+    atomic_write_json(
         root / "run-provenance.json",
         initial_provenance(
             session_id=session_id,
@@ -74,6 +91,8 @@ def write_run_contracts(
         "workdir": str(root),
         "prompt_path": str(root / "prompt.md"),
         "log_path": str(root / "output.log"),
+        "completion_collection_path": str(root / "collections" / "completion.json"),
+        "completion_validation_status": "valid",
     }
     atomic_write_json(root / "status.json", status)
     if include_final:

@@ -38,6 +38,10 @@ from .util import (
 )
 
 def _ignore_delegations(workdir: Path) -> None:
+    _add_git_exclude(workdir, ".delegations/")
+
+
+def _add_git_exclude(workdir: Path, entry: str) -> None:
     try:
         result = run(
             ["git", "-C", str(workdir), "rev-parse", "--git-path", "info/exclude"]
@@ -49,12 +53,21 @@ def _ignore_delegations(workdir: Path) -> None:
         exclude = workdir / exclude
     exclude.parent.mkdir(parents=True, exist_ok=True)
     existing = exclude.read_text(encoding="utf-8") if exclude.exists() else ""
-    entry = ".delegations/"
     if entry not in {line.strip() for line in existing.splitlines()}:
         with exclude.open("a", encoding="utf-8") as stream:
             if existing and not existing.endswith("\n"):
                 stream.write("\n")
             stream.write(entry + "\n")
+
+
+def _create_handoff_dir(workdir: Path, session_id: str) -> Path:
+    """Create the executor-writable completion boundary in the worktree."""
+    _add_git_exclude(workdir, ".agent-workflow-handoff/")
+    handoff = workdir / ".agent-workflow-handoff" / session_id
+    if handoff.exists() or handoff.is_symlink():
+        raise WorkflowError(f"completion handoff already exists: {handoff}")
+    handoff.mkdir(parents=True, mode=0o700)
+    return handoff.resolve()
 
 
 def _link_worktree_state(
@@ -84,6 +97,7 @@ def _write_runner(
     session_id: str = "unknown-session",
     prompt_source: Path | None = None,
     prompt_pack_root: Path | None = None,
+    handoff_dir: Path | None = None,
     stream_format: str = "text",
 ) -> Path:
     prompt = state_dir / "prompt.md"
@@ -99,13 +113,10 @@ def _write_runner(
         "set -Eeuo pipefail\n"
         f"readonly AGENT_WORKFLOW_SESSION_ID={shlex.quote(session_id)}\n"
         f"readonly AGENT_WORKFLOW_PROMPT_SOURCE={shlex.quote(str(prompt_source))}\n"
-        f"readonly AGENT_WORKFLOW_COMPLETION_PATH={shlex.quote(str(state_dir / 'completion.md'))}\n"
-        f"readonly AGENT_WORKFLOW_COMPLETION_JSON_PATH={shlex.quote(str(state_dir / 'completion.json'))}\n"
-        f"readonly AGENT_WORKFLOW_PROVENANCE_PATH={shlex.quote(str(state_dir / 'run-provenance.json'))}\n"
+        f"readonly AGENT_WORKFLOW_HANDOFF_DIR={shlex.quote(str(handoff_dir or ''))}\n"
         f"readonly AGENT_WORKFLOW_PROMPT_PACK_ROOT={shlex.quote(str(prompt_pack_root or ''))}\n"
         "export AGENT_WORKFLOW_SESSION_ID AGENT_WORKFLOW_PROMPT_SOURCE "
-        "AGENT_WORKFLOW_COMPLETION_PATH AGENT_WORKFLOW_COMPLETION_JSON_PATH "
-        "AGENT_WORKFLOW_PROVENANCE_PATH AGENT_WORKFLOW_PROMPT_PACK_ROOT\n"
+        "AGENT_WORKFLOW_HANDOFF_DIR AGENT_WORKFLOW_PROMPT_PACK_ROOT\n"
         f"export PYTHONPATH={shlex.quote(str(source_root))}${{PYTHONPATH:+:$PYTHONPATH}}\n"
         "exec python3 -m agent_workflow.runner "
         f"--run-dir {shlex.quote(str(state_dir))} "
@@ -140,9 +151,8 @@ def _write_launch_prompt(
     session_id: str,
     prompt_source: Path,
     prompt_pack_root: Path | None,
+    handoff_dir: Path,
 ) -> Path:
-    completion_path = state_dir / "completion.md"
-    completion_json_path = state_dir / "completion.json"
     context = [
         "# Agent-workflow launch context",
         "The complete ticket is included below. Do not reread prompt_source unless the ticket explicitly requests it.",
@@ -154,9 +164,10 @@ def _write_launch_prompt(
         context.append(f"- prompt_pack_root: `{prompt_pack_root}`")
     context.extend(
         [
-            f"- completion_path: `{completion_path}`",
-            f"- completion_json_path: `{completion_json_path}`",
-            "- Update the JSON completion contract before exiting; the Markdown file remains the human-readable report.",
+            f"- completion_handoff_dir: `{handoff_dir}`",
+            "- Write completion JSON only to `AGENT_WORKFLOW_HANDOFF_DIR/completion.json` using schema `agent-workflow/completion/v1`.",
+            "- Write it atomically; optional `completion.md` and `evidence.json` sidecars may use the same handoff directory.",
+            "- Canonical runtime completion paths are collector-owned; do not write to them.",
             "- Matching environment variables use the `AGENT_WORKFLOW_` prefix.",
             "",
             "---",
@@ -271,11 +282,13 @@ def launch(
     (state_dir / "completion.md").write_bytes(
         asset_path("prompt-pack-root/templates/TICKET_COMPLETION.md").read_bytes()
     )
+    handoff_dir = _create_handoff_dir(workdir, session_id)
     launch_prompt = _write_launch_prompt(
         state_dir,
         session_id=session_id,
         prompt_source=prompt_source,
         prompt_pack_root=prompt_pack_root,
+        handoff_dir=handoff_dir,
     )
 
     git_info: dict[str, Any]
@@ -446,6 +459,9 @@ def launch(
         "command_path": str(state_dir / "command.json"),
         "completion_path": str(state_dir / "completion.md"),
         "completion_json_path": str(completion_path),
+        "handoff_dir": str(handoff_dir),
+        "completion_collection_path": str(state_dir / "collections" / "completion.json"),
+        "completion_validation_status": None,
         "provenance_path": str(provenance_path),
         "events_path": str(events_path),
         "stderr_path": str(stderr_path),
@@ -466,6 +482,7 @@ def launch(
         session_id=session_id,
         prompt_source=prompt_source,
         prompt_pack_root=prompt_pack_root,
+        handoff_dir=handoff_dir,
         stream_format=executor_plan.stream_format,
     )
     update_status(

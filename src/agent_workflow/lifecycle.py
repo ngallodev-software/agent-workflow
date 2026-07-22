@@ -76,6 +76,10 @@ def record(
     completion = read_contract(
         run / "completion.json", "agent-workflow/completion/v1"
     )
+    collection = read_contract(
+        run / "collections" / "completion.json",
+        "agent-workflow/completion-collection/v1",
+    )
     independent = actor != status.get("executor")
     if action == "accepted":
         if status.get("disposition") != "reviewed":
@@ -98,6 +102,8 @@ def record(
             )
         if completion.get("result") != "completed":
             raise WorkflowError("acceptance requires completion result 'completed'")
+        if collection.get("validation_status") != "valid":
+            raise WorkflowError("acceptance requires a valid collected completion")
         if status.get("tier") not in {"low", "medium", "high", "critical"}:
             raise WorkflowError(
                 "acceptance requires a recorded task tier; relaunch with --tier"
