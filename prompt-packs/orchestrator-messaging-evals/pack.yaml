@@ -2,7 +2,7 @@ schema: agent-workflow/pack/v1
 pack_id: "orchestrator-messaging-evals"
 workflow:
   name: agent-workflow
-  minimum_version: "0.1.3"
+  minimum_version: "0.1.4"
   terminal_backend: tmux
   requires:
     - isolated_worktree

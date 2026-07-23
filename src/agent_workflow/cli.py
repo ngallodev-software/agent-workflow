@@ -75,7 +75,7 @@ def _print_table(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="agent-workflow")
-    parser.add_argument("--version", action="version", version="%(prog)s 0.1.3")
+    parser.add_argument("--version", action="version", version="%(prog)s 0.1.4")
     parser.add_argument("--config", type=Path, help="override config.toml path")
     parser.add_argument(
         "--json",

@@ -1,0 +1,39 @@
+{
+  "schema": "agent-workflow/evaluation-plan/v1",
+  "dataset_split": "development",
+  "task_ids": [
+    "normalize-records"
+  ],
+  "repetitions": 2,
+  "timeout_seconds": 60,
+  "scorers": [
+    "acceptance_commands",
+    "regression_guard",
+    "writable_scope",
+    "oracle_leak"
+  ],
+  "sandbox": "local-offline",
+  "acceptance_commands": [
+    {
+      "id": "known-tests",
+      "argv": [
+        "python3",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/test_normalize.py"
+      ]
+    }
+  ],
+  "scope": {
+    "writable_paths": [
+      "app/normalize.py"
+    ]
+  },
+  "oracle_refs": {
+    "normalize-records": {
+      "id": "normalize-records-hidden-v1",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  }
+}

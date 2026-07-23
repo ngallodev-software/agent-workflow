@@ -9,7 +9,7 @@ record.
 
 ## Source baseline
 
-`/lump/apps/agent-workflow`, `master`, release `0.1.3`, reviewed 2026-07-23.
+`/lump/apps/agent-workflow`, `master`, release `0.1.4`, reviewed 2026-07-23.
 
 ## Phase map
 

@@ -1,0 +1,1054 @@
+diff --git a/docs/MESSAGING_PRIOR_ART_REPORT.md b/docs/MESSAGING_PRIOR_ART_REPORT.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..8d0c22c5ef992cda74d82b6164c7105b461741f8
+--- /dev/null
++++ b/docs/MESSAGING_PRIOR_ART_REPORT.md
+@@ -0,0 +1,71 @@
++# Messaging Prior Art and Local Control Contract
++
++## Decision
++
++Use the run directory as the sole authority, with an append-only JSONL log protected by
++an advisory file lock and `fsync`. A waiter always replays durable records. `tmux wait-for`
++may later be used only as a latency accelerator; it cannot become the source of truth.
++The message UUID is the idempotency identity, sequence is contiguous within a run, and a
++steer remains pending until a child appends a correlated acknowledgement after applying it.
++
++## Decision matrix
++
++| Option | Durable replay | Multiwriter behavior | Operational cost | Fit |
++|---|---|---|---|---|
++| Filesystem JSONL + `flock`/`fsync` | Yes, by replay | Serialized local writers | None beyond the CLI | **Selected** |
++| `tmux wait-for` / control mode | No durable history by itself | Synchronization only | Already available | Wakeup accelerator only |
++| SQLite WAL | Yes | Strong transactions, one writer at a time | Schema/database lifecycle | Unnecessary for one small log |
++| Redis Streams | Yes, consumer groups and acknowledgements | Server-mediated | Requires a service | Reject for local-only CLI |
++| NATS JetStream | Yes, durable consumers and explicit acknowledgements | Server-mediated | Requires a service | Reject for local-only CLI |
++| Temporal Signals/Updates | Workflow-history durability | Service-mediated | Requires Temporal | Reject for local-only CLI |
++
++## Frozen contract
++
++- **Authority:** `<run>/messages.jsonl`; lifecycle `events.jsonl` remains separate.
++- **Wakeup:** optional `tmux wait-for` signal. After every wakeup, replay from the last
++  accepted sequence. Lost or coalesced wakeups therefore do not lose records.
++- **Identity:** canonical UUID `message_id`; consumers deduplicate by UUID.
++- **Ordering:** writers hold an exclusive lock, validate the complete existing log,
++  allocate the next contiguous sequence, append one line, flush, and `fsync`.
++- **Acknowledgement:** only a child-to-parent `ack` may correlate to an existing
++  parent-to-child `steer`; duplicate acknowledgements are rejected.
++- **Retention:** records are bounded per run and sealed with the run. Compaction is not
++  performed while active.
++- **Recovery:** restart replays from sequence zero or the consumer's last durable cursor.
++  A malformed or partial tail blocks further append rather than silently truncating data.
++
++## Delivery boundary
++
++`tmux send-keys` injects terminal input. It does not prove that an opaque one-shot executor
++accepted, parsed, applied, or semantically associated that input with a steering request.
++A genuine live adapter must name the executor capability, submit through its supported
++control interface, and append an acknowledgement containing the request UUID only after
++application. Where stdin closes after the initial prompt, the safe state is durable and
++pending—not “delivered.”
++
++## Threat model and mitigations
++
++| Threat | Mitigation |
++|---|---|
++| Traversal or symlink redirection | Fixed filename, validated session IDs, real run directory, regular non-symlink log |
++| Concurrent writers | `flock(LOCK_EX)` around validation, sequence allocation, append, flush, and `fsync` |
++| Partial write or corrupt tail | Strict line-by-line JSON and contiguous-sequence validation; reject append on corruption |
++| Duplicate delivery | UUID idempotency key and explicit correlated acknowledgement |
++| Oversized or malformed payload | Bounded content and closed direction/kind/field sets |
++| False local authority | Disk replay is authoritative; wakeups and terminal output are advisory |
++
++## Primary references
++
++- tmux manual and source: `https://github.com/tmux/tmux/blob/master/tmux.1`
++- tmux control mode: `https://github.com/tmux/tmux/wiki/Control-Mode`
++- SQLite WAL: `https://www.sqlite.org/wal.html`
++- Redis Streams: `https://redis.io/docs/latest/develop/data-types/streams/`
++- NATS JetStream consumers: `https://docs.nats.io/nats-concepts/jetstream/consumers`
++- Temporal message passing: `https://docs.temporal.io/develop/python/message-passing`
++
++The service-backed options offer valuable cross-host consumer state, ACLs, replication,
++and server-managed redelivery, but those properties do not justify introducing a daemon
++or network dependency for the current single-host CLI. Redis and JetStream explicitly use
++pending/acknowledgement models, reinforcing the selected at-least-once plus idempotency
++contract. SQLite WAL adds transactional storage but also a database schema and checkpoint
++lifecycle that the bounded append-only control stream does not need.
+diff --git a/docs/PHASE_3_BLOCKED_GATE_REPORT.md b/docs/PHASE_3_BLOCKED_GATE_REPORT.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..18751ea0f62eaae34815776da3761d3a010e90ad
+--- /dev/null
++++ b/docs/PHASE_3_BLOCKED_GATE_REPORT.md
+@@ -0,0 +1,18 @@
++# Phase 3 blocked gate report
++
++## Verdict
++
++Blocked by the ticket's explicit stop condition.
++
++## Verified missing prerequisites
++
++- No authoritative pinned browser container digest is supplied by the prompt pack.
++- No pinned font manifest is supplied.
++- The current run receipt has no verified browser/Inspect import bridge contract.
++- Therefore screenshot reproducibility and pre-seal browser evidence cannot be claimed.
++
++## Work preserved
++
++`tests/fixtures/regression-evals/priority-picker/README.md` freezes the telemetry order,
++primary DOM/ARIA judging rule, screenshot role, and required negative cases. No unpinned
++browser dependency or misleading “visual eval complete” claim was added.
+diff --git a/schemas/control-event.schema.json b/schemas/control-event.schema.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..f654c45c8145c55e8ad9121713ec4aabff0f5721
+--- /dev/null
++++ b/schemas/control-event.schema.json
+@@ -0,0 +1,19 @@
++{
++  "$schema": "https://json-schema.org/draft/2020-12/schema",
++  "$id": "agent-workflow/control-event/v1",
++  "type": "object",
++  "required": ["schema", "sequence", "message_id", "session_id", "timestamp", "direction", "kind", "actor", "content"],
++  "properties": {
++    "schema": {"const": "agent-workflow/control-event/v1"},
++    "sequence": {"type": "integer", "minimum": 1},
++    "message_id": {"type": "string", "format": "uuid"},
++    "session_id": {"type": "string"},
++    "timestamp": {"type": "string"},
++    "direction": {"enum": ["parent_to_child", "child_to_parent"]},
++    "kind": {"enum": ["steer", "progress", "ack", "error"]},
++    "actor": {"type": "string"},
++    "content": {"type": "string", "minLength": 1, "maxLength": 16384},
++    "correlation_id": {"type": ["string", "null"], "format": "uuid"}
++  },
++  "additionalProperties": false
++}
+diff --git a/schemas/execution-metrics.schema.json b/schemas/execution-metrics.schema.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..24ba8e68b8929049903c37f61dbba41b130fe26d
+--- /dev/null
++++ b/schemas/execution-metrics.schema.json
+@@ -0,0 +1,131 @@
++{
++  "$schema": "https://json-schema.org/draft/2020-12/schema",
++  "$id": "agent-workflow/execution-metrics/v1",
++  "type": "object",
++  "required": [
++    "schema",
++    "session_id",
++    "stages"
++  ],
++  "properties": {
++    "schema": {
++      "const": "agent-workflow/execution-metrics/v1"
++    },
++    "session_id": {
++      "type": "string",
++      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
++    },
++    "stages": {
++      "type": "array",
++      "minItems": 1,
++      "items": {
++        "$ref": "#/$defs/stage"
++      }
++    }
++  },
++  "$defs": {
++    "nullableNumber": {
++      "type": [
++        "integer",
++        "number",
++        "null"
++      ],
++      "minimum": 0
++    },
++    "stage": {
++      "type": "object",
++      "required": [
++        "stage",
++        "input_tokens",
++        "cached_input_tokens",
++        "output_tokens",
++        "provider_total_tokens",
++        "cost",
++        "currency",
++        "elapsed_seconds",
++        "first_output_latency_seconds",
++        "retry_count",
++        "errors",
++        "steer_count",
++        "steer_acknowledged_count",
++        "steer_pending_count"
++      ],
++      "properties": {
++        "stage": {
++          "type": "string",
++          "pattern": "^(orchestrator|verification|total|child:[A-Za-z0-9][A-Za-z0-9_.-]{0,127})$"
++        },
++        "input_tokens": {
++          "$ref": "#/$defs/nullableNumber"
++        },
++        "cached_input_tokens": {
++          "$ref": "#/$defs/nullableNumber"
++        },
++        "output_tokens": {
++          "$ref": "#/$defs/nullableNumber"
++        },
++        "provider_total_tokens": {
++          "$ref": "#/$defs/nullableNumber"
++        },
++        "cost": {
++          "$ref": "#/$defs/nullableNumber"
++        },
++        "currency": {
++          "type": [
++            "string",
++            "null"
++          ]
++        },
++        "elapsed_seconds": {
++          "$ref": "#/$defs/nullableNumber"
++        },
++        "first_output_latency_seconds": {
++          "$ref": "#/$defs/nullableNumber"
++        },
++        "retry_count": {
++          "type": "integer",
++          "minimum": 0
++        },
++        "errors": {
++          "type": "array",
++          "items": {
++            "type": "object",
++            "required": [
++              "category",
++              "detail"
++            ],
++            "properties": {
++              "category": {
++                "type": [
++                  "string",
++                  "null"
++                ]
++              },
++              "detail": {
++                "type": [
++                  "string",
++                  "null"
++                ]
++              }
++            },
++            "additionalProperties": false
++          }
++        },
++        "steer_count": {
++          "type": "integer",
++          "minimum": 0
++        },
++        "steer_acknowledged_count": {
++          "type": "integer",
++          "minimum": 0
++        },
++        "steer_pending_count": {
++          "type": "integer",
++          "minimum": 0
++        }
++      },
++      "additionalProperties": false
++    }
++  },
++  "additionalProperties": false
++}
+diff --git a/src/agent_workflow/eval/reporting.py b/src/agent_workflow/eval/reporting.py
+index d0b6a635dfa1332dfca9a0259ae0bd3a3c0c8197..7a3d869e71e3a8bbb1ccb59dc2d99533f76e4805 100644
+--- a/src/agent_workflow/eval/reporting.py
++++ b/src/agent_workflow/eval/reporting.py
+@@ -33,6 +33,8 @@ def build_report(
+     provenance = json.loads(
+         (run_dir / "run-provenance.json").read_text(encoding="utf-8")
+     )
++    metrics_path = run_dir / "execution-metrics.json"
++    metrics = json.loads(metrics_path.read_text(encoding="utf-8")) if metrics_path.is_file() else None
+     return {
+         "schema": "agent-workflow/evaluation-report/v1",
+         "session_id": final.get("session_id"),
+@@ -41,6 +43,7 @@ def build_report(
+         "executor_version": provenance.get("executor_version"),
+         "source_revision": provenance.get("source_revision"),
+         "usage": provenance.get("usage"),
++        "metrics": metrics,
+         "score_verdict": score_set.get("verdict") if isinstance(score_set, dict) else None,
+         "scores": score_set.get("scores", []) if isinstance(score_set, dict) else [],
+         "sealed_artifact_count": len(final.get("artifacts", [])),
+@@ -56,6 +59,7 @@ def render_markdown(value: dict[str, Any]) -> str:
+         f"- Source revision: `{value.get('source_revision') or 'unavailable'}`",
+         f"- Overall deterministic verdict: `{value.get('score_verdict') or 'not-scored'}`",
+         f"- Sealed artifacts: {value.get('sealed_artifact_count', 0)}",
++        f"- Normalized metrics: `{'present' if value.get('metrics') else 'unavailable'}`",
+         "",
+         "## Deterministic scores",
+         "",
+diff --git a/src/agent_workflow/messages.py b/src/agent_workflow/messages.py
+index 81417cdbc05c2f70ca4f1abce0e1b820d6eebff9..6da399a1d1b08627dc777ae7d48e72118af1aadd 100644
+--- a/src/agent_workflow/messages.py
++++ b/src/agent_workflow/messages.py
+@@ -5,6 +5,7 @@ from __future__ import annotations
+ import fcntl
+ import json
+ import os
++import stat
+ import time
+ import uuid
+ from pathlib import Path
+@@ -33,11 +34,34 @@ _REQUIRED_FIELDS = frozenset(
+     }
+ )
+ _OPTIONAL_FIELDS = frozenset({"correlation_id"})
++_KIND_DIRECTIONS = {
++    "steer": "parent_to_child",
++    "progress": "child_to_parent",
++    "ack": "child_to_parent",
++    "error": "child_to_parent",
++}
+ 
+ 
+ def message_log_path(run_dir: Path) -> Path:
+-    """Return the fixed append-only message-log path for *run_dir*."""
+-    return run_dir / MESSAGE_LOG_NAME
++    """Return the fixed append-only message-log path for a real run directory."""
++    try:
++        mode = run_dir.lstat().st_mode
++    except FileNotFoundError:
++        run_dir.mkdir(parents=True, exist_ok=True)
++        mode = run_dir.lstat().st_mode
++    except OSError as exc:
++        raise WorkflowError(f"cannot inspect run directory {run_dir}: {exc}") from exc
++    if stat.S_ISLNK(mode) or not stat.S_ISDIR(mode):
++        raise WorkflowError("message run directory must be a real directory, not a symlink")
++    path = run_dir / MESSAGE_LOG_NAME
++    if path.exists() or path.is_symlink():
++        try:
++            path_mode = path.lstat().st_mode
++        except OSError as exc:
++            raise WorkflowError(f"cannot inspect session message log {path}: {exc}") from exc
++        if stat.S_ISLNK(path_mode) or not stat.S_ISREG(path_mode):
++            raise WorkflowError("session message log must be a regular non-symlink file")
++    return path
+ 
+ 
+ def _uuid(value: object, label: str) -> str:
+@@ -88,13 +112,23 @@ def validate_message(value: object, *, expected_sequence: int | None = None) ->
+         raise WorkflowError("invalid session message direction")
+     if value["kind"] not in _KINDS:
+         raise WorkflowError("invalid session message kind")
++    expected_direction = _KIND_DIRECTIONS[value["kind"]]
++    if value["direction"] != expected_direction:
++        raise WorkflowError(
++            f"{value['kind']} messages must use {expected_direction} direction"
++        )
+     content = value["content"]
+     if not isinstance(content, str) or not content:
+         raise WorkflowError("session message content must be non-empty")
+     if len(content) > MAX_CONTENT_CHARS:
+         raise WorkflowError(f"session message content exceeds {MAX_CONTENT_CHARS} characters")
+-    if "correlation_id" in value and value["correlation_id"] is not None:
+-        _uuid(value["correlation_id"], "correlation_id")
++    correlation_id = value.get("correlation_id")
++    if correlation_id is not None:
++        _uuid(correlation_id, "correlation_id")
++    if value["kind"] == "ack" and correlation_id is None:
++        raise WorkflowError("ack messages require correlation_id")
++    if value["kind"] != "ack" and correlation_id is not None:
++        raise WorkflowError("only ack messages may include correlation_id")
+     return value
+ 
+ 
+@@ -108,10 +142,42 @@ def _read_locked(stream: Any) -> list[dict[str, Any]]:
+             value = json.loads(raw_line)
+         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+             raise WorkflowError(f"invalid session message JSON at line {line_number}: {exc}") from exc
+-        messages.append(validate_message(value, expected_sequence=line_number))
++        message = validate_message(value, expected_sequence=line_number)
++        if messages and message["session_id"] != messages[0]["session_id"]:
++            raise WorkflowError("session message log contains mixed session IDs")
++        if any(item["message_id"] == message["message_id"] for item in messages):
++            raise WorkflowError("session message log contains duplicate message_id")
++        if message["kind"] == "ack":
++            correlation_id = message["correlation_id"]
++            steer = next(
++                (item for item in messages if item["message_id"] == correlation_id),
++                None,
++            )
++            if steer is None or steer["kind"] != "steer":
++                raise WorkflowError("ack correlation_id must reference an earlier steer request")
++            if any(
++                item["kind"] == "ack" and item.get("correlation_id") == correlation_id
++                for item in messages
++            ):
++                raise WorkflowError("steer request is already acknowledged")
++        messages.append(message)
+     return messages
+ 
+ 
++def _validate_append_semantics(existing: list[dict[str, Any]], message: dict[str, Any]) -> None:
++    if existing and message["session_id"] != existing[0]["session_id"]:
++        raise WorkflowError("cannot append a different session ID to message log")
++    if any(item["message_id"] == message["message_id"] for item in existing):
++        raise WorkflowError("duplicate message_id")
++    if message["kind"] == "ack":
++        correlation_id = message["correlation_id"]
++        steer = next((item for item in existing if item["message_id"] == correlation_id), None)
++        if steer is None or steer["kind"] != "steer":
++            raise WorkflowError("ack correlation_id must reference an existing steer request")
++        if any(item["kind"] == "ack" and item.get("correlation_id") == correlation_id for item in existing):
++            raise WorkflowError("steer request is already acknowledged")
++
++
+ def append_message(
+     run_dir: Path,
+     *,
+@@ -123,12 +189,14 @@ def append_message(
+     correlation_id: str | None = None,
+ ) -> dict[str, Any]:
+     """Append and fsync a message, allocating its sequence under an exclusive lock."""
+-    run_dir.mkdir(parents=True, exist_ok=True)
+     path = message_log_path(run_dir)
+     with path.open("a+b") as stream:
+         fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
+         try:
+-            sequence = len(_read_locked(stream)) + 1
++            existing = _read_locked(stream)
++            if existing and any(item["session_id"] != session_id for item in existing):
++                raise WorkflowError("cannot append a different session ID to message log")
++            sequence = len(existing) + 1
+             message: dict[str, Any] = {
+                 "schema": MESSAGE_SCHEMA,
+                 "sequence": sequence,
+@@ -143,6 +211,7 @@ def append_message(
+             if correlation_id is not None:
+                 message["correlation_id"] = correlation_id
+             validate_message(message, expected_sequence=sequence)
++            _validate_append_semantics(existing, message)
+             stream.seek(0, os.SEEK_END)
+             stream.write(json.dumps(message, sort_keys=True, separators=(",", ":")).encode("utf-8") + b"\n")
+             stream.flush()
+diff --git a/src/agent_workflow/metrics.py b/src/agent_workflow/metrics.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..f903cbee3ac650588bcba2cee1dfa1ca692294db
+--- /dev/null
++++ b/src/agent_workflow/metrics.py
+@@ -0,0 +1,156 @@
++"""Sealed, provider-neutral execution metrics and control evidence."""
++from __future__ import annotations
++
++import json
++import os
++import tempfile
++from datetime import datetime
++from pathlib import Path
++from typing import Any
++
++from .contracts import validate_instance
++from .errors import WorkflowError
++from .messages import replay_messages
++from .util import atomic_write_json
++
++METRICS_SCHEMA = "agent-workflow/execution-metrics/v1"
++CONTROL_SCHEMA = "agent-workflow/control-event/v1"
++
++
++def _number(value: object) -> int | float | None:
++    if not isinstance(value, (int, float)) or isinstance(value, bool) or value < 0:
++        return None
++    return value
++
++
++def normalize_usage(usage: object) -> dict[str, Any]:
++    """Normalize provider usage without converting absent facts to zero."""
++    source = usage if isinstance(usage, dict) else {}
++    input_tokens = _number(source.get("input_tokens", source.get("prompt_tokens")))
++    cached = _number(source.get("cached_input_tokens", source.get("cache_read_input_tokens")))
++    output = _number(source.get("output_tokens", source.get("completion_tokens")))
++    provider_total = _number(source.get("total_tokens"))
++    cost = _number(source.get("cost", source.get("total_cost")))
++    currency = source.get("currency") if isinstance(source.get("currency"), str) else None
++    return {
++        "input_tokens": input_tokens,
++        "cached_input_tokens": cached,
++        "output_tokens": output,
++        "provider_total_tokens": provider_total,
++        "cost": cost,
++        "currency": currency,
++    }
++
++
++def _parse_timestamp(value: object) -> datetime | None:
++    if not isinstance(value, str):
++        return None
++    try:
++        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
++    except ValueError:
++        return None
++    return parsed if parsed.tzinfo is not None else None
++
++
++def _latency_seconds(started: object, first: object) -> float | None:
++    left, right = _parse_timestamp(started), _parse_timestamp(first)
++    if left is None or right is None:
++        return None
++    return round(max(0.0, (right - left).total_seconds()), 6)
++
++
++def _empty_stage(name: str) -> dict[str, Any]:
++    return {
++        "stage": name,
++        **normalize_usage(None),
++        "elapsed_seconds": None,
++        "first_output_latency_seconds": None,
++        "retry_count": 0,
++        "errors": [],
++        "steer_count": 0,
++        "steer_acknowledged_count": 0,
++        "steer_pending_count": 0,
++    }
++
++
++def build_execution_metrics(run_dir: Path, *, elapsed_seconds: float | None = None) -> dict[str, Any]:
++    try:
++        provenance = json.loads((run_dir / "run-provenance.json").read_text(encoding="utf-8"))
++        status = json.loads((run_dir / "final-status.json").read_text(encoding="utf-8"))
++    except (OSError, json.JSONDecodeError) as exc:
++        raise WorkflowError(f"cannot build execution metrics for {run_dir}: {exc}") from exc
++    if not isinstance(provenance, dict) or not isinstance(status, dict):
++        raise WorkflowError("execution metrics inputs must be JSON objects")
++
++    messages = replay_messages(run_dir)
++    steer_ids = {m["message_id"] for m in messages if m["kind"] == "steer"}
++    acked = {
++        m["correlation_id"] for m in messages
++        if m["kind"] == "ack" and m["correlation_id"] in steer_ids
++    }
++    errors = [
++        {"category": status.get("failure_category"), "detail": item}
++        for item in status.get("pump_errors", []) if isinstance(item, str)
++    ]
++    if status.get("status") == "failed" and not errors:
++        errors.append({"category": status.get("failure_category"), "detail": None})
++
++    orchestrator = _empty_stage("orchestrator")
++    orchestrator.update({
++        **normalize_usage(provenance.get("usage")),
++        "elapsed_seconds": round(elapsed_seconds, 6) if elapsed_seconds is not None else _number(status.get("wall_seconds")),
++        "first_output_latency_seconds": _latency_seconds(provenance.get("started_at"), provenance.get("first_output_at")),
++        "errors": errors,
++        "steer_count": len(steer_ids),
++        "steer_acknowledged_count": len(acked),
++        "steer_pending_count": len(steer_ids - acked),
++    })
++    child_stages = []
++    for actor in sorted({m["actor"] for m in messages if m["direction"] == "child_to_parent"}):
++        child = _empty_stage(f"child:{actor}")
++        actor_errors = [m for m in messages if m["actor"] == actor and m["kind"] == "error"]
++        child["errors"] = [{"category": "child_message", "detail": m["content"]} for m in actor_errors]
++        child_stages.append(child)
++    verification = _empty_stage("verification")
++    total = {**orchestrator, "stage": "total"}
++    value = {
++        "schema": METRICS_SCHEMA,
++        "session_id": provenance.get("session_id"),
++        "stages": [orchestrator, *child_stages, verification, total],
++    }
++    validate_instance(value, METRICS_SCHEMA, artifact=str(run_dir / "execution-metrics.json"))
++    return value
++
++
++def _atomic_write_jsonl(path: Path, records: list[dict[str, Any]]) -> None:
++    path.parent.mkdir(parents=True, exist_ok=True)
++    fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
++    try:
++        with os.fdopen(fd, "w", encoding="utf-8") as stream:
++            for record in records:
++                stream.write(json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n")
++            stream.flush()
++            os.fsync(stream.fileno())
++        os.replace(tmp, path)
++    finally:
++        try:
++            os.unlink(tmp)
++        except FileNotFoundError:
++            pass
++
++
++def write_control_events(run_dir: Path) -> list[dict[str, Any]]:
++    records = []
++    for message in replay_messages(run_dir):
++        record = {"schema": CONTROL_SCHEMA, **{k: v for k, v in message.items() if k != "schema"}}
++        validate_instance(record, CONTROL_SCHEMA, artifact=str(run_dir / "control-events.jsonl"))
++        records.append(record)
++    _atomic_write_jsonl(run_dir / "control-events.jsonl", records)
++    return records
++
++
++def write_execution_evidence(run_dir: Path, *, elapsed_seconds: float | None = None) -> dict[str, Any]:
++    write_control_events(run_dir)
++    metrics = build_execution_metrics(run_dir, elapsed_seconds=elapsed_seconds)
++    atomic_write_json(run_dir / "execution-metrics.json", metrics)
++    return metrics
+diff --git a/src/agent_workflow/receipts.py b/src/agent_workflow/receipts.py
+index 67787d000a9353accc934d5b6205bfa8aaa4db95..8ebeb2ae8f8e107c5dcdb7d3ae3bb1f3ad83ec11 100644
+--- a/src/agent_workflow/receipts.py
++++ b/src/agent_workflow/receipts.py
+@@ -27,6 +27,8 @@ SEALED_ARTIFACTS = (
+ SEALED_TREES = ("collections", "scope")
+ SEALED_OPTIONAL_ARTIFACTS = (
+     "evaluation-runtime.json",
++    "execution-metrics.json",
++    "control-events.jsonl",
+     "job-binding.json",
+     "jobs/native-job.json",
+     "external/tax-machine/MANIFEST.json",
+@@ -176,6 +178,19 @@ def seal_run(run_dir: Path, *, session_id: str) -> dict[str, Any]:
+     binding = run_dir / "job-binding.json"
+     if binding.is_file():
+         read_contract(binding, "agent-workflow/job-binding/v1")
++    metrics = run_dir / "execution-metrics.json"
++    if metrics.is_file():
++        read_contract(metrics, "agent-workflow/execution-metrics/v1")
++    controls = run_dir / "control-events.jsonl"
++    if controls.is_file():
++        for line_number, raw in enumerate(controls.read_text(encoding="utf-8").splitlines(), start=1):
++            if not raw:
++                raise WorkflowError(f"blank control event at line {line_number}")
++            try:
++                event = json.loads(raw)
++            except json.JSONDecodeError as exc:
++                raise WorkflowError(f"invalid control event JSON at line {line_number}: {exc}") from exc
++            validate_instance(event, "agent-workflow/control-event/v1", artifact=str(controls))
+     receipt = {
+         "schema": "agent-workflow/final-receipt/v1",
+         "session_id": session_id,
+@@ -241,7 +256,7 @@ def final_receipt_sha256(run_dir: Path) -> str:
+ 
+ 
+ def make_read_only(run_dir: Path) -> None:
+-    for name in SEALED_ARTIFACTS:
++    for name in (*SEALED_ARTIFACTS, *SEALED_OPTIONAL_ARTIFACTS):
+         path = run_dir / name
+         if path.is_file():
+             os.chmod(path, path.stat().st_mode & ~0o222)
+diff --git a/src/agent_workflow/runner.py b/src/agent_workflow/runner.py
+index d0f3e75f4666bf91ef727ec45db870c8bbac87c3..c2e5aefc732cf4f4bbccfd22a263e7cc5f105514 100644
+--- a/src/agent_workflow/runner.py
++++ b/src/agent_workflow/runner.py
+@@ -19,6 +19,7 @@ from .eval.commands import collect_commands, specs_from_data
+ from .eval.scope import ScopePolicy, collect_scope
+ from .executors import event_text, event_usage, parse_event
+ from .receipts import make_read_only, seal_run, update_provenance
++from .metrics import write_execution_evidence
+ from .util import atomic_write_json, sha256_file, utc_now
+ 
+ 
+@@ -335,6 +336,7 @@ def execute(
+             "updated_at": finished_at,
+         }
+         atomic_write_json(run_dir / "final-status.json", final_status)
++        write_execution_evidence(run_dir, elapsed_seconds=time.monotonic() - wall_started)
+         receipt = seal_run(run_dir, session_id=str(current["session_id"]))
+         receipt_hash = sha256_file(run_dir / "final-receipt.json")
+         _update_status(
+@@ -560,6 +562,7 @@ def execute(
+     }
+     _capture_patch(workdir, run_dir, run_dir / "patch.diff")
+     atomic_write_json(run_dir / "final-status.json", final_status)
++    write_execution_evidence(run_dir, elapsed_seconds=wall_seconds)
+     try:
+         receipt = seal_run(run_dir, session_id=str(current["session_id"]))
+         receipt_hash = sha256_file(run_dir / "final-receipt.json")
+diff --git a/tests/fixtures/regression-evals/deterministic-json/app/__init__.py b/tests/fixtures/regression-evals/deterministic-json/app/__init__.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
+diff --git a/tests/fixtures/regression-evals/deterministic-json/app/normalize.py b/tests/fixtures/regression-evals/deterministic-json/app/normalize.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..43cd302c87db10ed671f0bc5a061c6a6fd4fe007
+--- /dev/null
++++ b/tests/fixtures/regression-evals/deterministic-json/app/normalize.py
+@@ -0,0 +1,23 @@
++"""Deterministic normalization target used by the receipt-backed regression eval."""
++from __future__ import annotations
++
++from typing import Any, Iterable
++
++
++def normalize_records(records: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
++    """Return unique records normalized by case-folded id and stable key order.
++
++    The last record for a normalized id wins. Input objects are never mutated.
++    """
++    normalized: dict[str, dict[str, Any]] = {}
++    for record in records:
++        if not isinstance(record, dict):
++            raise TypeError("each record must be an object")
++        raw_id = record.get("id")
++        if not isinstance(raw_id, str) or not raw_id.strip():
++            raise ValueError("record id must be a non-empty string")
++        key = raw_id.strip().casefold()
++        clean = {str(name): value for name, value in record.items()}
++        clean["id"] = key
++        normalized[key] = dict(sorted(clean.items()))
++    return [normalized[key] for key in sorted(normalized)]
+diff --git a/tests/fixtures/regression-evals/deterministic-json/evaluation.json b/tests/fixtures/regression-evals/deterministic-json/evaluation.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..7709738702a532b37f8ca2483d259938054c3a43
+--- /dev/null
++++ b/tests/fixtures/regression-evals/deterministic-json/evaluation.json
+@@ -0,0 +1,39 @@
++{
++  "schema": "agent-workflow/evaluation-plan/v1",
++  "dataset_split": "development",
++  "task_ids": [
++    "normalize-records"
++  ],
++  "repetitions": 2,
++  "timeout_seconds": 60,
++  "scorers": [
++    "acceptance_commands",
++    "regression_guard",
++    "writable_scope",
++    "oracle_leak"
++  ],
++  "sandbox": "local-offline",
++  "acceptance_commands": [
++    {
++      "id": "known-tests",
++      "argv": [
++        "python3",
++        "-m",
++        "pytest",
++        "-q",
++        "tests/test_normalize.py"
++      ]
++    }
++  ],
++  "scope": {
++    "writable_paths": [
++      "app/normalize.py"
++    ]
++  },
++  "oracle_refs": {
++    "normalize-records": {
++      "id": "normalize-records-hidden-v1",
++      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
++    }
++  }
++}
+diff --git a/tests/fixtures/regression-evals/deterministic-json/mutations/first_wins.py b/tests/fixtures/regression-evals/deterministic-json/mutations/first_wins.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..d25ed229e689164899bed7efcca3f063fc8a5b6d
+--- /dev/null
++++ b/tests/fixtures/regression-evals/deterministic-json/mutations/first_wins.py
+@@ -0,0 +1,6 @@
++def normalize_records(records):
++    values = {}
++    for record in records:
++        key = record["id"].strip().casefold()
++        values.setdefault(key, {**record, "id": key})
++    return [values[key] for key in sorted(values)]
+diff --git a/tests/fixtures/regression-evals/deterministic-json/mutations/mutates_input.py b/tests/fixtures/regression-evals/deterministic-json/mutations/mutates_input.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..d636ed22a5001021780c048909bbce791a040a97
+--- /dev/null
++++ b/tests/fixtures/regression-evals/deterministic-json/mutations/mutates_input.py
+@@ -0,0 +1,4 @@
++def normalize_records(records):
++    for record in records:
++        record["id"] = record["id"].strip().casefold()
++    return sorted(records, key=lambda item: item["id"])
+diff --git a/tests/fixtures/regression-evals/deterministic-json/mutations/no_dedup.py b/tests/fixtures/regression-evals/deterministic-json/mutations/no_dedup.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..eb5396fc6ee53d904d312ab86e6cb704c0742929
+--- /dev/null
++++ b/tests/fixtures/regression-evals/deterministic-json/mutations/no_dedup.py
+@@ -0,0 +1,2 @@
++def normalize_records(records):
++    return [{**record, "id": record["id"].strip().casefold()} for record in records]
+diff --git a/tests/fixtures/regression-evals/deterministic-json/tests/test_normalize.py b/tests/fixtures/regression-evals/deterministic-json/tests/test_normalize.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..e5cfab0d5977e6a9ece89ef3e6a5359a60ba022c
+--- /dev/null
++++ b/tests/fixtures/regression-evals/deterministic-json/tests/test_normalize.py
+@@ -0,0 +1,21 @@
++from copy import deepcopy
++import sys
++from pathlib import Path
++sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
++from app.normalize import normalize_records
++
++
++def test_normalizes_sorts_and_deduplicates_without_mutation():
++    source = [{"id": " B ", "value": 1}, {"value": 2, "id": "a"}, {"id": "b", "value": 3}]
++    before = deepcopy(source)
++    assert normalize_records(source) == [{"id": "a", "value": 2}, {"id": "b", "value": 3}]
++    assert source == before
++
++
++def test_rejects_missing_id():
++    try:
++        normalize_records([{"value": 1}])
++    except ValueError:
++        pass
++    else:
++        raise AssertionError("missing id must fail")
+diff --git a/tests/fixtures/regression-evals/priority-picker/README.md b/tests/fixtures/regression-evals/priority-picker/README.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..5cf26e5d0ddde8ec871953cc903dab705927abb4
+--- /dev/null
++++ b/tests/fixtures/regression-evals/priority-picker/README.md
+@@ -0,0 +1,19 @@
++# Priority-picker visual regression fixture — blocked gate
++
++The Phase 3 fixture is intentionally not represented as complete in this source archive.
++The ticket requires a pinned offline browser image, pinned fonts, deterministic screenshot
++comparison, and imported browser/Inspect artifacts before sealing. This environment does
++not contain an authoritative browser image digest or a verified Inspect/browser evidence
++bridge. Implementing an unpinned browser test would violate the ticket's stop condition.
++
++The required protocol contract is frozen here for the follow-on implementation:
++
++1. `child_started`
++2. `child_request`
++3. `child_result`
++4. `child_finished`
++
++All four records must be explicit, ordered, session-bound, and sealed. DOM and ARIA
++assertions are primary; screenshots are secondary with a declared tolerance. Negative
++fixtures must independently reject missing child telemetry, late/invalid results, ignored
++results, broken Escape behavior, visual mismatch, and scope escape.
+diff --git a/tests/test_messages.py b/tests/test_messages.py
+index eff68f731bf62c2f1714068506f5a184a18c84a1..909f4b56208d6d95129bf9a604c4c1b2d791abd4 100644
+--- a/tests/test_messages.py
++++ b/tests/test_messages.py
+@@ -35,7 +35,6 @@ class MessageLogTests(unittest.TestCase):
+                 kind="progress",
+                 actor="child",
+                 content="I am inspecting them.",
+-                correlation_id=first["message_id"],
+             )
+             self.assertEqual([first, second], replay_messages(run_dir))
+             self.assertEqual([second], replay_messages(run_dir, after_sequence=1))
+@@ -48,9 +47,9 @@ class MessageLogTests(unittest.TestCase):
+                 append_message(
+                     run_dir,
+                     session_id="run",
+-                    direction="parent_to_child",
+-                    kind="ack",
+-                    actor="parent",
++                    direction="child_to_parent",
++                    kind="progress",
++                    actor="child",
+                     content=str(index),
+                 )["sequence"]
+                 for index in range(3)
+@@ -148,3 +147,54 @@ class MessageLogTests(unittest.TestCase):
+             write_status(settings, "run-done", {"session_id": "run-done", "status": "completed"})
+             with self.assertRaisesRegex(WorkflowError, "terminal session"):
+                 steer(settings, "run-done", actor="parent", content="too late")
++    def test_rejects_symlink_log_and_invalid_or_duplicate_ack(self):
++        with tempfile.TemporaryDirectory() as tmp:
++            root = Path(tmp)
++            real = root / "real.log"
++            real.write_text("", encoding="utf-8")
++            run = root / "run"
++            run.mkdir()
++            (run / "messages.jsonl").symlink_to(real)
++            with self.assertRaisesRegex(WorkflowError, "non-symlink"):
++                replay_messages(run)
++
++        with tempfile.TemporaryDirectory() as tmp:
++            root = Path(tmp)
++            settings = defaults(root / "missing.toml")
++            settings = settings.__class__(**{**settings.__dict__, "state_root": root / "state"})
++            write_status(settings, "run-ack", {"session_id": "run-ack", "status": "launched"})
++            with self.assertRaisesRegex(WorkflowError, "existing steer"):
++                acknowledge(settings, "run-ack", actor="child", content="bad", correlation_id="2a9d57d7-9a95-4acd-a3e8-8f27a84b985e")
++            request = steer(settings, "run-ack", actor="parent", content="apply")
++            acknowledge(settings, "run-ack", actor="child", content="done", correlation_id=request["message_id"])
++            with self.assertRaisesRegex(WorkflowError, "already acknowledged"):
++                acknowledge(settings, "run-ack", actor="child", content="again", correlation_id=request["message_id"])
++
++    def test_rejects_invalid_kind_direction_correlation_and_mixed_session(self):
++        with tempfile.TemporaryDirectory() as tmp:
++            run_dir = Path(tmp)
++            with self.assertRaisesRegex(WorkflowError, "must use"):
++                append_message(run_dir, session_id="run", direction="child_to_parent", kind="steer", actor="child", content="bad")
++            with self.assertRaisesRegex(WorkflowError, "require correlation"):
++                append_message(run_dir, session_id="run", direction="child_to_parent", kind="ack", actor="child", content="bad")
++            with self.assertRaisesRegex(WorkflowError, "only ack"):
++                append_message(run_dir, session_id="run", direction="child_to_parent", kind="progress", actor="child", content="bad", correlation_id="2a9d57d7-9a95-4acd-a3e8-8f27a84b985e")
++            append_message(run_dir, session_id="run", direction="child_to_parent", kind="progress", actor="child", content="ok")
++            with self.assertRaisesRegex(WorkflowError, "different session"):
++                append_message(run_dir, session_id="other", direction="child_to_parent", kind="progress", actor="child", content="bad")
++
++    def test_ack_validation_is_atomic_under_concurrent_writers(self):
++        from concurrent.futures import ThreadPoolExecutor
++        with tempfile.TemporaryDirectory() as tmp:
++            run_dir = Path(tmp)
++            steer = append_message(run_dir, session_id="run", direction="parent_to_child", kind="steer", actor="parent", content="apply")
++            def ack_once(index):
++                try:
++                    return append_message(run_dir, session_id="run", direction="child_to_parent", kind="ack", actor=f"child{index}", content="done", correlation_id=steer["message_id"])
++                except WorkflowError as exc:
++                    return str(exc)
++            with ThreadPoolExecutor(max_workers=2) as pool:
++                results = list(pool.map(ack_once, range(2)))
++            self.assertEqual(1, sum(isinstance(item, dict) for item in results))
++            self.assertEqual(1, sum("already acknowledged" in item for item in results if isinstance(item, str)))
++            self.assertEqual(2, len(replay_messages(run_dir)))
+diff --git a/tests/test_metrics.py b/tests/test_metrics.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..63d8efa83506112aa5ff2c9c4b9df4126ed16f9f
+--- /dev/null
++++ b/tests/test_metrics.py
+@@ -0,0 +1,67 @@
++import json
++import tempfile
++import unittest
++from pathlib import Path
++
++from agent_workflow.errors import WorkflowError
++from agent_workflow.messages import append_message
++from agent_workflow.metrics import normalize_usage, write_execution_evidence
++from agent_workflow.receipts import make_read_only, seal_run, verify_seal
++from agent_workflow.util import atomic_write_json, sha256_file
++from run_fixtures import write_run_contracts
++
++
++class MetricsTests(unittest.TestCase):
++    def test_normalization_preserves_unknown_as_null_and_rejects_invalid_numbers(self):
++        self.assertEqual(
++            normalize_usage({"prompt_tokens": 10, "completion_tokens": 3}),
++            {
++                "input_tokens": 10,
++                "cached_input_tokens": None,
++                "output_tokens": 3,
++                "provider_total_tokens": None,
++                "cost": None,
++                "currency": None,
++            },
++        )
++        self.assertIsNone(normalize_usage({"input_tokens": -1})["input_tokens"])
++        self.assertIsNone(normalize_usage({"output_tokens": True})["output_tokens"])
++
++    def test_metrics_include_required_stages_and_control_events_are_sealed_read_only(self):
++        with tempfile.TemporaryDirectory() as tmp:
++            run = Path(tmp) / "run"
++            write_run_contracts(run, session_id="metrics-run")
++            provenance = json.loads((run / "run-provenance.json").read_text())
++            provenance["usage"] = {"input_tokens": 7, "output_tokens": 2}
++            atomic_write_json(run / "run-provenance.json", provenance)
++            steer = append_message(run, session_id="metrics-run", direction="parent_to_child", kind="steer", actor="parent", content="check")
++            append_message(run, session_id="metrics-run", direction="child_to_parent", kind="ack", actor="worker-1", content="applied", correlation_id=steer["message_id"])
++            metrics = write_execution_evidence(run, elapsed_seconds=1.25)
++            stages = {stage["stage"]: stage for stage in metrics["stages"]}
++            self.assertEqual({"orchestrator", "child:worker-1", "verification", "total"}, set(stages))
++            self.assertEqual(1, stages["orchestrator"]["steer_acknowledged_count"])
++            self.assertIsNone(stages["verification"]["input_tokens"])
++            verified = verify_seal(run, expected_sha256=sha256_file(run / "final-receipt.json")) if False else None
++            receipt = seal_run(run, session_id="metrics-run")
++            digest = sha256_file(run / "final-receipt.json")
++            verified = verify_seal(run, expected_sha256=digest)
++            paths = {item["path"] for item in verified["artifacts"]}
++            self.assertIn("execution-metrics.json", paths)
++            self.assertIn("control-events.jsonl", paths)
++            make_read_only(run)
++            self.assertEqual(0, (run / "execution-metrics.json").stat().st_mode & 0o222)
++            self.assertEqual(0, (run / "control-events.jsonl").stat().st_mode & 0o222)
++
++    def test_sealing_rejects_invalid_metrics_and_control_event(self):
++        with tempfile.TemporaryDirectory() as tmp:
++            run = Path(tmp) / "run"
++            write_run_contracts(run, session_id="metrics-run")
++            atomic_write_json(run / "execution-metrics.json", {"schema": "agent-workflow/execution-metrics/v1"})
++            with self.assertRaises(WorkflowError):
++                seal_run(run, session_id="metrics-run")
++        with tempfile.TemporaryDirectory() as tmp:
++            run = Path(tmp) / "run"
++            write_run_contracts(run, session_id="metrics-run")
++            (run / "control-events.jsonl").write_text("{}\n", encoding="utf-8")
++            with self.assertRaises(WorkflowError):
++                seal_run(run, session_id="metrics-run")
+diff --git a/tests/test_regression_eval_fixture.py b/tests/test_regression_eval_fixture.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..0c3f42be21b22ac45803b2f5306f85e35049e3ce
+--- /dev/null
++++ b/tests/test_regression_eval_fixture.py
+@@ -0,0 +1,56 @@
++from __future__ import annotations
++
++import importlib.util
++from copy import deepcopy
++from pathlib import Path
++
++import pytest
++
++from agent_workflow.eval.oracles import scan_for_leak
++
++ROOT = Path(__file__).parent / "fixtures" / "regression-evals" / "deterministic-json"
++
++
++def _load(path: Path):
++    spec = importlib.util.spec_from_file_location(f"fixture_{path.stem}", path)
++    assert spec and spec.loader
++    module = importlib.util.module_from_spec(spec)
++    spec.loader.exec_module(module)
++    return module.normalize_records
++
++
++def _hidden_contract(fn):
++    source = [
++        {"id": " Z ", "nested": {"x": 1}},
++        {"id": "z", "nested": {"x": 2}},
++        {"id": "A", "value": 3},
++    ]
++    before = deepcopy(source)
++    result = fn(source)
++    assert result == [
++        {"id": "a", "value": 3},
++        {"id": "z", "nested": {"x": 2}},
++    ]
++    assert source == before
++    return result
++
++
++def test_reference_passes_hidden_contract_and_repeated_score_is_stable():
++    fn = _load(ROOT / "app" / "normalize.py")
++    first = _hidden_contract(fn)
++    second = _hidden_contract(fn)
++    assert first == second
++
++
++@pytest.mark.parametrize("mutation", ["no_dedup.py", "mutates_input.py", "first_wins.py"])
++def test_mutations_fail_hidden_contract(mutation):
++    fn = _load(ROOT / "mutations" / mutation)
++    with pytest.raises(AssertionError):
++        _hidden_contract(fn)
++
++
++def test_oracle_canary_is_detected_in_candidate_artifacts(tmp_path):
++    canary = b"hidden-oracle-canary-94a2"
++    candidate = tmp_path / "candidate.txt"
++    candidate.write_bytes(b"prefix " + canary + b" suffix")
++    assert scan_for_leak(canary, [candidate]) == [str(candidate)]
+diff --git a/tests/test_session_launch.py b/tests/test_session_launch.py
+index cf97e5d4a445409da34294e7554d406ecc395aad..f2dfea971aab612b00256e2945205333abc39460 100644
+--- a/tests/test_session_launch.py
++++ b/tests/test_session_launch.py
+@@ -209,6 +209,7 @@ class SessionLaunchTests(unittest.TestCase):
+                 patch("agent_workflow.sessions.tmux.create_session"),
+                 patch("agent_workflow.sessions.tmux.pane_info", return_value=None),
+                 patch("agent_workflow.sessions.executor_version", return_value="test"),
++                patch("agent_workflow.sessions.shutil.which", return_value="/usr/bin/codex"),
+             ):
+                 launch(
+                     settings,

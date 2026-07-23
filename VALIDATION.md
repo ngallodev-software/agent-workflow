@@ -1,12 +1,12 @@
 # Release Validation
 
-Release: `agent-workflow` 0.1.3
-Validation date: 2026-07-22
+Release: `agent-workflow` 0.1.4
+Validation date: 2026-07-23
 
 ## Automated gates
 
 - `bash scripts/release-check.sh`: passed.
-- `pytest -q`: 89 passed.
+- `pytest -q`: 101 passed through the release gate.
 - `ruff check src tests scripts`: passed.
 - `shellcheck install.sh uninstall.sh bin/agent-workflow scripts/*.sh`: passed.
 - Python compilation covered `src`, `tests`, and `scripts`.
@@ -16,7 +16,7 @@ Validation date: 2026-07-22
 ## Install and artifact gates
 
 - Installer/uninstaller tests passed in isolated temporary homes, including preservation of unrelated files and symlinks.
-- Wheel `agent_workflow-0.1.3-py3-none-any.whl` is the release artifact; build/install verification must report version `0.1.3` from both CLI and import.
+- Wheel `agent_workflow-0.1.4-py3-none-any.whl` is the release artifact; build/install verification must report version `0.1.4` from both CLI and import.
 - The `eval` extra installed in an isolated virtual environment at pinned `inspect-ai==0.3.247` and `inspect-swe==0.2.66`; both public Codex/Claude task factories constructed successfully and the minimal Docker image built successfully.
 - Generated Bash completion contained the current `swebench-prediction` command.
 - Example pack archived twice to byte-identical `.tar.zst` files, passed `zstd -t`, extracted, and revalidated from the extracted tree.

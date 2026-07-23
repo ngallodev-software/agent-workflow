@@ -27,6 +27,8 @@ SEALED_ARTIFACTS = (
 SEALED_TREES = ("collections", "scope")
 SEALED_OPTIONAL_ARTIFACTS = (
     "evaluation-runtime.json",
+    "execution-metrics.json",
+    "control-events.jsonl",
     "job-binding.json",
     "jobs/native-job.json",
     "external/tax-machine/MANIFEST.json",
@@ -176,6 +178,19 @@ def seal_run(run_dir: Path, *, session_id: str) -> dict[str, Any]:
     binding = run_dir / "job-binding.json"
     if binding.is_file():
         read_contract(binding, "agent-workflow/job-binding/v1")
+    metrics = run_dir / "execution-metrics.json"
+    if metrics.is_file():
+        read_contract(metrics, "agent-workflow/execution-metrics/v1")
+    controls = run_dir / "control-events.jsonl"
+    if controls.is_file():
+        for line_number, raw in enumerate(controls.read_text(encoding="utf-8").splitlines(), start=1):
+            if not raw:
+                raise WorkflowError(f"blank control event at line {line_number}")
+            try:
+                event = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                raise WorkflowError(f"invalid control event JSON at line {line_number}: {exc}") from exc
+            validate_instance(event, "agent-workflow/control-event/v1", artifact=str(controls))
     receipt = {
         "schema": "agent-workflow/final-receipt/v1",
         "session_id": session_id,
@@ -241,7 +256,7 @@ def final_receipt_sha256(run_dir: Path) -> str:
 
 
 def make_read_only(run_dir: Path) -> None:
-    for name in SEALED_ARTIFACTS:
+    for name in (*SEALED_ARTIFACTS, *SEALED_OPTIONAL_ARTIFACTS):
         path = run_dir / name
         if path.is_file():
             os.chmod(path, path.stat().st_mode & ~0o222)

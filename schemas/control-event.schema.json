@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/control-event/v1",
+  "type": "object",
+  "required": ["schema", "sequence", "message_id", "session_id", "timestamp", "direction", "kind", "actor", "content"],
+  "properties": {
+    "schema": {"const": "agent-workflow/control-event/v1"},
+    "sequence": {"type": "integer", "minimum": 1},
+    "message_id": {"type": "string", "format": "uuid"},
+    "session_id": {"type": "string"},
+    "timestamp": {"type": "string"},
+    "direction": {"enum": ["parent_to_child", "child_to_parent"]},
+    "kind": {"enum": ["steer", "progress", "ack", "error"]},
+    "actor": {"type": "string"},
+    "content": {"type": "string", "minLength": 1, "maxLength": 16384},
+    "correlation_id": {"type": ["string", "null"], "format": "uuid"}
+  },
+  "additionalProperties": false
+}

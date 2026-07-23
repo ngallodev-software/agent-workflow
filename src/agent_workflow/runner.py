@@ -19,6 +19,7 @@ from .eval.commands import collect_commands, specs_from_data
 from .eval.scope import ScopePolicy, collect_scope
 from .executors import event_text, event_usage, parse_event
 from .receipts import make_read_only, seal_run, update_provenance
+from .metrics import write_execution_evidence
 from .util import atomic_write_json, sha256_file, utc_now
 
 
@@ -335,6 +336,7 @@ def execute(
             "updated_at": finished_at,
         }
         atomic_write_json(run_dir / "final-status.json", final_status)
+        write_execution_evidence(run_dir, elapsed_seconds=time.monotonic() - wall_started)
         receipt = seal_run(run_dir, session_id=str(current["session_id"]))
         receipt_hash = sha256_file(run_dir / "final-receipt.json")
         _update_status(
@@ -560,6 +562,7 @@ def execute(
     }
     _capture_patch(workdir, run_dir, run_dir / "patch.diff")
     atomic_write_json(run_dir / "final-status.json", final_status)
+    write_execution_evidence(run_dir, elapsed_seconds=wall_seconds)
     try:
         receipt = seal_run(run_dir, session_id=str(current["session_id"]))
         receipt_hash = sha256_file(run_dir / "final-receipt.json")

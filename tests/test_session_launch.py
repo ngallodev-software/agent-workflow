@@ -209,6 +209,7 @@ class SessionLaunchTests(unittest.TestCase):
                 patch("agent_workflow.sessions.tmux.create_session"),
                 patch("agent_workflow.sessions.tmux.pane_info", return_value=None),
                 patch("agent_workflow.sessions.executor_version", return_value="test"),
+                patch("agent_workflow.sessions.shutil.which", return_value="/usr/bin/codex"),
             ):
                 launch(
                     settings,

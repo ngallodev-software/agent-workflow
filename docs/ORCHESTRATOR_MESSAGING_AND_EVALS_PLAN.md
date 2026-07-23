@@ -64,16 +64,25 @@ the primary provider evidence.
 
 ## Current implementation status
 
-Phase 1's safe foundation is implemented: `messages.jsonl` uses a versioned,
-validated, locked and fsync'd record format, and the CLI exposes `steer`,
-`progress`, `ack`, and blocking `watch`. A request is durable and observable;
-it is not represented as delivered until a correlated acknowledgement exists.
+Phase 1 is implemented and hardened: `messages.jsonl` uses a versioned,
+validated, locked and fsync'd record format. It rejects unsafe targets, mixed
+session records, duplicate IDs, invalid direction/kind pairs, and duplicate or
+out-of-order acknowledgements. The CLI exposes `steer`, `progress`, `ack`, and
+blocking `watch`; a request is durable and observable but is not represented as
+delivered until a correlated acknowledgement exists.
 
-The generic executor adapter is intentionally not implemented: current runners
-write an initial prompt to a one-shot stdin and close it, so they cannot prove
-late semantic delivery. Phase 2 metrics/deterministic fixture and Phase 3
-browser fixture remain planned, with their prompts and acceptance gates in the
-portable pack.
+Phase 2 is implemented for native runs: `control-events.jsonl` and
+`execution-metrics.json` are atomically written, schema-validated, sealed,
+made read-only, and included in reports. Metrics expose nullable normalized
+provider usage, orchestration/child/verification/total stages, steer state,
+and errors. The deterministic normalization fixture has hidden-contract,
+mutation, oracle-canary, and repeatability coverage.
+
+The generic executor adapter remains intentionally absent: current runners
+write an initial prompt to one-shot stdin and close it, so they cannot prove
+late semantic delivery. Phase 3 is correctly blocked: no pinned browser image
+digest/font manifest or verified pre-seal browser/Inspect evidence bridge is
+available. See `docs/PHASE_3_BLOCKED_GATE_REPORT.md`.
 
 ## Evaluation fixtures
 

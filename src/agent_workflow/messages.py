@@ -5,6 +5,7 @@ from __future__ import annotations
 import fcntl
 import json
 import os
+import stat
 import time
 import uuid
 from pathlib import Path
@@ -33,11 +34,34 @@ _REQUIRED_FIELDS = frozenset(
     }
 )
 _OPTIONAL_FIELDS = frozenset({"correlation_id"})
+_KIND_DIRECTIONS = {
+    "steer": "parent_to_child",
+    "progress": "child_to_parent",
+    "ack": "child_to_parent",
+    "error": "child_to_parent",
+}
 
 
 def message_log_path(run_dir: Path) -> Path:
-    """Return the fixed append-only message-log path for *run_dir*."""
-    return run_dir / MESSAGE_LOG_NAME
+    """Return the fixed append-only message-log path for a real run directory."""
+    try:
+        mode = run_dir.lstat().st_mode
+    except FileNotFoundError:
+        run_dir.mkdir(parents=True, exist_ok=True)
+        mode = run_dir.lstat().st_mode
+    except OSError as exc:
+        raise WorkflowError(f"cannot inspect run directory {run_dir}: {exc}") from exc
+    if stat.S_ISLNK(mode) or not stat.S_ISDIR(mode):
+        raise WorkflowError("message run directory must be a real directory, not a symlink")
+    path = run_dir / MESSAGE_LOG_NAME
+    if path.exists() or path.is_symlink():
+        try:
+            path_mode = path.lstat().st_mode
+        except OSError as exc:
+            raise WorkflowError(f"cannot inspect session message log {path}: {exc}") from exc
+        if stat.S_ISLNK(path_mode) or not stat.S_ISREG(path_mode):
+            raise WorkflowError("session message log must be a regular non-symlink file")
+    return path
 
 
 def _uuid(value: object, label: str) -> str:
@@ -88,13 +112,23 @@ def validate_message(value: object, *, expected_sequence: int | None = None) -> 
         raise WorkflowError("invalid session message direction")
     if value["kind"] not in _KINDS:
         raise WorkflowError("invalid session message kind")
+    expected_direction = _KIND_DIRECTIONS[value["kind"]]
+    if value["direction"] != expected_direction:
+        raise WorkflowError(
+            f"{value['kind']} messages must use {expected_direction} direction"
+        )
     content = value["content"]
     if not isinstance(content, str) or not content:
         raise WorkflowError("session message content must be non-empty")
     if len(content) > MAX_CONTENT_CHARS:
         raise WorkflowError(f"session message content exceeds {MAX_CONTENT_CHARS} characters")
-    if "correlation_id" in value and value["correlation_id"] is not None:
-        _uuid(value["correlation_id"], "correlation_id")
+    correlation_id = value.get("correlation_id")
+    if correlation_id is not None:
+        _uuid(correlation_id, "correlation_id")
+    if value["kind"] == "ack" and correlation_id is None:
+        raise WorkflowError("ack messages require correlation_id")
+    if value["kind"] != "ack" and correlation_id is not None:
+        raise WorkflowError("only ack messages may include correlation_id")
     return value
 
 
@@ -108,8 +142,40 @@ def _read_locked(stream: Any) -> list[dict[str, Any]]:
             value = json.loads(raw_line)
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise WorkflowError(f"invalid session message JSON at line {line_number}: {exc}") from exc
-        messages.append(validate_message(value, expected_sequence=line_number))
+        message = validate_message(value, expected_sequence=line_number)
+        if messages and message["session_id"] != messages[0]["session_id"]:
+            raise WorkflowError("session message log contains mixed session IDs")
+        if any(item["message_id"] == message["message_id"] for item in messages):
+            raise WorkflowError("session message log contains duplicate message_id")
+        if message["kind"] == "ack":
+            correlation_id = message["correlation_id"]
+            steer = next(
+                (item for item in messages if item["message_id"] == correlation_id),
+                None,
+            )
+            if steer is None or steer["kind"] != "steer":
+                raise WorkflowError("ack correlation_id must reference an earlier steer request")
+            if any(
+                item["kind"] == "ack" and item.get("correlation_id") == correlation_id
+                for item in messages
+            ):
+                raise WorkflowError("steer request is already acknowledged")
+        messages.append(message)
     return messages
+
+
+def _validate_append_semantics(existing: list[dict[str, Any]], message: dict[str, Any]) -> None:
+    if existing and message["session_id"] != existing[0]["session_id"]:
+        raise WorkflowError("cannot append a different session ID to message log")
+    if any(item["message_id"] == message["message_id"] for item in existing):
+        raise WorkflowError("duplicate message_id")
+    if message["kind"] == "ack":
+        correlation_id = message["correlation_id"]
+        steer = next((item for item in existing if item["message_id"] == correlation_id), None)
+        if steer is None or steer["kind"] != "steer":
+            raise WorkflowError("ack correlation_id must reference an existing steer request")
+        if any(item["kind"] == "ack" and item.get("correlation_id") == correlation_id for item in existing):
+            raise WorkflowError("steer request is already acknowledged")
 
 
 def append_message(
@@ -123,12 +189,14 @@ def append_message(
     correlation_id: str | None = None,
 ) -> dict[str, Any]:
     """Append and fsync a message, allocating its sequence under an exclusive lock."""
-    run_dir.mkdir(parents=True, exist_ok=True)
     path = message_log_path(run_dir)
     with path.open("a+b") as stream:
         fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
         try:
-            sequence = len(_read_locked(stream)) + 1
+            existing = _read_locked(stream)
+            if existing and any(item["session_id"] != session_id for item in existing):
+                raise WorkflowError("cannot append a different session ID to message log")
+            sequence = len(existing) + 1
             message: dict[str, Any] = {
                 "schema": MESSAGE_SCHEMA,
                 "sequence": sequence,
@@ -143,6 +211,7 @@ def append_message(
             if correlation_id is not None:
                 message["correlation_id"] = correlation_id
             validate_message(message, expected_sequence=sequence)
+            _validate_append_semantics(existing, message)
             stream.seek(0, os.SEEK_END)
             stream.write(json.dumps(message, sort_keys=True, separators=(",", ":")).encode("utf-8") + b"\n")
             stream.flush()

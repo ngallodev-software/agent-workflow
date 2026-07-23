@@ -9,6 +9,11 @@
 - Reuse Inspect SWE adapters behind an optional Docker evaluation seam; add optional SWE-bench, OpenTelemetry, MLflow, and shell-completion integrations.
 - Correct live Codex non-Git and Claude structured-output command requirements and preserve structured executor settings across retries.
 
+## 0.1.4
+
+- Add sealed execution metrics, control evidence, deterministic regression-eval
+  fixtures, and stronger durable message validation.
+
 ## 0.1.3
 
 - Refresh the global executable and agent-skill installation release.

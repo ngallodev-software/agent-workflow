@@ -33,6 +33,8 @@ def build_report(
     provenance = json.loads(
         (run_dir / "run-provenance.json").read_text(encoding="utf-8")
     )
+    metrics_path = run_dir / "execution-metrics.json"
+    metrics = json.loads(metrics_path.read_text(encoding="utf-8")) if metrics_path.is_file() else None
     return {
         "schema": "agent-workflow/evaluation-report/v1",
         "session_id": final.get("session_id"),
@@ -41,6 +43,7 @@ def build_report(
         "executor_version": provenance.get("executor_version"),
         "source_revision": provenance.get("source_revision"),
         "usage": provenance.get("usage"),
+        "metrics": metrics,
         "score_verdict": score_set.get("verdict") if isinstance(score_set, dict) else None,
         "scores": score_set.get("scores", []) if isinstance(score_set, dict) else [],
         "sealed_artifact_count": len(final.get("artifacts", [])),
@@ -56,6 +59,7 @@ def render_markdown(value: dict[str, Any]) -> str:
         f"- Source revision: `{value.get('source_revision') or 'unavailable'}`",
         f"- Overall deterministic verdict: `{value.get('score_verdict') or 'not-scored'}`",
         f"- Sealed artifacts: {value.get('sealed_artifact_count', 0)}",
+        f"- Normalized metrics: `{'present' if value.get('metrics') else 'unavailable'}`",
         "",
         "## Deterministic scores",
         "",
