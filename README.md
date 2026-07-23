@@ -67,6 +67,13 @@ or:
 
 The repository is the source of truth. `~/.local/bin` and agent skill directories contain installed links, not independent copies.
 
+## Planning and backlog
+
+[BACKLOG.md](BACKLOG.md) is the single authoritative register for unfinished,
+blocked, and deferred work. Design documents retain detailed rationale and
+acceptance material, but link back to the backlog rather than duplicating task
+lists.
+
 ## First configuration
 
 Edit `~/.config/agent-workflow/config.toml`. A machine with projects under `/lump/apps` might use:

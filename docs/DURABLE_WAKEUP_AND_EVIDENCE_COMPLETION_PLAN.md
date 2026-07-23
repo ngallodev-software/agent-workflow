@@ -1,5 +1,9 @@
 # Durable Wakeup and Evidence Completion Plan
 
+**Status:** Phases A-C are implemented. Active, blocked, and deferred follow-on
+work is tracked only in [BACKLOG.md](../BACKLOG.md); this document preserves
+the implementation contract and acceptance history.
+
 ## Purpose
 
 Complete the two remaining foundations for observable, restart-safe orchestration:

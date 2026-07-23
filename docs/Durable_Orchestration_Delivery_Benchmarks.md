@@ -4,6 +4,10 @@
 **Scope:** Design research only; no implementation changes
 **Date:** July 23, 2026
 
+**Task tracking:** [BACKLOG.md](../BACKLOG.md) is the canonical register for
+work derived from this research. Keep this document as the detailed evidence
+and design reference; do not maintain a second task list here.
+
 ## Executive decision
 
 `agent-workflow` should preserve **append-only, fsynced, replayable JSONL control records as the authoritative orchestration state**. Notification mechanisms should carry only an advisory statement equivalent to “new durable records may be available.” They must never carry the sole copy of a steer, acknowledgement, cancellation, or other control instruction.

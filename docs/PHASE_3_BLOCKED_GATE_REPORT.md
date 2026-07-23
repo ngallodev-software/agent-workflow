@@ -1,5 +1,7 @@
 # Phase 3 blocked gate report
 
+**Canonical task:** [BKL-010 in BACKLOG.md](../BACKLOG.md#blocked-on-supplied-prerequisites).
+
 ## Verdict
 
 Blocked by the ticket's explicit stop condition.
