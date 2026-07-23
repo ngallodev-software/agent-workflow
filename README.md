@@ -169,7 +169,6 @@ The `scripts/` directory preserves the original helper filenames as thin wrapper
 - `docs/MIGRATING_EXISTING_ASSETS.md`
 - `VALIDATION.md`
 - `SECURITY.md`
-- `docs/ROADMAP.md`
 
 ## Development validation
 
