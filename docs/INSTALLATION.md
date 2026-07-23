@@ -23,6 +23,10 @@ cd /lump/apps/agent-workflow
 ./install.sh
 ```
 
+This installs the package and its core Python dependencies in editable user
+mode, then wires the launcher and skills. To install optional integrations,
+use `./install.sh --extras eval,stats` or `./install.sh --extras all`.
+
 ## Installed locations
 
 ```text

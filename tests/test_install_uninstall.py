@@ -12,13 +12,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class InstallUninstallTests(unittest.TestCase):
-    def _run(self, script: str, home: Path) -> subprocess.CompletedProcess[str]:
+    def _run(self, script: str, home: Path, *args: str) -> subprocess.CompletedProcess[str]:
         dependency_root = str(Path(jsonschema.__file__).resolve().parents[1])
         inherited = os.environ.get("PYTHONPATH")
         pythonpath = dependency_root + (os.pathsep + inherited if inherited else "")
         env = {**os.environ, "HOME": str(home), "PYTHONPATH": pythonpath}
         return subprocess.run(
-            [str(ROOT / script)],
+            [str(ROOT / script), *args],
             cwd=ROOT,
             env=env,
             text=True,
@@ -29,7 +29,7 @@ class InstallUninstallTests(unittest.TestCase):
     def test_install_and_uninstall_owned_links(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
-            installed = self._run("install.sh", home)
+            installed = self._run("install.sh", home, "--no-deps")
             self.assertEqual(installed.returncode, 0, installed.stderr)
             launcher = home / ".local/bin/agent-workflow"
             self.assertEqual(launcher.resolve(), (ROOT / "bin/agent-workflow").resolve())

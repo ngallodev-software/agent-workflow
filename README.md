@@ -25,7 +25,7 @@ It intentionally does **not** provide automatic merging, automatic agent killing
 - Git
 - `tmux`
 - Bash
-- Python package `jsonschema>=4.18,<5` (installed with the wheel and checked by the symlink installer)
+- Python package `jsonschema>=4.18,<5` (installed automatically by `install.sh`)
 - GNU `tar` (with `--sort`, `--mtime`, and ownership-normalization options) and
   `zstd` for deterministic `.tar.zst` creation
 
@@ -39,7 +39,13 @@ From the extracted repository:
 ./install.sh
 ```
 
-The installer links the permanent source checkout into `~/.local/bin`, installs workflow skills by symlink, and creates a starter config if one does not exist. It performs no network access and creates no virtual environment.
+The installer installs the checkout in editable mode into the current user's
+Python environment, including core dependencies and a pip-managed launcher in
+`~/.local/bin`. It also installs workflow skills by symlink and creates a
+starter config if one does not exist. Use `--extras eval,stats` for selected
+optional dependency groups or `--extras all` for every optional group. Use
+`--no-deps` only when the required dependencies are already installed; it uses
+a source-link launcher instead.
 
 Make sure `~/.local/bin` is on `PATH`:
 
