@@ -1,0 +1,8 @@
+phase: "3"
+name: "visual-handoff-eval"
+mandatory_order: ["P3-00"]
+tasks:
+  - id: "P3-00"
+    tier: B
+    session: "orchestrator-messaging-evals-p3-00-visual"
+    prompt: "tickets/P3-00-baseline-and-preflight.md"

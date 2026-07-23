@@ -1,0 +1,8 @@
+phase: "1"
+name: "durable-local-messaging"
+mandatory_order: ["P1-00"]
+tasks:
+  - id: "P1-00"
+    tier: C
+    session: "orchestrator-messaging-evals-p1-00-messaging"
+    prompt: "tickets/P1-00-baseline-and-preflight.md"

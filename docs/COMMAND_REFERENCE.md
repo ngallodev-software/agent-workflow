@@ -13,6 +13,10 @@ agent-workflow list
 agent-workflow status SESSION [--capture N]
 agent-workflow attach SESSION
 agent-workflow tail SESSION [--lines N]
+agent-workflow steer SESSION TEXT --actor ID
+agent-workflow progress SESSION TEXT --actor ID
+agent-workflow ack SESSION MESSAGE_UUID TEXT --actor ID
+agent-workflow watch SESSION [--after SEQUENCE] [--timeout SECONDS]
 agent-workflow interrupt SESSION
 agent-workflow terminate SESSION [--grace-seconds N]
 agent-workflow kill SESSION
@@ -36,3 +40,8 @@ agent-workflow pack archive SOURCE OUTPUT.tar.zst
 Use global `--json` or `--config PATH` before or after the subcommand. Options after an explicit launch `--` belong to the delegated command.
 
 `doctor` is offline: executor capability probes invoke only local `--version` and `--help` commands. It performs no authentication probe or model call.
+
+`steer`, `progress`, and `ack` append validated, fsync'd records to the active
+run. `watch` blocks until a new record is durable (or its optional timeout).
+They do not claim an arbitrary one-shot executor received a late prompt: a
+steer becomes applied only when a child writes a correlated acknowledgement.

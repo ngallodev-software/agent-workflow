@@ -1,0 +1,8 @@
+phase: "0"
+name: "prior-art-and-contract"
+mandatory_order: ["P0-00"]
+tasks:
+  - id: "P0-00"
+    tier: C
+    session: "orchestrator-messaging-evals-p0-00-research"
+    prompt: "tickets/P0-00-baseline-and-preflight.md"

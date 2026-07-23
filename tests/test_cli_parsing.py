@@ -60,3 +60,13 @@ class CliParsingTests(unittest.TestCase):
             build_parser(), ["doctor", "--config", "/tmp/workflow.toml"]
         )
         self.assertEqual(str(args.config), "/tmp/workflow.toml")
+
+    def test_control_commands_preserve_message_contract_inputs(self):
+        steer = _parse_args(
+            build_parser(), ["steer", "run-1", "inspect tests", "--actor", "parent"]
+        )
+        watch = _parse_args(
+            build_parser(), ["watch", "run-1", "--after", "7", "--timeout", "1.5"]
+        )
+        self.assertEqual((steer.command, steer.actor, steer.content), ("steer", "parent", "inspect tests"))
+        self.assertEqual((watch.command, watch.after, watch.timeout), ("watch", 7, 1.5))

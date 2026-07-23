@@ -1,0 +1,8 @@
+phase: "2"
+name: "metrics-and-deterministic-eval"
+mandatory_order: ["P2-00"]
+tasks:
+  - id: "P2-00"
+    tier: C
+    session: "orchestrator-messaging-evals-p2-00-metrics"
+    prompt: "tickets/P2-00-baseline-and-preflight.md"

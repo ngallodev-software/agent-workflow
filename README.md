@@ -8,6 +8,8 @@ It provides:
 - one fresh, named `tmux` session per delegation;
 - schema-validated, sealed prompts, commands, event streams, provenance, patches, and completion records;
 - foreground, tail, inspect, interrupt, terminate, kill, and restart controls;
+- durable parent/child progress, steering, acknowledgement, and blocking wait
+  records for active runs;
 - multi-signal health diagnostics based on terminal, heartbeat, lifecycle, and log state;
 - deterministic evaluation collectors, scorers, ledgers, comparisons, and review receipts;
 - prompt-pack scaffolding, structural validation, checksums, and deterministic `.tar.zst` archives;
@@ -115,6 +117,17 @@ Interrupt and retry without overwriting evidence:
 ```bash
 agent-workflow interrupt example-p0-01
 agent-workflow restart example-p0-01
+```
+
+Exchange durable control records without polling status. A steer is a pending
+request until the child explicitly acknowledges its message ID; it is not proof
+that a one-shot executor has consumed a late prompt.
+
+```bash
+agent-workflow steer example-p0-01 "Run the focused tests before editing." --actor orchestrator
+agent-workflow watch example-p0-01 --after 0 --timeout 300
+agent-workflow progress example-p0-01 "Tests are green; reviewing scope." --actor child
+agent-workflow ack example-p0-01 MESSAGE_UUID "Applied at checkpoint." --actor child
 ```
 
 ## Prompt packs

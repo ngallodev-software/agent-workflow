@@ -21,6 +21,7 @@ from .evaluation import validate_evaluation
 from .executors import ExecutorPlan, executor_version, prepare_executor
 from .git import snapshot
 from .native_jobs import ValidatedNativeJob, validate_native_job
+from .messages import append_message, replay_messages, wait_for_messages
 from .tax_machine import TaxMachinePack, discover as discover_tax_machine, validate_job as validate_tax_job
 from .process import run
 from .receipts import initial_completion, initial_provenance, update_provenance
@@ -273,6 +274,10 @@ def _write_launch_prompt(
             "- Write it atomically; optional `completion.md` and `evidence.json` sidecars may use the same handoff directory.",
             "- Canonical runtime completion paths are collector-owned; do not write to them.",
             "- Matching environment variables use the `AGENT_WORKFLOW_` prefix.",
+            "- At meaningful checkpoints you may emit a concise durable progress update with `python3 -m agent_workflow progress "
+            + shlex.quote(session_id)
+            + " 'message' --actor child`. Do not expose secrets in updates.",
+            "- A parent steer request is only applied after you explicitly acknowledge its message ID with `python3 -m agent_workflow ack`.",
             "",
             "---",
             "",
@@ -807,6 +812,92 @@ def observe(
     if capture_lines and alive:
         result["capture"] = tmux.capture(session_id, capture_lines)
     return result
+
+
+def _active_run(settings: Settings, session_id: str) -> dict[str, Any]:
+    status = read_status(settings, session_id)
+    if str(status.get("status")) in TERMINAL_STATUSES:
+        raise WorkflowError("cannot send a control message to a terminal session")
+    return status
+
+
+def steer(
+    settings: Settings,
+    session_id: str,
+    *,
+    actor: str,
+    content: str,
+) -> dict[str, Any]:
+    """Persist a parent steering request without assuming executor delivery."""
+    _active_run(settings, session_id)
+    return append_message(
+        run_dir(settings, session_id),
+        session_id=session_id,
+        direction="parent_to_child",
+        kind="steer",
+        actor=actor,
+        content=content,
+    )
+
+
+def progress(
+    settings: Settings,
+    session_id: str,
+    *,
+    actor: str,
+    content: str,
+) -> dict[str, Any]:
+    """Persist an explicit child progress update for its parent."""
+    _active_run(settings, session_id)
+    return append_message(
+        run_dir(settings, session_id),
+        session_id=session_id,
+        direction="child_to_parent",
+        kind="progress",
+        actor=actor,
+        content=content,
+    )
+
+
+def acknowledge(
+    settings: Settings,
+    session_id: str,
+    *,
+    actor: str,
+    content: str,
+    correlation_id: str,
+) -> dict[str, Any]:
+    """Record a child acknowledgement after it has applied a control request."""
+    _active_run(settings, session_id)
+    return append_message(
+        run_dir(settings, session_id),
+        session_id=session_id,
+        direction="child_to_parent",
+        kind="ack",
+        actor=actor,
+        content=content,
+        correlation_id=correlation_id,
+    )
+
+
+def messages(settings: Settings, session_id: str, *, after_sequence: int = 0) -> list[dict[str, Any]]:
+    read_status(settings, session_id)
+    return replay_messages(run_dir(settings, session_id), after_sequence=after_sequence)
+
+
+def wait_for_message(
+    settings: Settings,
+    session_id: str,
+    *,
+    after_sequence: int = 0,
+    timeout_seconds: float | None = None,
+) -> list[dict[str, Any]]:
+    read_status(settings, session_id)
+    return wait_for_messages(
+        run_dir(settings, session_id),
+        after_sequence=after_sequence,
+        timeout_seconds=timeout_seconds,
+    )
 
 
 def interrupt(settings: Settings, session_id: str) -> dict[str, Any]:

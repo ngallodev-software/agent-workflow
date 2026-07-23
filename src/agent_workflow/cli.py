@@ -26,9 +26,13 @@ from .receipts import verify_seal
 from .sessions import interrupt as interrupt_session
 from .sessions import kill as kill_session
 from .sessions import launch as launch_session
+from .sessions import acknowledge as acknowledge_message
+from .sessions import progress as record_progress
 from .sessions import observe
 from .sessions import restart as restart_session
+from .sessions import steer as steer_session
 from .sessions import terminate as terminate_session
+from .sessions import wait_for_message
 from .state import list_statuses, read_status, runs_root
 from .tmux import attach as attach_tmux
 from .util import atomic_write_json, expand_path
@@ -152,6 +156,35 @@ def build_parser() -> argparse.ArgumentParser:
     tail = commands.add_parser("tail", help="follow a delegation log")
     tail.add_argument("session_id")
     tail.add_argument("--lines", type=int, default=50)
+
+    steer = commands.add_parser(
+        "steer", help="persist a parent-to-child steering request"
+    )
+    steer.add_argument("session_id")
+    steer.add_argument("content")
+    steer.add_argument("--actor", required=True)
+
+    progress = commands.add_parser(
+        "progress", help="persist a child-to-parent progress update"
+    )
+    progress.add_argument("session_id")
+    progress.add_argument("content")
+    progress.add_argument("--actor", required=True)
+
+    acknowledge = commands.add_parser(
+        "ack", help="record application of a steering request"
+    )
+    acknowledge.add_argument("session_id")
+    acknowledge.add_argument("correlation_id")
+    acknowledge.add_argument("content")
+    acknowledge.add_argument("--actor", required=True)
+
+    watch = commands.add_parser(
+        "watch", help="block until a durable session message arrives"
+    )
+    watch.add_argument("session_id")
+    watch.add_argument("--after", type=int, default=0)
+    watch.add_argument("--timeout", type=float)
 
     interrupt = commands.add_parser(
         "interrupt", help="send Ctrl-C without deleting the session"
@@ -407,6 +440,29 @@ def main(argv: list[str] | None = None) -> int:
             status_data = read_status(settings, args.session_id)
             log = Path(str(status_data["log_path"]))
             os.execvp("tail", ["tail", "-n", str(args.lines), "-f", str(log)])
+        elif args.command == "steer":
+            data = steer_session(
+                settings, args.session_id, actor=args.actor, content=args.content
+            )
+        elif args.command == "progress":
+            data = record_progress(
+                settings, args.session_id, actor=args.actor, content=args.content
+            )
+        elif args.command == "ack":
+            data = acknowledge_message(
+                settings,
+                args.session_id,
+                actor=args.actor,
+                content=args.content,
+                correlation_id=args.correlation_id,
+            )
+        elif args.command == "watch":
+            data = wait_for_message(
+                settings,
+                args.session_id,
+                after_sequence=args.after,
+                timeout_seconds=args.timeout,
+            )
         elif args.command == "interrupt":
             data = interrupt_session(settings, args.session_id)
         elif args.command == "terminate":
