@@ -88,10 +88,11 @@ def _collect_completion(run_dir: Path, workdir: Path) -> dict[str, Any]:
     handoff_value = status.get("handoff_dir")
     handoff = Path(handoff_value) if isinstance(handoff_value, str) else None
     source = handoff / "completion.json" if handoff is not None else None
+    adapter = str(status.get("pack_adapter") or "native")
     receipt: dict[str, Any] = {
         "schema": "agent-workflow/completion-collection/v1",
         "session_id": str(status["session_id"]),
-        "adapter": "native",
+        "adapter": adapter,
         "adapter_version": "1",
         "source_path": str(source) if source is not None else None,
         "source_sha256": None,
@@ -116,28 +117,38 @@ def _collect_completion(run_dir: Path, workdir: Path) -> dict[str, Any]:
     else:
         receipt["source_sha256"] = hashlib.sha256(data).hexdigest()
         try:
-            value = json.loads(data.decode("utf-8"))
-            if not isinstance(value, dict):
-                raise WorkflowError("completion handoff must be a JSON object")
-            if value.get("session_id") != status["session_id"]:
-                raise WorkflowError("completion handoff session_id does not match run")
-            from .contracts import validate_instance
-
-            validate_instance(
-                value,
-                "agent-workflow/completion/v1",
-                artifact=str(source),
-            )
-            completion_path = run_dir / "completion.json"
-            temporary = completion_path.with_name(f".{completion_path.name}.handoff")
-            temporary.write_bytes(data)
-            os.replace(temporary, completion_path)
+            if adapter == "tax-machine":
+                from .tax_machine import discover, validate_completion
+                root_value = status.get("prompt_pack_root")
+                pack = discover(Path(root_value)) if isinstance(root_value, str) else None
+                if pack is None:
+                    raise WorkflowError("Tax Machine pack cannot be rediscovered for collection")
+                validate_completion(pack, data)
+                stored = run_dir / "external" / "tax-machine" / "completion.json"
+                stored.parent.mkdir(parents=True, exist_ok=True)
+                stored.write_bytes(data)
+                stored.chmod(0o444)
+                receipt["stored_path"] = str(stored.relative_to(run_dir))
+                # The current Tax contract has no deterministic complete native
+                # result/revision/criteria/command mapping. Preserve evidence but
+                # deliberately retain the native placeholder.
+                receipt["canonical_mapping"] = "not_mappable_current_schema"
+            else:
+                value = json.loads(data.decode("utf-8"))
+                if not isinstance(value, dict):
+                    raise WorkflowError("completion handoff must be a JSON object")
+                if value.get("session_id") != status["session_id"]:
+                    raise WorkflowError("completion handoff session_id does not match run")
+                from .contracts import validate_instance
+                validate_instance(value, "agent-workflow/completion/v1", artifact=str(source))
+                completion_path = run_dir / "completion.json"
+                temporary = completion_path.with_name(f".{completion_path.name}.handoff")
+                temporary.write_bytes(data)
+                os.replace(temporary, completion_path)
+                receipt["stored_path"] = "completion.json"
+                receipt["canonical_mapping"] = "identity"
+                receipt["canonical_sha256"] = hashlib.sha256(completion_path.read_bytes()).hexdigest()
             receipt["validation_status"] = "valid"
-            receipt["stored_path"] = "completion.json"
-            receipt["canonical_mapping"] = "identity"
-            receipt["canonical_sha256"] = hashlib.sha256(
-                completion_path.read_bytes()
-            ).hexdigest()
         except (OSError, UnicodeDecodeError, json.JSONDecodeError, WorkflowError) as exc:
             receipt["validation_status"] = "invalid"
             receipt["validation_errors"] = [str(exc)]
@@ -462,7 +473,7 @@ def execute(
                 receipt_dir=run_dir / "scope",
             )
             commands = runtime.get("acceptance_commands", [])
-            if commands:
+            if commands or runtime.get("native_job_binding_sha256"):
                 collect_commands(
                     workdir,
                     specs_from_data(commands),

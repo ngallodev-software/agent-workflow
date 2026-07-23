@@ -1,0 +1,15 @@
+{
+  "schema": "agent-workflow/native-job/v1",
+  "job_id": "native-job-1",
+  "ticket_id": "P0-01",
+  "prompt_path": "prompts/P0-01.md",
+  "worktree_target": "worktrees/P0-01",
+  "path_policy": {
+    "allowed_paths": ["src/example.py", "tests/test_example.py"],
+    "forbidden_paths": ["secrets"]
+  },
+  "acceptance_commands": [
+    {"id": "unit", "argv": ["python3", "-m", "pytest", "-q"]}
+  ],
+  "review_requirement": {"required": true, "independent": true}
+}

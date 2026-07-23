@@ -16,12 +16,15 @@ class CliParsingTests(unittest.TestCase):
                 "P0-01",
                 "--pack",
                 "sample-pack",
+                "--job",
+                "jobs/P0-01.json",
                 "--executor",
                 "codex",
             ],
         )
         self.assertEqual(args.ticket, "P0-01")
         self.assertEqual(args.executor, "codex")
+        self.assertEqual(str(args.job), "jobs/P0-01.json")
         self.assertIsNone(args.explicit_command)
 
     def test_explicit_command_is_preserved_after_separator(self):

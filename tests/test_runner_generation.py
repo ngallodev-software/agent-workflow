@@ -4,6 +4,8 @@ import unittest
 import json
 from pathlib import Path
 
+from agent_workflow.eval.scoring import score_trial
+from agent_workflow.util import sha256_file
 from agent_workflow.runner import MAX_COMPLETION_HANDOFF_BYTES, _capture_patch, _collect_completion
 from agent_workflow.sessions import _write_runner
 from run_fixtures import write_run_contracts
@@ -29,6 +31,69 @@ class RunnerTests(unittest.TestCase):
             )
 
 class RunnerExecutionTests(unittest.TestCase):
+    def test_native_job_post_receipts_report_scope_and_command_failures(self):
+        import subprocess
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state, work = root / "state", root / "work"
+            state.mkdir()
+            work.mkdir()
+            write_run_contracts(state, session_id="native-post", include_final=False)
+            handoff = work / ".agent-workflow-handoff" / "native-post"
+            handoff.mkdir(parents=True)
+            status_path = state / "status.json"
+            status = json.loads(status_path.read_text(encoding="utf-8"))
+            status["handoff_dir"] = str(handoff)
+            status_path.write_text(json.dumps(status), encoding="utf-8")
+            (state / "evaluation-runtime.json").write_text(
+                json.dumps(
+                    {
+                        "schema": "agent-workflow/evaluation-runtime/v1",
+                        "acceptance_commands": [
+                            {"id": "reject", "argv": ["python3", "-c", "raise SystemExit(1)"]}
+                        ],
+                        "scope": {
+                            "writable_paths": ["allowed.txt"],
+                            "disposable_trees": [".agent-workflow-handoff/"],
+                        },
+                        "scorers": [],
+                        "native_job_binding_sha256": "bound",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            from agent_workflow.eval.scope import ScopePolicy, collect_scope
+
+            collect_scope(
+                work,
+                phase="baseline",
+                policy=ScopePolicy(work, writable_paths=("allowed.txt",), disposable_trees=(".agent-workflow-handoff/",)),
+                receipt_dir=state / "scope",
+            )
+            writer = (
+                "import json, os, pathlib; pathlib.Path('outside.txt').write_text('no'); "
+                "p=pathlib.Path(os.environ['AGENT_WORKFLOW_HANDOFF_DIR']); "
+                "p.joinpath('completion.json').write_text(json.dumps({'schema':'agent-workflow/completion/v1',"
+                "'session_id':'native-post','ticket_id':None,'pack_id':None,'result':'completed',"
+                "'base_revision':None,'head_revision':None,'changed_files':[],'criteria':[],'commands':[],"
+                "'unresolved':[],'usage':None}))"
+            )
+            runner = _write_runner(state, work, ["python3", "-c", writer], handoff_dir=handoff)
+            self.assertEqual(subprocess.run([str(runner)], check=False).returncode, 0)
+            post = json.loads((state / "collections" / "commands-post.json").read_text(encoding="utf-8"))
+            self.assertEqual(post["commands"][0]["exit_code"], 1)
+            scope = json.loads((state / "scope" / "scope-post.json").read_text(encoding="utf-8"))
+            self.assertEqual(scope["policy"]["writable_paths"], ["allowed.txt"])
+            scores = score_trial(
+                state,
+                output_dir=state / "scores",
+                expected_final_receipt_sha256=sha256_file(state / "final-receipt.json"),
+            )
+            by_id = {item["scorer"]["id"]: item["verdict"] for item in scores["scores"]}
+            self.assertEqual(by_id["acceptance_commands"], "fail")
+            self.assertEqual(by_id["writable_scope"], "fail")
+
     def test_runner_collects_valid_handoff_before_seal(self):
         import subprocess
 

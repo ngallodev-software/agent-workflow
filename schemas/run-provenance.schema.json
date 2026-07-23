@@ -19,6 +19,17 @@
     "worktree": {"type": "string"},
     "environment": {"type": "object"},
     "budgets": {"type": "object"},
+    "job_binding": {
+      "type": ["object", "null"],
+      "properties": {
+        "path": {"type": "string"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "job_id": {"type": "string"}
+      },
+      "required": ["path", "sha256", "job_id"],
+      "additionalProperties": false
+    },
+    "external_snapshots": {"type": ["object", "null"]},
     "evaluation_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
     "usage": {"type": ["object", "null"]},
     "started_at": {"type": "string"},

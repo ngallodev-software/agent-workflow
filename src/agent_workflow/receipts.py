@@ -25,7 +25,16 @@ SEALED_ARTIFACTS = (
     "collections/completion.json",
 )
 SEALED_TREES = ("collections", "scope")
-SEALED_OPTIONAL_ARTIFACTS = ("evaluation-runtime.json",)
+SEALED_OPTIONAL_ARTIFACTS = (
+    "evaluation-runtime.json",
+    "job-binding.json",
+    "jobs/native-job.json",
+    "external/tax-machine/MANIFEST.json",
+    "external/tax-machine/job.json",
+    "external/tax-machine/job.schema.json",
+    "external/tax-machine/completion.schema.json",
+    "external/tax-machine/completion.json",
+)
 
 
 def initial_completion(
@@ -66,6 +75,8 @@ def initial_provenance(
     worktree: Path,
     environment: dict[str, Any],
     budgets: dict[str, Any] | None = None,
+    job_binding: dict[str, Any] | None = None,
+    external_snapshots: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "schema": "agent-workflow/run-provenance/v1",
@@ -83,6 +94,8 @@ def initial_provenance(
         "worktree": str(worktree),
         "environment": environment,
         "budgets": budgets or {},
+        "job_binding": job_binding,
+        "external_snapshots": external_snapshots,
         "usage": None,
         "started_at": utc_now(),
         "first_output_at": None,
@@ -160,6 +173,9 @@ def seal_run(run_dir: Path, *, session_id: str) -> dict[str, Any]:
         "collections/completion.json": "agent-workflow/completion-collection/v1",
     }.items():
         read_contract(run_dir / name, schema)
+    binding = run_dir / "job-binding.json"
+    if binding.is_file():
+        read_contract(binding, "agent-workflow/job-binding/v1")
     receipt = {
         "schema": "agent-workflow/final-receipt/v1",
         "session_id": session_id,

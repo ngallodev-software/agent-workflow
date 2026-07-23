@@ -13,12 +13,15 @@ from typing import Any
 from . import tmux
 from .assets import asset_path
 from .config import Settings
+from .contracts import read_contract
 from .errors import WorkflowError
 from .eval.commands import collect_commands, specs_from_data
 from .eval.scope import ScopePolicy, collect_scope
 from .evaluation import validate_evaluation
 from .executors import ExecutorPlan, executor_version, prepare_executor
 from .git import snapshot
+from .native_jobs import ValidatedNativeJob, validate_native_job
+from .tax_machine import TaxMachinePack, discover as discover_tax_machine, validate_job as validate_tax_job
 from .process import run
 from .receipts import initial_completion, initial_provenance, update_provenance
 from .state import (
@@ -145,6 +148,107 @@ def _discover_prompt_pack_root(prompt_source: Path) -> Path | None:
     return None
 
 
+def _pack_id(pack_root: Path) -> str:
+    """Read the deliberately small, stable identity field from pack.yaml."""
+    pack_file = pack_root / "pack.yaml"
+    try:
+        for line in pack_file.read_text(encoding="utf-8").splitlines():
+            key, separator, value = line.partition(":")
+            if key.strip() == "pack_id" and separator and value.strip():
+                return value.strip().strip("\"'")
+    except OSError as exc:
+        raise WorkflowError(f"cannot read selected pack: {pack_file}: {exc}") from exc
+    raise WorkflowError(f"selected pack has no pack_id: {pack_file}")
+
+
+def _bind_native_job(
+    *,
+    job_path: Path,
+    prompt_path: Path,
+    workdir: Path,
+    ticket_id: str | None,
+    pack_id: str | None,
+) -> ValidatedNativeJob:
+    """Perform all job checks before any runtime state is created."""
+    pack_root = _discover_prompt_pack_root(prompt_path)
+    if pack_root is None:
+        raise WorkflowError("--job requires a prompt under a selected prompt pack")
+    job = validate_native_job(expand_path(job_path), pack_root=pack_root)
+    if job.prompt_path != prompt_path.resolve():
+        raise WorkflowError(
+            "native job prompt_path disagrees with launch prompt: "
+            f"{job.prompt_relative_path}"
+        )
+    expected_workdir = (pack_root / job.worktree_target).resolve()
+    if expected_workdir != workdir.resolve():
+        raise WorkflowError(
+            "native job worktree_target disagrees with launch workdir: "
+            f"expected {expected_workdir}, got {workdir.resolve()}"
+        )
+    if ticket_id is not None and ticket_id != job.ticket_id:
+        raise WorkflowError(
+            f"--ticket disagrees with native job: {ticket_id} != {job.ticket_id}"
+        )
+    selected_pack_id = _pack_id(pack_root)
+    if pack_id is not None and pack_id != selected_pack_id:
+        raise WorkflowError(
+            f"--pack disagrees with selected pack: {pack_id} != {selected_pack_id}"
+        )
+    return job
+
+
+def _write_job_binding(state_dir: Path, job: ValidatedNativeJob, *, session_id: str, workdir: Path) -> dict[str, Any]:
+    """Snapshot the validated source bytes and write the immutable binding receipt."""
+    stored = state_dir / "jobs" / "native-job.json"
+    stored.parent.mkdir(parents=True, exist_ok=True)
+    raw = job.job_path.read_bytes()
+    stored.write_bytes(raw)
+    source_sha256 = sha256_file(job.job_path)
+    stored_sha256 = sha256_file(stored)
+    if source_sha256 != stored_sha256:
+        raise WorkflowError("native job changed while its binding was being created")
+    receipt = {
+        "schema": "agent-workflow/job-binding/v1",
+        "bound_at": utc_now(),
+        "session_id": session_id,
+        "run_dir": str(state_dir),
+        "job_id": job.job_id,
+        "ticket_id": job.ticket_id,
+        "pack_root": str(job.pack_root),
+        "worktree": str(workdir),
+        "worktree_target": job.worktree_target,
+        "prompt_source_path": str(job.prompt_path),
+        "job_source_path": str(job.job_path),
+        "job_source_sha256": source_sha256,
+        "job_stored_path": str(stored),
+        "job_stored_sha256": stored_sha256,
+        "path_policy": {
+            "allowed_paths": list(job.path_policy.allowed_paths),
+            "forbidden_paths": list(job.path_policy.forbidden_paths),
+        },
+        "acceptance_commands": [
+            {
+                "id": command.id,
+                "argv": list(command.argv),
+                "cwd": command.cwd,
+                "timeout_seconds": command.timeout_seconds,
+                "result_format": command.result_format,
+                "junit_path": command.junit_path,
+            }
+            for command in job.acceptance_commands
+        ],
+        "review_requirement": {
+            "required": job.review_requirement.required,
+            "independent": job.review_requirement.independent,
+        },
+    }
+    receipt_path = state_dir / "job-binding.json"
+    atomic_write_json(receipt_path, receipt)
+    stored.chmod(0o444)
+    receipt_path.chmod(0o444)
+    return receipt
+
+
 def _write_launch_prompt(
     state_dir: Path,
     *,
@@ -202,6 +306,7 @@ def launch(
     prompt_pack_root_override: Path | None = None,
     evaluation_path: Path | None = None,
     tier: str | None = None,
+    job_path: Path | None = None,
 ) -> dict[str, Any]:
     validate_id(session_id, "session ID")
     if ticket_id:
@@ -214,6 +319,20 @@ def launch(
         raise WorkflowError(f"workdir not found: {workdir}")
     if not prompt_path.is_file():
         raise WorkflowError(f"prompt not found: {prompt_path}")
+    tax_pack = discover_tax_machine(prompt_source_override or prompt_path) if job_path is not None else None
+    native_job: ValidatedNativeJob | None = None
+    if job_path is not None and tax_pack is not None:
+        # External packs are selected only by a real MANIFEST.json ancestor and
+        # validate their own job schema without extending global contracts.
+        validate_tax_job(tax_pack, expand_path(job_path))
+    elif job_path is not None:
+        native_job = _bind_native_job(
+            job_path=job_path, prompt_path=prompt_source_override or prompt_path,
+            workdir=workdir, ticket_id=ticket_id, pack_id=pack_id,
+        )
+    if native_job is not None:
+        ticket_id = native_job.ticket_id
+        pack_id = _pack_id(native_job.pack_root)
     if settings.terminal_backend != "tmux":
         raise WorkflowError(
             f"unsupported terminal backend {settings.terminal_backend!r}; v0.1 supports tmux"
@@ -247,6 +366,17 @@ def launch(
     else:
         state_dir.mkdir(parents=True)
 
+    job_binding = (
+        _write_job_binding(state_dir, native_job, session_id=session_id, workdir=workdir)
+        if native_job is not None
+        else None
+    )
+    tax_snapshots = (
+        tax_pack.snapshot(state_dir, expand_path(job_path))
+        if tax_pack is not None and job_path is not None
+        else None
+    )
+
     executor_plan = prepare_executor(
         settings, executor, explicit_command, structured=structured
     )
@@ -268,6 +398,8 @@ def launch(
         if prompt_pack_root_override is not None
         else _discover_prompt_pack_root(prompt_source)
     )
+    if tax_pack is not None:
+        prompt_pack_root = tax_pack.root
     (state_dir / "output.log").touch()
     atomic_write_json(
         state_dir / "command.json",
@@ -353,7 +485,7 @@ def launch(
         if settings.config_path and settings.config_path.is_file()
         else None
     )
-    pack_manifest = prompt_pack_root / "MANIFEST.sha256" if prompt_pack_root else None
+    pack_manifest = (tax_pack.manifest if tax_pack is not None else prompt_pack_root / "MANIFEST.sha256") if prompt_pack_root else None
     provenance_path = state_dir / "run-provenance.json"
     atomic_write_json(
         provenance_path,
@@ -382,40 +514,88 @@ def launch(
                 "platform": platform.platform(),
                 "implementation": sys.implementation.name,
             },
+            job_binding=(
+                {
+                    "path": str(state_dir / "job-binding.json"),
+                    "sha256": sha256_file(state_dir / "job-binding.json"),
+                    "job_id": native_job.job_id,
+                }
+                if native_job is not None
+                else None
+            ),
+            external_snapshots=tax_snapshots,
         ),
     )
-    if evaluation_path is not None:
-        evaluation = validate_evaluation(
-            expand_path(evaluation_path),
-            pack_root=prompt_pack_root,
-        )
-        if ticket_id and ticket_id not in evaluation.task_ids:
-            raise WorkflowError(
-                f"evaluation plan does not include launched ticket: {ticket_id}"
+    if evaluation_path is not None or native_job is not None:
+        evaluation = None
+        evaluation_data: dict[str, Any] = {}
+        if evaluation_path is not None:
+            evaluation = validate_evaluation(
+                expand_path(evaluation_path),
+                pack_root=prompt_pack_root,
             )
-        commands = evaluation.data.get("acceptance_commands", [])
-        scope_data = evaluation.data.get("scope", {})
+            if ticket_id and ticket_id not in evaluation.task_ids:
+                raise WorkflowError(
+                    f"evaluation plan does not include launched ticket: {ticket_id}"
+                )
+            evaluation_data = evaluation.data
+        # A bound native job is an execution policy, not advisory metadata.  Its
+        # validated command vectors and allowed paths therefore override any
+        # evaluation-plan collector settings for this run.
+        commands = (
+            [
+                {
+                    "id": command.id,
+                    "argv": list(command.argv),
+                    "cwd": command.cwd,
+                    "timeout_seconds": command.timeout_seconds,
+                    "result_format": command.result_format,
+                    "junit_path": command.junit_path,
+                }
+                for command in native_job.acceptance_commands
+            ]
+            if native_job is not None
+            else evaluation_data.get("acceptance_commands", [])
+        )
+        scope_data = (
+            {
+                "writable_paths": list(native_job.path_policy.allowed_paths),
+                # These runner-owned worktree directories are established before
+                # baseline collection and receive completion/state writes after it.
+                "disposable_trees": [".agent-workflow-handoff/", ".delegations/"],
+            }
+            if native_job is not None
+            else evaluation_data.get("scope", {})
+        )
         runtime = {
             "schema": "agent-workflow/evaluation-runtime/v1",
-            "evaluation_path": str(evaluation.path),
-            "evaluation_sha256": evaluation.sha256,
-            "timeout_seconds": evaluation.data["timeout_seconds"],
+            "evaluation_path": str(evaluation.path) if evaluation is not None else None,
+            "evaluation_sha256": evaluation.sha256 if evaluation is not None else None,
+            "timeout_seconds": evaluation_data.get("timeout_seconds"),
             "acceptance_commands": commands,
             "scope": scope_data,
-            "scorers": evaluation.data["scorers"],
-            "oracle_refs": evaluation.data.get("oracle_refs", {}),
-            "statistics_policy": evaluation.data.get(
+            "scorers": evaluation_data.get("scorers", []),
+            "oracle_refs": evaluation_data.get("oracle_refs", {}),
+            "statistics_policy": evaluation_data.get(
                 "statistics_policy", "agent-workflow/statistics/v1"
             ),
             "ticket_id": ticket_id,
+            "native_job_binding_sha256": (
+                sha256_file(state_dir / "job-binding.json")
+                if native_job is not None
+                else None
+            ),
         }
-        update_provenance(
-            state_dir,
-            budgets=evaluation.data.get("budgets", {}),
-            evaluation_sha256=evaluation.sha256,
-        )
+        if evaluation is not None:
+            update_provenance(
+                state_dir,
+                budgets=evaluation_data.get("budgets", {}),
+                evaluation_sha256=evaluation.sha256,
+            )
         atomic_write_json(state_dir / "evaluation-runtime.json", runtime)
-        if commands:
+        # Native jobs require receipts even for an empty declared command list:
+        # the empty set is itself evidence that the binding was enforced.
+        if commands or native_job is not None:
             collect_commands(
                 workdir,
                 specs_from_data(commands),
@@ -470,6 +650,11 @@ def launch(
             str(expand_path(evaluation_path)) if evaluation_path else None
         ),
         "source_baseline_path": str(baseline_path),
+        "job_binding_path": str(state_dir / "job-binding.json") if job_binding else None,
+        "job_binding_sha256": sha256_file(state_dir / "job-binding.json") if job_binding else None,
+        "job_id": native_job.job_id if native_job else None,
+        "pack_adapter": "tax-machine" if tax_pack is not None else "native",
+        "external_snapshots": tax_snapshots,
         "tmux_session": session_id,
         **git_info,
     }
@@ -711,6 +896,17 @@ def restart(
     ):
         raise WorkflowError(f"invalid saved command for session {session_id}")
     new_id = new_session or next_retry_id(settings, session_id)
+    job_path = None
+    if old.get("job_binding_path"):
+        binding_path = Path(str(old["job_binding_path"]))
+        binding = read_contract(binding_path, "agent-workflow/job-binding/v1")
+        source = Path(str(binding["job_source_path"]))
+        expected = str(binding["job_source_sha256"])
+        if not source.is_file() or sha256_file(source) != expected:
+            raise WorkflowError(
+                "cannot restart: native job binding source is missing or changed"
+            )
+        job_path = source
     return launch(
         settings,
         session_id=new_id,
@@ -735,4 +931,5 @@ def restart(
             else None
         ),
         tier=old.get("tier"),
+        job_path=job_path,
     )

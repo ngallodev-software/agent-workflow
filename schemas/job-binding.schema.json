@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/job-binding/v1",
+  "type": "object",
+  "required": ["schema", "bound_at", "session_id", "run_dir", "job_id", "ticket_id", "pack_root", "worktree", "worktree_target", "prompt_source_path", "job_source_path", "job_source_sha256", "job_stored_path", "job_stored_sha256", "path_policy", "acceptance_commands", "review_requirement"],
+  "properties": {
+    "schema": {"const": "agent-workflow/job-binding/v1"},
+    "bound_at": {"type": "string"}, "session_id": {"type": "string"}, "run_dir": {"type": "string"}, "job_id": {"type": "string"}, "ticket_id": {"type": "string"}, "pack_root": {"type": "string"}, "worktree": {"type": "string"}, "worktree_target": {"type": "string"}, "prompt_source_path": {"type": "string"}, "job_source_path": {"type": "string"}, "job_source_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "job_stored_path": {"type": "string"}, "job_stored_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "path_policy": {"type": "object", "required": ["allowed_paths", "forbidden_paths"], "properties": {"allowed_paths": {"type": "array", "items": {"type": "string"}}, "forbidden_paths": {"type": "array", "items": {"type": "string"}}}, "additionalProperties": false},
+    "acceptance_commands": {"type": "array", "items": {"type": "object", "required": ["id", "argv", "cwd", "timeout_seconds", "result_format", "junit_path"], "properties": {"id": {"type": "string"}, "argv": {"type": "array", "items": {"type": "string"}}, "cwd": {"type": "string"}, "timeout_seconds": {"type": "integer"}, "result_format": {"type": "string"}, "junit_path": {"type": ["string", "null"]}}, "additionalProperties": false}},
+    "review_requirement": {"type": "object", "required": ["required", "independent"], "properties": {"required": {"type": "boolean"}, "independent": {"type": "boolean"}}, "additionalProperties": false}
+  },
+  "additionalProperties": false
+}

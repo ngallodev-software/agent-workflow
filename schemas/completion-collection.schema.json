@@ -6,11 +6,11 @@
   "properties": {
     "schema": {"const": "agent-workflow/completion-collection/v1"},
     "session_id": {"type": "string"},
-    "adapter": {"const": "native"},
+    "adapter": {"enum": ["native", "tax-machine"]},
     "adapter_version": {"const": "1"},
     "source_path": {"type": ["string", "null"]},
     "source_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
-    "canonical_mapping": {"type": ["string", "null"], "enum": ["identity", null]},
+    "canonical_mapping": {"type": ["string", "null"], "enum": ["identity", "not_mappable_current_schema", null]},
     "canonical_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
     "validation_status": {"enum": ["valid", "missing", "invalid"]},
     "validation_errors": {"type": "array", "items": {"type": "string"}},

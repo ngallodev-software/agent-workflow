@@ -2,7 +2,7 @@ schema: agent-workflow/pack/v1
 pack_id: "{{PACK_SLUG}}"
 workflow:
   name: agent-workflow
-  minimum_version: "0.1.1"
+  minimum_version: "0.1.2"
   terminal_backend: tmux
   requires:
     - isolated_worktree

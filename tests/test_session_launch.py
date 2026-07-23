@@ -15,6 +15,163 @@ from agent_workflow.tmux import PaneInfo
 
 
 class SessionLaunchTests(unittest.TestCase):
+    def _native_job_launch_inputs(self, root: Path) -> tuple[Path, Path, Path]:
+        pack = root / "pack"
+        workdir = pack / "worktrees" / "P0-01"
+        workdir.mkdir(parents=True)
+        (pack / "pack.yaml").write_text(
+            "schema: agent-workflow/pack/v1\npack_id: native-pack\n",
+            encoding="utf-8",
+        )
+        prompt = pack / "prompts" / "P0-01.md"
+        prompt.parent.mkdir()
+        prompt.write_text("# native task\n", encoding="utf-8")
+        job = pack / "jobs" / "P0-01.json"
+        job.parent.mkdir()
+        job.write_text(
+            json.dumps(
+                {
+                    "schema": "agent-workflow/native-job/v1",
+                    "job_id": "native-P0-01",
+                    "ticket_id": "P0-01",
+                    "prompt_path": "prompts/P0-01.md",
+                    "worktree_target": "worktrees/P0-01",
+                    "path_policy": {
+                        "allowed_paths": ["src/example.py"],
+                        "forbidden_paths": ["secrets"],
+                    },
+                    "acceptance_commands": [
+                        {"id": "unit", "argv": ["python3", "-c", "pass"]}
+                    ],
+                    "review_requirement": {"required": True, "independent": True},
+                }
+            ),
+            encoding="utf-8",
+        )
+        return workdir, prompt, job
+
+    def test_native_job_preflight_failures_create_no_state_or_tmux(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            workdir, prompt, job = self._native_job_launch_inputs(root)
+            settings = defaults(root / "missing.toml")
+            settings = settings.__class__(
+                **{**settings.__dict__, "state_root": root / "state"}
+            )
+            cases = [
+                ("ticket", {"ticket_id": "P9-99"}, "--ticket disagrees"),
+                ("pack", {"pack_id": "other-pack"}, "--pack disagrees"),
+                ("worktree", {"workdir": root / "elsewhere"}, "worktree_target disagrees"),
+            ]
+            for suffix, overrides, message in cases:
+                if "workdir" in overrides:
+                    overrides["workdir"].mkdir()
+                with patch("agent_workflow.sessions.tmux.create_session") as create_session:
+                    with self.assertRaisesRegex(WorkflowError, message):
+                        launch(
+                            settings,
+                            session_id=f"native-fail-{suffix}",
+                            workdir=overrides.get("workdir", workdir),
+                            prompt_path=prompt,
+                            explicit_command=["cat"],
+                            job_path=job,
+                            ticket_id=overrides.get("ticket_id"),
+                            pack_id=overrides.get("pack_id"),
+                        )
+                self.assertFalse((root / "state" / "runs" / f"native-fail-{suffix}").exists())
+                create_session.assert_not_called()
+
+            outside = root / "outside.json"
+            outside.write_bytes(job.read_bytes())
+            with patch("agent_workflow.sessions.tmux.create_session") as create_session:
+                with self.assertRaisesRegex(WorkflowError, "outside pack root"):
+                    launch(
+                        settings,
+                        session_id="native-fail-outside",
+                        workdir=workdir,
+                        prompt_path=prompt,
+                        explicit_command=["cat"],
+                        job_path=outside,
+                    )
+            self.assertFalse((root / "state" / "runs" / "native-fail-outside").exists())
+            create_session.assert_not_called()
+
+            escaped = root / "pack" / "jobs" / "escaped.json"
+            escaped_value = json.loads(job.read_text(encoding="utf-8"))
+            escaped_value["prompt_path"] = "../outside.md"
+            escaped.write_text(json.dumps(escaped_value), encoding="utf-8")
+            with patch("agent_workflow.sessions.tmux.create_session") as create_session:
+                with self.assertRaisesRegex(WorkflowError, "prompt_path must be a relative"):
+                    launch(
+                        settings,
+                        session_id="native-fail-prompt-escape",
+                        workdir=workdir,
+                        prompt_path=prompt,
+                        explicit_command=["cat"],
+                        job_path=escaped,
+                    )
+            self.assertFalse(
+                (root / "state" / "runs" / "native-fail-prompt-escape").exists()
+            )
+            create_session.assert_not_called()
+
+    def test_native_job_binding_snapshots_raw_bytes_and_status_provenance(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            workdir, prompt, job = self._native_job_launch_inputs(root)
+            settings = defaults(root / "missing.toml")
+            settings = settings.__class__(
+                **{**settings.__dict__, "state_root": root / "state"}
+            )
+            with (
+                patch("agent_workflow.sessions.tmux.session_exists", return_value=False),
+                patch("agent_workflow.sessions.tmux.create_session") as create_session,
+                patch("agent_workflow.sessions.tmux.pane_info", return_value=None),
+            ):
+                result = launch(
+                    settings,
+                    session_id="native-bound",
+                    workdir=workdir,
+                    prompt_path=prompt,
+                    explicit_command=["cat"],
+                    job_path=job,
+                    ticket_id="P0-01",
+                    pack_id="native-pack",
+                )
+            run = Path(result["prompt_path"]).parent
+            binding = json.loads((run / "job-binding.json").read_text(encoding="utf-8"))
+            stored = Path(binding["job_stored_path"])
+            self.assertEqual(stored.read_bytes(), job.read_bytes())
+            self.assertEqual(binding["job_source_sha256"], hashlib.sha256(job.read_bytes()).hexdigest())
+            self.assertEqual(binding["job_stored_sha256"], binding["job_source_sha256"])
+            self.assertEqual(binding["path_policy"]["allowed_paths"], ["src/example.py"])
+            self.assertTrue(binding["review_requirement"]["required"])
+            status = json.loads((run / "status.json").read_text(encoding="utf-8"))
+            provenance = json.loads((run / "run-provenance.json").read_text(encoding="utf-8"))
+            self.assertEqual(status["job_id"], "native-P0-01")
+            self.assertEqual(status["job_binding_path"], str(run / "job-binding.json"))
+            self.assertEqual(provenance["job_binding"]["sha256"], status["job_binding_sha256"])
+            runtime = json.loads((run / "evaluation-runtime.json").read_text(encoding="utf-8"))
+            self.assertEqual(runtime["scope"]["writable_paths"], ["src/example.py"])
+            self.assertEqual(runtime["acceptance_commands"][0]["argv"], ["python3", "-c", "pass"])
+            self.assertTrue((run / "scope" / "scope-baseline.json").is_file())
+            baseline_commands = json.loads(
+                (run / "collections" / "commands-baseline.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(baseline_commands["commands"][0]["exit_code"], 0)
+            create_session.assert_called_once()
+            with (
+                patch("agent_workflow.sessions.tmux.session_exists", return_value=False),
+                patch("agent_workflow.sessions.tmux.create_session"),
+                patch("agent_workflow.sessions.tmux.pane_info", return_value=None),
+            ):
+                retry = restart(settings, "native-bound", "native-bound-retry")
+            retry_binding = json.loads(
+                (Path(retry["prompt_path"]).parent / "job-binding.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(retry_binding["job_source_sha256"], binding["job_source_sha256"])
     def test_restart_preserves_structured_executor_and_prompt_source(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -112,6 +269,9 @@ class SessionLaunchTests(unittest.TestCase):
             self.assertEqual(result["status"], "launched")
             self.assertTrue((run_dir / "prompt.md").is_file())
             self.assertTrue((run_dir / "source-baseline.json").is_file())
+            self.assertFalse((run_dir / "evaluation-runtime.json").exists())
+            self.assertFalse((run_dir / "scope" / "scope-baseline.json").exists())
+            self.assertFalse((run_dir / "collections" / "commands-baseline.json").exists())
             self.assertTrue((run_dir / "completion.md").is_file())
             self.assertTrue((run_dir / "completion.json").is_file())
             self.assertTrue((run_dir / "run-provenance.json").is_file())

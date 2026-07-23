@@ -4,7 +4,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Active plan; Phase A implemented and independently verified, Phases B-D deferred |
+| Status | Active plan; Phases A-C implemented and verified; Phase D blocked on external contract definition |
 | Audience | Orchestrator, prompt-pack builder, runtime implementer, reviewer |
 | Scope | Bridge external prompt-pack jobs, completions, ledgers, and reviews to agent-workflow run state |
 | Non-goals | Tax-domain logic, weakened sealing, bypassed review, acceptance from agent prose |
@@ -15,9 +15,9 @@
 | Phase | Status | Evidence |
 |---|---|---|
 | A: evidence boundary | Implemented | Worktree-local handoff, no-follow bounded collection, required sealed collection receipt, lifecycle acceptance guard, and valid/missing/invalid/symlink/oversize/escape tests. |
-| B: native job binding | Planned | Refined into B1 schema/adapter, B2 preflight/binding, and B3 enforced execution mapping. |
-| C: Tax Machine adapter | Planned | Requires adapter-local schema validation and an explicit deterministic canonical-completion mapping. |
-| D: ledger and review | Planned | Must build on sealed job/completion evidence and explicit review policy. |
+| B: native job binding | Implemented | JSON-only native job schema, launch preflight, immutable sealed binding, and enforced scope/controlled-command receipts. |
+| C: Tax Machine adapter | Implemented | Adapter-local contained schema validation, sealed snapshots/external completion, and intentional non-mapping to canonical completion. |
+| D: ledger and review | Blocked | Requires an external append-only ledger contract and versioned reviewer-receipt/binding contract before implementation can be safe. |
 
 ## 1. Problem
 
@@ -465,6 +465,26 @@ receipt hashes, and one exact revision.
 6. Supported external pack resolves root and schemas without ad hoc wrappers.
 7. Default tests remain offline and synthetic.
 8. Existing native launches remain compatible when --job is absent.
+
+### Phase-D unblock contract
+
+Do not implement ledger sync or reviewer dispatch until the source pack defines
+these versioned contracts:
+
+1. **Ledger event schema:** append-only event shape, event identity, run/job/
+   repository-root binding, permitted transitions, and idempotency key.
+2. **Ledger write semantics:** authoritative file/root, full-ledger validation,
+   revision or compare-and-swap behavior, lock/concurrency rule, temp-file
+   fsync/replace atomicity, and conflict handling.
+3. **Reviewer receipt schema:** implementation final-receipt hash, exact
+   revision, reviewer identity/model/role, checklist hash, required gate hashes,
+   outcome, and independence policy.
+4. **Acceptance linkage:** which job policies require a reviewer receipt and
+   how a lifecycle receipt references it without amending sealed agent evidence.
+
+Until those contracts exist, `ledger` remains the current read-only derived run
+view and `review`/`accept` remain the existing local lifecycle operations. This
+is a deliberate safety gate, not a missing automation feature.
 
 ## 10. Operator guidance until implemented
 

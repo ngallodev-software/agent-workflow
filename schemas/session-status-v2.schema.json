@@ -21,6 +21,9 @@
     "events_path": {"type": "string"},
     "final_receipt_path": {"type": ["string", "null"]},
     "failure_category": {"type": ["string", "null"]}
+    ,"job_binding_path": {"type": ["string", "null"]}
+    ,"job_binding_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}
+    ,"job_id": {"type": ["string", "null"]}
   },
   "additionalProperties": true
 }

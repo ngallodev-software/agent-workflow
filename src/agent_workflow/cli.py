@@ -71,7 +71,7 @@ def _print_table(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="agent-workflow")
-    parser.add_argument("--version", action="version", version="%(prog)s 0.1.1")
+    parser.add_argument("--version", action="version", version="%(prog)s 0.1.2")
     parser.add_argument("--config", type=Path, help="override config.toml path")
     parser.add_argument(
         "--json",
@@ -121,6 +121,7 @@ def build_parser() -> argparse.ArgumentParser:
     launch.add_argument("--ticket")
     launch.add_argument("--tier", choices=("low", "medium", "high", "critical"))
     launch.add_argument("--pack")
+    launch.add_argument("--job", type=Path, help="validated native JSON job in the prompt pack")
     launch.add_argument("--executor")
     launch.add_argument("--evaluation", type=Path)
     launch.add_argument(
@@ -352,6 +353,7 @@ def main(argv: list[str] | None = None) -> int:
                 ticket_id=args.ticket,
                 tier=args.tier,
                 pack_id=args.pack,
+                job_path=args.job,
                 allow_dirty=args.allow_dirty,
                 structured=args.structured,
                 evaluation_path=args.evaluation,
