@@ -6,7 +6,7 @@ history, or introduce network services.
 
 ## Starting state
 
-- Current release target: `0.1.2`.
+- Current release target: `0.1.3`.
 - `master` contains completed and tested prompt-pack integration Phases A-C.
 - Phase A: executor writes only a worktree-local handoff; the collector
   validates, hashes, and seals native completion evidence.
