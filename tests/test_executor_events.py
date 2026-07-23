@@ -1,7 +1,7 @@
 import unittest
 
 from agent_workflow.config import defaults
-from agent_workflow.executors import event_text, event_usage, prepare_executor
+from agent_workflow.executors import accumulate_usage, event_text, event_usage, prepare_executor
 
 
 class ExecutorEventTests(unittest.TestCase):
@@ -35,6 +35,13 @@ class ExecutorEventTests(unittest.TestCase):
         self.assertEqual(plan.name, None)
         self.assertEqual(plan.argv, ("cat",))
         self.assertEqual(plan.stream_format, "text")
+
+    def test_explicit_usage_modes_do_not_double_count_terminal_total(self):
+        usage = accumulate_usage(None, {"input_tokens": 3, "output_tokens": 2}, mode="delta")
+        usage = accumulate_usage(usage, {"input_tokens": 4, "output_tokens": 5}, mode="delta")
+        usage = accumulate_usage(usage, {"input_tokens": 7, "output_tokens": 7}, mode="terminal")
+        self.assertEqual(usage["input_tokens"], 7)
+        self.assertEqual(usage["output_tokens"], 7)
 
     def test_explicit_known_executors_preserve_structured_format(self):
         codex = prepare_executor(

@@ -50,6 +50,48 @@ class SessionLaunchTests(unittest.TestCase):
         )
         return workdir, prompt, job
 
+    def test_launch_uses_visible_current_tmux_window_or_detached_fallback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            workdir, prompt, job = self._native_job_launch_inputs(root)
+            settings = defaults(root / "missing.toml")
+            settings = settings.__class__(**{**settings.__dict__, "state_root": root / "state"})
+            with (
+                patch("agent_workflow.sessions.tmux.session_exists", return_value=False),
+                patch("agent_workflow.sessions.tmux.current_window_target", return_value="parent:1"),
+                patch("agent_workflow.sessions.tmux.split_window", return_value="parent:1.3") as split,
+                patch("agent_workflow.sessions.tmux.create_session") as create,
+                patch("agent_workflow.sessions.tmux.pane_info", return_value=PaneInfo(123, False, "python3")),
+            ):
+                result = launch(
+                    settings, session_id="visible-child", workdir=workdir,
+                    prompt_path=prompt, explicit_command=["cat"], job_path=job,
+                    ticket_id="P0-01", pack_id="native-pack",
+                )
+            split.assert_called_once()
+            create.assert_not_called()
+            self.assertEqual("shared_window", result["tmux_mode"])
+            self.assertEqual("parent", result["tmux_session"])
+            self.assertEqual("parent:1.3", result["tmux_target"])
+
+            workdir2, prompt2, job2 = self._native_job_launch_inputs(root / "fallback")
+            settings2 = defaults(root / "fallback.toml")
+            settings2 = settings2.__class__(**{**settings2.__dict__, "state_root": root / "state2"})
+            with (
+                patch("agent_workflow.sessions.tmux.session_exists", return_value=False),
+                patch("agent_workflow.sessions.tmux.current_window_target", return_value=None),
+                patch("agent_workflow.sessions.tmux.create_session") as fallback_create,
+                patch("agent_workflow.sessions.tmux.pane_info", return_value=None),
+            ):
+                fallback = launch(
+                    settings2, session_id="detached-child", workdir=workdir2,
+                    prompt_path=prompt2, explicit_command=["cat"], job_path=job2,
+                    ticket_id="P0-01", pack_id="native-pack",
+                )
+            fallback_create.assert_called_once()
+            self.assertEqual("dedicated_session", fallback["tmux_mode"])
+            self.assertEqual("detached-child", fallback["tmux_target"])
+
     def test_native_job_preflight_failures_create_no_state_or_tmux(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

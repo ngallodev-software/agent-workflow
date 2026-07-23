@@ -149,3 +149,14 @@ digests, `child_finished`, stage, child ID, monotonic time, and errors.
 - Do not persist secrets/raw prompts in control records.
 - Stop a phase if an executor adapter, pinned browser image, or source contract
   is unavailable; record the blocker rather than inventing a transport.
+
+## Current State vs Long-Term Goal
+
+| Area | State | Next gap |
+|---|---|---|
+| Durable control records | Implemented | `watch` blocks, but needs a `tmux wait-for`/inotify wakeup accelerator and an orchestrator-facing subscription interface to avoid its internal replay polling latency. |
+| Mid-task steering | Partially implemented | A steer is durable and ackable, but there is no verified executor adapter that injects a late instruction into Codex/Claude after one-shot stdin closes. This must be adapter-specific, not `send-keys` guesswork. |
+| Token/cost/time evidence | Partially implemented | Metrics are sealed and normalized, but need true provider-event accumulation, cached-token aliases per provider, command-stage durations, and child-executor usage ingestion. |
+| Deterministic eval | Implemented as fixture/regression coverage | Next, run a small real executor cohort and retain its sealed baseline for future `eval compare` regression checks. |
+| Visual eval | Correctly blocked | Supply a pinned browser image digest, font manifest, and a pre-seal Inspect/browser-artifact bridge; then implement the priority-picker Playwright fixture and explicit child telemetry gate. |
+| Multi-agent orchestration | Foundation only | Add an explicit child lifecycle protocol—spawned, request accepted, result received, failed—backed by control receipts and idempotent recovery. |

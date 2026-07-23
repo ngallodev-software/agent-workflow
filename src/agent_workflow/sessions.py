@@ -661,6 +661,8 @@ def launch(
         "pack_adapter": "tax-machine" if tax_pack is not None else "native",
         "external_snapshots": tax_snapshots,
         "tmux_session": session_id,
+        "tmux_target": session_id,
+        "tmux_mode": "dedicated_session",
         **git_info,
     }
     write_status(settings, session_id, status)
@@ -683,7 +685,16 @@ def launch(
         runner_path=str(runner),
     )
     try:
-        tmux.create_session(session_id, str(workdir), str(runner))
+        parent_target = tmux.current_window_target()
+        if parent_target is not None:
+            tmux_target = tmux.split_window(parent_target, str(workdir), str(runner))
+            tmux_session = tmux_target.split(":", 1)[0]
+            tmux_mode = "shared_window"
+        else:
+            tmux.create_session(session_id, str(workdir), str(runner))
+            tmux_target = session_id
+            tmux_session = session_id
+            tmux_mode = "dedicated_session"
     except Exception:
         update_status(
             settings,
@@ -693,10 +704,13 @@ def launch(
             launch_error=True,
         )
         raise
-    pane = tmux.pane_info(session_id)
+    pane = tmux.pane_info(tmux_target)
     return update_status(
         settings,
         session_id,
+        tmux_session=tmux_session,
+        tmux_target=tmux_target,
+        tmux_mode=tmux_mode,
         pane_pid=pane.pid if pane else None,
         pane_command=pane.command if pane else None,
     )
@@ -709,9 +723,13 @@ def observe(
 ) -> dict[str, Any]:
     data = read_status(settings, session_id)
     terminal_error = None
+    target = str(data.get("tmux_target", session_id))
+    host_session = str(data.get("tmux_session", session_id))
     try:
-        alive: bool | None = tmux.session_exists(session_id)
-        pane = tmux.pane_info(session_id) if alive else None
+        alive: bool | None = tmux.session_exists(host_session)
+        pane = tmux.pane_info(target) if alive else None
+        if pane is not None and pane.dead:
+            alive = False
     except WorkflowError as exc:
         alive = None
         pane = None
@@ -810,7 +828,7 @@ def observe(
         "next_action": safe_actions[-1],
     }
     if capture_lines and alive:
-        result["capture"] = tmux.capture(session_id, capture_lines)
+        result["capture"] = tmux.capture(target, capture_lines)
     return result
 
 
@@ -819,6 +837,22 @@ def _active_run(settings: Settings, session_id: str) -> dict[str, Any]:
     if str(status.get("status")) in TERMINAL_STATUSES:
         raise WorkflowError("cannot send a control message to a terminal session")
     return status
+
+
+def _append_control_message(
+    settings: Settings,
+    session_id: str,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Persist first, then issue a best-effort tmux wake hint."""
+    state_dir = run_dir(settings, session_id)
+    channel = tmux.wakeup_channel(state_dir)
+    return append_message(
+        state_dir,
+        session_id=session_id,
+        after_commit=lambda _message: tmux.signal_waiters(channel),
+        **kwargs,
+    )
 
 
 def steer(
@@ -830,9 +864,9 @@ def steer(
 ) -> dict[str, Any]:
     """Persist a parent steering request without assuming executor delivery."""
     _active_run(settings, session_id)
-    return append_message(
-        run_dir(settings, session_id),
-        session_id=session_id,
+    return _append_control_message(
+        settings,
+        session_id,
         direction="parent_to_child",
         kind="steer",
         actor=actor,
@@ -849,9 +883,9 @@ def progress(
 ) -> dict[str, Any]:
     """Persist an explicit child progress update for its parent."""
     _active_run(settings, session_id)
-    return append_message(
-        run_dir(settings, session_id),
-        session_id=session_id,
+    return _append_control_message(
+        settings,
+        session_id,
         direction="child_to_parent",
         kind="progress",
         actor=actor,
@@ -869,9 +903,9 @@ def acknowledge(
 ) -> dict[str, Any]:
     """Record a child acknowledgement after it has applied a control request."""
     _active_run(settings, session_id)
-    return append_message(
-        run_dir(settings, session_id),
-        session_id=session_id,
+    return _append_control_message(
+        settings,
+        session_id,
         direction="child_to_parent",
         kind="ack",
         actor=actor,
@@ -893,18 +927,23 @@ def wait_for_message(
     timeout_seconds: float | None = None,
 ) -> list[dict[str, Any]]:
     read_status(settings, session_id)
+    state_dir = run_dir(settings, session_id)
     return wait_for_messages(
-        run_dir(settings, session_id),
+        state_dir,
         after_sequence=after_sequence,
         timeout_seconds=timeout_seconds,
+        wakeup_channel=tmux.wakeup_channel(state_dir),
+        wait_for_wakeup=tmux.wait_for_wakeup,
     )
 
 
 def interrupt(settings: Settings, session_id: str) -> dict[str, Any]:
     prior = read_status(settings, session_id)
-    if not tmux.session_exists(session_id):
+    target = str(prior.get("tmux_target", session_id))
+    host_session = str(prior.get("tmux_session", session_id))
+    if not tmux.session_exists(host_session):
         raise WorkflowError(f"session is not running: {session_id}")
-    tmux.interrupt(session_id)
+    tmux.interrupt(target)
     return update_status(
         settings,
         session_id,
@@ -919,14 +958,19 @@ def terminate(
     session_id: str,
     grace_seconds: int,
 ) -> dict[str, Any]:
-    read_status(settings, session_id)
-    if tmux.session_exists(session_id):
-        tmux.interrupt(session_id)
+    prior = read_status(settings, session_id)
+    target = str(prior.get("tmux_target", session_id))
+    host_session = str(prior.get("tmux_session", session_id))
+    if tmux.session_exists(host_session):
+        tmux.interrupt(target)
         deadline = time.time() + max(0, grace_seconds)
-        while time.time() < deadline and tmux.session_exists(session_id):
+        while time.time() < deadline and tmux.pane_info(target) is not None:
             time.sleep(0.25)
-        if tmux.session_exists(session_id):
-            tmux.kill(session_id)
+        if tmux.pane_info(target) is not None:
+            if prior.get("tmux_mode") == "shared_window":
+                tmux.kill_pane(target)
+            else:
+                tmux.kill(session_id)
     current = read_status(settings, session_id)
     if str(current.get("status")) not in TERMINAL_STATUSES:
         current = update_status(
@@ -940,9 +984,14 @@ def terminate(
 
 
 def kill(settings: Settings, session_id: str) -> dict[str, Any]:
-    read_status(settings, session_id)
-    if tmux.session_exists(session_id):
-        tmux.kill(session_id)
+    prior = read_status(settings, session_id)
+    target = str(prior.get("tmux_target", session_id))
+    host_session = str(prior.get("tmux_session", session_id))
+    if tmux.session_exists(host_session):
+        if prior.get("tmux_mode") == "shared_window":
+            tmux.kill_pane(target)
+        else:
+            tmux.kill(session_id)
     current = read_status(settings, session_id)
     if str(current.get("status")) in TERMINAL_STATUSES:
         return current

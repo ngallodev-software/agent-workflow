@@ -26,6 +26,23 @@ class MetricsTests(unittest.TestCase):
         )
         self.assertIsNone(normalize_usage({"input_tokens": -1})["input_tokens"])
         self.assertIsNone(normalize_usage({"output_tokens": True})["output_tokens"])
+        self.assertEqual(
+            4,
+            normalize_usage({"prompt_tokens_details": {"cached_tokens": 4}})["cached_input_tokens"],
+        )
+
+    def test_command_collection_populates_only_verification_duration(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = Path(tmp) / "run"
+            write_run_contracts(run, session_id="metrics-duration")
+            atomic_write_json(run / "collections" / "commands-post.json", {
+                "schema": "agent-workflow/command-collection-set/v1", "phase": "post",
+                "commands": [{"duration_seconds": 0.25}, {"duration_seconds": 0.75}, {"duration_seconds": -1}],
+            })
+            metrics = write_execution_evidence(run, elapsed_seconds=3.0)
+            stages = {item["stage"]: item for item in metrics["stages"]}
+            self.assertEqual(1.0, stages["verification"]["elapsed_seconds"])
+            self.assertEqual(3.0, stages["total"]["elapsed_seconds"])
 
     def test_metrics_include_required_stages_and_control_events_are_sealed_read_only(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -2,6 +2,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 from agent_workflow.errors import WorkflowError
 from agent_workflow.config import defaults
@@ -147,6 +148,69 @@ class MessageLogTests(unittest.TestCase):
             write_status(settings, "run-done", {"session_id": "run-done", "status": "completed"})
             with self.assertRaisesRegex(WorkflowError, "terminal session"):
                 steer(settings, "run-done", actor="parent", content="too late")
+
+    def test_after_commit_runs_after_replay_and_failures_are_suppressed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / "run"
+            observed = []
+
+            def callback(message):
+                observed.extend(replay_messages(run_dir))
+                raise RuntimeError("wakeup unavailable")
+
+            record = append_message(
+                run_dir, session_id="run", direction="parent_to_child",
+                kind="steer", actor="parent", content="durable first",
+                after_commit=callback,
+            )
+            self.assertEqual([record], observed)
+            self.assertEqual([record], replay_messages(run_dir))
+
+    def test_existing_replay_does_not_wait_and_unavailable_waiter_keeps_polling(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / "run"
+            record = append_message(
+                run_dir, session_id="run", direction="child_to_parent",
+                kind="progress", actor="child", content="already here",
+            )
+            waiter = Mock(return_value=True)
+            self.assertEqual(
+                [record],
+                wait_for_messages(run_dir, wakeup_channel="channel", wait_for_wakeup=waiter),
+            )
+            waiter.assert_not_called()
+
+            with patch("agent_workflow.messages.time.sleep") as sleep:
+                self.assertEqual(
+                    [],
+                    wait_for_messages(
+                        run_dir, after_sequence=1, timeout_seconds=0.01,
+                        poll_seconds=0.01, wakeup_channel="channel",
+                        wait_for_wakeup=Mock(return_value=False),
+                    ),
+                )
+            self.assertTrue(sleep.called)
+
+    def test_session_controls_signal_after_durable_append_and_wait_uses_tmux_seam(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            settings = defaults(root / "missing.toml")
+            settings = settings.__class__(**{**settings.__dict__, "state_root": root / "state"})
+            write_status(settings, "run-1", {"session_id": "run-1", "status": "launched"})
+            with (
+                patch("agent_workflow.sessions.tmux.wakeup_channel", return_value="safe-channel") as channel,
+                patch("agent_workflow.sessions.tmux.signal_waiters") as signal,
+            ):
+                record = steer(settings, "run-1", actor="parent", content="check")
+            self.assertEqual([record], replay_messages(root / "state" / "runs" / "run-1"))
+            channel.assert_called_once()
+            signal.assert_called_once_with("safe-channel")
+            with (
+                patch("agent_workflow.sessions.tmux.wakeup_channel", return_value="safe-channel"),
+                patch("agent_workflow.sessions.tmux.wait_for_wakeup", return_value=False) as waiter,
+            ):
+                self.assertEqual([record], wait_for_message(settings, "run-1"))
+            waiter.assert_not_called()
     def test_rejects_symlink_log_and_invalid_or_duplicate_ack(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

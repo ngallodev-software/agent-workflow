@@ -143,3 +143,77 @@ def event_usage(event: dict[str, Any]) -> dict[str, Any] | None:
     if isinstance(item, dict) and isinstance(item.get("usage"), dict):
         return dict(item["usage"])
     return None
+
+
+_USAGE_FIELDS = (
+    "input_tokens",
+    "cached_input_tokens",
+    "output_tokens",
+    "total_tokens",
+    "cost",
+)
+
+
+def _usage_number(value: object) -> int | float | None:
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or value < 0:
+        return None
+    return value
+
+
+def accumulate_usage(
+    current: dict[str, Any] | None,
+    usage: dict[str, Any],
+    *,
+    mode: str,
+) -> dict[str, Any]:
+    """Merge an explicitly classified provider usage update.
+
+    ``delta`` values are added; ``cumulative`` and ``terminal`` values replace
+    only the fields they report.  Callers must classify the update--this helper
+    intentionally does not guess from a provider's payload shape.
+    """
+    if mode not in {"delta", "cumulative", "terminal"}:
+        raise ValueError(f"unsupported usage mode: {mode}")
+    result = dict(current or {})
+    aliases = {
+        "input_tokens": ("input_tokens", "prompt_tokens"),
+        "cached_input_tokens": (
+            "cached_input_tokens",
+            "cache_read_input_tokens",
+            "cached_tokens",
+        ),
+        "output_tokens": ("output_tokens", "completion_tokens"),
+        "total_tokens": ("total_tokens",),
+        "cost": ("cost", "total_cost"),
+    }
+    details = usage.get("prompt_tokens_details")
+    if not isinstance(details, dict):
+        details = {}
+    for target, names in aliases.items():
+        value = next((usage[name] for name in names if name in usage), None)
+        if target == "cached_input_tokens" and value is None:
+            value = details.get("cached_tokens")
+        number = _usage_number(value)
+        if number is None:
+            continue
+        if mode == "delta":
+            result[target] = (_usage_number(result.get(target)) or 0) + number
+        else:
+            result[target] = number
+    currency = usage.get("currency")
+    if isinstance(currency, str) and currency:
+        result["currency"] = currency
+    return result
+
+
+def usage_update(event: dict[str, Any]) -> tuple[dict[str, Any], str] | None:
+    """Return a usage payload plus its explicit update mode, if available."""
+    usage = event_usage(event)
+    if usage is None:
+        return None
+    mode = usage.pop("mode", event.get("usage_mode", event.get("usage_type", None)))
+    if mode in {"delta", "cumulative", "terminal"}:
+        return usage, mode
+    # Compatibility boundary: legacy adapters expose only a final usage object.
+    # A provider that streams interim usage must label those updates explicitly.
+    return usage, "terminal"

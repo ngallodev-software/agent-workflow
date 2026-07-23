@@ -17,7 +17,7 @@ from .events import append_lifecycle_event
 from .diagnostics import classify_failure
 from .eval.commands import collect_commands, specs_from_data
 from .eval.scope import ScopePolicy, collect_scope
-from .executors import event_text, event_usage, parse_event
+from .executors import accumulate_usage, event_text, parse_event, usage_update
 from .receipts import make_read_only, seal_run, update_provenance
 from .metrics import write_execution_evidence
 from .util import atomic_write_json, sha256_file, utc_now
@@ -379,9 +379,10 @@ def execute(
                             with lock:
                                 _write_bytes(output, raw)
                             continue
-                        event_usage_value = event_usage(event)
-                        if event_usage_value is not None:
-                            usage = event_usage_value
+                        usage_value = usage_update(event)
+                        if usage_value is not None:
+                            payload, mode = usage_value
+                            usage = accumulate_usage(usage, payload, mode=mode)
                         for text in event_text(event, stream_format):
                             normalized = text.rstrip()
                             if normalized == last_normalized_text:

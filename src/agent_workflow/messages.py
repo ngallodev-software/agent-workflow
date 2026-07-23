@@ -9,7 +9,7 @@ import stat
 import time
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .errors import WorkflowError
 from .util import utc_now, validate_id
@@ -187,8 +187,14 @@ def append_message(
     actor: str,
     content: str,
     correlation_id: str | None = None,
+    after_commit: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
-    """Append and fsync a message, allocating its sequence under an exclusive lock."""
+    """Append and fsync a message, allocating its sequence under an exclusive lock.
+
+    ``after_commit`` is a best-effort notification seam.  It runs only after
+    the file is closed and its lock is released; failures cannot undo a durable
+    append or turn it into an error.
+    """
     path = message_log_path(run_dir)
     with path.open("a+b") as stream:
         fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
@@ -218,6 +224,11 @@ def append_message(
             os.fsync(stream.fileno())
         finally:
             fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+    if after_commit is not None:
+        try:
+            after_commit(message)
+        except Exception:
+            pass
     return message
 
 
@@ -246,11 +257,14 @@ def wait_for_messages(
     after_sequence: int = 0,
     timeout_seconds: float | None = None,
     poll_seconds: float = 0.2,
+    wakeup_channel: str | None = None,
+    wait_for_wakeup: Callable[[str, float], bool] | None = None,
 ) -> list[dict[str, Any]]:
     """Block until durable records appear, then replay them in sequence order.
 
     The caller blocks rather than repeatedly issuing status commands. Replay is
-    authoritative because a future wakeup accelerator may lose signals.
+    authoritative because a wakeup accelerator may lose signals.  When a
+    waiter is supplied it is only a bounded hint; polling remains the fallback.
     """
     if timeout_seconds is not None and timeout_seconds < 0:
         raise WorkflowError("timeout_seconds must be non-negative")
@@ -261,10 +275,19 @@ def wait_for_messages(
         messages = replay_messages(run_dir, after_sequence=after_sequence)
         if messages:
             return messages
-        if deadline is not None:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                return []
-            time.sleep(min(poll_seconds, remaining))
-        else:
-            time.sleep(poll_seconds)
+        remaining = deadline - time.monotonic() if deadline is not None else None
+        if remaining is not None and remaining <= 0:
+            return []
+        wait_seconds = min(poll_seconds, remaining) if remaining is not None else poll_seconds
+        started = time.monotonic()
+        woke = False
+        if wakeup_channel is not None and wait_for_wakeup is not None:
+            try:
+                woke = bool(wait_for_wakeup(wakeup_channel, wait_seconds))
+            except Exception:
+                pass
+        elapsed = time.monotonic() - started
+        # An unavailable/erroring waiter can return immediately.  Preserve the
+        # ordinary polling cadence instead of turning that into a busy loop.
+        if not woke and elapsed < wait_seconds:
+            time.sleep(wait_seconds - elapsed)

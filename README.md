@@ -121,7 +121,9 @@ agent-workflow restart example-p0-01
 
 Exchange durable control records without polling status. A steer is a pending
 request until the child explicitly acknowledges its message ID; it is not proof
-that a one-shot executor has consumed a late prompt.
+that a one-shot executor has consumed a late prompt. `watch` always replays the
+fsynced message log; when tmux is available it uses `tmux wait-for` only as a
+best-effort local wakeup hint, so a missed hint cannot lose a control record.
 
 ```bash
 agent-workflow steer example-p0-01 "Run the focused tests before editing." --actor orchestrator

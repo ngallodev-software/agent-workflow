@@ -13,6 +13,8 @@ from .evaluation import validate_evaluation
 from .eval.reporting import build_report, render_markdown
 from .eval.oracles import resolve_oracle
 from .eval.scoring import score_trial
+from .eval.compare import compare_trials
+from .eval.trials import collect_trials, load_trials
 from .errors import WorkflowError
 from .ledger import build_ledger, render_ledger
 from .lifecycle import record as record_lifecycle
@@ -75,7 +77,7 @@ def _print_table(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="agent-workflow")
-    parser.add_argument("--version", action="version", version="%(prog)s 0.1.4")
+    parser.add_argument("--version", action="version", version="%(prog)s 0.1.5")
     parser.add_argument("--config", type=Path, help="override config.toml path")
     parser.add_argument(
         "--json",
@@ -250,6 +252,17 @@ def build_parser() -> argparse.ArgumentParser:
     eval_swebench.add_argument("--instance-id", required=True)
     eval_swebench.add_argument("--model", required=True)
     eval_swebench.add_argument("--output", type=Path, required=True)
+    eval_collect = evaluation_commands.add_parser(
+        "collect", help="write immutable trial evidence from sealed runs"
+    )
+    eval_collect.add_argument("--output", type=Path, required=True)
+    eval_collect.add_argument("runs", nargs="+", type=Path)
+    eval_compare = evaluation_commands.add_parser(
+        "compare", help="compare explicit baseline and candidate evidence files"
+    )
+    eval_compare.add_argument("baseline", type=Path)
+    eval_compare.add_argument("candidate", type=Path)
+    eval_compare.add_argument("--output", type=Path, required=True)
 
     pack = commands.add_parser("pack", help="prompt-pack commands")
     pack_commands = pack.add_subparsers(dest="pack_command", required=True)
@@ -614,6 +627,28 @@ def main(argv: list[str] | None = None) -> int:
                     output=expand_path(args.output),
                 )
                 data = {"output": str(output)}
+            elif args.eval_command == "collect":
+                output = expand_path(args.output)
+                evidence = collect_trials(
+                    [expand_path(path) for path in args.runs], output
+                )
+                data = {"output": str(output), "trials": len(evidence["trials"])}
+            elif args.eval_command == "compare":
+                baseline, candidate = (
+                    load_trials(expand_path(args.baseline)),
+                    load_trials(expand_path(args.candidate)),
+                )
+                currencies = {
+                    trial.get("currency")
+                    for trial in [*baseline, *candidate]
+                    if trial.get("cost") is not None
+                }
+                if len(currencies) > 1:
+                    raise WorkflowError("cannot compare evidence with different currencies")
+                output = expand_path(args.output)
+                data = compare_trials(baseline, candidate)
+                atomic_write_json(output, data)
+                data = {"output": str(output), **data}
         elif args.command == "pack":
             if args.pack_command == "scaffold":
                 data = scaffold_pack(args.destination, args.phases, args.name)

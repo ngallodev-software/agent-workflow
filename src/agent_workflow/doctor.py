@@ -83,7 +83,7 @@ def run_doctor(settings: Settings) -> dict[str, Any]:
     }
     return {
         "ok": all(checks.values()),
-        "version": "0.1.4",
+        "version": "0.1.5",
         "config_path": str(settings.config_path),
         "commands": commands,
         "executors": {

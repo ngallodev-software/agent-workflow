@@ -27,7 +27,14 @@ def normalize_usage(usage: object) -> dict[str, Any]:
     """Normalize provider usage without converting absent facts to zero."""
     source = usage if isinstance(usage, dict) else {}
     input_tokens = _number(source.get("input_tokens", source.get("prompt_tokens")))
-    cached = _number(source.get("cached_input_tokens", source.get("cache_read_input_tokens")))
+    details = source.get("prompt_tokens_details")
+    nested_cached = details.get("cached_tokens") if isinstance(details, dict) else None
+    cached = _number(
+        source.get(
+            "cached_input_tokens",
+            source.get("cache_read_input_tokens", source.get("cached_tokens", nested_cached)),
+        )
+    )
     output = _number(source.get("output_tokens", source.get("completion_tokens")))
     provider_total = _number(source.get("total_tokens"))
     cost = _number(source.get("cost", source.get("total_cost")))
@@ -73,6 +80,26 @@ def _empty_stage(name: str) -> dict[str, Any]:
     }
 
 
+def _verification_duration(run_dir: Path) -> float | None:
+    """Return only explicitly recorded post-command durations."""
+    path = run_dir / "collections" / "commands-post.json"
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except (OSError, json.JSONDecodeError) as exc:
+        raise WorkflowError(f"cannot read command collection {path}: {exc}") from exc
+    if not isinstance(value, dict) or not isinstance(value.get("commands"), list):
+        raise WorkflowError(f"invalid command collection {path}")
+    durations = [
+        _number(item.get("duration_seconds"))
+        for item in value["commands"]
+        if isinstance(item, dict)
+    ]
+    known = [duration for duration in durations if duration is not None]
+    return round(sum(known), 6) if known else None
+
+
 def build_execution_metrics(run_dir: Path, *, elapsed_seconds: float | None = None) -> dict[str, Any]:
     try:
         provenance = json.loads((run_dir / "run-provenance.json").read_text(encoding="utf-8"))
@@ -112,6 +139,7 @@ def build_execution_metrics(run_dir: Path, *, elapsed_seconds: float | None = No
         child["errors"] = [{"category": "child_message", "detail": m["content"]} for m in actor_errors]
         child_stages.append(child)
     verification = _empty_stage("verification")
+    verification["elapsed_seconds"] = _verification_duration(run_dir)
     total = {**orchestrator, "stage": "total"}
     value = {
         "schema": METRICS_SCHEMA,
