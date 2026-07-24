@@ -1,0 +1,12 @@
+phase: "0"
+name: "skill-cli-integration"
+mandatory_order: ["P0-00", "P0-01"]
+tasks:
+  - id: "P0-00"
+    tier: C
+    session: "agent-workflow-skills-and-mcp-p0-00-baseline"
+    prompt: "tickets/P0-00-baseline-and-preflight.md"
+  - id: "P0-01"
+    tier: B
+    session: "agent-workflow-skills-and-mcp-p0-01-integration"
+    prompt: "tickets/P0-01-skill-cli-integration.md"

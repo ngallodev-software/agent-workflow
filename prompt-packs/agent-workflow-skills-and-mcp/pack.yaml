@@ -1,0 +1,13 @@
+schema: agent-workflow/pack/v1
+pack_id: "agent-workflow-skills-and-mcp"
+workflow:
+  name: agent-workflow
+  minimum_version: "0.1.6"
+  terminal_backend: tmux
+  requires:
+    - isolated_worktree
+    - foregroundable_session
+    - persistent_log
+    - source_baseline
+    - completion_report
+    - independent_phase_gate

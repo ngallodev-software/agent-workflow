@@ -1,0 +1,8 @@
+phase: "1"
+name: "mcp-decision-research"
+mandatory_order: ["P1-00"]
+tasks:
+  - id: "P1-00"
+    tier: B
+    session: "agent-workflow-skills-and-mcp-p1-00-mcp-research"
+    prompt: "tickets/P1-00-mcp-server-decision.md"
