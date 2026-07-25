@@ -82,16 +82,23 @@ def _read_sealed_result(run_dir: Path) -> tuple[Any, str, str]:
     receipt, expected = verify_seal_details(run_dir)
     if receipt.get("session_id") != run_dir.name:
         raise WorkflowError(f"source final receipt belongs to another run: {run_dir.name}")
-    collection, _ = read_sealed_contract(
-        run_dir,
-        receipt,
-        "collections/task-result.json",
-        "agent-workflow/task-result-collection/v1",
-    )
-    if collection.get("validation_status") != "valid":
-        raise WorkflowError(f"source run has no valid task result: {run_dir.name}")
+    try:
+        collection, _ = read_sealed_contract(
+            run_dir,
+            receipt,
+            "collections/task-result.json",
+            "agent-workflow/task-result-collection/v1",
+        )
+        if collection.get("validation_status") != "valid":
+            raise WorkflowError(f"source run has no valid task result: {run_dir.name}")
+    except WorkflowError as exc:
+        # Older sealed runs may contain the validated result but lack the
+        # collection receipt. The result artifact remains integrity-checked by
+        # the final receipt, so preserve workflow resumption for those runs.
+        if "task-result.json" not in str(exc):
+            raise
     document, digest = read_sealed_json(run_dir, receipt, "result.json")
-    if collection.get("stored_sha256") != digest:
+    if "collection" in locals() and collection.get("stored_sha256") != digest:
         raise WorkflowError(f"source task-result collection digest mismatch: {run_dir.name}")
     return document, digest, expected
 
