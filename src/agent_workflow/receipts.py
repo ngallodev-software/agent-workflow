@@ -99,10 +99,12 @@ def _artifact_entry(receipt: dict[str, Any], relative_path: str) -> dict[str, An
         for item in receipt.get("artifacts", [])
         if isinstance(item, dict) and item.get("path") == relative_path
     ]
-    if len(matches) != 1:
+    if not matches:
         raise WorkflowError(
-            f"final receipt must contain exactly one artifact entry for {relative_path}"
+            f"final receipt is missing an artifact entry for {relative_path}"
         )
+    if any(item != matches[0] for item in matches[1:]):
+        raise WorkflowError(f"conflicting final receipt entries for {relative_path}")
     return matches[0]
 
 
