@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/workflow-event/v1",
+  "type": "object",
+  "required": ["schema", "sequence", "timestamp", "workflow_id", "kind", "node_id", "actor", "reason", "snapshot_sha256"],
+  "properties": {
+    "schema": {"const": "agent-workflow/workflow-event/v1"},
+    "sequence": {"type": "integer", "minimum": 1},
+    "timestamp": {"type": "string"},
+    "workflow_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"},
+    "kind": {"enum": ["node-bound", "node-transition"]},
+    "node_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"},
+    "actor": {"type": "string", "minLength": 1},
+    "reason": {"type": "string", "minLength": 1},
+    "snapshot_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "previous_state": {
+      "type": ["string", "null"],
+      "enum": [null, "blocked", "eligible", "running", "completed", "failed", "recoverable"]
+    },
+    "next_state": {
+      "type": ["string", "null"],
+      "enum": [null, "blocked", "eligible", "running", "completed", "failed", "recoverable"]
+    },
+    "binding": {
+      "type": ["object", "null"],
+      "required": ["run_id", "attempt", "bound_at", "current"],
+      "properties": {
+        "run_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"},
+        "attempt": {"type": "integer", "minimum": 1},
+        "retry_of_run_id": {
+          "type": ["string", "null"],
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+        },
+        "bound_at": {"type": "string"},
+        "current": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "details": {"type": ["object", "null"]}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"kind": {"const": "node-bound"}}},
+      "then": {"required": ["binding"], "properties": {"previous_state": {"const": null}, "next_state": {"const": null}}}
+    },
+    {
+      "if": {"properties": {"kind": {"const": "node-transition"}}},
+      "then": {"required": ["previous_state", "next_state"], "properties": {"binding": {"const": null}}}
+    }
+  ],
+  "additionalProperties": false
+}

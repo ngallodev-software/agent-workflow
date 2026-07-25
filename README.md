@@ -1,231 +1,166 @@
 # agent-workflow
 
-`agent-workflow` is a terminal-first workflow for delegating bounded implementation tickets to coding agents without losing observability, source provenance, or review discipline.
+`agent-workflow` is a terminal-first control plane for bounded coding-agent work. It launches agents in isolated Git worktrees and tmux sessions, preserves durable evidence, supports restart-safe dependency graphs, and keeps review and acceptance under operator control.
 
-It provides:
+The project is **pre-public-release**. Core behavior is usable, but public distribution is blocked on license selection, external compatibility runs, and release-governance decisions tracked in [Public release readiness](docs/PUBLIC_RELEASE_READINESS.md).
 
-- one isolated Git worktree per ticket;
-- one fresh, named `tmux` session per delegation;
-- schema-validated, sealed prompts, commands, event streams, provenance, patches, and completion records;
-- foreground, tail, inspect, interrupt, terminate, kill, and restart controls;
-- durable parent/child progress, steering, acknowledgement, and blocking wait
-  records for active runs;
-- multi-signal health diagnostics based on terminal, heartbeat, lifecycle, and log state;
-- deterministic evaluation collectors, scorers, ledgers, comparisons, and review receipts;
-- prompt-pack scaffolding, structural validation, checksums, and deterministic `.tar.zst` archives;
-- reusable ticket-completion and phase-gate templates;
-- skills for prompt-pack construction, delegated implementation, and independent review.
+## What it does
 
-It intentionally does **not** provide automatic merging, automatic agent killing, a daemon, a web UI, remote execution, or autonomous model selection.
+- creates and manages ticket worktrees;
+- launches named Codex, Claude, or explicit commands through one execution path;
+- records prompts, argv, source state, logs, structured provider events, patches, completion handoffs, and immutable receipts;
+- supports status, attach, tail, interrupt, terminate, restart, review, acceptance, and rejection;
+- stores durable steer, progress, acknowledgement, and watch records;
+- schedules restart-safe workflow DAGs with bounded parallelism, approval gates, result bindings, retries, and aggregate receipts;
+- validates and archives prompt packs deterministically;
+- collects deterministic evaluation evidence and compares matched baseline/candidate cohorts;
+- exposes an optional bounded read-only local stdio MCP adapter.
+
+It does **not** merge branches, kill suspected stalls automatically, provide a daemon or web UI, perform remote execution, or choose models autonomously.
 
 ## Requirements
 
-- Linux or another POSIX-like environment
 - Python 3.11+
 - Git
-- `tmux`
+- tmux
 - Bash
-- Python package `jsonschema>=4.18,<5` (installed automatically by `install.sh`)
-- GNU `tar` (with `--sort`, `--mtime`, and ownership-normalization options) and
-  `zstd` for deterministic `.tar.zst` creation
+- GNU tar and zstd for deterministic `.tar.zst` archives
+- a supported coding-agent executable, or an explicit command
 
-Task manifests use a constrained YAML shape. PyYAML is used when available; a built-in parser keeps manifest parsing offline-capable. JSON Schema validation uses `jsonschema`.
+Core installation includes `jsonschema`. Optional dependency groups cover evaluation, statistics, telemetry, MLflow, shell completion, and MCP.
 
 ## Install
 
-From the extracted repository:
+From a source checkout:
 
 ```bash
 ./install.sh
-```
-
-The installer installs the checkout in editable mode into the current user's
-Python environment, including core dependencies and a pip-managed launcher in
-`~/.local/bin`. It also installs workflow skills by symlink and creates a
-starter config if one does not exist. Use `--extras eval,stats` for selected
-optional dependency groups or `--extras all` for every optional group. Use
-`--no-deps` only when the required dependencies are already installed; it uses
-a source-link launcher instead.
-
-Make sure `~/.local/bin` is on `PATH`:
-
-```bash
 export PATH="$HOME/.local/bin:$PATH"
-```
-
-## Recommended source location
-
-```text
-/lump/apps/agent-workflow
-```
-
-or:
-
-```text
-~/src/agent-workflow
-```
-
-The repository is the source of truth. `~/.local/bin` and agent skill directories contain installed links, not independent copies.
-
-## Planning and backlog
-
-[BACKLOG.md](BACKLOG.md) is the single authoritative register for unfinished,
-blocked, and deferred work. Design documents retain detailed rationale and
-acceptance material, but link back to the backlog rather than duplicating task
-lists.
-
-## First configuration
-
-Edit `~/.config/agent-workflow/config.toml`. A machine with projects under `/lump/apps` might use:
-
-```toml
-[paths]
-worktree_root = "/lump/worktrees"
-
-[terminal]
-backend = "tmux"
-stall_minutes = 10
-
-[executors.codex]
-command = ["codex", "exec", "--sandbox", "workspace-write", "--skip-git-repo-check", "-"]
-
-[executors.claude]
-command = ["claude", "--print"]
-```
-
-## Core workflow
-
-```bash
 agent-workflow doctor
-agent-workflow worktree create /lump/apps/example P0-01 HEAD
-agent-workflow launch   example-p0-01   /lump/worktrees/example/p0-01   ./phase-0/tickets/P0-01.md   --ticket P0-01   --pack example-phases-0-2   --executor codex
 ```
 
-Or provide an explicit command:
+The installer uses an editable local installation, links the shipped skills into supported discovery roots, and creates a starter XDG configuration without replacing unrelated files. See [Installation](docs/INSTALLATION.md) and [`config/agent-workflow.example.toml`](config/agent-workflow.example.toml).
+
+## First run
 
 ```bash
-agent-workflow launch example-p0-01 /path/to/worktree ticket.md -- \
+agent-workflow worktree create /path/to/repo TICKET-1 HEAD
+
+agent-workflow launch \
+  ticket-1 \
+  /path/to/worktrees/ticket-1 \
+  ./ticket.md \
+  --ticket TICKET-1 \
+  --executor codex
+
+agent-workflow status ticket-1 --capture 50
+agent-workflow attach ticket-1
+```
+
+An explicit executor command can be supplied after `--`:
+
+```bash
+agent-workflow launch ticket-1 /path/to/worktree ticket.md -- \
   codex exec --sandbox workspace-write --skip-git-repo-check -
 ```
 
-By default, Git worktrees must be clean at launch. Use `--allow-dirty` only for an intentional continuation or recovery; retries automatically preserve and reuse the existing worktree.
-
-Use `--executor codex` or `--executor claude` to select a configured executor.
-Add `--structured` to preserve raw Codex JSONL or Claude stream-JSON while rendering normalized operator output. Retries preserve the saved executor identity, stream format, original prompt source, and pack root.
-Installed workflow skills are invoked as `$prompt-pack-builder`,
-`$delegated-implementation`, and `$phase-gate-review` in Codex, or with `/`
-instead of `$` in Claude.
-
-Observe and foreground:
+Review and disposition remain explicit:
 
 ```bash
-agent-workflow list
-agent-workflow status example-p0-01 --capture 50
-agent-workflow attach example-p0-01
-agent-workflow tail example-p0-01
+agent-workflow review ticket-1 --actor reviewer --reason "evidence checked"
+agent-workflow accept ticket-1 --actor reviewer --reason "criteria met" --revision SHA
 ```
 
-Interrupt and retry without overwriting evidence:
+## Durable control
 
 ```bash
-agent-workflow interrupt example-p0-01
-agent-workflow restart example-p0-01
+agent-workflow steer ticket-1 "Run the focused tests before editing." --actor orchestrator
+agent-workflow watch ticket-1 --after 0 --timeout 300
+agent-workflow progress ticket-1 "Tests are green." --actor child
+agent-workflow ack ticket-1 MESSAGE_ID "Applied." --actor child
 ```
 
-Exchange durable control records without polling status. A steer is a pending
-request until the child explicitly acknowledges its message ID; it is not proof
-that a one-shot executor has consumed a late prompt. `watch` always replays the
-fsynced message log; when tmux is available it uses `tmux wait-for` only as a
-best-effort local wakeup hint, so a missed hint cannot lose a control record.
+The append-only message log is authoritative. tmux wakeups are only best-effort hints. A steer remains pending until the child emits correlated acknowledgement evidence; the current detached-executor late-steering gap is tracked in [BACKLOG.md](BACKLOG.md).
+
+## Workflow graphs
 
 ```bash
-agent-workflow steer example-p0-01 "Run the focused tests before editing." --actor orchestrator
-agent-workflow watch example-p0-01 --after 0 --timeout 300
-agent-workflow progress example-p0-01 "Tests are green; reviewing scope." --actor child
-agent-workflow ack example-p0-01 MESSAGE_UUID "Applied at checkpoint." --actor child
+agent-workflow workflow validate ./workflow.json
+agent-workflow workflow start ./workflow-run ./workflow.json
+agent-workflow workflow status ./workflow-run ./workflow.json
+agent-workflow workflow resume ./workflow-run ./workflow.json
+agent-workflow workflow seal ./workflow-run ./workflow.json
+agent-workflow workflow verify ./workflow-run ./workflow.json
+```
+
+Workflow state is reconstructed from an immutable normalized snapshot and append-only event journal. Child sessions use the normal launch service. Approval nodes rely on canonical lifecycle receipts, and result bindings copy bounded JSON Pointer values from sealed predecessor results.
+
+Authorized templates:
+
+```bash
+agent-workflow workflow template pipeline ./spec.json --output ./workflow.json
+agent-workflow workflow template parallel-review-fan-in ./spec.json --output ./workflow.json
+agent-workflow workflow template implementation-independent-review ./spec.json --output ./workflow.json
 ```
 
 ## Prompt packs
 
 ```bash
-agent-workflow pack scaffold ./my-project-prompt-pack --phases 3
-agent-workflow pack validate ./my-project-prompt-pack
-agent-workflow pack archive ./my-project-prompt-pack ./my-project-prompt-pack.tar.zst
+agent-workflow pack scaffold ./my-pack --phases 3
+agent-workflow pack validate ./my-pack
+agent-workflow pack archive ./my-pack ./my-pack.tar.zst
 ```
 
-## Deterministic evaluation
+Prompt-pack dependencies form a validated cross-phase DAG. Tickets may declare JSON Schema result contracts whose validated handoffs are sealed with run evidence. See [Prompt packs](docs/PROMPT_PACKS.md).
+
+## Evaluation
 
 ```bash
-agent-workflow eval validate ./evals/evaluation.json --pack ./prompt-pack
-agent-workflow launch eval-p0-01 /path/to/worktree ticket.md \
-  --ticket P0-01 --executor codex --structured \
-  --evaluation ./evals/evaluation.json
-agent-workflow eval score eval-p0-01
-agent-workflow eval report eval-p0-01 --format markdown
-agent-workflow ledger ./prompt-pack
-agent-workflow review eval-p0-01 --actor reviewer --reason "gates checked"
-agent-workflow accept eval-p0-01 --actor reviewer --reason "approved" --revision SHA
+agent-workflow eval validate ./evaluation.json --pack ./prompt-pack
+agent-workflow eval score SESSION
+agent-workflow eval report SESSION --format markdown
+agent-workflow eval compare ./baseline.json ./candidate.json --output ./comparison.json
 ```
 
-Baseline commands and scope are captured before the agent; post scope is captured before post commands. Collector artifacts are sealed before scoring. Evaluator-only oracle material remains outside the checkout and is addressed by ID and SHA-256.
+Raw provider streams are bounded and sealed before normalization. Usage evidence distinguishes delta, cumulative, and terminal totals and never mixes provider-billed cost with local estimates. Cohort comparison requires matched task identities and remains descriptive when samples are too small. See [Evidence and evaluation](docs/EVIDENCE_AND_EVALUATION.md).
 
-Inspect AI, statistics, OpenTelemetry, MLflow, and generated shell completions are optional extras. Their adapters are intentionally experimental seams: the Inspect seam reuses the public `inspect_swe` Codex and Claude agents inside an Inspect-owned Docker sandbox, while paid model trials and external backend/harness validation remain operator-run gates.
+## Optional MCP server
 
-## State and evidence
+Install the `mcp` extra and configure `agent-workflow-mcp` as a local stdio server. The current adapter is read-only and bounded to configured roots. It does not expose launch, workflow mutation, review, destructive lifecycle commands, raw shell, arbitrary paths, terminal capture, or HTTP. See [MCP server](docs/MCP_SERVER.md).
 
-Authoritative records are stored under:
+## State and trust
+
+Authoritative run evidence is stored below the configured XDG state root, normally:
 
 ```text
 ~/.local/state/agent-workflow/runs/<session-id>/
 ```
 
-Each worktree receives a discoverability symlink at `.delegations/<session-id>`. Deleting a worktree therefore does not delete the authoritative evidence bundle. `final-receipt.json` hashes every required artifact; `events.jsonl` and immutable review receipts record later lifecycle actions without rewriting sealed agent evidence.
+Worktree `.delegations/` entries are discoverability links, not evidence authorities. Status files and terminal captures are projections. Sealed receipts, lifecycle records, workflow snapshots, workflow journals, and verified child evidence determine state transitions. See [Architecture](docs/ARCHITECTURE.md) and [Security](SECURITY.md).
 
-## Compatibility scripts
-
-The `scripts/` directory preserves the original helper filenames as thin wrappers around the CLI. Lifecycle behavior belongs only in `src/agent_workflow/`.
-
-## Documentation
-
-- `EXECUTION_PROTOCOL.md`
-- `DELEGATION_RUNBOOK.md`
-- `docs/PROMPT_PACK_STANDARD.md`
-- `docs/ARCHITECTURE.md`
-- `docs/MODEL_TIERS.md`
-- `docs/TEST_POLICY.md`
-- `docs/STALL_RECOVERY.md`
-- `docs/MIGRATING_EXISTING_ASSETS.md`
-- `VALIDATION.md`
-- `SECURITY.md`
-
-## Development validation
+## Development and testing
 
 ```bash
-PYTHONPATH=src python3 -m unittest discover -s tests -v
-python3 -m compileall -q src
+python -m pip install -e '.[dev]'
+pytest
 ./scripts/release-check.sh
 ```
 
-## Local Jenkins
+The default suite is acceptance-first: it builds and installs a wheel, invokes public executables as subprocesses, and exercises real Git/filesystem/process journeys. A compact invariant layer protects security, replay, and accounting boundaries. Strict expected-failure future journeys keep approved TDD work visible, and live tmux/provider checks remain opt-in. See [Testing](docs/TESTING.md).
 
-The repository includes a local-only Jenkins pipeline in [`Jenkinsfile`](Jenkinsfile).
-It is triggered by an authenticated local Jenkins URL, runs the release checks,
-builds a wheel, and installs it into `.jenkins-local-venv`. It uses the local
-`master` branch only and does not use polling, webhooks, or remote deployment.
+## Documentation
 
-Configure the installed job idempotently, then reload Jenkins:
+- [Command reference](docs/COMMAND_REFERENCE.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Repository diagrams](docs/diagrams/REPOSITORY_CHART_PACK.md)
+- [Operations](docs/OPERATIONS.md)
+- [Prompt packs](docs/PROMPT_PACKS.md)
+- [Evidence and evaluation](docs/EVIDENCE_AND_EVALUATION.md)
+- [Testing](docs/TESTING.md)
+- [MCP server](docs/MCP_SERVER.md)
+- [Public release readiness](docs/PUBLIC_RELEASE_READINESS.md)
+- [Backlog](BACKLOG.md)
+- [Contributing](CONTRIBUTING.md)
+- [Support](SUPPORT.md)
 
-```sh
-JENKINS_HOME=/var/lib/jenkins JENKINS_URL=http://127.0.0.1:8080 \
-  ./scripts/jenkins-local-job.sh configure
-./scripts/jenkins-local-job.sh inspect
-```
-
-After a merge to `master`, notify Jenkins with the operator's API token:
-
-```sh
-curl -fsS -X POST -u "$JENKINS_USER_ID:$JENKINS_API_TOKEN" \
-  "$JENKINS_URL/job/agent-workflow-local/build"
-```
-
-The token is read from the operator environment and is never committed.
+The repository is the source of truth. Completed implementation prompt packs, release-run ledgers, and one-off audit reports are intentionally not retained as parallel documentation; Git history and the changelog preserve that history.

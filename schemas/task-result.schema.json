@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/task-result/v1",
+  "type": "object",
+  "required": [
+    "schema",
+    "status",
+    "summary",
+    "outputs"
+  ],
+  "properties": {
+    "schema": {
+      "const": "agent-workflow/task-result/v1"
+    },
+    "status": {
+      "enum": [
+        "completed",
+        "partial",
+        "failed",
+        "blocked"
+      ]
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 20000
+    },
+    "outputs": {
+      "type": "object"
+    },
+    "unresolved": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    }
+  },
+  "additionalProperties": false
+}

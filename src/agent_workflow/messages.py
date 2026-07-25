@@ -19,7 +19,7 @@ MESSAGE_SCHEMA = "agent-workflow/session-message/v1"
 MESSAGE_LOG_NAME = "messages.jsonl"
 MAX_CONTENT_CHARS = 16_384
 _DIRECTIONS = frozenset({"parent_to_child", "child_to_parent"})
-_KINDS = frozenset({"steer", "progress", "ack", "error"})
+_KINDS = frozenset({"steer", "progress", "ack", "error", "task_complete"})
 _REQUIRED_FIELDS = frozenset(
     {
         "schema",
@@ -39,6 +39,7 @@ _KIND_DIRECTIONS = {
     "progress": "child_to_parent",
     "ack": "child_to_parent",
     "error": "child_to_parent",
+    "task_complete": "child_to_parent",
 }
 
 

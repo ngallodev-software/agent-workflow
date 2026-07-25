@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import fnmatch
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -17,6 +18,8 @@ class ExecutorPlan:
     name: str | None
     argv: tuple[str, ...]
     stream_format: StreamFormat = "text"
+    model: str | None = None
+    no_go_authorized: bool = False
 
 
 def _insert_before_stdin(argv: list[str], values: list[str]) -> list[str]:
@@ -38,16 +41,62 @@ def _infer_executor(argv: list[str]) -> str | None:
     return None
 
 
+def _explicit_model(argv: list[str]) -> str | None:
+    for index, value in enumerate(argv):
+        if value in {"--model", "-m"} and index + 1 < len(argv):
+            return argv[index + 1]
+        if value.startswith("--model="):
+            return value.split("=", 1)[1]
+    return None
+
+
+def _select_model(settings: Settings, executor: str | None, requested: str | None, allow_no_go: bool) -> tuple[str | None, bool]:
+    if executor is None:
+        if requested is not None:
+            raise WorkflowError("--model requires a known configured executor")
+        return None, False
+    policy = settings.executor_policies.get(executor)
+    selected = requested or (policy.default_model if policy else None)
+    if selected is None:
+        return None, False
+    if policy and policy.models and selected not in policy.models:
+        raise WorkflowError(f"model {selected!r} is not allowed for executor {executor!r}")
+    no_go = bool(policy and any(fnmatch.fnmatchcase(selected, pattern) for pattern in policy.no_go_models))
+    if no_go and not allow_no_go:
+        raise WorkflowError(
+            f"model {selected!r} is no-go for executor {executor!r}; "
+            "pass --allow-no-go-model to record explicit permission"
+        )
+    return selected, no_go and allow_no_go
+
+
 def prepare_executor(
     settings: Settings,
     executor: str | None,
     explicit: list[str] | None,
     *,
     structured: bool = False,
+    interactive: bool = False,
+    model: str | None = None,
+    allow_no_go_model: bool = False,
 ) -> ExecutorPlan:
+    if structured and interactive:
+        raise WorkflowError("--structured and --interactive are mutually exclusive")
     if explicit:
         executor = _infer_executor(explicit)
         argv = list(explicit)
+        explicit_model = _explicit_model(argv)
+        if model and explicit_model and model != explicit_model:
+            raise WorkflowError("--model disagrees with the explicit executor command")
+        selected_model, authorized = _select_model(
+            settings, executor, model or explicit_model, allow_no_go_model
+        )
+        policy = settings.executor_policies.get(executor) if executor else None
+        if interactive and executor is not None:
+            argv = list(policy.interactive_command if policy and policy.interactive_command else [argv[0]])
+            argv.extend(policy.interactive_permission_args if policy else ())
+        if selected_model and explicit_model is None:
+            argv = _insert_before_stdin(argv, list(policy.model_arg) + [selected_model] if policy else ["--model", selected_model])
         stream_format = "text"
         if structured and executor == "codex":
             if "--json" not in argv:
@@ -59,7 +108,7 @@ def prepare_executor(
             if "--output-format" not in argv:
                 argv.extend(["--output-format", "stream-json"])
             stream_format = "claude-stream-json"
-        return ExecutorPlan(executor, tuple(argv), stream_format)
+        return ExecutorPlan(executor, tuple(argv), stream_format, selected_model, authorized)
     if not executor:
         raise WorkflowError(
             "provide --executor NAME or an explicit command after --"
@@ -73,6 +122,28 @@ def prepare_executor(
         ) from exc
     if not argv:
         raise WorkflowError(f"executor {executor!r} has an empty command")
+    policy = settings.executor_policies.get(executor)
+    selected_model, authorized = _select_model(settings, executor, model, allow_no_go_model)
+    if interactive and executor in {"codex", "claude"}:
+        # Built-in policies provide the provider-specific interactive flags, but
+        # a configured command may intentionally be a test double or wrapper.
+        # Do not replace that command with the default provider binary.
+        configured_executable = Path(argv[0]).name
+        policy_executable = (
+            Path(policy.interactive_command[0]).name
+            if policy and policy.interactive_command
+            else None
+        )
+        if policy and policy.interactive_command and configured_executable == policy_executable:
+            argv = list(policy.interactive_command)
+        argv.extend(policy.interactive_permission_args if policy else ())
+        if selected_model:
+            argv.extend(list(policy.model_arg) + [selected_model] if policy else ["--model", selected_model])
+        return ExecutorPlan(executor, tuple(argv), "text", selected_model, authorized)
+    if policy:
+        argv = _insert_before_stdin(argv, list(policy.non_interactive_permission_args))
+    if selected_model:
+        argv = _insert_before_stdin(argv, list(policy.model_arg) + [selected_model] if policy else ["--model", selected_model])
     stream_format = "text"
     if executor == "codex" and "--skip-git-repo-check" not in argv:
         argv = _insert_before_stdin(argv, ["--skip-git-repo-check"])
@@ -86,7 +157,7 @@ def prepare_executor(
         if "--output-format" not in argv:
             argv.extend(["--output-format", "stream-json"])
         stream_format = "claude-stream-json"
-    return ExecutorPlan(executor, tuple(argv), stream_format)
+    return ExecutorPlan(executor, tuple(argv), stream_format, selected_model, authorized)
 
 
 def executor_version(plan: ExecutorPlan) -> str | None:

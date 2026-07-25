@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import fcntl
+import hashlib
 import json
+import os
 import platform
 import shlex
 import shutil
@@ -11,10 +14,12 @@ from pathlib import Path
 from typing import Any
 
 from . import tmux
+from .agent_context import acknowledge_reuse, idle_interactive_sessions
+from .agent_context import initialize as initialize_agent_context
 from .assets import asset_path
 from .config import Settings
 from .contracts import read_contract
-from .errors import WorkflowError
+from .errors import InteractiveCapacityError, WorkflowError
 from .eval.commands import collect_commands, specs_from_data
 from .eval.scope import ScopePolicy, collect_scope
 from .evaluation import validate_evaluation
@@ -22,7 +27,7 @@ from .executors import ExecutorPlan, executor_version, prepare_executor
 from .git import snapshot
 from .native_jobs import ValidatedNativeJob, validate_native_job
 from .messages import append_message, replay_messages, wait_for_messages
-from .tax_machine import TaxMachinePack, discover as discover_tax_machine, validate_job as validate_tax_job
+from .manifests import task_result_contract
 from .process import run
 from .receipts import initial_completion, initial_provenance, update_provenance
 from .state import (
@@ -34,12 +39,14 @@ from .state import (
     write_status,
 )
 from .util import (
+    atomic_write_bytes,
     atomic_write_json,
     expand_path,
     sha256_file,
     utc_now,
     validate_id,
 )
+
 
 def _ignore_delegations(workdir: Path) -> None:
     _add_git_exclude(workdir, ".delegations/")
@@ -103,6 +110,8 @@ def _write_runner(
     prompt_pack_root: Path | None = None,
     handoff_dir: Path | None = None,
     stream_format: str = "text",
+    interactive: bool = False,
+    close_tmux_on_exit: bool = False,
 ) -> Path:
     prompt = state_dir / "prompt.md"
     launch_prompt = state_dir / "launch-prompt.md"
@@ -112,22 +121,60 @@ def _write_runner(
     runner = state_dir / "run.sh"
     command_text = shlex.join(command)
     source_root = Path(__file__).resolve().parents[1]
-    runner.write_text(
+    runner_invocation = (
+        "python3 -m agent_workflow.runner "
+        f"--run-dir {shlex.quote(str(state_dir))} "
+        f"--workdir {shlex.quote(str(workdir))} "
+        f"--stream-format {shlex.quote(stream_format)} "
+        f"{'--interactive ' if interactive else ''}-- {command_text}"
+    )
+    if interactive and not close_tmux_on_exit:
+        runner_command = (
+            "if [[ -t 0 ]]; then\n"
+            f"    exec {runner_invocation}\n"
+            "else\n"
+            f"    exec {runner_invocation.replace('--interactive ', '', 1)}\n"
+            "fi"
+        )
+    elif close_tmux_on_exit:
+        fallback_invocation = runner_invocation.replace("--interactive ", "", 1)
+        runner_command = (
+            "if [[ -t 0 ]]; then\n"
+            "    set +e\n"
+            f"    {runner_invocation}\n"
+            "    runner_status=$?\n"
+            "    set -e\n"
+            "    if [[ -n \"${AGENT_WORKFLOW_TMUX_SESSION:-}\" ]]; then\n"
+            "        tmux kill-session -t \"$AGENT_WORKFLOW_TMUX_SESSION\" >/dev/null 2>&1 || true\n"
+            "    fi\n"
+            "    exit \"$runner_status\"\n"
+            "else\n"
+            f"    exec {fallback_invocation}\n"
+            "fi\n"
+        )
+    else:
+        runner_command = f"exec {runner_invocation}"
+    runner_text = (
         "#!/usr/bin/env bash\n"
         "set -Eeuo pipefail\n"
         f"readonly AGENT_WORKFLOW_SESSION_ID={shlex.quote(session_id)}\n"
         f"readonly AGENT_WORKFLOW_PROMPT_SOURCE={shlex.quote(str(prompt_source))}\n"
         f"readonly AGENT_WORKFLOW_HANDOFF_DIR={shlex.quote(str(handoff_dir or ''))}\n"
         f"readonly AGENT_WORKFLOW_PROMPT_PACK_ROOT={shlex.quote(str(prompt_pack_root or ''))}\n"
-        "export AGENT_WORKFLOW_SESSION_ID AGENT_WORKFLOW_PROMPT_SOURCE "
-        "AGENT_WORKFLOW_HANDOFF_DIR AGENT_WORKFLOW_PROMPT_PACK_ROOT\n"
-        f"export PYTHONPATH={shlex.quote(str(source_root))}${{PYTHONPATH:+:$PYTHONPATH}}\n"
-        "exec python3 -m agent_workflow.runner "
-        f"--run-dir {shlex.quote(str(state_dir))} "
-        f"--workdir {shlex.quote(str(workdir))} "
-        f"--stream-format {shlex.quote(stream_format)} -- {command_text}\n",
-        encoding="utf-8",
     )
+    if close_tmux_on_exit:
+        runner_text += (
+            f"readonly AGENT_WORKFLOW_TMUX_SESSION={shlex.quote(session_id)}\n"
+        )
+    runner_text += (
+        "export AGENT_WORKFLOW_SESSION_ID AGENT_WORKFLOW_PROMPT_SOURCE "
+        "AGENT_WORKFLOW_HANDOFF_DIR AGENT_WORKFLOW_PROMPT_PACK_ROOT"
+        + (" AGENT_WORKFLOW_TMUX_SESSION\n" if close_tmux_on_exit else "\n")
+        + f"export PYTHONPATH={shlex.quote(str(source_root))}${{PYTHONPATH:+:$PYTHONPATH}}\n"
+        + runner_command
+        + "\n"
+    )
+    runner.write_text(runner_text, encoding="utf-8")
     runner.chmod(0o755)
     syntax = subprocess.run(
         ["bash", "-n", str(runner)],
@@ -203,8 +250,8 @@ def _write_job_binding(state_dir: Path, job: ValidatedNativeJob, *, session_id: 
     stored = state_dir / "jobs" / "native-job.json"
     stored.parent.mkdir(parents=True, exist_ok=True)
     raw = job.job_path.read_bytes()
-    stored.write_bytes(raw)
-    source_sha256 = sha256_file(job.job_path)
+    source_sha256 = hashlib.sha256(raw).hexdigest()
+    atomic_write_bytes(stored, raw, mode=0o444)
     stored_sha256 = sha256_file(stored)
     if source_sha256 != stored_sha256:
         raise WorkflowError("native job changed while its binding was being created")
@@ -244,9 +291,7 @@ def _write_job_binding(state_dir: Path, job: ValidatedNativeJob, *, session_id: 
         },
     }
     receipt_path = state_dir / "job-binding.json"
-    atomic_write_json(receipt_path, receipt)
-    stored.chmod(0o444)
-    receipt_path.chmod(0o444)
+    atomic_write_json(receipt_path, receipt, mode=0o444)
     return receipt
 
 
@@ -257,6 +302,9 @@ def _write_launch_prompt(
     prompt_source: Path,
     prompt_pack_root: Path | None,
     handoff_dir: Path,
+    result_contract: dict[str, Any] | None = None,
+    interactive: bool = False,
+    detached_interactive: bool = False,
 ) -> Path:
     context = [
         "# Agent-workflow launch context",
@@ -267,6 +315,31 @@ def _write_launch_prompt(
     ]
     if prompt_pack_root is not None:
         context.append(f"- prompt_pack_root: `{prompt_pack_root}`")
+    if result_contract is not None:
+        context.extend(
+            [
+                f"- task_result_schema: `{result_contract['schema']}`",
+                "- Write task result JSON atomically to `AGENT_WORKFLOW_HANDOFF_DIR/result.json`.",
+                "- The result must satisfy the declared JSON Schema; downstream work may depend on its structured outputs.",
+            ]
+        )
+    if interactive:
+        context.extend(
+            [
+                "- This interactive agent remains open after its assignment.",
+                '- Before becoming reusable, emit structured completion with `agent-workflow agent task-complete "$AGENT_WORKFLOW_SESSION_ID" --actor <agent-name> --summary <summary>`.',
+                "- For a reused assignment, acknowledge its correlated steer message before starting work.",
+            ]
+        )
+    elif detached_interactive:
+        context.extend(
+            [
+                "- This task is non-interactive from the orchestrator's perspective and runs in a private tmux session.",
+                "- Do not wait for user input or expect a user to resume this run.",
+                "- On completion, notify the calling agent through the durable completion handoff and a concise progress update.",
+                "- Exit cleanly when finished; the private tmux session will be closed automatically when possible.",
+            ]
+        )
     context.extend(
         [
             f"- completion_handoff_dir: `{handoff_dir}`",
@@ -292,6 +365,152 @@ def _write_launch_prompt(
     return launch_prompt
 
 
+def _status_agent_active(item: dict[str, Any]) -> bool:
+    if str(item.get("status")) in TERMINAL_STATUSES:
+        return False
+    target = item.get("tmux_target")
+    if not isinstance(target, str) or not target:
+        return True
+    try:
+        pane = tmux.pane_info(target)
+    except WorkflowError:
+        return True
+    return pane is not None and not pane.dead
+
+
+def _resolve_agent_identity(
+    settings: Settings,
+    *,
+    requested_name: str | None,
+    requested_class: str | None,
+    executor: str | None,
+    model: str | None,
+    allow_no_go_model: bool,
+    explicit_command: list[str] | None,
+    interactive: bool | None,
+    allow_active_name: bool = False,
+) -> tuple[str, str, str | None, str | None, bool, bool]:
+    interactive_explicit = interactive is not None
+    active_names = {
+        str(item["agent_name"])
+        for item in list_statuses(settings)
+        if item.get("agent_name") and _status_agent_active(item)
+    }
+    if requested_name is not None:
+        validate_id(requested_name, "agent name")
+        generated_name = requested_name.startswith(f"{settings.generated_agent_prefix}-")
+        if requested_name not in settings.preferred_agent_names and not generated_name:
+            raise WorkflowError(
+                f"agent name {requested_name!r} is not listed in [agents].preferred_names"
+            )
+        if requested_name in active_names and not allow_active_name:
+            raise WorkflowError(f"agent name is already active: {requested_name}")
+        agent_name = requested_name
+    else:
+        agent_name = next(
+            (name for name in settings.preferred_agent_names if name not in active_names),
+            "",
+        )
+        if not agent_name:
+            index = 1
+            while f"{settings.generated_agent_prefix}-{index:02d}" in active_names:
+                index += 1
+            agent_name = f"{settings.generated_agent_prefix}-{index:02d}"
+    profile = settings.agent_profiles.get(agent_name)
+    agent_class = requested_class or settings.default_agent_class
+    if profile is not None:
+        if explicit_command is not None and not allow_active_name:
+            raise WorkflowError(f"agent profile {agent_name!r} cannot use an explicit command")
+        if profile.agent_class is not None:
+            if requested_class is not None and requested_class != profile.agent_class:
+                raise WorkflowError(f"agent {agent_name!r} requires class {profile.agent_class!r}")
+            agent_class = profile.agent_class
+        if executor is not None and executor != profile.executor:
+            raise WorkflowError(f"agent {agent_name!r} requires executor {profile.executor!r}")
+        if model is not None and model != profile.model:
+            raise WorkflowError(f"agent {agent_name!r} requires model {profile.model!r}")
+        executor = profile.executor or executor
+        model = profile.model or model
+        allow_no_go_model = profile.allow_no_go_model
+        if interactive is None and profile.interactive is not None:
+            interactive = profile.interactive
+    if agent_class not in settings.agent_classes:
+        raise WorkflowError(f"agent class is not configured: {agent_class}")
+    class_policy = settings.agent_classes[agent_class]
+    if executor is None and explicit_command is None:
+        executor = class_policy.default_executor or settings.default_agent_executor
+    if model is None and executor is not None:
+        if executor == class_policy.default_executor:
+            model = class_policy.default_model
+        else:
+            allowed_for_executor = class_policy.allowed_models.get(executor, ())
+            model = allowed_for_executor[0] if allowed_for_executor else None
+    if executor is not None and model is not None:
+        allowed_models = class_policy.allowed_models.get(executor, ())
+        if model not in allowed_models:
+            raise WorkflowError(
+                f"agent class {agent_class!r} does not allow {executor}/{model}"
+            )
+    if interactive is None:
+        interactive = class_policy.interactive
+    if executor == "claude" and not interactive_explicit:
+        interactive = True
+    return agent_name, agent_class, executor, model, allow_no_go_model, interactive
+
+
+def _claim_agent_name(
+    settings: Settings,
+    *,
+    agent_name: str,
+    session_id: str,
+    interactive: bool,
+) -> None:
+    """Atomically reserve one name across interactive and detached runs."""
+    lease_root = settings.state_root / "agent-name-leases"
+    lease_root.mkdir(parents=True, exist_ok=True)
+    lock_path = lease_root / ".lock"
+    with lock_path.open("a+b") as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        active_names = {
+            str(item["agent_name"])
+            for item in list_statuses(settings)
+            if item.get("agent_name")
+            and item.get("session_id") != session_id
+            and _status_agent_active(item)
+        }
+        lease_path = lease_root / f"{agent_name}.json"
+        if lease_path.is_file():
+            try:
+                lease = json.loads(lease_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                lease = {}
+            leased_session = lease.get("session_id")
+            if leased_session and leased_session != session_id:
+                try:
+                    leased_status = read_status(settings, str(leased_session))
+                except WorkflowError:
+                    leased_status = None
+                if leased_status is not None:
+                    if _status_agent_active(leased_status):
+                        active_names.add(agent_name)
+                elif lease.get("pid") == os.getpid():
+                    active_names.add(agent_name)
+        if agent_name in active_names:
+            raise WorkflowError(f"agent name is already active: {agent_name}")
+        atomic_write_json(
+            lease_path,
+            {
+                "schema": "agent-workflow/agent-name-lease/v1",
+                "agent_name": agent_name,
+                "session_id": session_id,
+                "interactive": interactive,
+                "pid": os.getpid(),
+                "claimed_at": utc_now(),
+            },
+        )
+        fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
+
 def launch(
     settings: Settings,
     *,
@@ -299,12 +518,17 @@ def launch(
     workdir: Path,
     prompt_path: Path,
     executor: str | None = None,
+    agent_name: str | None = None,
+    agent_class: str | None = None,
+    model: str | None = None,
+    allow_no_go_model: bool = False,
     explicit_command: list[str] | None = None,
     ticket_id: str | None = None,
     pack_id: str | None = None,
     retry_of: str | None = None,
     allow_dirty: bool = False,
     structured: bool = False,
+    interactive: bool | None = None,
     saved_stream_format: str | None = None,
     saved_executor: str | None = None,
     prompt_source_override: Path | None = None,
@@ -312,6 +536,8 @@ def launch(
     evaluation_path: Path | None = None,
     tier: str | None = None,
     job_path: Path | None = None,
+    allow_active_agent_name: bool = False,
+    workflow_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     validate_id(session_id, "session ID")
     if ticket_id:
@@ -324,13 +550,8 @@ def launch(
         raise WorkflowError(f"workdir not found: {workdir}")
     if not prompt_path.is_file():
         raise WorkflowError(f"prompt not found: {prompt_path}")
-    tax_pack = discover_tax_machine(prompt_source_override or prompt_path) if job_path is not None else None
     native_job: ValidatedNativeJob | None = None
-    if job_path is not None and tax_pack is not None:
-        # External packs are selected only by a real MANIFEST.json ancestor and
-        # validate their own job schema without extending global contracts.
-        validate_tax_job(tax_pack, expand_path(job_path))
-    elif job_path is not None:
+    if job_path is not None:
         native_job = _bind_native_job(
             job_path=job_path, prompt_path=prompt_source_override or prompt_path,
             workdir=workdir, ticket_id=ticket_id, pack_id=pack_id,
@@ -342,6 +563,44 @@ def launch(
         raise WorkflowError(
             f"unsupported terminal backend {settings.terminal_backend!r}; v0.1 supports tmux"
         )
+    # Claude's native command is interactive by default.  The explicit
+    # --structured/--no-interactive paths remain opt-outs for automation.
+    if structured and interactive is None:
+        interactive = False
+    agent_name, agent_class, executor, model, allow_no_go_model, interactive = _resolve_agent_identity(
+        settings,
+        requested_name=agent_name,
+        requested_class=agent_class,
+        executor=executor,
+        model=model,
+        allow_no_go_model=allow_no_go_model,
+        explicit_command=explicit_command,
+        interactive=interactive,
+        allow_active_name=allow_active_agent_name,
+    )
+    # `interactive` describes user-visible/reusable assignment semantics.  A
+    # non-interactive assignment still gets a real interactive executor when
+    # it is placed in tmux, so it can complete and report without leaving a
+    # blank resumable session behind.
+    executor_interactive = not structured
+    interactive_parent_target = tmux.current_window_target() if interactive else None
+    parent_target = (
+        interactive_parent_target
+        if interactive
+        else tmux.current_window_target()
+        if settings.non_interactive_tmux == "shared_window"
+        else None
+    )
+    if parent_target is not None:
+        pane_count = tmux.interactive_pane_count(parent_target)
+        if pane_count >= settings.max_interactive_agent_panes:
+            raise InteractiveCapacityError(
+                count=pane_count,
+                maximum=settings.max_interactive_agent_panes,
+                idle_sessions=idle_interactive_sessions(
+                    settings, window_target=parent_target
+                ),
+            )
     if tmux.session_exists(session_id):
         raise WorkflowError(f"tmux session already exists: {session_id}")
 
@@ -376,20 +635,19 @@ def launch(
         if native_job is not None
         else None
     )
-    tax_snapshots = (
-        tax_pack.snapshot(state_dir, expand_path(job_path))
-        if tax_pack is not None and job_path is not None
-        else None
-    )
-
     executor_plan = prepare_executor(
-        settings, executor, explicit_command, structured=structured
+        settings, executor, explicit_command, structured=structured,
+        interactive=executor_interactive,
+        model=model,
+        allow_no_go_model=allow_no_go_model,
     )
     if saved_stream_format is not None:
         executor_plan = ExecutorPlan(
             saved_executor,
             executor_plan.argv,
             saved_stream_format,
+            executor_plan.model,
+            executor_plan.no_go_authorized,
         )
     command = list(executor_plan.argv)
     if not shutil.which(command[0]):
@@ -403,8 +661,6 @@ def launch(
         if prompt_pack_root_override is not None
         else _discover_prompt_pack_root(prompt_source)
     )
-    if tax_pack is not None:
-        prompt_pack_root = tax_pack.root
     (state_dir / "output.log").touch()
     atomic_write_json(
         state_dir / "command.json",
@@ -414,18 +670,32 @@ def launch(
             "shell": shlex.join(command),
             "executor": executor_plan.name,
             "stream_format": executor_plan.stream_format,
+            "interactive": interactive,
+            "executor_interactive": executor_interactive,
+            "model": executor_plan.model,
+            "no_go_authorized": executor_plan.no_go_authorized,
+            "agent_name": agent_name,
+            "agent_class": agent_class,
         },
     )
     (state_dir / "completion.md").write_bytes(
         asset_path("prompt-pack-root/templates/TICKET_COMPLETION.md").read_bytes()
     )
     handoff_dir = _create_handoff_dir(workdir, session_id)
+    result_contract = (
+        task_result_contract(prompt_pack_root, ticket_id)
+        if prompt_pack_root is not None
+        else None
+    )
     launch_prompt = _write_launch_prompt(
         state_dir,
         session_id=session_id,
         prompt_source=prompt_source,
         prompt_pack_root=prompt_pack_root,
         handoff_dir=handoff_dir,
+        result_contract=result_contract,
+        interactive=interactive,
+        detached_interactive=not interactive and executor_interactive,
     )
 
     git_info: dict[str, Any]
@@ -490,7 +760,7 @@ def launch(
         if settings.config_path and settings.config_path.is_file()
         else None
     )
-    pack_manifest = (tax_pack.manifest if tax_pack is not None else prompt_pack_root / "MANIFEST.sha256") if prompt_pack_root else None
+    pack_manifest = prompt_pack_root / "MANIFEST.sha256" if prompt_pack_root else None
     provenance_path = state_dir / "run-provenance.json"
     atomic_write_json(
         provenance_path,
@@ -504,6 +774,13 @@ def launch(
                 if executor_plan.name is not None
                 else None
             ),
+            model=executor_plan.model,
+            agent_name=agent_name,
+            agent_class=agent_class,
+            model_policy={
+                "no_go_authorized": executor_plan.no_go_authorized,
+                "authorization_source": "--allow-no-go-model" if executor_plan.no_go_authorized else None,
+            },
             prompt_sha256=sha256_file(prompt_copy),
             launch_prompt_sha256=sha256_file(launch_prompt),
             config_sha256=config_sha256,
@@ -519,6 +796,7 @@ def launch(
                 "platform": platform.platform(),
                 "implementation": sys.implementation.name,
             },
+            retry_of_run_id=retry_of,
             job_binding=(
                 {
                     "path": str(state_dir / "job-binding.json"),
@@ -528,9 +806,28 @@ def launch(
                 if native_job is not None
                 else None
             ),
-            external_snapshots=tax_snapshots,
         ),
     )
+    if workflow_context is not None:
+        from .contracts import validate_instance
+        validate_instance(
+            workflow_context,
+            "agent-workflow/workflow-input-bindings/v1",
+            artifact="workflow launch inputs",
+        )
+        workflow_inputs_path = state_dir / "workflow-inputs.json"
+        atomic_write_json(workflow_inputs_path, workflow_context, mode=0o444)
+        update_provenance(
+            state_dir,
+            workflow={
+                "workflow_id": workflow_context["workflow_id"],
+                "node_id": workflow_context["node_id"],
+                "attempt": workflow_context["attempt"],
+                "inputs_path": str(workflow_inputs_path),
+                "inputs_sha256": sha256_file(workflow_inputs_path),
+                "routing": None,
+            },
+        )
     if evaluation_path is not None or native_job is not None:
         evaluation = None
         evaluation_data: dict[str, Any] = {}
@@ -625,6 +922,8 @@ def launch(
         "schema": "agent-workflow/session-status/v2",
         "session_id": session_id,
         "ticket_id": ticket_id,
+        "agent_name": agent_name,
+        "agent_class": agent_class,
         "tier": tier,
         "pack_id": pack_id,
         "retry_of": retry_of,
@@ -636,8 +935,13 @@ def launch(
         "prompt_path": str(prompt_copy),
         "prompt_source": str(prompt_source),
         "executor": executor_plan.name,
+        "model": executor_plan.model,
+        "interactive": interactive,
+        "executor_interactive": executor_interactive,
+        "agent_context_path": str(state_dir / "agent-context.json"),
         "prompt_sha256": sha256_file(prompt_copy),
         "prompt_pack_root": str(prompt_pack_root) if prompt_pack_root else None,
+        "result_contract": result_contract,
         "launch_prompt_path": str(launch_prompt),
         "launch_prompt_sha256": sha256_file(launch_prompt),
         "log_path": str(state_dir / "output.log"),
@@ -658,14 +962,24 @@ def launch(
         "job_binding_path": str(state_dir / "job-binding.json") if job_binding else None,
         "job_binding_sha256": sha256_file(state_dir / "job-binding.json") if job_binding else None,
         "job_id": native_job.job_id if native_job else None,
-        "pack_adapter": "tax-machine" if tax_pack is not None else "native",
-        "external_snapshots": tax_snapshots,
         "tmux_session": session_id,
         "tmux_target": session_id,
         "tmux_mode": "dedicated_session",
         **git_info,
     }
+    _claim_agent_name(
+        settings,
+        agent_name=agent_name,
+        session_id=session_id,
+        interactive=interactive,
+    )
     write_status(settings, session_id, status)
+    initialize_agent_context(
+        state_dir,
+        session_id=session_id,
+        status=status,
+        command=json.loads((state_dir / "command.json").read_text(encoding="utf-8")),
+    )
     _link_worktree_state(workdir, session_id, state_dir)
     runner = _write_runner(
         state_dir,
@@ -676,6 +990,8 @@ def launch(
         prompt_pack_root=prompt_pack_root,
         handoff_dir=handoff_dir,
         stream_format=executor_plan.stream_format,
+        interactive=executor_interactive,
+        close_tmux_on_exit=(not interactive and executor_interactive and parent_target is None),
     )
     update_status(
         settings,
@@ -685,13 +1001,23 @@ def launch(
         runner_path=str(runner),
     )
     try:
-        parent_target = tmux.current_window_target()
         if parent_target is not None:
-            tmux_target = tmux.split_window(parent_target, str(workdir), str(runner))
+            tmux.configure_server(mouse=settings.mouse)
+            tmux_target = tmux.split_window(
+                parent_target,
+                str(workdir),
+                str(runner),
+                orchestrator_side=settings.orchestrator_side,
+                pane_name=agent_name,
+                max_interactive_agent_panes=settings.max_interactive_agent_panes,
+                max_interactive_agent_width=settings.max_interactive_agent_width,
+                max_interactive_agent_vertical=settings.max_interactive_agent_vertical,
+            )
             tmux_session = tmux_target.split(":", 1)[0]
             tmux_mode = "shared_window"
         else:
-            tmux.create_session(session_id, str(workdir), str(runner))
+            tmux.configure_server(mouse=settings.mouse)
+            tmux.create_session(session_id, str(workdir), str(runner), agent_name)
             tmux_target = session_id
             tmux_session = session_id
             tmux_mode = "dedicated_session"
@@ -705,6 +1031,15 @@ def launch(
         )
         raise
     pane = tmux.pane_info(tmux_target)
+    if pane is not None and pane.dead:
+        update_status(
+            settings,
+            session_id,
+            status="failed",
+            finished_at=utc_now(),
+            failure_category="executor_exited_during_launch",
+        )
+        raise WorkflowError(f"agent pane exited during launch: {tmux_target}")
     return update_status(
         settings,
         session_id,
@@ -789,7 +1124,10 @@ def observe(
         else data.get("failure_category")
     )
     safe_actions = [f"agent-workflow status {session_id} --json"]
-    if observed in {"orphaned", "failed", "interrupted", "killed"}:
+    if (
+        observed in {"orphaned", "failed", "interrupted", "killed"}
+        and bool(data.get("interactive", False))
+    ):
         safe_actions.append(f"agent-workflow restart {session_id}")
     elif observed == "possibly_stalled":
         safe_actions.append(f"agent-workflow interrupt {session_id}")
@@ -903,7 +1241,7 @@ def acknowledge(
 ) -> dict[str, Any]:
     """Record a child acknowledgement after it has applied a control request."""
     _active_run(settings, session_id)
-    return _append_control_message(
+    message = _append_control_message(
         settings,
         session_id,
         direction="child_to_parent",
@@ -912,6 +1250,8 @@ def acknowledge(
         content=content,
         correlation_id=correlation_id,
     )
+    acknowledge_reuse(settings, session_id, correlation_id, actor)
+    return message
 
 
 def messages(settings: Settings, session_id: str, *, after_sequence: int = 0) -> list[dict[str, Any]]:
@@ -1025,9 +1365,22 @@ def restart(
     new_session: str | None = None,
 ) -> dict[str, Any]:
     old = read_status(settings, session_id)
+    restart_agent_name = (
+        old.get("agent_name")
+        if str(old.get("status")) in TERMINAL_STATUSES
+        else None
+    )
     command_data = json.loads(
         Path(str(old["command_path"])).read_text(encoding="utf-8")
     )
+    if (
+        not bool(command_data.get("interactive", old.get("interactive", False)))
+        and str(old.get("status")) not in TERMINAL_STATUSES
+    ):
+        raise WorkflowError(
+            "non-interactive tasks cannot be restarted while active; launch a new "
+            "task or have the calling agent delegate the work again"
+        )
     command = command_data.get("argv")
     if (
         not isinstance(command, list)
@@ -1036,6 +1389,8 @@ def restart(
     ):
         raise WorkflowError(f"invalid saved command for session {session_id}")
     new_id = new_session or next_retry_id(settings, session_id)
+    interactive = bool(command_data.get("interactive", False))
+    no_go_authorized = bool(command_data.get("no_go_authorized", False))
     job_path = None
     if old.get("job_binding_path"):
         binding_path = Path(str(old["job_binding_path"]))
@@ -1053,12 +1408,17 @@ def restart(
         workdir=Path(str(old["workdir"])),
         prompt_path=Path(str(old["prompt_path"])),
         explicit_command=command,
+        agent_name=restart_agent_name,
+        agent_class=old.get("agent_class"),
+        model=command_data.get("model"),
+        allow_no_go_model=no_go_authorized,
         ticket_id=old.get("ticket_id"),
         pack_id=old.get("pack_id"),
         retry_of=session_id,
         allow_dirty=True,
         saved_stream_format=str(command_data.get("stream_format", "text")),
         saved_executor=command_data.get("executor"),
+        interactive=interactive,
         prompt_source_override=Path(str(old.get("prompt_source", old["prompt_path"]))),
         prompt_pack_root_override=(
             Path(str(old["prompt_pack_root"]))
@@ -1072,4 +1432,5 @@ def restart(
         ),
         tier=old.get("tier"),
         job_path=job_path,
+        allow_active_agent_name=False,
     )

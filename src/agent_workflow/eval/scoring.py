@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import stat
 from pathlib import Path
 from typing import Any, Mapping
 
 from ..contracts import read_contract, validate_instance
 from ..errors import WorkflowError
-from ..receipts import verify_seal
+from ..receipts import verify_seal_details
 from ..util import atomic_write_json, sha256_file
 from .junit import compare_junit
 from .oracles import scan_for_leak
@@ -27,10 +29,22 @@ KNOWN_SCORERS = {
 }
 
 
-def _load(path: Path) -> dict[str, Any]:
+def _load(path: Path, *, require_read_only: bool = False) -> dict[str, Any]:
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        descriptor = os.open(path, flags)
+    except OSError as exc:
+        raise WorkflowError(f"cannot read evaluation receipt {path}: {exc}") from exc
+    with os.fdopen(descriptor, "rb") as stream:
+        info = os.fstat(stream.fileno())
+        if not stat.S_ISREG(info.st_mode):
+            raise WorkflowError(f"evaluation receipt must be a regular file: {path}")
+        if require_read_only and info.st_mode & 0o222:
+            raise WorkflowError(f"content-addressed score receipt must be read-only: {path}")
+        data = stream.read()
+    try:
+        value = json.loads(data.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise WorkflowError(f"cannot read evaluation receipt {path}: {exc}") from exc
     if not isinstance(value, dict):
         raise WorkflowError(f"evaluation receipt must be an object: {path}")
@@ -74,8 +88,11 @@ def _write_content_addressed(output_dir: Path, value: dict[str, Any]) -> Path:
     digest = hashlib.sha256(encoded).hexdigest()
     output_dir.mkdir(parents=True, exist_ok=True)
     path = output_dir / f"{value['scorer']['id']}-{digest}.json"
-    if not path.exists():
-        atomic_write_json(path, value)
+    if path.exists() or path.is_symlink():
+        if _load(path, require_read_only=True) != value:
+            raise WorkflowError(f"content-addressed score receipt changed: {path}")
+    else:
+        atomic_write_json(path, value, mode=0o444)
     return path
 
 
@@ -139,7 +156,13 @@ def validate_score_set(
         encoded = json.dumps(score, sort_keys=True, separators=(",", ":")).encode()
         digest = hashlib.sha256(encoded).hexdigest()
         score_path = run_dir / "scores" / f"{identifier}-{digest}.json"
-        if not score_path.is_file() or _load(score_path) != score:
+        try:
+            stored_score = _load(score_path, require_read_only=True)
+        except WorkflowError as exc:
+            raise WorkflowError(
+                f"content-addressed score receipt is missing or changed: {score_path}: {exc}"
+            ) from exc
+        if stored_score != score:
             raise WorkflowError(
                 f"content-addressed score receipt is missing or changed: {score_path}"
             )
@@ -172,8 +195,9 @@ def score_trial(
     oracle_canary: bytes | None = None,
 ) -> dict[str, Any]:
     run_dir = run_dir.resolve()
-    final = verify_seal(run_dir, expected_sha256=expected_final_receipt_sha256)
-    final_hash = sha256_file(run_dir / "final-receipt.json")
+    final, final_hash = verify_seal_details(
+        run_dir, expected_sha256=expected_final_receipt_sha256
+    )
     scores: list[dict[str, Any]] = []
     runtime_path = run_dir / "evaluation-runtime.json"
     runtime = _load(runtime_path) if runtime_path.is_file() else None

@@ -1,66 +1,58 @@
-# agent-workflow Backlog
+# agent-workflow backlog
 
-This is the authoritative register for unfinished repository work. Create,
-prioritize, close, or defer tasks here; detailed design, acceptance criteria,
-and prior-art evidence live in the linked reference documents. Historical
-plans and implementation reports are not parallel task trackers.
+This is the only task register for unfinished work. Design documents explain architecture and constraints; they do not maintain parallel checklists. Completed implementation detail belongs in Git history and [CHANGELOG.md](CHANGELOG.md).
 
-## Operating rules
+## Rules
 
-- Every active task has a stable ID, state, priority, owner type, and exit
-  evidence. New work starts here before it is delegated.
-- A task is `done` only after its stated evidence exists; move it to the
-  completed history rather than leaving completed checkboxes in design docs.
-- `blocked` tasks name the missing external input. They are not implementation
-  authorization until that input is supplied.
-- `decision` items require an explicit maintainer choice; do not turn them
-  into infrastructure by default.
-- Link here from a deep design document instead of copying its instructions.
+- Every active item has a stable ID, priority, state, and observable exit evidence.
+- `done` means the behavior and evidence exist; completed items move to the history summary.
+- `blocked` names the missing external prerequisite.
+- `decision` requires explicit maintainer authorization before implementation.
+- New features require an installed-product acceptance journey or an approved strict future specification.
 
 ## Now
 
 | ID | Priority | State | Work and exit evidence | Reference |
 |---|---|---|---|---|
-| BKL-001 | P0 | ready | Add durable per-consumer control-log cursors and idempotent handling/disposition. Prove restart recovery, duplicate delivery safety, and cursor advancement only after handling succeeds. | [research: Stage A and Priority 2](docs/Durable_Orchestration_Delivery_Benchmarks.md#stage-a--single-host-tmux) |
-| BKL-006 | P0 | ready | Make `agent-workflow` operationally discoverable to agents: add an orchestration skill, connect existing skills to CLI/runbooks/protocols, define native-agent versus durable-run boundaries, and install/test supported discovery roots. | [P0 task breakdown](docs/AGENT_WORKFLOW_SKILL_INTEGRATION_P0.md) |
-| BKL-002 | P0 | ready | Define and implement an executor-specific late-steering adapter for at least one supported executor. It must expose request accepted, delivered/applied, rejected, and terminal states through durable receipts; no terminal keystroke inference. | [messaging delivery boundary](docs/ORCHESTRATOR_MESSAGING_AND_EVALS_PLAN.md#delivery-boundary) |
-| BKL-003 | P1 | ready | Seal bounded raw executor stream evidence before normalization and add provider adapters that explicitly label usage as `delta`, `cumulative`, or `terminal`. Calibrate cached-token, reasoning-token, retry, and cost behavior against each supported executor. | [research: evidence principles and usage envelope](docs/Durable_Orchestration_Delivery_Benchmarks.md#evidence-principles) |
-| BKL-004 | P1 | ready | Run a controlled real-executor deterministic cohort. Pin executor/model/environment/tool policy, record capability calibration, retain raw and sealed evidence, publish an explicit baseline/candidate manifest with exclusions, and run `agent-workflow eval compare`. | [research: cohort protocol](docs/Durable_Orchestration_Delivery_Benchmarks.md#real-executor-cohort-protocol) |
-| BKL-005 | P1 | ready | Extend trial evidence only where a sealed provider receipt proves it: source digests, retry/re-steer/error accounting, provider-billed versus locally estimated cost, currency rules, and incomplete-trial rejection. Add schema and comparison tests for every new field. | [research: immutable trial evidence and cost rules](docs/Durable_Orchestration_Delivery_Benchmarks.md#immutable-trial-evidence-schema) |
+| BKL-001 | P0 | ready | Add durable per-consumer message cursors and idempotent handling dispositions. Prove restart recovery, duplicate safety, and cursor advancement only after successful handling. | [Operations](docs/OPERATIONS.md#durable-messages) |
+| BKL-002 | P0 | ready | Add executor-specific post-launch steering for detached runs. A running executor must consume a steer without restart and emit correlated delivered/applied/rejected evidence; terminal text or process liveness is not proof. | Strict future journey in `tests/future/test_late_steering_journey.py` |
+| REL-001 | P0 | needs-decision | Select and add the project license, matching package metadata, and distribution policy. | [Public release readiness](docs/PUBLIC_RELEASE_READINESS.md#blocking-decisions) |
+| REL-002 | P0 | blocked | Establish a real monitored vulnerability-reporting channel and update `SECURITY.md`. | [Public release readiness](docs/PUBLIC_RELEASE_READINESS.md#blocking-decisions) |
+| REL-003 | P0 | ready | Define the supported Linux/Python/tmux/executor matrix and run live compatibility journeys on representative clean hosts. | [Testing](docs/TESTING.md#live-compatibility) |
+| BKL-004 | P1 | ready | Run a controlled real-executor baseline/candidate cohort with pinned model, executor, environment, tools, cache policy, repetitions, exclusions, and sealed evidence. | [Evidence and evaluation](docs/EVIDENCE_AND_EVALUATION.md#cohort-comparison) |
+| BKL-007 | P1 | ready | Add opt-in installer-owned host routing enforcement only for narrowly defined direct delegation commands, with preserved hooks and an audited break-glass path. | [Operations](docs/OPERATIONS.md#host-routing) |
+| MCP-003 | P1 | ready | Add idempotent pack validation, worktree creation, bounded launch, workflow validate/start/status/resume, progress, ack, and steer tools through existing services. | [MCP server](docs/MCP_SERVER.md#planned-mutation-phase) and [`prompt-packs/mcp-server-next/`](prompt-packs/mcp-server-next/) |
 
-## Blocked on supplied prerequisites
+## Blocked prerequisites
 
 | ID | Priority | State | Missing input and exit evidence | Reference |
 |---|---|---|---|---|
-| BKL-010 | P1 | blocked | Provide a pinned browser-image digest, font manifest, and a verified pre-seal browser/Inspect evidence bridge. Then implement the priority-picker Playwright fixture with DOM, keyboard, ARIA, screenshot, and explicit child-lifecycle telemetry gates. | [blocked-gate report](docs/PHASE_3_BLOCKED_GATE_REPORT.md) |
+| BKL-010 | P1 | blocked | Supply a pinned browser-image digest, font manifest, and verified pre-seal browser/Inspect evidence bridge before implementing the visual priority-picker fixture. | [Evidence and evaluation](docs/EVIDENCE_AND_EVALUATION.md) |
 
-## Decisions required before implementation
+## Decisions
 
-| ID | Priority | State | Decision required | Reference |
-|---|---|---|---|---|
-| DEC-001 | P0 | needs-decision | Set the durable-control service objective: storage location/failure model, ordering scope, producer model, exactly-once external-effect requirements, and maximum no-wakeup steering latency. Record the decision before changing journal topology. | [research: open questions 1-6](docs/Durable_Orchestration_Delivery_Benchmarks.md#open-questions) |
-| DEC-002 | P1 | needs-decision | Set benchmark policy: required first executors, billing meaning, warm-cache role, replicate count/effect threshold, and handling of interrupted or human-assisted trials. | [research: open questions 9-14](docs/Durable_Orchestration_Delivery_Benchmarks.md#open-questions) |
-| DEC-003 | P2 | deferred | Authorize multi-host orchestration only when a concrete cross-host consumer or local wakeup/scan service objective fails. If authorized, choose JetStream first unless an existing Redis dependency is mandated; retain the canonical durable record envelope and idempotency requirements. | [research: Stages B-D and Priorities 6-7](docs/Durable_Orchestration_Delivery_Benchmarks.md#recommended-staged-architecture) |
+| ID | Priority | State | Decision |
+|---|---|---|---|
+| DEC-001 | P0 | needs-decision | Set the durable-control service objective: storage/failure model, ordering scope, producer model, external-effect idempotency, and maximum no-wakeup latency. |
+| DEC-002 | P1 | needs-decision | Set benchmark policy: first executors, billing meaning, cache role, replicate count/effect threshold, and treatment of interrupted or human-assisted trials. |
+| DEC-003 | P2 | deferred | Authorize multi-host orchestration only after a measured single-host failure. Preserve replayable durable records as authority; prefer JetStream unless an existing Redis dependency is mandated. |
+| DEC-MCP-HTTP | P2 | deferred | Authorize any non-stdio MCP transport only through a separate security ADR after local adoption evidence. |
 
 ## Deferred architecture
 
-| ID | Priority | State | Work and trigger | Reference |
-|---|---|---|---|---|
-| ARC-001 | P2 | deferred | Add a transport-neutral advisory notifier interface with tmux and filesystem-watch adapters only after a latency/operability need is measured. Replay plus bounded reconciliation remains mandatory. | [research: Stage B](docs/Durable_Orchestration_Delivery_Benchmarks.md#stage-b--transport-neutral-notifier-interface) |
-| ARC-002 | P3 | deferred | Add a reconstructable SQLite materialized index only when JSONL replay/scan cost is measured as a problem; never make two stores independently authoritative. | [research: Stage C](docs/Durable_Orchestration_Delivery_Benchmarks.md#stage-c--durable-record-indexing) |
-| ARC-003 | P3 | deferred | Add a multi-host broker adapter, shared-artifact record references or canonical envelope replication, and cross-trust signing only after DEC-003. | [research: Stage D and open questions 7-8](docs/Durable_Orchestration_Delivery_Benchmarks.md#stage-d--optional-multi-host-broker) |
+| ID | Priority | Trigger |
+|---|---|---|
+| ARC-001 | P2 | Add a transport-neutral notifier only after measured wakeup latency or operability requires it; replay remains mandatory. |
+| ARC-002 | P3 | Add a reconstructable SQLite index only after JSONL replay/scan cost is measured as a problem. |
+| ARC-003 | P3 | Add a multi-host broker, shared-artifact references, and cross-trust signing only after `DEC-003`. |
+| MCP-004 | P2 | Add policy-gated review/disposition and interrupt/terminate tools after `MCP-003`; force kill remains excluded. |
+| WF-006 | P2 | Consider evidence-derived routing recommendations only after comparable real-executor cohorts exist; no online learning or vector-memory dependency. |
 
 ## Completed history
 
-| ID | Completed in | Result | Evidence |
-|---|---|---|---|
-| HIST-001 | 0.1.5 | Durable fsynced control records, best-effort tmux wakeups, visible same-window panes, usage accumulation, verifier timing, and immutable `eval collect`/`eval compare` landed. | [implementation completion plan](docs/DURABLE_WAKEUP_AND_EVIDENCE_COMPLETION_PLAN.md), commit `6b61cbb` |
-| HIST-002 | 0.1.6 | Global editable installer now installs core Python dependencies and retains its pip-managed launcher. | [installation guide](docs/INSTALLATION.md), commit `306c6f5` |
-
-## Reference map
-
-- [Durable orchestration and benchmark research](docs/Durable_Orchestration_Delivery_Benchmarks.md): prior art, recommended stages, evidence envelope, cost rules, cohort protocol, and open questions.
-- [Messaging and regression-eval status](docs/ORCHESTRATOR_MESSAGING_AND_EVALS_PLAN.md): contracts and implemented/blocked status.
-- [Wakeup and evidence completion plan](docs/DURABLE_WAKEUP_AND_EVIDENCE_COMPLETION_PLAN.md): completed implementation plan and acceptance history.
-- [Visual-eval blocked gate](docs/PHASE_3_BLOCKED_GATE_REPORT.md): exact external prerequisites.
-- [Implementation report](IMPLEMENTATION_REPORT.md): historical archive-overlay review and validation evidence.
+| Release | Summary |
+|---|---|
+| 0.1.x | Worktrees, tmux lifecycle, durable state, prompt packs, evaluation, provider adapters, skills, and packaging foundations. |
+| 0.2.0 | Workflow DAGs, approvals, result binding, aggregate receipts, templates, routing advice, and provider/trial evidence. |
+| 0.2.1 | Authority, replay, locking, symlink, scorer-receipt, provider-accounting, and immutable-input hardening. |
+| 0.2.2 | Acceptance-first installed-product tests, compact invariant matrices, strict future TDD journeys, CI, and public-documentation consolidation. |

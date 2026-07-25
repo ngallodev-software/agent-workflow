@@ -1,0 +1,32 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install system tools
+        run: sudo apt-get update && sudo apt-get install -y tmux zstd
+      - name: Install test dependencies
+        run: python -m pip install 'setuptools>=61' 'pytest>=8,<10' 'jsonschema>=4.18,<5'
+      - name: Acceptance and invariant suite
+        run: python -m pytest
+      - name: Compile and release assets
+        run: |
+          python -m compileall -q src
+          bash -n install.sh uninstall.sh scripts/*.sh
+          python scripts/audit-release-assets.py

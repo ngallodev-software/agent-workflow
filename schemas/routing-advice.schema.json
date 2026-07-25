@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/routing-advice/v1",
+  "type": "object",
+  "required": ["schema", "recommendation", "explanation_codes", "enforced_selection", "policy_disagreements"],
+  "properties": {
+    "schema": {"const": "agent-workflow/routing-advice/v1"},
+    "recommendation": {"$ref": "#/$defs/selection"},
+    "enforced_selection": {"$ref": "#/$defs/selection"},
+    "explanation_codes": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "policy_disagreements": {"type": "array", "items": {"enum": ["agent_class", "executor", "model", "interactive"]}, "uniqueItems": true}
+  },
+  "$defs": {
+    "selection": {
+      "type": "object",
+      "required": ["agent_class", "executor", "model", "interactive"],
+      "properties": {
+        "agent_class": {"type": "string", "minLength": 1},
+        "executor": {"type": "string", "minLength": 1},
+        "model": {"type": "string", "minLength": 1},
+        "interactive": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -2,40 +2,262 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "agent-workflow/run-provenance/v1",
   "type": "object",
-  "required": ["schema", "session_id", "executor", "argv", "prompt_sha256", "source_revision", "environment", "started_at"],
+  "required": [
+    "schema",
+    "session_id",
+    "executor",
+    "argv",
+    "prompt_sha256",
+    "source_revision",
+    "environment",
+    "started_at"
+  ],
   "properties": {
-    "schema": {"const": "agent-workflow/run-provenance/v1"},
-    "session_id": {"type": "string"},
-    "executor": {"type": ["string", "null"]},
-    "argv": {"type": "array", "minItems": 1, "items": {"type": "string"}},
-    "stream_format": {"enum": ["text", "codex-jsonl", "claude-stream-json"]},
-    "executor_version": {"type": ["string", "null"]},
-    "model": {"type": ["string", "null"]},
-    "prompt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-    "launch_prompt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-    "config_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
-    "pack_manifest_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
-    "source_revision": {"type": ["string", "null"]},
-    "worktree": {"type": "string"},
-    "environment": {"type": "object"},
-    "budgets": {"type": "object"},
-    "job_binding": {
-      "type": ["object", "null"],
+    "schema": {
+      "const": "agent-workflow/run-provenance/v1"
+    },
+    "session_id": {
+      "type": "string"
+    },
+    "executor": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "agent_name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "agent_class": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "argv": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "stream_format": {
+      "enum": [
+        "text",
+        "codex-jsonl",
+        "claude-stream-json"
+      ]
+    },
+    "executor_version": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "model": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "model_policy": {
+      "type": "object",
+      "required": [
+        "no_go_authorized",
+        "authorization_source"
+      ],
       "properties": {
-        "path": {"type": "string"},
-        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-        "job_id": {"type": "string"}
+        "no_go_authorized": {
+          "type": "boolean"
+        },
+        "authorization_source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       },
-      "required": ["path", "sha256", "job_id"],
       "additionalProperties": false
     },
-    "external_snapshots": {"type": ["object", "null"]},
-    "evaluation_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
-    "usage": {"type": ["object", "null"]},
-    "started_at": {"type": "string"},
-    "first_output_at": {"type": ["string", "null"]},
-    "finished_at": {"type": ["string", "null"]},
-    "exit_code": {"type": ["integer", "null"]}
+    "prompt_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "launch_prompt_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "config_sha256": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "pack_manifest_sha256": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "source_revision": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "worktree": {
+      "type": "string"
+    },
+    "environment": {
+      "type": "object"
+    },
+    "retry_of_run_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+    },
+    "budgets": {
+      "type": "object"
+    },
+    "job_binding": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "job_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "job_id"
+      ],
+      "additionalProperties": false
+    },
+    "evaluation_sha256": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "usage": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "started_at": {
+      "type": "string"
+    },
+    "first_output_at": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "finished_at": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "exit_code": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "workflow": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "workflow_id": {
+          "type": "string"
+        },
+        "node_id": {
+          "type": "string"
+        },
+        "attempt": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "inputs_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "inputs_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "routing": {
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "workflow_id",
+        "node_id",
+        "attempt",
+        "inputs_path",
+        "inputs_sha256",
+        "routing"
+      ],
+      "additionalProperties": false
+    },
+    "provider_evidence": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "path",
+        "sha256",
+        "usage_complete",
+        "capture_complete"
+      ],
+      "properties": {
+        "path": {
+          "const": "provider-evidence.json"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "usage_complete": {
+          "type": "boolean"
+        },
+        "capture_complete": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    }
   },
   "additionalProperties": false
 }

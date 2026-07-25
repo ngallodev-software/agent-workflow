@@ -1,0 +1,16 @@
+erDiagram
+  PROMPT_PACK ||--o{ PHASE : contains
+  PHASE ||--o{ TICKET : contains
+  TICKET ||--o{ SESSION_RUN : executes_as
+  SESSION_RUN o|--o| SESSION_RUN : retries
+  SESSION_RUN ||--|| RUN_PROVENANCE : records
+  SESSION_RUN ||--o{ EXECUTOR_EVENT : emits
+  SESSION_RUN ||--o{ CONTROL_MESSAGE : exchanges
+  SESSION_RUN ||--|| FINAL_RECEIPT : seals
+  FINAL_RECEIPT ||--o{ LIFECYCLE_RECEIPT : reviewed_by
+  WORKFLOW ||--|| WORKFLOW_SNAPSHOT : defined_by
+  WORKFLOW ||--o{ WORKFLOW_NODE : contains
+  WORKFLOW ||--o{ WORKFLOW_EVENT : records
+  WORKFLOW_NODE o|--o| SESSION_RUN : binds
+  WORKFLOW ||--o| WORKFLOW_RECEIPT : seals
+  FINAL_RECEIPT ||--o{ TRIAL_EVIDENCE : supports

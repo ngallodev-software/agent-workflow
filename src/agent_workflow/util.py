@@ -45,21 +45,42 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def atomic_write_json(path: Path, data: dict[str, Any]) -> None:
+def fsync_directory(path: Path) -> None:
+    """Persist directory-entry changes on POSIX filesystems."""
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    descriptor = os.open(path, flags)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def atomic_write_bytes(
+    path: Path, data: bytes, *, mode: int | None = None
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as stream:
-            json.dump(data, stream, indent=2, sort_keys=True)
-            stream.write("\n")
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(data)
             stream.flush()
+            if mode is not None:
+                os.fchmod(stream.fileno(), mode)
             os.fsync(stream.fileno())
         os.replace(tmp, path)
+        fsync_directory(path.parent)
     finally:
         try:
             os.unlink(tmp)
         except FileNotFoundError:
             pass
+
+
+def atomic_write_json(
+    path: Path, data: dict[str, Any], *, mode: int | None = None
+) -> None:
+    encoded = (json.dumps(data, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    atomic_write_bytes(path, encoded, mode=mode)
 
 
 def read_json(path: Path) -> dict[str, Any]:

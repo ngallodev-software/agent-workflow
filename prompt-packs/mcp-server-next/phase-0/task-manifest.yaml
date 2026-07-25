@@ -1,0 +1,18 @@
+phase: "0"
+name: "workflow-aware-safe-mutation"
+mandatory_order: ["MCP3-00", "MCP3-01", "MCP3-02"]
+tasks:
+  - id: "MCP3-00"
+    tier: B
+    session: "mcp-server-next-baseline"
+    prompt: "tickets/MCP3-00-workflow-baseline.md"
+  - id: "MCP3-01"
+    tier: A
+    session: "mcp-server-next-safe-mutation"
+    prompt: "tickets/MCP3-01-workflow-aware-tools.md"
+    dependencies: ["MCP3-00"]
+  - id: "MCP3-02"
+    tier: A
+    session: "mcp-server-next-review"
+    prompt: "tickets/MCP3-02-independent-review.md"
+    dependencies: ["MCP3-01"]
