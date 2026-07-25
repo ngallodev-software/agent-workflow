@@ -205,3 +205,27 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 python3 -m compileall -q src
 ./scripts/release-check.sh
 ```
+
+## Local Jenkins
+
+The repository includes a local-only Jenkins pipeline in [`Jenkinsfile`](Jenkinsfile).
+It is triggered by an authenticated local Jenkins URL, runs the release checks,
+builds a wheel, and installs it into `.jenkins-local-venv`. It uses the local
+`master` branch only and does not use polling, webhooks, or remote deployment.
+
+Configure the installed job idempotently, then reload Jenkins:
+
+```sh
+JENKINS_HOME=/var/lib/jenkins JENKINS_URL=http://127.0.0.1:8080 \
+  ./scripts/jenkins-local-job.sh configure
+./scripts/jenkins-local-job.sh inspect
+```
+
+After a merge to `master`, notify Jenkins with the operator's API token:
+
+```sh
+curl -fsS -X POST -u "$JENKINS_USER_ID:$JENKINS_API_TOKEN" \
+  "$JENKINS_URL/job/agent-workflow-local/build"
+```
+
+The token is read from the operator environment and is never committed.
