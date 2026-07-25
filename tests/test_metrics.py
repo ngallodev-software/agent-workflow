@@ -18,8 +18,13 @@ class MetricsTests(unittest.TestCase):
             {
                 "input_tokens": 10,
                 "cached_input_tokens": None,
+                "cache_write_input_tokens": None,
                 "output_tokens": 3,
+                "reasoning_output_tokens": None,
                 "provider_total_tokens": None,
+                "provider_billed_cost": None,
+                "local_estimated_cost": None,
+                "price_catalog_id": None,
                 "cost": None,
                 "currency": None,
             },
@@ -43,6 +48,26 @@ class MetricsTests(unittest.TestCase):
             stages = {item["stage"]: item for item in metrics["stages"]}
             self.assertEqual(1.0, stages["verification"]["elapsed_seconds"])
             self.assertEqual(3.0, stages["total"]["elapsed_seconds"])
+
+    def test_retry_lineage_is_counted_from_sealed_provenance(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = Path(tmp) / "run"
+            write_run_contracts(run, session_id="metrics-retry")
+            provenance = json.loads((run / "run-provenance.json").read_text())
+            provenance["retry_of_run_id"] = "metrics-original"
+            provenance["workflow"] = {
+                "workflow_id": "wf",
+                "node_id": "node",
+                "attempt": 3,
+                "inputs_path": None,
+                "inputs_sha256": None,
+                "routing": None,
+            }
+            atomic_write_json(run / "run-provenance.json", provenance)
+            metrics = write_execution_evidence(run, elapsed_seconds=1.0)
+            stages = {item["stage"]: item for item in metrics["stages"]}
+            self.assertEqual(stages["orchestrator"]["retry_count"], 2)
+            self.assertEqual(stages["total"]["retry_count"], 2)
 
     def test_metrics_include_required_stages_and_control_events_are_sealed_read_only(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -20,7 +20,7 @@ No production writes. Research uses primary sources. Do not silently reopen
 approved decisions; record any challenge as a decision delta with evidence.
 
 Root README, `BACKLOG.md`, `docs/MCP_SERVER_DECISION.md`, MCP source/tests,
-official SDK snapshot, and `references/`.
+official SDK dependency record, and `references/`.
 
 Evidence contains the exact source baseline, research matrix, threat review,
 decision deltas, dependency graph, bounded tickets, and revised prompt pack.

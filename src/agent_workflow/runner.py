@@ -19,8 +19,9 @@ from .diagnostics import classify_failure
 from .eval.commands import collect_commands, specs_from_data
 from .eval.scope import ScopePolicy, collect_scope
 from .executors import accumulate_usage, event_text, parse_event, usage_update
-from .receipts import make_read_only, seal_run, update_provenance
+from .receipts import final_receipt_sha256, make_read_only, seal_run, update_provenance
 from .metrics import write_execution_evidence
+from .provider_evidence import MAX_PROVIDER_EVENT_BYTES, write_provider_evidence
 from .util import atomic_write_json, sha256_file, utc_now
 
 
@@ -352,6 +353,8 @@ def execute(
     heartbeat_path = run_dir / "heartbeat.json"
     lock = threading.Lock()
     usage: dict[str, Any] | None = None
+    provider_event_bytes = 0
+    provider_capture_exceeded = False
     first_output_at: str | None = None
     last_normalized_text: str | None = None
     pump_errors: list[str] = []
@@ -416,9 +419,22 @@ def execute(
             "updated_at": finished_at,
         }
         atomic_write_json(run_dir / "final-status.json", final_status)
+        provider = write_provider_evidence(
+            run_dir, stream_format=stream_format, executor=provenance_initial.get("executor")
+        )
+        update_provenance(
+            run_dir,
+            provider_evidence={
+                "path": "provider-evidence.json",
+                "sha256": sha256_file(run_dir / "provider-evidence.json"),
+                "usage_complete": provider["usage_complete"],
+                "capture_complete": provider["capture_complete"],
+            },
+            usage=provider["aggregate"],
+        )
         write_execution_evidence(run_dir, elapsed_seconds=time.monotonic() - wall_started)
         receipt = seal_run(run_dir, session_id=str(current["session_id"]))
-        receipt_hash = sha256_file(run_dir / "final-receipt.json")
+        receipt_hash = final_receipt_sha256(run_dir)
         _update_status(
             status_path,
             **final_status,
@@ -446,7 +462,8 @@ def execute(
     signal.signal(signal.SIGTERM, forward_signal)
 
     def stdout_pump() -> None:
-        nonlocal usage, first_output_at, last_normalized_text
+        nonlocal usage, provider_event_bytes, provider_capture_exceeded
+        nonlocal first_output_at, last_normalized_text
         try:
             with output_path.open("ab") as output, events_path.open("ab") as events:
                 for raw in iter(process.stdout.readline, b""):
@@ -457,7 +474,11 @@ def execute(
                             _write_bytes(output, raw)
                             _mirror_terminal(sys.stdout.buffer, raw)
                     else:
-                        _write_bytes(events, raw)
+                        if provider_event_bytes + len(raw) <= MAX_PROVIDER_EVENT_BYTES:
+                            _write_bytes(events, raw)
+                            provider_event_bytes += len(raw)
+                        else:
+                            provider_capture_exceeded = True
                         line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
                         event = parse_event(line, stream_format)
                         if event is None:
@@ -586,6 +607,21 @@ def execute(
             pump_errors.append(f"collectors: {exc}")
             return_code = return_code or 1
 
+    provider = write_provider_evidence(
+        run_dir,
+        capture_exceeded=provider_capture_exceeded,
+        stream_format=stream_format,
+        executor=(
+            str(provenance_initial["executor"])
+            if provenance_initial.get("executor")
+            else None
+        ),
+    )
+    usage = provider["aggregate"]
+    if provider_capture_exceeded:
+        pump_errors.append("provider evidence capture limit exceeded")
+        return_code = return_code or 1
+
     terminal_status = (
         "completed"
         if return_code == 0
@@ -605,7 +641,11 @@ def execute(
             if isinstance(used, (int, float)) and isinstance(limit, (int, float)):
                 if used > limit:
                     budget_exceeded.append(f"{usage_key}:{used}>{limit}")
-        cost = usage.get("cost", usage.get("total_cost"))
+        cost = usage.get("provider_billed_cost")
+        if cost is None:
+            cost = usage.get("local_estimated_cost")
+        if cost is None:
+            cost = usage.get("cost", usage.get("total_cost"))
         max_cost = budgets.get("max_cost")
         if isinstance(cost, (int, float)) and isinstance(max_cost, (int, float)):
             if cost > max_cost:
@@ -637,6 +677,12 @@ def execute(
         finished_at=finished_at,
         exit_code=return_code,
         usage=usage,
+        provider_evidence={
+            "path": "provider-evidence.json",
+            "sha256": sha256_file(run_dir / "provider-evidence.json"),
+            "usage_complete": provider["usage_complete"],
+            "capture_complete": provider["capture_complete"],
+        },
     )
     current = _read_status(status_path)
     final_status = {
@@ -665,7 +711,7 @@ def execute(
     write_execution_evidence(run_dir, elapsed_seconds=wall_seconds)
     try:
         receipt = seal_run(run_dir, session_id=str(current["session_id"]))
-        receipt_hash = sha256_file(run_dir / "final-receipt.json")
+        receipt_hash = final_receipt_sha256(run_dir)
         _update_status(
             status_path,
             **{

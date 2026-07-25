@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import fcntl
+import hashlib
 import json
 import os
 import platform
@@ -38,12 +39,14 @@ from .state import (
     write_status,
 )
 from .util import (
+    atomic_write_bytes,
     atomic_write_json,
     expand_path,
     sha256_file,
     utc_now,
     validate_id,
 )
+
 
 def _ignore_delegations(workdir: Path) -> None:
     _add_git_exclude(workdir, ".delegations/")
@@ -209,8 +212,8 @@ def _write_job_binding(state_dir: Path, job: ValidatedNativeJob, *, session_id: 
     stored = state_dir / "jobs" / "native-job.json"
     stored.parent.mkdir(parents=True, exist_ok=True)
     raw = job.job_path.read_bytes()
-    stored.write_bytes(raw)
-    source_sha256 = sha256_file(job.job_path)
+    source_sha256 = hashlib.sha256(raw).hexdigest()
+    atomic_write_bytes(stored, raw, mode=0o444)
     stored_sha256 = sha256_file(stored)
     if source_sha256 != stored_sha256:
         raise WorkflowError("native job changed while its binding was being created")
@@ -250,9 +253,7 @@ def _write_job_binding(state_dir: Path, job: ValidatedNativeJob, *, session_id: 
         },
     }
     receipt_path = state_dir / "job-binding.json"
-    atomic_write_json(receipt_path, receipt)
-    stored.chmod(0o444)
-    receipt_path.chmod(0o444)
+    atomic_write_json(receipt_path, receipt, mode=0o444)
     return receipt
 
 
@@ -488,6 +489,7 @@ def launch(
     tier: str | None = None,
     job_path: Path | None = None,
     allow_active_agent_name: bool = False,
+    workflow_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     validate_id(session_id, "session ID")
     if ticket_id:
@@ -732,6 +734,7 @@ def launch(
                 "platform": platform.platform(),
                 "implementation": sys.implementation.name,
             },
+            retry_of_run_id=retry_of,
             job_binding=(
                 {
                     "path": str(state_dir / "job-binding.json"),
@@ -743,6 +746,26 @@ def launch(
             ),
         ),
     )
+    if workflow_context is not None:
+        from .contracts import validate_instance
+        validate_instance(
+            workflow_context,
+            "agent-workflow/workflow-input-bindings/v1",
+            artifact="workflow launch inputs",
+        )
+        workflow_inputs_path = state_dir / "workflow-inputs.json"
+        atomic_write_json(workflow_inputs_path, workflow_context, mode=0o444)
+        update_provenance(
+            state_dir,
+            workflow={
+                "workflow_id": workflow_context["workflow_id"],
+                "node_id": workflow_context["node_id"],
+                "attempt": workflow_context["attempt"],
+                "inputs_path": str(workflow_inputs_path),
+                "inputs_sha256": sha256_file(workflow_inputs_path),
+                "routing": None,
+            },
+        )
     if evaluation_path is not None or native_job is not None:
         evaluation = None
         evaluation_data: dict[str, Any] = {}

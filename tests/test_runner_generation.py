@@ -308,9 +308,10 @@ class RunnerExecutionTests(unittest.TestCase):
             provenance_path.write_text(json.dumps(provenance), encoding="utf-8")
             event = json.dumps(
                 {
+                    "type": "turn.completed",
                     "usage": {
                         "output_tokens": 2,
-                        "cost": 0.2,
+                        "provider_billed_cost": 0.2,
                         "currency": "USD",
                     }
                 }

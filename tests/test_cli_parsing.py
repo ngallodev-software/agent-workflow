@@ -144,3 +144,49 @@ class CliParsingTests(unittest.TestCase):
         )
         self.assertEqual((steer.command, steer.actor, steer.content), ("steer", "parent", "inspect tests"))
         self.assertEqual((watch.command, watch.after, watch.timeout), ("watch", 7, 1.5))
+
+    def test_workflow_commands_parse_paths(self):
+        validate = _parse_args(build_parser(), ["workflow", "validate", "snapshot.json"])
+        start = _parse_args(build_parser(), ["workflow", "start", "run", "snapshot.json"])
+        status = _parse_args(build_parser(), ["workflow", "status", "run", "snapshot.json"])
+        resume = _parse_args(build_parser(), ["workflow", "resume", "run", "snapshot.json"])
+        self.assertEqual((validate.command, validate.workflow_command), ("workflow", "validate"))
+        self.assertEqual(str(start.run_dir), "run")
+        self.assertEqual(str(status.run_dir), "run")
+        self.assertEqual(str(resume.snapshot), "snapshot.json")
+
+    def test_workflow_validate_uses_default_service_root(self):
+        result = {
+            "schema": "agent-workflow/workflow-node-result/v1",
+            "workflow_id": "wf-1",
+            "action": "validate",
+            "result": {"snapshot_sha256": "abc", "node_count": 1},
+        }
+        with (
+            patch("agent_workflow.cli.WorkflowService.validate", return_value=result) as validate,
+            patch("agent_workflow.cli._print_json") as print_json,
+            patch("agent_workflow.cli._print_mapping") as print_mapping,
+        ):
+            self.assertEqual(main(["workflow", "validate", "snapshot.json", "--json"]), 0)
+        validate.assert_called_once()
+        self.assertEqual(str(validate.call_args.args[0]), "snapshot.json")
+        print_json.assert_called_once_with(result)
+        print_mapping.assert_not_called()
+
+    def test_workflow_validate_human_output_uses_default_service_root(self):
+        result = {
+            "schema": "agent-workflow/workflow-node-result/v1",
+            "workflow_id": "wf-1",
+            "action": "validate",
+            "result": {"snapshot_sha256": "abc", "node_count": 1},
+        }
+        with (
+            patch("agent_workflow.cli.WorkflowService.validate", return_value=result) as validate,
+            patch("agent_workflow.cli._print_json") as print_json,
+            patch("agent_workflow.cli._print_mapping") as print_mapping,
+        ):
+            self.assertEqual(main(["workflow", "validate", "snapshot.json"]), 0)
+        validate.assert_called_once()
+        self.assertEqual(str(validate.call_args.args[0]), "snapshot.json")
+        print_mapping.assert_called_once_with(result)
+        print_json.assert_not_called()

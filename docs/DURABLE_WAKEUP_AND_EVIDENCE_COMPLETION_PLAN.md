@@ -4,18 +4,18 @@
 work is tracked only in [BACKLOG.md](../BACKLOG.md); this document preserves
 the implementation contract and acceptance history.
 
-## Purpose
+## Historical purpose and current outcome
 
-Complete the two remaining foundations for observable, restart-safe orchestration:
+This document preserves the preimplementation contract that completed two formerly missing foundations for observable, restart-safe orchestration:
 
 1. accelerate durable control-record delivery when parent and child share a tmux server, without making tmux authoritative; and
 2. turn sealed execution metrics into comparable, provenance-backed token, cost, and timing evidence.
 
-This plan deliberately separates implementation that is deterministic and safe to ship now from provider-specific and real-executor work that needs a controlled cohort.
+The deterministic implementation is complete: tmux wakeups remain best-effort accelerators over replayable JSONL, bounded raw provider streams are sealed before normalization, provider adapters preserve explicit usage modes, and trial evidence can be persisted and compared. BKL-003 and BKL-005 are complete. The real-executor cohort remains the separately controlled BKL-004 backlog item.
 
-## Starting point
+## Historical starting point
 
-The existing append-only `messages.jsonl` protocol is authoritative. Records are locked, flushed, and fsynced; replay is restart-safe; steering, progress, and acknowledgement records already exist. `watch` currently obtains responsiveness by replay polling. Sealed execution metrics already contain nullable normalized usage fields, elapsed time, and command-collection files, but the runner preserves only the latest executor usage event and the evaluation CLI cannot yet persist or compare a sealed-trial cohort.
+At the time this plan was written, the append-only `messages.jsonl` protocol was already authoritative and restart-safe, while `watch` relied only on replay polling. Execution metrics contained nullable normalized usage fields and elapsed time, but the runner retained only the latest executor usage event and the evaluation CLI could not persist or compare a sealed-trial cohort. This paragraph is historical context, not the current implementation state.
 
 ## Non-negotiable contracts
 

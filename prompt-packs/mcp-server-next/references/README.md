@@ -9,7 +9,7 @@ Required source references in the companion archive:
   and durable-record authorities;
 - `schemas/`, `scripts/audit-release-assets.py`, and `MANIFEST.sha256` — release
   and wire-format gates;
-- `src/agent_workflow/mcp/sdk/` — pinned official SDK source reference only;
+- `src/agent_workflow/mcp/SDK_DEPENDENCY.md` — pinned SDK dependency and research provenance;
 - `docs/GLOBAL_AGENT_ROUTING.md` and `skills/agent-workflow-orchestrator/` —
   routing boundary and operational use.
 

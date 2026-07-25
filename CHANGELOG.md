@@ -3,28 +3,46 @@
 
 ## Unreleased
 
+No unreleased changes.
+
+## 0.2.1 — 2026-07-24
+
+- Reconcile running workflow nodes from verified child provenance and sealed terminal evidence; count existing running nodes against parallelism and require a durable child footprint before recording `running`.
+- Make recoverable retries replay-valid and reopen dependency-failed descendants when a prerequisite retry begins or succeeds.
+- Store canonical workflow snapshots and aggregate receipts read-only in the atomic rename, reject writable/symlink substitutions, validate journals before append, lock journal reads, fsync directory entries, and refresh workflow projections after scheduling and status reads.
+- Reject duplicate dependency/session identifiers in workflow snapshots.
+- Validate trial score sets against content-addressed scorer receipts and the sealed final receipt instead of trusting a mutable verdict file.
+- Harden provider evidence against symlinked or changing raw streams, empty/conflicting/non-finite terminal usage, nonmonotonic cumulative totals, incomplete cost metadata, and ambiguous duplicate deltas without provider event identity.
+- Reject symlinked lifecycle receipt roots, fsync lifecycle directory entries, serialize final-run seal creation/verification, and read/hash final receipts and artifacts from stable non-symlink descriptors.
+- Return final-receipt digests from the same lock-scoped descriptor used for verification; read and hash aggregate workflow receipts from one descriptor under the workflow lock.
+- Install content-addressed scorer receipts read-only, reject symlink/writable substitutions, and hash the exact score-set bytes validated for lifecycle review.
+- Read authority-bearing sealed JSON through beneath-root no-symlink descriptors and recheck receipt size/hash before lifecycle, approval, scheduling, binding, workflow-receipt, or trial decisions.
+- Cover required and optional sealed trees in the read-only pass; reject symlink chmod targets and intermediate symlink components during seal creation and verification.
+- Write parent and child workflow input snapshots, native-job source snapshots, and job-binding receipts read-only before their atomic rename and before executor launch.
+- Add focused regression coverage and supersede the original 0.2.0 critical-review conclusion.
+
+## 0.2.0 — 2026-07-24
+
+- Add restart-safe workflow graphs with receipt-backed approval gates, bounded
+  JSON Pointer result binding, aggregate workflow receipts, deterministic graph
+  templates, and explainable routing advice.
+- Add bounded sealed provider stream evidence with explicit delta, cumulative,
+  and terminal usage semantics; preserve cached, cache-write, reasoning, billed,
+  estimated, currency, retry, error, and steering evidence without double counting.
+- Extend immutable trial evidence and cohort comparison validity checks.
+- Harden final and lifecycle receipt verification against mutable status
+  projections, symlinks, writable receipts, substitutions, omissions, and stale
+  workflow snapshots.
+- Complete the workflow integration gate, update CLI/help/skills/man pages, add
+  repository and MCP architecture chart packs, and publish the MCP mutation
+  implementation proposal and threat model.
+- Remove the unused vendored MCP Python SDK source snapshot; retain only the
+  pinned optional dependency and public-API integration.
 - Track bounded context and assignment history for interactive agents with
-  explicit completion, same-worktree ranking, stale-idle policy, and
-  exact-lineage-only automatic reuse.
-- Add pending reassignment and correlated acknowledgement states without
-  inferring task completion or delivery from terminal text.
-- Enforce globally unique active agent names across pane and detached modes.
-- Configure interactive capacity as width x vertical slots; default to two
-  right-side columns with three agents each, creating columns horizontally
-  before balancing vertical splits.
-- Prompt at the interactive pane cap to close explicitly idle panes, launch
-  detached/non-interactive, or cancel; non-TTY callers fail closed unless an
-  action is supplied.
-- Apply the workflow-foundations sequencing addendum: cross-phase dependency
-  DAGs, schema-validated task results, and MCP mutations blocked behind WF-22.
-
-- Correct the canonical backlog so every workflow prompt-pack ticket is a stable task with explicit dependencies and direct ticket links.
-- Sequence all remaining mutating MCP work after the complete workflow foundation, while preserving the completed read-only stdio adapter.
-- Extend the MCP continuation prompt pack with a workflow-aware safe-mutation phase that reuses authoritative CLI/domain services.
-
-- Validate prompt-pack dependencies as a cross-phase directed acyclic graph.
-- Add optional schema-validated structured task results with bounded handoff collection and sealed receipts.
-- Add the scoped workflow-foundations plan, backlog, and remaining-work prompt pack.
+  explicit completion, same-worktree ranking, stale-idle policy, exact-lineage
+  automatic reuse, globally unique active names, and configurable pane capacity.
+- Validate prompt-pack dependencies as a cross-phase DAG and collect structured,
+  schema-validated task results into sealed run evidence.
 
 ## 0.1.8
 

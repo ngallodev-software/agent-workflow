@@ -5,8 +5,8 @@
 Maintain the optional local-stdio MCP adapter without creating a second
 orchestrator. Phases 0 through 2 cover the completed research, shared read
 services, and bounded read-only server. Phase 3 is the remaining safe mutation
-surface and is intentionally blocked until the complete workflow foundation
-prompt pack finishes through canonical backlog task `WF-22`.
+surface. The workflow foundation is complete through canonical backlog task
+`WF-22`, so Phase 3 is now ready for a separately authorized execution.
 
 The workflow foundation is implemented first because MCP must wrap stable
 workflow, routing, lifecycle, approval, and receipt services. It must not invent
@@ -15,8 +15,10 @@ parallel state machines or reinterpret workflow files itself.
 ## Source baseline
 
 The companion source archive is a filtered snapshot of the `agent-workflow`
-checkout prepared 2026-07-24 at release 0.1.8. Current extracted source remains
-authoritative when it differs from this pack.
+checkout prepared from the pre-0.2.0 implementation. Current extracted source,
+release 0.2.1, remains authoritative when it differs from historical pack text.
+The 0.2.1 hardening pass corrected workflow replay, durable child authority,
+projection recovery, evidence validation, and concurrent sealing boundaries.
 
 ## Phase map
 
@@ -25,7 +27,7 @@ authoritative when it differs from this pack.
 | 0 | Research refresh, architecture review, and executable planning | completed | Accepted source baseline and primary-source evidence |
 | 1 | Reusable domain seams and typed read contracts | completed | Phase 0 accepted |
 | 2 | Local stdio read-only resource/server implementation and conformance | completed | Phase 1 accepted |
-| 3 | Workflow-aware safe mutation adapter | blocked | `workflow-foundations-next` through `WF-22`, then Phase 2 accepted |
+| 3 | Workflow-aware safe mutation adapter | ready | WF-22 and Phase 2 accepted; execute only as a separate MCP-003 scope |
 
 ## Universal delegation rules
 
@@ -48,7 +50,7 @@ authoritative when it differs from this pack.
 
 ## How to execute remaining work
 
-Do not execute Phase 3 until `WF-22` is marked done in `BACKLOG.md`. Then start
+`WF-22` is done. Start
 with `phase-3/tickets/P3-00-workflow-baseline.md`, which must prove every MCP
 operation maps to a stable shared service. Validate with
 `agent-workflow pack validate` and run focused MCP/workflow tests before any

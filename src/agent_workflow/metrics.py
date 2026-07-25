@@ -37,14 +37,26 @@ def normalize_usage(usage: object) -> dict[str, Any]:
     )
     output = _number(source.get("output_tokens", source.get("completion_tokens")))
     provider_total = _number(source.get("total_tokens"))
-    cost = _number(source.get("cost", source.get("total_cost")))
+    cache_write = _number(
+        source.get("cache_write_input_tokens", source.get("cache_creation_input_tokens"))
+    )
+    reasoning = _number(source.get("reasoning_output_tokens", source.get("reasoning_tokens")))
+    provider_cost = _number(source.get("provider_billed_cost"))
+    local_cost = _number(source.get("local_estimated_cost"))
+    legacy_cost = _number(source.get("cost", source.get("total_cost")))
     currency = source.get("currency") if isinstance(source.get("currency"), str) else None
+    catalog = source.get("price_catalog_id") if isinstance(source.get("price_catalog_id"), str) else None
     return {
         "input_tokens": input_tokens,
         "cached_input_tokens": cached,
+        "cache_write_input_tokens": cache_write,
         "output_tokens": output,
+        "reasoning_output_tokens": reasoning,
         "provider_total_tokens": provider_total,
-        "cost": cost,
+        "provider_billed_cost": provider_cost,
+        "local_estimated_cost": local_cost,
+        "price_catalog_id": catalog,
+        "cost": legacy_cost,
         "currency": currency,
     }
 
@@ -123,10 +135,22 @@ def build_execution_metrics(run_dir: Path, *, elapsed_seconds: float | None = No
         errors.append({"category": status.get("failure_category"), "detail": None})
 
     orchestrator = _empty_stage("orchestrator")
+    workflow = provenance.get("workflow")
+    workflow_attempt = (
+        workflow.get("attempt") if isinstance(workflow, dict) else None
+    )
+    retry_count = (
+        max(0, workflow_attempt - 1)
+        if isinstance(workflow_attempt, int) and not isinstance(workflow_attempt, bool)
+        else 1
+        if provenance.get("retry_of_run_id")
+        else 0
+    )
     orchestrator.update({
         **normalize_usage(provenance.get("usage")),
         "elapsed_seconds": round(elapsed_seconds, 6) if elapsed_seconds is not None else _number(status.get("wall_seconds")),
         "first_output_latency_seconds": _latency_seconds(provenance.get("started_at"), provenance.get("first_output_at")),
+        "retry_count": retry_count,
         "errors": errors,
         "steer_count": len(steer_ids),
         "steer_acknowledged_count": len(acked),

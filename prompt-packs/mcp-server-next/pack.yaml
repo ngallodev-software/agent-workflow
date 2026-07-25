@@ -2,7 +2,7 @@ schema: agent-workflow/pack/v1
 pack_id: "mcp-server-next"
 workflow:
   name: agent-workflow
-  minimum_version: "0.1.8"
+  minimum_version: "0.2.1"
   terminal_backend: tmux
   requires:
     - isolated_worktree

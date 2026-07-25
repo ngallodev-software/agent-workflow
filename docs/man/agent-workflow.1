@@ -1,0 +1,65 @@
+.TH AGENT-WORKFLOW 1 "2026-07-24" "agent-workflow 0.2.1" "User Commands"
+.SH NAME
+agent-workflow \- terminal-first delegated execution, workflow, evidence, and review CLI
+.SH SYNOPSIS
+.B agent-workflow
+.RI [ --config " PATH" ]
+.RI [ --json ]
+.I COMMAND
+.RI [ ARGS ]
+.SH DESCRIPTION
+agent-workflow creates isolated Git worktrees, launches configured coding executors through tmux, stores durable run evidence, supports restart-safe workflow graphs, and seals review and evaluation receipts. Durable JSON/JSONL records and read-only receipts are authoritative; tmux capture and logs are observational.
+.SH COMMAND FAMILIES
+.TP
+.B doctor, config, completion
+Environment/configuration inspection and generated shell completion.
+.TP
+.B worktree
+Create, list, and remove isolated ticket worktrees.
+.TP
+.B launch, list, status, attach, tail, restart
+Launch and observe delegated sessions.
+.TP
+.B steer, progress, ack, watch
+Append and replay durable control/progress records. A steer is pending until correlated evidence proves acknowledgement/application.
+.TP
+.B interrupt, terminate, kill
+Process controls that preserve run evidence. Kill is immediate and should be reserved for explicit operator use.
+.TP
+.B agent
+Inspect bounded interactive-agent context and perform same-worktree reuse.
+.TP
+.B workflow
+Validate, template, start, replay, resume, seal, and verify workflow graphs. See agent-workflow-workflow(1).
+.TP
+.B review, accept, reject
+Append immutable lifecycle receipts. Acceptance requires exact revision and valid evidence.
+.TP
+.B eval, ledger
+Validate/score/report evaluation runs, collect immutable trials, compare cohorts, and render pack ledgers.
+.TP
+.B pack
+Scaffold, validate, checksum, and deterministically archive prompt packs.
+.SH GLOBAL OPTIONS
+.TP
+.B --config PATH
+Use an alternate TOML configuration path.
+.TP
+.B --json
+Request machine-readable output where supported.
+.TP
+.B --version
+Print the release version.
+.SH EVIDENCE
+Run evidence is normally stored below ~/.local/state/agent-workflow/runs/SESSION. final-receipt.json seals required and optional artifacts. Review dispositions are separate read-only receipts. Structured provider evidence is bounded and sealed before trial extraction.
+.SH MCP
+The optional local stdio server is a separate executable, agent-workflow-mcp(1). It is currently bounded/read-only plus pack validation; planned mutation tools are not present.
+.SH FILES
+.TP
+.I ~/.config/agent-workflow/config.toml
+Default user configuration.
+.TP
+.I ~/.local/state/agent-workflow/
+Default durable state root.
+.SH SEE ALSO
+agent-workflow-workflow(1), agent-workflow-mcp(1), docs/COMMAND_REFERENCE.md, docs/ARCHITECTURE.md

@@ -1,5 +1,7 @@
 # ChatGPT Workflow Foundations and Benchmark Completion
 
+> Status: executed against release 0.2.0; retained as the authoritative implementation input and reproducibility pack.
+
 This pack is the ordered implementation handoff for ChatGPT. It completes
 WF-10, WF-11, WF-12, WF-20, WF-21, WF-22, and BKL-003, including the research
 needed to make BKL-003 safe and evidence-backed. Work must continue through

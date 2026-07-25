@@ -1,5 +1,7 @@
 # Phase Gate Report
 
+**Historical evidence notice:** This report records the earlier skills/MCP Phase 0-1 gate and is not the current workflow-completion gate. Current 0.2.1 correction evidence is recorded in `WORKFLOW_BENCHMARK_PHASE_GATE.md` and `FINAL_CRITICAL_REVIEW.md`.
+
 ## Decision
 
 **Accept Phase 0 with validation caveat; accept Phase 1 research artifact.**

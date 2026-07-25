@@ -1,5 +1,11 @@
 # P0: Agent-Workflow Skill and Orchestrator Integration
 
+**Status:** Implemented. This document preserves the original P0 acceptance contract; current behavior is summarized below and tracked in `BACKLOG.md`.
+
+## Current outcome
+
+The repository now installs and cross-links the orchestration, delegated-implementation, phase-gate-review, and prompt-pack-builder skills across the supported shared, Codex, and Claude discovery roots. Those skills name the canonical CLI lifecycle, preserve the distinction between host-native subagents and durable `agent-workflow` runs, and document the tmux current-window/detached fallback behavior. Installer ownership checks remain fail-closed for unrelated paths.
+
 ## Problem
 
 `agent-workflow` has a complete CLI, durable run evidence, lifecycle runbooks,

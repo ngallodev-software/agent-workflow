@@ -33,7 +33,7 @@ class EvaluationReportTests(unittest.TestCase):
                     score_receipt, sort_keys=True, separators=(",", ":")
                 ).encode()
             ).hexdigest()
-            atomic_write_json(scores / f"schema_validity-{digest}.json", score_receipt)
+            atomic_write_json(scores / f"schema_validity-{digest}.json", score_receipt, mode=0o444)
             atomic_write_json(
                 scores / "score-set.json",
                 {
@@ -68,7 +68,7 @@ class EvaluationReportTests(unittest.TestCase):
             digest = hashlib.sha256(
                 json.dumps(receipt, sort_keys=True, separators=(",", ":")).encode()
             ).hexdigest()
-            atomic_write_json(scores / f"schema_validity-{digest}.json", receipt)
+            atomic_write_json(scores / f"schema_validity-{digest}.json", receipt, mode=0o444)
             atomic_write_json(
                 scores / "score-set.json",
                 {

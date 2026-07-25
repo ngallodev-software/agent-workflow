@@ -1,0 +1,10 @@
+flowchart LR
+  Client[MCP client] --> Adapter[FastMCP stdio adapter]
+  Adapter --> Validate[Validation/policy]
+  Validate --> Idem[Durable idempotency journal]
+  Idem --> Services[Shared application services]
+  Services --> Worktree[Worktrees]
+  Services --> Session[Sessions]
+  Services --> Workflow[Workflow scheduler]
+  Services --> Messages[Durable messages]
+  Services --> Lifecycle[Lifecycle receipts]

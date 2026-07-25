@@ -14,7 +14,13 @@ from run_fixtures import write_run_contracts
 
 
 class LifecycleTests(unittest.TestCase):
-    def _completed_run(self, root: Path) -> tuple[object, Path]:
+    def _completed_run(
+        self,
+        root: Path,
+        *,
+        tier: str = "medium",
+        executor: str | None = None,
+    ) -> tuple[object, Path]:
         settings = defaults(root / "missing.toml")
         settings = settings.__class__(
             **{**settings.__dict__, "state_root": root / "state"}
@@ -31,14 +37,16 @@ class LifecycleTests(unittest.TestCase):
                 "scorers": ["acceptance_commands"],
             },
         )
-        seal_run(run, session_id="life-test")
         status = json.loads((run / "status.json").read_text(encoding="utf-8"))
         status.update(
-            status="completed",
-            disposition=None,
+            status="completed", disposition=None, tier=tier, executor=executor
+        )
+        atomic_write_json(run / "status.json", status)
+        atomic_write_json(run / "final-status.json", status)
+        seal_run(run, session_id="life-test")
+        status.update(
             final_receipt_path=str(run / "final-receipt.json"),
             final_receipt_sha256=sha256_file(run / "final-receipt.json"),
-            tier="medium",
         )
         atomic_write_json(run / "status.json", status)
         scores = run / "scores"
@@ -57,7 +65,7 @@ class LifecycleTests(unittest.TestCase):
                 score_receipt, sort_keys=True, separators=(",", ":")
             ).encode()
             digest = hashlib.sha256(encoded).hexdigest()
-            atomic_write_json(scores / f"{scorer_id}-{digest}.json", score_receipt)
+            atomic_write_json(scores / f"{scorer_id}-{digest}.json", score_receipt, mode=0o444)
             score_receipts.append(score_receipt)
         atomic_write_json(
             scores / "score-set.json",
@@ -94,6 +102,39 @@ class LifecycleTests(unittest.TestCase):
             reconstructed = reconstruct_lifecycle(run / "events.jsonl")
             self.assertEqual(reconstructed["state"]["review"], "accepted")
 
+    def test_mutable_status_projection_cannot_change_review_authority(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            settings, run = self._completed_run(Path(tmp))
+            status_path = run / "status.json"
+            status = json.loads(status_path.read_text(encoding="utf-8"))
+            status.update(
+                status="failed",
+                tier="critical",
+                executor="reviewer",
+                final_receipt_sha256="0" * 64,
+            )
+            atomic_write_json(status_path, status)
+            reviewed = record(
+                settings,
+                "life-test",
+                action="reviewed",
+                actor="reviewer",
+                reason="canonical terminal evidence controls",
+            )
+            receipt = json.loads(
+                Path(reviewed["lifecycle_receipt"]).read_text(encoding="utf-8")
+            )
+            self.assertTrue(receipt["reviewer_independent"])
+            accepted = record(
+                settings,
+                "life-test",
+                action="accepted",
+                actor="reviewer",
+                reason="projection tamper ignored",
+                revision="abc123",
+            )
+            self.assertEqual("accepted", accepted["disposition"])
+
     def test_accept_rejects_revision_mismatch_and_failed_score(self):
         with tempfile.TemporaryDirectory() as tmp:
             settings, run = self._completed_run(Path(tmp))
@@ -128,6 +169,7 @@ class LifecycleTests(unittest.TestCase):
                 / "scores"
                 / f"{changed_receipt['scorer']['id']}-{changed_digest}.json",
                 changed_receipt,
+                mode=0o444,
             )
             atomic_write_json(score_path, score)
             with self.assertRaisesRegex(WorkflowError, "passing deterministic"):
@@ -142,11 +184,9 @@ class LifecycleTests(unittest.TestCase):
 
     def test_high_risk_acceptance_rejects_executor_self_review(self):
         with tempfile.TemporaryDirectory() as tmp:
-            settings, run = self._completed_run(Path(tmp))
-            status_path = run / "status.json"
-            status = json.loads(status_path.read_text(encoding="utf-8"))
-            status.update(tier="high", executor="same-actor")
-            atomic_write_json(status_path, status)
+            settings, run = self._completed_run(
+                Path(tmp), tier="high", executor="same-actor"
+            )
             record(
                 settings,
                 "life-test",
@@ -166,11 +206,9 @@ class LifecycleTests(unittest.TestCase):
 
     def test_high_risk_acceptance_rejects_self_review_then_other_acceptor(self):
         with tempfile.TemporaryDirectory() as tmp:
-            settings, run = self._completed_run(Path(tmp))
-            status_path = run / "status.json"
-            status = json.loads(status_path.read_text(encoding="utf-8"))
-            status.update(tier="critical", executor="executor-id")
-            atomic_write_json(status_path, status)
+            settings, run = self._completed_run(
+                Path(tmp), tier="critical", executor="executor-id"
+            )
             record(
                 settings,
                 "life-test",

@@ -21,3 +21,9 @@ Use this skill after all implementation tickets in a phase have completion repor
 - produce a phase-gate report with an explicit decision.
 
 The gate reviewer must not merely summarize implementer reports or accept an unsealed terminal claim as durable evidence.
+
+## Workflow and provider gates
+
+For workflow phases, verify the stored snapshot, contiguous event journal, exact node set, approval receipt chains, input-binding digests, child final receipts, retry lineage, and aggregate workflow receipt. Mutating `status.json` must not create approval or change sealed evidence.
+
+For benchmark phases, inspect bounded raw events and `provider-evidence.json`; confirm delta/cumulative/terminal semantics, cached/reasoning subset handling, cost/currency/catalog rules, and incomplete-trial rejection. Record unavailable paid/external cohorts rather than simulating them.

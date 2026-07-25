@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/workflow-node-binding/v1",
+  "type": "object",
+  "required": ["schema", "workflow_id", "node_id", "run_id", "attempt", "bound_at", "current"],
+  "properties": {
+    "schema": {"const": "agent-workflow/workflow-node-binding/v1"},
+    "workflow_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"},
+    "node_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"},
+    "run_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"},
+    "attempt": {"type": "integer", "minimum": 1},
+    "retry_of_run_id": {
+      "type": ["string", "null"],
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+    },
+    "bound_at": {"type": "string"},
+    "current": {"type": "boolean"}
+  },
+  "additionalProperties": false
+}

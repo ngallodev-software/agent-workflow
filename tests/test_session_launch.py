@@ -111,6 +111,43 @@ class SessionLaunchTests(unittest.TestCase):
                         agent_name="agent-42", interactive=True,
                     )
 
+    def test_workflow_inputs_are_copied_read_only_before_executor_launch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            workdir = root / "worktree"
+            workdir.mkdir()
+            prompt = root / "task.md"
+            prompt.write_text("task", encoding="utf-8")
+            settings = defaults(root / "missing.toml")
+            settings = settings.__class__(
+                **{**settings.__dict__, "state_root": root / "state"}
+            )
+            context = {
+                "schema": "agent-workflow/workflow-input-bindings/v1",
+                "workflow_id": "wf-1",
+                "snapshot_sha256": "a" * 64,
+                "node_id": "node-1",
+                "attempt": 1,
+                "created_at": "2026-07-24T00:00:00+00:00",
+                "bindings": [],
+            }
+            with (
+                patch("agent_workflow.sessions.tmux.session_exists", return_value=False),
+                patch("agent_workflow.sessions.tmux.create_session"),
+                patch("agent_workflow.sessions.tmux.pane_info", return_value=None),
+            ):
+                result = launch(
+                    settings,
+                    session_id="workflow-input-copy",
+                    workdir=workdir,
+                    prompt_path=prompt,
+                    explicit_command=["cat"],
+                    workflow_context=context,
+                )
+            copied = Path(result["prompt_path"]).parent / "workflow-inputs.json"
+            self.assertEqual(context, json.loads(copied.read_text(encoding="utf-8")))
+            self.assertEqual(0, copied.stat().st_mode & 0o222)
+
     def test_named_agent_profile_binds_executor_model_and_class(self):
         base = defaults(Path("/missing.toml"))
         settings = base.__class__(
@@ -328,6 +365,8 @@ class SessionLaunchTests(unittest.TestCase):
             self.assertEqual(stored.read_bytes(), job.read_bytes())
             self.assertEqual(binding["job_source_sha256"], hashlib.sha256(job.read_bytes()).hexdigest())
             self.assertEqual(binding["job_stored_sha256"], binding["job_source_sha256"])
+            self.assertEqual(0, stored.stat().st_mode & 0o222)
+            self.assertEqual(0, (run / "job-binding.json").stat().st_mode & 0o222)
             self.assertEqual(binding["path_policy"]["allowed_paths"], ["src/example.py"])
             self.assertTrue(binding["review_requirement"]["required"])
             status = json.loads((run / "status.json").read_text(encoding="utf-8"))

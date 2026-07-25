@@ -93,6 +93,9 @@ def write_run_contracts(
         "log_path": str(root / "output.log"),
         "completion_collection_path": str(root / "collections" / "completion.json"),
         "completion_validation_status": "valid",
+        "tier": "medium",
+        "executor": None,
+        "evaluation_path": None,
     }
     atomic_write_json(root / "status.json", status)
     if include_final:

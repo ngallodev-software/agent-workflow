@@ -1,6 +1,6 @@
 # MCP Server Architecture Decision
 
-**Status:** Read-only local-stdio implementation complete; safe mutation deferred until workflow foundations complete; no HTTP rollout  
+**Status:** Read-only local-stdio implementation complete; safe mutation is ready for separately authorized MCP-003 work; no HTTP rollout
 **Decision date:** 2026-07-24  
 **Confidence:** High for local stdio; medium for later HTTP deployment
 
@@ -8,7 +8,7 @@
 
 Adopt MCP as an optional integration layer for `agent-workflow`, beginning with a thin, local, stdio-only Python server that calls existing domain services and reads authoritative run artifacts. Do not make MCP the lifecycle authority, do not expose tmux directly, and do not add a daemon or remote HTTP endpoint in the first phase.
 
-The completed first surface is intentionally small: bounded read-only resources for run state/evidence plus `pack_validate`. Remaining mutation tools must wait until the workflow foundation is complete through `WF-22`, then reuse the same workflow, launch, routing, messaging, approval, and receipt services as the CLI. A steering call returns `pending` unless an executor-specific correlated acknowledgement proves delivery or application.
+The completed first surface is intentionally small: bounded read-only resources for run state/evidence plus `pack_validate`. The workflow foundation is complete through `WF-22`; the remaining mutation tools are authorized only as the separately scoped MCP-003 backlog item and must reuse the same workflow, launch, routing, messaging, approval, and receipt services as the CLI. A steering call returns `pending` unless an executor-specific correlated acknowledgement proves delivery or application.
 
 Rejected alternatives:
 
@@ -129,7 +129,7 @@ Add `mcp==1.28.1` as an optional extra. Implement server initialization, capabil
 
 ### Workflow prerequisite gate
 
-Complete `workflow-foundations-next` through `WF-22` before any remaining MCP mutation work. This includes restart-safe scheduling, approvals, result binding, aggregate receipts, the three authorized templates, deterministic routing explanations, and integration review. The gate prevents MCP from becoming a second workflow implementation.
+`WF-22` was completed in release 0.2.0 and its scheduler, replay, receipt, and evidence authority boundaries were hardened in release 0.2.1. Restart-safe scheduling, approvals, result binding, aggregate receipts, the three authorized templates, deterministic routing explanations, and integration review are implemented. MCP-003 may proceed as a separately scoped task, but MCP must remain a façade over these services rather than becoming a second workflow implementation.
 
 ### MCP-2 — Safe creation, workflow, and control tools
 
@@ -166,20 +166,20 @@ stable tag `v1.28.1` (`777b8d06710c140e3606b0d4598e2aa48546c266`). The SDK's pub
 FastMCP API supports `@mcp.resource`, `@mcp.tool`, and `mcp.run(transport="stdio")`.
 The repository's `main` line is v2 alpha/beta and is not the selected dependency.
 
-The initial scaffold is in `src/agent_workflow/mcp/server.py`. It exposes bounded
+The implemented read-only adapter is in `src/agent_workflow/mcp/server.py`. It exposes bounded
 run/status/messages/receipt resources and `pack_validate`, while delegating to
 existing state, message, receipt, and manifest services. It does not expose shell,
 tmux, arbitrary paths, launch/control mutation, raw terminal capture, or HTTP.
 
-The full SDK source snapshot is retained at `src/agent_workflow/mcp/sdk/` for
-research and prompt-pack evidence only; the runtime package depends on the pinned
-optional distribution.
+The repository no longer vendors an SDK source tree. Runtime and tests use the
+pinned optional `mcp==1.28.1` distribution through public APIs; dependency
+provenance is recorded in `src/agent_workflow/mcp/SDK_DEPENDENCY.md`.
 
-## Applied backlog update
+## Current backlog status
 
 - **MCP-001 (done):** Reusable domain seams and typed MCP request/result contracts.
 - **MCP-002 (done):** Read-only local stdio MCP server with official Python SDK, bounded resources, traversal/redaction controls, and conformance tests.
-- **MCP-003 (blocked on WF-22):** Safe single-run/workflow mutation tools with idempotency and durable evidence mapping.
+- **MCP-003 (ready):** Safe single-run/workflow mutation tools with idempotency and durable evidence mapping; not implemented through 0.2.1.
 - **MCP-004 (deferred):** Gated destructive/review tools and representative-host evaluation matrix.
 - **MCP-005 (decision):** Authorize or reject Streamable HTTP after local adoption and security evidence.
 

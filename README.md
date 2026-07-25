@@ -11,10 +11,13 @@ It provides:
 - durable parent/child progress, steering, acknowledgement, and blocking wait
   records for active runs;
 - multi-signal health diagnostics based on terminal, heartbeat, lifecycle, and log state;
+- restart-safe workflow graphs with approvals, bounded result binding, deterministic templates, explainable routing, and aggregate receipts;
+- sealed provider stream evidence and comparison-safe token/cost normalization;
 - deterministic evaluation collectors, scorers, ledgers, comparisons, and review receipts;
 - prompt-pack scaffolding, structural validation, checksums, and deterministic `.tar.zst` archives;
 - reusable ticket-completion and phase-gate templates;
-- skills for orchestration, prompt-pack construction, delegated implementation, and independent review.
+- skills for orchestration, prompt-pack construction, delegated implementation, and independent review;
+- an optional bounded read-only local stdio MCP adapter.
 
 It intentionally does **not** provide automatic merging, automatic agent killing, a daemon, a web UI, remote execution, or autonomous model selection.
 
@@ -261,6 +264,35 @@ two columns, with at most three agents per column (six total).
 
 Prompt-pack task dependencies are validated as a cross-phase DAG. Tickets may optionally declare a JSON Schema result contract; validated `result.json` artifacts and collection receipts are copied into and sealed with the durable run. See [Workflow Foundations Plan](docs/WORKFLOW_FOUNDATIONS_PLAN.md).
 
+## Workflow graphs
+
+Workflows use a canonical normalized snapshot plus an append-only event journal.
+They reuse the existing session launch service and never create a second executor
+path. Approval gates validate immutable lifecycle receipt chains; input bindings
+copy bounded JSON Pointer values from sealed ancestor results; terminal workflows
+can be sealed into an aggregate receipt.
+
+```bash
+agent-workflow workflow validate ./workflow.json
+agent-workflow workflow start ./workflow-run ./workflow.json
+agent-workflow workflow status ./workflow-run ./workflow.json
+agent-workflow workflow resume ./workflow-run ./workflow.json
+agent-workflow workflow seal ./workflow-run ./workflow.json
+agent-workflow workflow verify ./workflow-run ./workflow.json
+```
+
+Generate one of the three authorized graph shapes with `workflow template`:
+
+```bash
+agent-workflow workflow template pipeline ./pipeline-spec.json --output ./workflow.json
+agent-workflow workflow template parallel-review-fan-in ./review-spec.json --output ./workflow.json
+agent-workflow workflow template implementation-independent-review ./implementation-review-spec.json --output ./workflow.json
+```
+
+After `start`, later commands must supply the same snapshot digest. Workflow
+status files are projections; the snapshot, event journal, child seals, approval
+receipts, and aggregate workflow receipt are the evidence authorities.
+
 ## Prompt packs
 
 ```bash
@@ -283,7 +315,7 @@ agent-workflow review eval-p0-01 --actor reviewer --reason "gates checked"
 agent-workflow accept eval-p0-01 --actor reviewer --reason "approved" --revision SHA
 ```
 
-Baseline commands and scope are captured before the agent; post scope is captured before post commands. Collector artifacts are sealed before scoring. Evaluator-only oracle material remains outside the checkout and is addressed by ID and SHA-256.
+Baseline commands and scope are captured before the agent; post scope is captured before post commands. Collector artifacts are sealed before scoring. Structured executor streams are bounded and normalized into sealed provider evidence with explicit delta/cumulative/terminal semantics. Incomplete or malformed usage evidence is rejected by trial collection, and provider-billed versus locally estimated cost remains separate. Evaluator-only oracle material remains outside the checkout and is addressed by ID and SHA-256.
 
 Inspect AI, statistics, OpenTelemetry, MLflow, and generated shell completions are optional extras. Their adapters are intentionally experimental seams: the Inspect seam reuses the public `inspect_swe` Codex and Claude agents inside an Inspect-owned Docker sandbox, while paid model trials and external backend/harness validation remain operator-run gates.
 
@@ -297,6 +329,14 @@ Authoritative records are stored under:
 
 Each worktree receives a discoverability symlink at `.delegations/<session-id>`. Deleting a worktree therefore does not delete the authoritative evidence bundle. `final-receipt.json` hashes every required artifact; `events.jsonl` and immutable review receipts record later lifecycle actions without rewriting sealed agent evidence.
 
+## Optional MCP server
+
+Install the `mcp` extra and run `agent-workflow-mcp` from an MCP host that supports
+local stdio servers. The current adapter exposes bounded read-only run, status,
+message, and receipt resources plus pack validation. It does not expose launch,
+workflow mutation, review/acceptance, raw shell, arbitrary paths, terminal
+capture, or HTTP. See [MCP Server Implementation Proposal](docs/MCP_SERVER_IMPLEMENTATION_PROPOSAL.md) for the separately gated mutation plan.
+
 ## Compatibility scripts
 
 The `scripts/` directory preserves the original helper filenames as thin wrappers around the CLI. Lifecycle behavior belongs only in `src/agent_workflow/`.
@@ -307,6 +347,11 @@ The `scripts/` directory preserves the original helper filenames as thin wrapper
 - `DELEGATION_RUNBOOK.md`
 - `docs/PROMPT_PACK_STANDARD.md`
 - `docs/ARCHITECTURE.md`
+- `docs/diagrams/REPOSITORY_CHART_PACK.md`
+- `docs/PROVIDER_EVIDENCE_RESEARCH.md`
+- `docs/MCP_SERVER_IMPLEMENTATION_PROPOSAL.md`
+- `docs/MCP_TOOL_AND_RESOURCE_CATALOG.md`
+- `docs/MCP_THREAT_MODEL.md`
 - `docs/MODEL_TIERS.md`
 - `docs/TEST_POLICY.md`
 - `docs/STALL_RECOVERY.md`
@@ -317,7 +362,7 @@ The `scripts/` directory preserves the original helper filenames as thin wrapper
 ## Development validation
 
 ```bash
-PYTHONPATH=src python3 -m unittest discover -s tests -v
+PYTHONPATH=src python3 -m pytest -q
 python3 -m compileall -q src
 ./scripts/release-check.sh
 ```

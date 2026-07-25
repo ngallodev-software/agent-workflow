@@ -69,3 +69,22 @@ Terminal text is operational context, not sealed proof. Inspect the authoritativ
 - [`docs/PROMPT_PACK_STANDARD.md`](../../docs/PROMPT_PACK_STANDARD.md)
 - [`EXECUTION_PROTOCOL.md`](../../EXECUTION_PROTOCOL.md)
 - [`DELEGATION_RUNBOOK.md`](../../DELEGATION_RUNBOOK.md)
+
+## Workflow graphs
+
+```bash
+agent-workflow workflow validate workflow.json
+agent-workflow workflow start workflow-run workflow.json
+agent-workflow workflow status workflow-run workflow.json
+agent-workflow workflow resume workflow-run workflow.json
+agent-workflow workflow seal workflow-run workflow.json
+agent-workflow workflow verify workflow-run workflow.json
+```
+
+Use only the three authorized `workflow template` shapes. Treat the normalized snapshot and append-only workflow journal as authority. Approval gates require canonical immutable lifecycle receipts. Result bindings may consume only bounded JSON Pointer values from sealed ancestor results. Do not launch workflow children outside the scheduler's canonical session service.
+
+## Provider and MCP boundaries
+
+A structured run is comparison-ready only when its bounded raw executor stream, provider evidence, metrics, completion, and final receipt are sealed and complete. Do not infer tokens or cost from prose/logs, add cached or reasoning details twice, or combine provider-billed and locally estimated cost.
+
+The current `agent-workflow-mcp` adapter is local stdio and read-only. Do not claim planned MCP-003 mutation tools exist. Any future MCP mutation must reuse shared services and durable idempotency.
