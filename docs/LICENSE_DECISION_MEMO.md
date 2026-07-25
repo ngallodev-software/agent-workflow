@@ -251,7 +251,7 @@ GPL v3 is fundamentally incompatible with the project's role as a foundation for
    ```markdown
    ## License
    
-   `agent-workflow` is licensed under the Apache License 2.0. See [LICENSE](LICENSE) for details.
+   `agent-workflow` is licensed under the Apache License 2.0. The repository license file is still required before release.
    ```
 
 6. **Legal review** (optional): If the organization has legal counsel, brief them on the choice and confirm it aligns with organizational practices.
