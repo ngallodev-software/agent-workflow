@@ -367,6 +367,11 @@ def _seal_run_unlocked(run_dir: Path, *, session_id: str) -> dict[str, Any]:
                 if path.is_file()
                 and path.relative_to(run_dir).as_posix() not in listed_paths
             )
+    task_result = run_dir / "collections" / "task-result.json"
+    if task_result.is_file() and not any(
+        item.get("path") == "collections/task-result.json" for item in artifacts
+    ):
+        artifacts.append(_artifact_receipt(task_result, run_dir))
     unique_artifacts: dict[str, dict[str, Any]] = {}
     for artifact in artifacts:
         path = str(artifact["path"])
