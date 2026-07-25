@@ -108,6 +108,8 @@ def load_task_manifest(text: str) -> dict[str, Any]:
     tasks: list[dict[str, Any]] = []
     in_tasks = False
     current_task: dict[str, Any] | None = None
+    nested_mapping: dict[str, Any] | None = None
+    nested_indent: int | None = None
 
     for line_number, raw_line in enumerate(text.splitlines(), 1):
         cleaned = _strip_comment(raw_line).rstrip()
@@ -118,6 +120,8 @@ def load_task_manifest(text: str) -> dict[str, Any]:
 
         if indent == 0:
             current_task = None
+            nested_mapping = None
+            nested_indent = None
             key, separator, raw_value = line.partition(":")
             if not separator:
                 raise MiniYamlError(f"line {line_number}: expected key: value")
@@ -159,6 +163,8 @@ def load_task_manifest(text: str) -> dict[str, Any]:
                     )
                 current_task = {key.strip(): _parse_scalar(raw_value)}
             tasks.append(current_task)
+            nested_mapping = None
+            nested_indent = None
             continue
 
         if current_task is None:
@@ -168,6 +174,18 @@ def load_task_manifest(text: str) -> dict[str, Any]:
         key, separator, raw_value = line.partition(":")
         if not separator:
             raise MiniYamlError(f"line {line_number}: expected key: value")
-        current_task[key.strip()] = _parse_scalar(raw_value)
+        if nested_mapping is not None and nested_indent is not None and indent > nested_indent:
+            nested_mapping[key.strip()] = _parse_scalar(raw_value)
+            continue
+        key = key.strip()
+        if not raw_value.strip():
+            child: dict[str, Any] = {}
+            current_task[key] = child
+            nested_mapping = child
+            nested_indent = indent
+        else:
+            current_task[key] = _parse_scalar(raw_value)
+            nested_mapping = None
+            nested_indent = None
 
     return result
