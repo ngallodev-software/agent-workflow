@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/assignment-event/v1",
+  "type": "object",
+  "required": ["schema", "sequence", "timestamp", "event", "session_id", "assignment_id", "actor"],
+  "properties": {
+    "schema": {"const": "agent-workflow/assignment-event/v1"},
+    "sequence": {"type": "integer", "minimum": 1},
+    "timestamp": {"type": "string"},
+    "event": {"enum": ["assigned", "assignment_requested", "assignment_started", "task_completed"]},
+    "session_id": {"type": "string"},
+    "assignment_id": {"type": "string", "format": "uuid"},
+    "actor": {"type": "string"},
+    "ticket_id": {"type": ["string", "null"]},
+    "pack_id": {"type": ["string", "null"]},
+    "correlation_id": {"type": ["string", "null"], "format": "uuid"},
+    "automatic": {"type": "boolean"},
+    "summary": {"type": "string", "maxLength": 4096},
+    "tags": {"type": "array", "maxItems": 64, "items": {"type": "string"}},
+    "files": {"type": "array", "maxItems": 64, "items": {"type": "string"}}
+  },
+  "additionalProperties": false
+}

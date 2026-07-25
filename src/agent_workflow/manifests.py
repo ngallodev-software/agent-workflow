@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import json
 from pathlib import Path
 from typing import Any
 
@@ -75,6 +76,56 @@ def _check_required(root: Path, report: ValidationReport) -> None:
             report.errors.append(f"missing required file: {rel}")
 
 
+def task_result_contract(root: Path, ticket_id: str | None) -> dict[str, Any] | None:
+    """Return the validated result contract declaration for one pack ticket."""
+    if not ticket_id:
+        return None
+    root = root.resolve()
+    for manifest_path in sorted(root.glob("phase-*/task-manifest.yaml")):
+        report = ValidationReport(root=root)
+        manifest = _load_yaml(manifest_path, report)
+        if manifest is None:
+            continue
+        tasks = manifest.get("tasks")
+        if not isinstance(tasks, list):
+            continue
+        for task in tasks:
+            if not isinstance(task, dict) or str(task.get("id")) != ticket_id:
+                continue
+            contract = task.get("result_contract")
+            return dict(contract) if isinstance(contract, dict) else None
+    return None
+
+
+def _find_dependency_cycle(graph: dict[str, list[str]]) -> list[str] | None:
+    visiting: set[str] = set()
+    visited: set[str] = set()
+    stack: list[str] = []
+
+    def visit(node: str) -> list[str] | None:
+        if node in visiting:
+            start = stack.index(node)
+            return stack[start:] + [node]
+        if node in visited:
+            return None
+        visiting.add(node)
+        stack.append(node)
+        for dependency in graph.get(node, []):
+            cycle = visit(dependency)
+            if cycle:
+                return cycle
+        stack.pop()
+        visiting.remove(node)
+        visited.add(node)
+        return None
+
+    for node in graph:
+        cycle = visit(node)
+        if cycle:
+            return cycle
+    return None
+
+
 def validate_pack(root: Path, verify_checksums: bool = True) -> ValidationReport:
     root = root.resolve()
     report = ValidationReport(root=root)
@@ -89,6 +140,8 @@ def validate_pack(root: Path, verify_checksums: bool = True) -> ValidationReport
 
     sessions: set[str] = set()
     ticket_ids: set[str] = set()
+    dependencies_by_ticket: dict[str, list[str]] = {}
+    dependency_locations: dict[str, str] = {}
     for phase_dir in phase_dirs:
         report.phases += 1
         for rel in [
@@ -158,6 +211,41 @@ def validate_pack(root: Path, verify_checksums: bool = True) -> ValidationReport
                         + ", ".join(absent)
                     )
 
+            dependencies = task.get("dependencies", [])
+            if dependencies is None:
+                dependencies = []
+            if not isinstance(dependencies, list) or any(not isinstance(item, str) for item in dependencies):
+                report.errors.append(f"{location}: dependencies must be a list of ticket IDs")
+                dependencies = []
+            dependencies_by_ticket[task_id] = list(dependencies)
+            dependency_locations[task_id] = location
+
+            result_contract = task.get("result_contract")
+            if result_contract is not None:
+                if not isinstance(result_contract, dict):
+                    report.errors.append(f"{location}: result_contract must be a mapping")
+                else:
+                    schema_rel = result_contract.get("schema")
+                    if not isinstance(schema_rel, str) or not schema_rel:
+                        report.errors.append(f"{location}: result_contract.schema is required")
+                    else:
+                        schema_path = (root / schema_rel).resolve()
+                        try:
+                            schema_path.relative_to(root)
+                        except ValueError:
+                            report.errors.append(f"{location}: result contract schema escapes pack root: {schema_rel}")
+                        else:
+                            if not schema_path.is_file():
+                                report.errors.append(f"{location}: result contract schema not found: {schema_rel}")
+                            else:
+                                try:
+                                    schema_value = json.loads(schema_path.read_text(encoding="utf-8"))
+                                except (OSError, json.JSONDecodeError) as exc:
+                                    report.errors.append(f"{location}: invalid result contract schema: {exc}")
+                                else:
+                                    if not isinstance(schema_value, dict):
+                                        report.errors.append(f"{location}: result contract schema must be a JSON object")
+
         if order:
             if not isinstance(order, list):
                 report.errors.append(
@@ -175,6 +263,24 @@ def validate_pack(root: Path, verify_checksums: bool = True) -> ValidationReport
                     report.warnings.append(
                         f"{manifest_path.relative_to(root)}: unordered tickets: {omitted}"
                     )
+
+    for ticket_id, dependencies in dependencies_by_ticket.items():
+        unknown = sorted(set(dependencies) - ticket_ids)
+        if unknown:
+            report.errors.append(
+                f"{dependency_locations[ticket_id]}: unknown dependencies: {unknown}"
+            )
+        if ticket_id in dependencies:
+            report.errors.append(
+                f"{dependency_locations[ticket_id]}: ticket cannot depend on itself"
+            )
+    known_graph = {
+        ticket_id: [item for item in dependencies if item in ticket_ids]
+        for ticket_id, dependencies in dependencies_by_ticket.items()
+    }
+    cycle = _find_dependency_cycle(known_graph)
+    if cycle:
+        report.errors.append("dependency cycle: " + " -> ".join(cycle))
 
     evaluation_path = root / "evals" / "evaluation.json"
     if evaluation_path.is_file():

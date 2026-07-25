@@ -10,7 +10,7 @@
     "session_id": {"type": "string"},
     "timestamp": {"type": "string"},
     "direction": {"enum": ["parent_to_child", "child_to_parent"]},
-    "kind": {"enum": ["steer", "progress", "ack", "error"]},
+    "kind": {"enum": ["steer", "progress", "ack", "error", "task_complete"]},
     "actor": {"type": "string"},
     "content": {"type": "string", "minLength": 1, "maxLength": 16384},
     "correlation_id": {"type": ["string", "null"], "format": "uuid"}

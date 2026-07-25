@@ -109,3 +109,11 @@ that integration automatically.
 - [Prompt-pack standard](PROMPT_PACK_STANDARD.md)
 - [Current durable-control/evidence research](Durable_Orchestration_Delivery_Benchmarks.md)
 - [Canonical backlog](../BACKLOG.md)
+
+## Implemented discovery policy
+
+The installer links all four repo-owned workflow skills into the shared agent
+root (`~/.agents/skills`), Codex root (`~/.codex/skills`), and Claude root
+(`~/.claude/skills`). Installation is idempotent only for links owned by this
+checkout. Any unrelated file or symlink at a target name is preserved and the
+installer exits with an error rather than introducing divergent skill content.

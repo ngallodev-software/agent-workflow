@@ -1,0 +1,19 @@
+phase: "2"
+name: "read-only-stdio-server"
+mandatory_order: ["P2-00", "P2-01", "P2-02"]
+tasks:
+  - id: "P2-00"
+    tier: C
+    session: "mcp-server-next-p2-00-baseline"
+    prompt: "tickets/P2-00-baseline-and-preflight.md"
+    dependencies: ["P1-02"]
+  - id: "P2-01"
+    tier: A
+    session: "mcp-server-next-p2-01-stdio-server"
+    prompt: "tickets/P2-01-read-only-stdio-server.md"
+    dependencies: ["P2-00"]
+  - id: "P2-02"
+    tier: A
+    session: "mcp-server-next-p2-02-security-review"
+    prompt: "tickets/P2-02-security-conformance-review.md"
+    dependencies: ["P2-01"]

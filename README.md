@@ -14,7 +14,7 @@ It provides:
 - deterministic evaluation collectors, scorers, ledgers, comparisons, and review receipts;
 - prompt-pack scaffolding, structural validation, checksums, and deterministic `.tar.zst` archives;
 - reusable ticket-completion and phase-gate templates;
-- skills for prompt-pack construction, delegated implementation, and independent review.
+- skills for orchestration, prompt-pack construction, delegated implementation, and independent review.
 
 It intentionally does **not** provide automatic merging, automatic agent killing, a daemon, a web UI, remote execution, or autonomous model selection.
 
@@ -53,19 +53,9 @@ Make sure `~/.local/bin` is on `PATH`:
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-## Recommended source location
+## Source checkout
 
-```text
-/lump/apps/agent-workflow
-```
-
-or:
-
-```text
-~/src/agent-workflow
-```
-
-The repository is the source of truth. `~/.local/bin` and agent skill directories contain installed links, not independent copies.
+Use any normal Git checkout. The repository is the source of truth; installed command and skill links are not independent copies.
 
 ## Planning and backlog
 
@@ -74,31 +64,95 @@ blocked, and deferred work. Design documents retain detailed rationale and
 acceptance material, but link back to the backlog rather than duplicating task
 lists.
 
+Global instructions and the installed orchestration skill route suitable work
+through this application. Host hooks are only a narrow future guardrail for
+recognizable direct delegation commands; see
+[global agent routing](docs/GLOBAL_AGENT_ROUTING.md).
+
 ## First configuration
 
-Edit `~/.config/agent-workflow/config.toml`. A machine with projects under `/lump/apps` might use:
+Edit the user configuration file. Use a worktree root appropriate for the host:
 
 ```toml
 [paths]
-worktree_root = "/lump/worktrees"
+worktree_root = "<worktree-root>"
 
 [terminal]
 backend = "tmux"
 stall_minutes = 10
+mouse = true
+orchestrator_side = "left"
+max_interactive_agent_width = 2
+max_interactive_agent_vertical = 3
+
+[agents]
+preferred_names = ["larry", "moe", "curly"]
+generated_prefix = "agent"
+default_executor = "codex"
+non_interactive_tmux = "dedicated_session"
+default_class = "implementation"
+reuse_stale_minutes = 120
+
+[agents.profiles.moe]
+class = "implementation"
+executor = "codex"
+model = "gpt-5.6-luna"
+
+[agents.profiles.curly]
+class = "implementation"
+executor = "claude"
+model = "haiku"
+
+[agent_classes.exploratory]
+interactive = false
+default_executor = "claude"
+default_model = "haiku"
+
+[agent_classes.exploratory.models]
+claude = ["haiku"]
+codex = ["gpt-5.6-luna"]
+
+[agent_classes.review]
+interactive = false
+default_executor = "codex"
+default_model = "gpt-5.6-luna"
+
+[agent_classes.review.models]
+claude = ["haiku", "sonnet"]
+codex = ["gpt-5.6-luna", "gpt-5.6-luna"]
+
+[agent_classes.implementation]
+interactive = true
+default_executor = "codex"
+default_model = "gpt-5.6-luna"
+
+[agent_classes.implementation.models]
+claude = ["haiku", "sonnet"]
+codex = ["gpt-5.6-luna", "gpt-5.6-luna", "gpt-5.6-terra"]
 
 [executors.codex]
 command = ["codex", "exec", "--sandbox", "workspace-write", "--skip-git-repo-check", "-"]
+interactive_command = ["codex"]
+models = ["gpt-5.6-luna", "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"]
+default_model = "gpt-5.6-luna"
+no_go_models = ["gpt-5.6-sol", "*fast*"]
+permission_args = ["--ask-for-approval", "on-request"]
 
 [executors.claude]
 command = ["claude", "--print"]
+interactive_command = ["claude"]
+models = ["haiku", "sonnet", "opus", "fable"]
+default_model = "sonnet"
+no_go_models = ["opus", "fable"]
+permission_args = ["--permission-mode", "manual"]
 ```
 
 ## Core workflow
 
 ```bash
 agent-workflow doctor
-agent-workflow worktree create /lump/apps/example P0-01 HEAD
-agent-workflow launch   example-p0-01   /lump/worktrees/example/p0-01   ./phase-0/tickets/P0-01.md   --ticket P0-01   --pack example-phases-0-2   --executor codex
+agent-workflow worktree create /path/to/example P0-01 HEAD
+agent-workflow launch   example-p0-01   /path/to/worktrees/example/p0-01   ./phase-0/tickets/P0-01.md   --ticket P0-01   --pack example-phases-0-2   --executor codex
 ```
 
 Or provide an explicit command:
@@ -111,10 +165,40 @@ agent-workflow launch example-p0-01 /path/to/worktree ticket.md -- \
 By default, Git worktrees must be clean at launch. Use `--allow-dirty` only for an intentional continuation or recovery; retries automatically preserve and reuse the existing worktree.
 
 Use `--executor codex` or `--executor claude` to select a configured executor.
-Add `--structured` to preserve raw Codex JSONL or Claude stream-JSON while rendering normalized operator output. Retries preserve the saved executor identity, stream format, original prompt source, and pack root.
-Installed workflow skills are invoked as `$prompt-pack-builder`,
-`$delegated-implementation`, and `$phase-gate-review` in Codex, or with `/`
-instead of `$` in Claude.
+Use `--agent-name NAME` to request a configured preferred name. Without it, the
+orchestrator assigns the first unused preferred name and then generates
+`generated_prefix-NN` names after the pool is exhausted. Named profiles bind
+an agent name to an executor/model pair; explicit conflicting launch options
+are rejected. The assigned name is written to run evidence and shown in the
+tmux pane border.
+Use `--agent-class exploratory|review|implementation` to select work policy.
+Classes define interactivity and allowed executor/model pairs; named profiles
+may narrow a class but cannot escape it. The built-in exploratory class is
+non-interactive and permits only Claude Haiku or `gpt-5.6-luna`; review is also
+non-interactive; implementation is interactive by default. Additional classes
+are ordinary `[agent_classes.NAME]` config tables.
+Interactive agents share the orchestrator window by default. Non-interactive
+agents use detached named tmux sessions when `non_interactive_tmux` is
+`"dedicated_session"`, so invisible workers do not consume a visible pane.
+Claude agents are interactive by default, including exploratory and review
+classes. Use the explicit `--no-interactive` (or `--structured`) mode when a
+Claude run must be detached/non-interactive. Use `--interactive` to make the
+choice explicit for any executor.
+Use `--model MODEL`; configured defaults apply when it is omitted. Models must
+be listed for that executor. A `no_go_models` match is rejected unless the run
+uses `--allow-no-go-model`, which is recorded in provenance. Executor-specific
+`permission_args` are always applied to configured launches: Codex uses
+`--ask-for-approval` and sandbox arguments, while Claude uses
+`--permission-mode` and may additionally use `--allowedTools` or
+`--disallowedTools`.
+
+Add `--structured` to preserve raw Codex JSONL or Claude stream-JSON while rendering normalized operator output. Use `--interactive` instead to run the native executor TUI on the pane PTY; these modes are mutually exclusive. Durable `steer` records are not automatic TUI keystrokes: an interactive child must be prompted to read and acknowledge them, or an operator must send terminal input separately. Retries preserve the saved executor identity, stream format, original prompt source, and pack root.
+Installed workflow skills are linked into `~/.agents/skills`, `~/.codex/skills`,
+and `~/.claude/skills`. Invoke `$agent-workflow-orchestrator`,
+`$prompt-pack-builder`, `$delegated-implementation`, or `$phase-gate-review`
+in Codex, or use `/` instead of `$` in Claude. The installer refuses to replace
+unrelated paths, so every installed name remains an unambiguous link to this
+checkout.
 
 Observe and foreground:
 
@@ -144,6 +228,38 @@ agent-workflow watch example-p0-01 --after 0 --timeout 300
 agent-workflow progress example-p0-01 "Tests are green; reviewing scope." --actor child
 agent-workflow ack example-p0-01 MESSAGE_UUID "Applied at checkpoint." --actor child
 ```
+
+### Reusing an interactive agent
+
+Interactive agents retain bounded durable assignment context, not a raw
+transcript. A child must explicitly complete its assignment before reuse:
+
+```bash
+agent-workflow agent task-complete SESSION --actor AGENT --summary "Implemented parser" --tag parser --file src/parser.py
+agent-workflow agent candidates /path/to/worktree --ticket TICKET --pack PACK
+agent-workflow agent reuse SESSION ./next-task.md --actor orchestrator --ticket TICKET --pack PACK
+```
+
+Candidates must be idle, live, compatible, unexpired, and in the exact same
+worktree. Similar work is ranked for an operator, but automatic reuse is
+restricted to exact ticket or retry lineage. Reassignment remains
+`reuse_pending` until the child acknowledges the correlated steer message.
+Names are globally leased across interactive panes and detached agents, so no
+two active runs can use the same configured or generated agent name.
+
+When the interactive pane limit is full, an attached CLI prompts before doing
+anything destructive: close enough explicitly idle panes, run the new job as a
+detached non-interactive task, or cancel. Automation can choose explicitly with
+`--pane-limit-action close-idle|non-interactive|cancel`; non-TTY callers using
+the default `prompt` policy fail closed with structured choices.
+
+The default interactive grid creates two agent columns to the right of the
+orchestrator before adding vertical splits. It then balances agents across the
+two columns, with at most three agents per column (six total).
+
+## Structured task results and dependency graphs
+
+Prompt-pack task dependencies are validated as a cross-phase DAG. Tickets may optionally declare a JSON Schema result contract; validated `result.json` artifacts and collection receipts are copied into and sealed with the durable run. See [Workflow Foundations Plan](docs/WORKFLOW_FOUNDATIONS_PLAN.md).
 
 ## Prompt packs
 
@@ -195,7 +311,7 @@ The `scripts/` directory preserves the original helper filenames as thin wrapper
 - `docs/TEST_POLICY.md`
 - `docs/STALL_RECOVERY.md`
 - `docs/MIGRATING_EXISTING_ASSETS.md`
-- `VALIDATION.md`
+- `CLEANUP_AND_REMOVAL_AUDIT.md`
 - `SECURITY.md`
 
 ## Development validation

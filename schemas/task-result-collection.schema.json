@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/task-result-collection/v1",
+  "type": "object",
+  "required": [
+    "schema",
+    "session_id",
+    "required",
+    "schema_path",
+    "source_path",
+    "source_sha256",
+    "stored_path",
+    "stored_sha256",
+    "validation_status",
+    "validation_errors",
+    "collected_at"
+  ],
+  "properties": {
+    "schema": {
+      "const": "agent-workflow/task-result-collection/v1"
+    },
+    "session_id": {
+      "type": "string"
+    },
+    "required": {
+      "type": "boolean"
+    },
+    "schema_path": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "source_path": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "source_sha256": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "stored_path": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "stored_sha256": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "validation_status": {
+      "enum": [
+        "not-configured",
+        "missing",
+        "valid",
+        "invalid"
+      ]
+    },
+    "validation_errors": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "collected_at": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}

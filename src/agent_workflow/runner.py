@@ -7,6 +7,7 @@ import os
 import signal
 import stat
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -89,11 +90,10 @@ def _collect_completion(run_dir: Path, workdir: Path) -> dict[str, Any]:
     handoff_value = status.get("handoff_dir")
     handoff = Path(handoff_value) if isinstance(handoff_value, str) else None
     source = handoff / "completion.json" if handoff is not None else None
-    adapter = str(status.get("pack_adapter") or "native")
     receipt: dict[str, Any] = {
         "schema": "agent-workflow/completion-collection/v1",
         "session_id": str(status["session_id"]),
-        "adapter": adapter,
+        "adapter": "native",
         "adapter_version": "1",
         "source_path": str(source) if source is not None else None,
         "source_sha256": None,
@@ -118,37 +118,20 @@ def _collect_completion(run_dir: Path, workdir: Path) -> dict[str, Any]:
     else:
         receipt["source_sha256"] = hashlib.sha256(data).hexdigest()
         try:
-            if adapter == "tax-machine":
-                from .tax_machine import discover, validate_completion
-                root_value = status.get("prompt_pack_root")
-                pack = discover(Path(root_value)) if isinstance(root_value, str) else None
-                if pack is None:
-                    raise WorkflowError("Tax Machine pack cannot be rediscovered for collection")
-                validate_completion(pack, data)
-                stored = run_dir / "external" / "tax-machine" / "completion.json"
-                stored.parent.mkdir(parents=True, exist_ok=True)
-                stored.write_bytes(data)
-                stored.chmod(0o444)
-                receipt["stored_path"] = str(stored.relative_to(run_dir))
-                # The current Tax contract has no deterministic complete native
-                # result/revision/criteria/command mapping. Preserve evidence but
-                # deliberately retain the native placeholder.
-                receipt["canonical_mapping"] = "not_mappable_current_schema"
-            else:
-                value = json.loads(data.decode("utf-8"))
-                if not isinstance(value, dict):
-                    raise WorkflowError("completion handoff must be a JSON object")
-                if value.get("session_id") != status["session_id"]:
-                    raise WorkflowError("completion handoff session_id does not match run")
-                from .contracts import validate_instance
-                validate_instance(value, "agent-workflow/completion/v1", artifact=str(source))
-                completion_path = run_dir / "completion.json"
-                temporary = completion_path.with_name(f".{completion_path.name}.handoff")
-                temporary.write_bytes(data)
-                os.replace(temporary, completion_path)
-                receipt["stored_path"] = "completion.json"
-                receipt["canonical_mapping"] = "identity"
-                receipt["canonical_sha256"] = hashlib.sha256(completion_path.read_bytes()).hexdigest()
+            value = json.loads(data.decode("utf-8"))
+            if not isinstance(value, dict):
+                raise WorkflowError("completion handoff must be a JSON object")
+            if value.get("session_id") != status["session_id"]:
+                raise WorkflowError("completion handoff session_id does not match run")
+            from .contracts import validate_instance
+            validate_instance(value, "agent-workflow/completion/v1", artifact=str(source))
+            completion_path = run_dir / "completion.json"
+            temporary = completion_path.with_name(f".{completion_path.name}.handoff")
+            temporary.write_bytes(data)
+            os.replace(temporary, completion_path)
+            receipt["stored_path"] = "completion.json"
+            receipt["canonical_mapping"] = "identity"
+            receipt["canonical_sha256"] = hashlib.sha256(completion_path.read_bytes()).hexdigest()
             receipt["validation_status"] = "valid"
         except (OSError, UnicodeDecodeError, json.JSONDecodeError, WorkflowError) as exc:
             receipt["validation_status"] = "invalid"
@@ -159,6 +142,92 @@ def _collect_completion(run_dir: Path, workdir: Path) -> dict[str, Any]:
         run_dir / "status.json",
         completion_collection_path=str(receipt_path),
         completion_validation_status=receipt["validation_status"],
+    )
+    return receipt
+
+
+def _collect_task_result(run_dir: Path, workdir: Path) -> dict[str, Any] | None:
+    """Collect and validate an optional ticket-specific structured result."""
+    status = _read_status(run_dir / "status.json")
+    contract = status.get("result_contract")
+    if not isinstance(contract, dict):
+        return None
+    required = bool(contract.get("required", True))
+    schema_rel = contract.get("schema")
+    pack_root_value = status.get("prompt_pack_root")
+    handoff_value = status.get("handoff_dir")
+    handoff = Path(handoff_value) if isinstance(handoff_value, str) else None
+    source = handoff / "result.json" if handoff is not None else None
+    receipt: dict[str, Any] = {
+        "schema": "agent-workflow/task-result-collection/v1",
+        "session_id": str(status["session_id"]),
+        "required": required,
+        "schema_path": str(schema_rel) if isinstance(schema_rel, str) else None,
+        "source_path": str(source) if source is not None else None,
+        "source_sha256": None,
+        "stored_path": None,
+        "stored_sha256": None,
+        "validation_status": "missing",
+        "validation_errors": [],
+        "collected_at": utc_now(),
+    }
+    try:
+        if handoff is None:
+            raise FileNotFoundError("launch has no completion handoff")
+        _require_real_handoff_dir(handoff, workdir)
+        if not isinstance(schema_rel, str) or not schema_rel:
+            raise WorkflowError("result contract schema path is missing")
+        if not isinstance(pack_root_value, str):
+            raise WorkflowError("result contract has no prompt pack root")
+        pack_root = Path(pack_root_value).resolve()
+        schema_path = (pack_root / schema_rel).resolve()
+        try:
+            schema_path.relative_to(pack_root)
+        except ValueError as exc:
+            raise WorkflowError("result contract schema escapes prompt pack root") from exc
+        if schema_path.is_symlink() or not schema_path.is_file():
+            raise WorkflowError("result contract schema must be a regular non-symlink file")
+        assert source is not None
+        data = _read_handoff_completion(source)
+        value = json.loads(data.decode("utf-8"))
+        schema_value = json.loads(schema_path.read_text(encoding="utf-8"))
+        if not isinstance(value, dict):
+            raise WorkflowError("task result must be a JSON object")
+        if not isinstance(schema_value, dict):
+            raise WorkflowError("task result schema must be a JSON object")
+        try:
+            import jsonschema
+        except ImportError as exc:
+            raise WorkflowError("task result validation requires jsonschema") from exc
+        errors = sorted(
+            jsonschema.Draft202012Validator(schema_value).iter_errors(value),
+            key=lambda item: list(item.path),
+        )
+        if errors:
+            details = []
+            for error in errors[:20]:
+                location = ".".join(str(part) for part in error.absolute_path) or "$"
+                details.append(f"{location}: {error.message}")
+            raise WorkflowError("invalid task result: " + "; ".join(details))
+        receipt["source_sha256"] = hashlib.sha256(data).hexdigest()
+        stored = run_dir / "result.json"
+        temporary = stored.with_name(f".{stored.name}.handoff")
+        temporary.write_bytes(data)
+        os.replace(temporary, stored)
+        receipt["stored_path"] = "result.json"
+        receipt["stored_sha256"] = hashlib.sha256(stored.read_bytes()).hexdigest()
+        receipt["validation_status"] = "valid"
+    except FileNotFoundError as exc:
+        receipt["validation_errors"] = [str(exc)]
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, WorkflowError) as exc:
+        receipt["validation_status"] = "invalid"
+        receipt["validation_errors"] = [str(exc)]
+    receipt_path = run_dir / "collections" / "task-result.json"
+    atomic_write_json(receipt_path, receipt)
+    _update_status(
+        run_dir / "status.json",
+        task_result_collection_path=str(receipt_path),
+        task_result_validation_status=receipt["validation_status"],
     )
     return receipt
 
@@ -193,6 +262,14 @@ def _update_status(path: Path, **changes: Any) -> dict[str, Any]:
 def _write_bytes(stream: BinaryIO, data: bytes) -> None:
     stream.write(data)
     stream.flush()
+
+
+def _mirror_terminal(stream: BinaryIO, data: bytes) -> None:
+    """Best-effort pane output; durable run artifacts remain authoritative."""
+    try:
+        _write_bytes(stream, data)
+    except (BrokenPipeError, OSError, ValueError):
+        pass
 
 
 def _capture_patch(workdir: Path, run_dir: Path, path: Path) -> None:
@@ -262,6 +339,7 @@ def execute(
     command: list[str],
     *,
     stream_format: str,
+    interactive: bool = False,
     heartbeat_seconds: float = 5.0,
 ) -> int:
     run_dir = run_dir.resolve()
@@ -307,13 +385,14 @@ def execute(
 
     _update_status(status_path, status="running", started_at=utc_now())
     try:
+        launch_command = command + ([prompt.decode("utf-8")] if interactive else [])
         process = subprocess.Popen(
-            command,
+            launch_command,
             cwd=workdir,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            start_new_session=True,
+            stdin=None if interactive else subprocess.PIPE,
+            stdout=None if interactive else subprocess.PIPE,
+            stderr=None if interactive else subprocess.PIPE,
+            start_new_session=not interactive,
         )
     except OSError as exc:
         finished_at = utc_now()
@@ -324,6 +403,7 @@ def execute(
         )
         _capture_patch(workdir, run_dir, run_dir / "patch.diff")
         _collect_completion(run_dir, workdir)
+        _collect_task_result(run_dir, workdir)
         current = _read_status(status_path)
         final_status = {
             **current,
@@ -348,15 +428,19 @@ def execute(
         )
         make_read_only(run_dir)
         return 127
-    assert process.stdin is not None
-    assert process.stdout is not None
-    assert process.stderr is not None
-    process.stdin.write(prompt)
-    process.stdin.close()
+    if not interactive:
+        assert process.stdin is not None
+        assert process.stdout is not None
+        assert process.stderr is not None
+        process.stdin.write(prompt)
+        process.stdin.close()
 
     def forward_signal(signum: int, _frame: Any) -> None:
         if process.poll() is None:
-            os.killpg(process.pid, signum)
+            if interactive:
+                process.send_signal(signum)
+            else:
+                os.killpg(process.pid, signum)
 
     signal.signal(signal.SIGINT, forward_signal)
     signal.signal(signal.SIGTERM, forward_signal)
@@ -371,6 +455,7 @@ def execute(
                     if stream_format == "text":
                         with lock:
                             _write_bytes(output, raw)
+                            _mirror_terminal(sys.stdout.buffer, raw)
                     else:
                         _write_bytes(events, raw)
                         line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
@@ -378,6 +463,7 @@ def execute(
                         if event is None:
                             with lock:
                                 _write_bytes(output, raw)
+                                _mirror_terminal(sys.stdout.buffer, raw)
                             continue
                         usage_value = usage_update(event)
                         if usage_value is not None:
@@ -389,7 +475,9 @@ def execute(
                                 continue
                             last_normalized_text = normalized
                             with lock:
-                                _write_bytes(output, (normalized + "\n").encode())
+                                visible = (normalized + "\n").encode()
+                                _write_bytes(output, visible)
+                                _mirror_terminal(sys.stdout.buffer, visible)
         except Exception as exc:  # pragma: no cover - defensive thread boundary
             pump_errors.append(f"stdout: {exc}")
 
@@ -403,10 +491,11 @@ def execute(
                     _write_bytes(errors, raw)
                     with lock:
                         _write_bytes(output, raw)
+                        _mirror_terminal(sys.stderr.buffer, raw)
         except Exception as exc:  # pragma: no cover - defensive thread boundary
             pump_errors.append(f"stderr: {exc}")
 
-    threads = [
+    threads = [] if interactive else [
         threading.Thread(target=stdout_pump, daemon=True),
         threading.Thread(target=stderr_pump, daemon=True),
     ]
@@ -428,11 +517,17 @@ def execute(
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 timed_out = True
-                os.killpg(process.pid, signal.SIGTERM)
+                if interactive:
+                    process.terminate()
+                else:
+                    os.killpg(process.pid, signal.SIGTERM)
                 try:
                     return_code = process.wait(timeout=5)
                 except subprocess.TimeoutExpired:
-                    os.killpg(process.pid, signal.SIGKILL)
+                    if interactive:
+                        process.kill()
+                    else:
+                        os.killpg(process.pid, signal.SIGKILL)
                     return_code = process.wait()
                 break
             wait_seconds = min(wait_seconds, remaining)
@@ -446,7 +541,10 @@ def execute(
     if any(thread.is_alive() for thread in threads):
         pump_errors.append("stream drain deadline exceeded")
         try:
-            os.killpg(process.pid, signal.SIGTERM)
+            if interactive:
+                process.terminate()
+            else:
+                os.killpg(process.pid, signal.SIGTERM)
         except ProcessLookupError:
             pass
         process.stdout.close()
@@ -459,6 +557,7 @@ def execute(
         return_code = return_code or 1
 
     _collect_completion(run_dir, workdir)
+    _collect_task_result(run_dir, workdir)
 
     if isinstance(runtime, dict):
         try:
@@ -595,6 +694,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--run-dir", type=Path, required=True)
     parser.add_argument("--workdir", type=Path, required=True)
     parser.add_argument("--stream-format", default="text")
+    parser.add_argument("--interactive", action="store_true")
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     command = list(args.command)
@@ -607,6 +707,7 @@ def main(argv: list[str] | None = None) -> int:
         args.workdir,
         command,
         stream_format=args.stream_format,
+        interactive=args.interactive,
     )
 
 

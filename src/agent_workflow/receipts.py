@@ -26,17 +26,17 @@ SEALED_ARTIFACTS = (
 )
 SEALED_TREES = ("collections", "scope")
 SEALED_OPTIONAL_ARTIFACTS = (
+    "result.json",
+    "collections/task-result.json",
     "evaluation-runtime.json",
     "execution-metrics.json",
     "control-events.jsonl",
     "job-binding.json",
     "jobs/native-job.json",
-    "external/tax-machine/MANIFEST.json",
-    "external/tax-machine/job.json",
-    "external/tax-machine/job.schema.json",
-    "external/tax-machine/completion.schema.json",
-    "external/tax-machine/completion.json",
+    "agent-context.json",
+    "assignments.jsonl",
 )
+SEALED_OPTIONAL_TREES = ("assignments",)
 
 
 def initial_completion(
@@ -69,6 +69,10 @@ def initial_provenance(
     argv: list[str],
     stream_format: str,
     executor_version: str | None,
+    agent_name: str | None = None,
+    agent_class: str | None = None,
+    model: str | None = None,
+    model_policy: dict[str, Any] | None = None,
     prompt_sha256: str,
     launch_prompt_sha256: str,
     config_sha256: str | None,
@@ -78,16 +82,21 @@ def initial_provenance(
     environment: dict[str, Any],
     budgets: dict[str, Any] | None = None,
     job_binding: dict[str, Any] | None = None,
-    external_snapshots: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "schema": "agent-workflow/run-provenance/v1",
         "session_id": session_id,
         "executor": executor,
+        "agent_name": agent_name,
+        "agent_class": agent_class,
         "argv": argv,
         "stream_format": stream_format,
         "executor_version": executor_version,
-        "model": None,
+        "model": model,
+        "model_policy": model_policy or {
+            "no_go_authorized": False,
+            "authorization_source": None,
+        },
         "prompt_sha256": prompt_sha256,
         "launch_prompt_sha256": launch_prompt_sha256,
         "config_sha256": config_sha256,
@@ -97,7 +106,6 @@ def initial_provenance(
         "environment": environment,
         "budgets": budgets or {},
         "job_binding": job_binding,
-        "external_snapshots": external_snapshots,
         "usage": None,
         "started_at": utc_now(),
         "first_output_at": None,
@@ -151,6 +159,14 @@ def seal_run(run_dir: Path, *, session_id: str) -> dict[str, Any]:
         for name in SEALED_OPTIONAL_ARTIFACTS
         if (path := run_dir / name).is_file()
     )
+    for tree in SEALED_OPTIONAL_TREES:
+        tree_root = run_dir / tree
+        if tree_root.is_dir() and not tree_root.is_symlink():
+            artifacts.extend(
+                _artifact_receipt(path, run_dir)
+                for path in sorted(tree_root.rglob("*"))
+                if path.is_file()
+            )
     listed_paths = {item["path"] for item in artifacts}
     for tree in SEALED_TREES:
         tree_root = run_dir / tree
@@ -178,6 +194,9 @@ def seal_run(run_dir: Path, *, session_id: str) -> dict[str, Any]:
     binding = run_dir / "job-binding.json"
     if binding.is_file():
         read_contract(binding, "agent-workflow/job-binding/v1")
+    task_result_collection = run_dir / "collections" / "task-result.json"
+    if task_result_collection.is_file():
+        read_contract(task_result_collection, "agent-workflow/task-result-collection/v1")
     metrics = run_dir / "execution-metrics.json"
     if metrics.is_file():
         read_contract(metrics, "agent-workflow/execution-metrics/v1")

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/agent-context/v1",
+  "type": "object",
+  "required": ["schema", "session_id", "interactive", "worktree", "state", "completed_assignments", "reuse_count", "created_at", "updated_at"],
+  "properties": {
+    "schema": {"const": "agent-workflow/agent-context/v1"},
+    "session_id": {"type": "string"},
+    "agent_name": {"type": ["string", "null"]},
+    "agent_class": {"type": ["string", "null"]},
+    "executor": {"type": ["string", "null"]},
+    "model": {"type": ["string", "null"]},
+    "interactive": {"type": "boolean"},
+    "provider_session_id": {"type": ["string", "null"]},
+    "repository_root": {"type": ["string", "null"]},
+    "worktree": {"type": "string"},
+    "source_revision": {"type": ["string", "null"]},
+    "state": {"enum": ["busy", "reuse_pending", "idle_reusable", "idle_stale", "closed"]},
+    "current_assignment": {"type": ["object", "null"]},
+    "completed_assignments": {"type": "array", "items": {"type": "object"}},
+    "reuse_count": {"type": "integer", "minimum": 0},
+    "created_at": {"type": "string"},
+    "updated_at": {"type": "string"}
+  },
+  "additionalProperties": false
+}

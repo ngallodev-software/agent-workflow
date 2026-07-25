@@ -56,6 +56,7 @@ class EvaluationRuntimeTests(unittest.TestCase):
             )
             with (
                 patch("agent_workflow.sessions.tmux.session_exists", return_value=False),
+                patch("agent_workflow.sessions.tmux.current_window_target", return_value=None),
                 patch("agent_workflow.sessions.tmux.create_session") as create,
                 patch("agent_workflow.sessions.tmux.pane_info", return_value=None),
             ):

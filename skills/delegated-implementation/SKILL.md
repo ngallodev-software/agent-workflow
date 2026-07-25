@@ -1,11 +1,11 @@
 ---
 name: delegated-implementation
-description: Execute bounded implementation tickets from an agent-workflow prompt pack with strict scope, evidence, and test controls.
+description: Execute bounded implementation tickets already launched through agent-workflow with strict scope, durable evidence, and test controls.
 ---
 
 # Delegated implementation
 
-Use this skill when executing a bounded implementation ticket from an agent-workflow prompt pack.
+Use this skill inside a bounded ticket session that was launched through the `agent-workflow` CLI. For orchestration and lifecycle commands, use [`agent-workflow-orchestrator`](../agent-workflow-orchestrator/SKILL.md).
 
 ## Required behavior
 
@@ -14,12 +14,15 @@ Use this skill when executing a bounded implementation ticket from an agent-work
 3. Stay inside writable paths.
 4. Implement the smallest coherent change.
 5. Add only tests tied to explicit acceptance criteria or a demonstrated regression.
-6. Preserve failed commands and unresolved contradictions in the completion report.
-7. Do not merge, broaden scope, or claim phase acceptance.
+6. Emit durable `progress` records at meaningful checkpoints and `ack` correlated steering messages when the configured executor adapter supports semantic delivery.
+7. Preserve failed commands and unresolved contradictions in the completion report.
+8. Do not merge, broaden scope, or claim phase acceptance.
 
 ## Terminal contract
 
-The operator launches each delegation in a fresh foregroundable session. Do not spawn a replacement coding agent inside the ticket session unless the ticket explicitly assigns coordinator behavior.
+The operator must launch the ticket with `agent-workflow launch`. Do not create tmux sessions or panes directly. Do not spawn a replacement coding agent from inside the ticket session unless the ticket explicitly assigns coordinator behavior.
+
+A host-native child process or subagent is not an `agent-workflow` run unless an explicit bridge launches it through the CLI and records receipts.
 
 ## Stop conditions
 

@@ -1,0 +1,27 @@
+phase: 0
+name: scheduler-core
+mandatory_order: [WF-00, WF-01, WF-02]
+tasks:
+  - id: WF-00
+    tier: B
+    session: workflow-foundations-wf-00
+    prompt: tickets/WF-00-contract-and-state.md
+    result_contract:
+      schema: contracts/workflow-node-result.schema.json
+      required: true
+  - id: WF-01
+    tier: A
+    session: workflow-foundations-wf-01
+    prompt: tickets/WF-01-scheduler-service.md
+    dependencies: [WF-00]
+    result_contract:
+      schema: contracts/workflow-node-result.schema.json
+      required: true
+  - id: WF-02
+    tier: A
+    session: workflow-foundations-wf-02
+    prompt: tickets/WF-02-restart-and-cli.md
+    dependencies: [WF-01]
+    result_contract:
+      schema: contracts/workflow-node-result.schema.json
+      required: true

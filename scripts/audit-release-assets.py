@@ -18,11 +18,15 @@ LINK_RE = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
 errors: list[str] = []
 
 EXCLUDED_DIRS = {
+    ".agent-workflow-handoff",
+    ".claude",
+    ".claude-flow",
     ".codebase-memory",
     ".git",
     ".mypy_cache",
     ".pytest_cache",
     ".ruff_cache",
+    ".swarm",
     ".venv",
     "__pycache__",
     "build",

@@ -1,0 +1,19 @@
+phase: "1"
+name: "domain-seams-contracts"
+mandatory_order: ["P1-00", "P1-01", "P1-02"]
+tasks:
+  - id: "P1-00"
+    tier: C
+    session: "mcp-server-next-p1-00-baseline"
+    prompt: "tickets/P1-00-baseline-and-preflight.md"
+    dependencies: ["P0-02"]
+  - id: "P1-01"
+    tier: A
+    session: "mcp-server-next-p1-01-domain-services"
+    prompt: "tickets/P1-01-domain-services-and-contracts.md"
+    dependencies: ["P1-00"]
+  - id: "P1-02"
+    tier: A
+    session: "mcp-server-next-p1-02-review"
+    prompt: "tickets/P1-02-independent-phase-review.md"
+    dependencies: ["P1-01"]

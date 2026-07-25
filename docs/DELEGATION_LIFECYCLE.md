@@ -23,3 +23,9 @@ Interrupt first. Preserve the original run directory and worktree. A retry uses 
 ## Complete
 
 The implementer fills in the generated completion report. The reviewer inspects the diff and reruns narrow gates independently. The original session record remains evidence after branch merge or worktree removal.
+
+For an interactive agent that remains open, process lifetime and assignment
+completion are separate. The child emits `agent task-complete` with a bounded
+summary, tags, and touched files; no terminal text is inferred. A new
+assignment is `reuse_pending` until its correlated acknowledgement. Automatic
+reuse is limited to exact ticket/retry lineage in the same worktree.

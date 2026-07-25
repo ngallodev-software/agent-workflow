@@ -6,6 +6,10 @@ state_root = "~/.local/state/agent-workflow"
 backend = "tmux"
 stall_minutes = 10
 capture_lines = 50
+mouse = true
+orchestrator_side = "left"
+max_interactive_agent_width = 2
+max_interactive_agent_vertical = 3
 
 [git]
 branch_prefix = "impl/"
@@ -16,8 +20,73 @@ archive_level = 19
 write_sha256 = true
 validate_before_archive = true
 
+[agents]
+preferred_names = ["larry", "moe", "curly"]
+generated_prefix = "agent"
+default_executor = "codex"
+non_interactive_tmux = "dedicated_session"
+default_class = "implementation"
+reuse_stale_minutes = 120
+
+[agents.profiles.moe]
+class = "implementation"
+executor = "codex"
+model = "gpt-5.6-luna"
+
+[agents.profiles.curly]
+class = "implementation"
+executor = "claude"
+model = "haiku"
+
+[agent_classes.exploratory]
+# Claude launches are interactive by default; --no-interactive is an explicit
+# per-launch opt-out. This class flag remains the default for non-Claude
+# executors and custom executor policies.
+interactive = false
+default_executor = "claude"
+default_model = "haiku"
+
+[agent_classes.exploratory.models]
+claude = ["haiku"]
+codex = ["gpt-5.4-mini"]
+
+[agent_classes.review]
+# Claude launches are interactive by default; --no-interactive is an explicit
+# per-launch opt-out. This class flag remains the default for non-Claude
+# executors and custom executor policies.
+interactive = false
+default_executor = "codex"
+default_model = "gpt-5.4-mini"
+
+[agent_classes.review.models]
+claude = ["haiku", "sonnet"]
+codex = ["gpt-5.4-mini", "gpt-5.6-luna"]
+
+[agent_classes.implementation]
+interactive = true
+default_executor = "codex"
+default_model = "gpt-5.4-mini"
+
+[agent_classes.implementation.models]
+claude = ["haiku", "sonnet"]
+codex = ["gpt-5.4-mini", "gpt-5.6-luna", "gpt-5.6-terra"]
+
 [executors.codex]
 command = ["codex", "exec", "--sandbox", "workspace-write", "--skip-git-repo-check", "-"]
+interactive_command = ["codex"]
+models = ["gpt-5.4-mini", "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"]
+default_model = "gpt-5.4-mini"
+no_go_models = ["gpt-5.6-sol", "*fast*"]
+model_arg = ["--model"]
+interactive_permission_args = ["--ask-for-approval", "on-request"]
+non_interactive_permission_args = []
 
 [executors.claude]
 command = ["claude", "--print"]
+interactive_command = ["claude"]
+models = ["haiku", "sonnet", "opus", "fable"]
+default_model = "sonnet"
+no_go_models = ["opus", "fable"]
+model_arg = ["--model"]
+interactive_permission_args = ["--permission-mode", "manual"]
+non_interactive_permission_args = ["--permission-mode", "manual"]
