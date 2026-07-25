@@ -31,7 +31,6 @@ SEALED_ARTIFACTS = (
 SEALED_TREES = ("collections", "scope")
 SEALED_OPTIONAL_ARTIFACTS = (
     "result.json",
-    "collections/task-result.json",
     "evaluation-runtime.json",
     "execution-metrics.json",
     "control-events.jsonl",
