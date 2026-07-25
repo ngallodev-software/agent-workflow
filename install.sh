@@ -84,10 +84,13 @@ else
   echo "kept existing config: $CONFIG_FILE"
 fi
 if [[ $INSTALL_SKILLS -eq 1 ]]; then
-  mkdir -p "$HOME/.agents/skills" "$HOME/.claude/skills"
-  for skill in delegated-implementation prompt-pack-builder phase-gate-review; do
-    safe_link "$ROOT/skills/$skill" "$HOME/.agents/skills/$skill"
-    safe_link "$ROOT/skills/$skill" "$HOME/.claude/skills/$skill"
+  skill_roots=("$HOME/.agents/skills" "$HOME/.codex/skills" "$HOME/.claude/skills")
+  skills=(agent-workflow-orchestrator delegated-implementation prompt-pack-builder phase-gate-review)
+  mkdir -p "${skill_roots[@]}"
+  for root in "${skill_roots[@]}"; do
+    for skill in "${skills[@]}"; do
+      safe_link "$ROOT/skills/$skill" "$root/$skill"
+    done
   done
 fi
 cat <<EOF2

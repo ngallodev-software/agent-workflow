@@ -1,5 +1,8 @@
 # Priority-picker visual regression fixture — blocked gate
 
+> Status: active blocked-test contract linked from BKL-010; this is not a completed fixture claim.
+
+
 The Phase 3 fixture is intentionally not represented as complete in this source archive.
 The ticket requires a pinned offline browser image, pinned fonts, deterministic screenshot
 comparison, and imported browser/Inspect artifacts before sealing. This environment does

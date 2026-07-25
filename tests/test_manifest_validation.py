@@ -3,6 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from agent_workflow.pack import scaffold
 from agent_workflow.manifests import validate_pack, write_checksum_manifest
 
 
@@ -130,3 +131,47 @@ class MiniYamlFallbackTests(unittest.TestCase):
         )
         self.assertEqual(block["tasks"][0]["session"], "test-p0-00")
         self.assertEqual(inline["tasks"][0]["tier"], "C")
+
+class WorkflowDependencyValidationTests(unittest.TestCase):
+    def test_pack_rejects_unknown_and_cyclic_dependencies(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            scaffold(root, phases=1, name="graph")
+            manifest = root / "phase-0" / "task-manifest.yaml"
+            manifest.write_text(
+                """phase: 0
+name: graph
+tasks:
+  - id: A
+    tier: A
+    session: graph-a
+    prompt: tickets/P0-00-baseline-and-preflight.md
+    dependencies: [B]
+  - id: B
+    tier: A
+    session: graph-b
+    prompt: tickets/P0-00-baseline-and-preflight.md
+    dependencies: [A]
+""",
+                encoding="utf-8",
+            )
+            report = validate_pack(root, verify_checksums=False)
+            self.assertTrue(any("dependency cycle" in error for error in report.errors))
+
+    def test_pack_accepts_ticket_result_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            scaffold(root, phases=1, name="result")
+            (root / "contracts").mkdir()
+            (root / "contracts" / "result.schema.json").write_text(
+                '{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object"}',
+                encoding="utf-8",
+            )
+            manifest = root / "phase-0" / "task-manifest.yaml"
+            text = manifest.read_text(encoding="utf-8")
+            text = text.replace(
+                '    prompt: "tickets/P0-00-baseline-and-preflight.md"',
+                '    prompt: "tickets/P0-00-baseline-and-preflight.md"\n    result_contract:\n      schema: "contracts/result.schema.json"\n      required: true',
+            )
+            manifest.write_text(text, encoding="utf-8")
+            self.assertTrue(validate_pack(root, verify_checksums=False).ok)

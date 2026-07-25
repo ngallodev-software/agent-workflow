@@ -14,5 +14,3 @@ build/
 *.sha256
 !MANIFEST.sha256
 !examples/three-phase-pack/MANIFEST.sha256
-scripts.orig/
-templates.orig/

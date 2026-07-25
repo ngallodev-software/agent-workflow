@@ -1,5 +1,8 @@
 # Orchestrator messaging and regression evals
 
+> Status: historical prompt pack retained for provenance. Its 0.1.4 baseline is intentionally historical, not the current release.
+
+
 ## Purpose
 
 Research, implement, and independently verify durable local parent/child
@@ -9,7 +12,7 @@ record.
 
 ## Source baseline
 
-`/lump/apps/agent-workflow`, `master`, release `0.1.4`, reviewed 2026-07-23.
+Supplied source archive, release `0.1.4`, reviewed 2026-07-23.
 
 ## Phase map
 

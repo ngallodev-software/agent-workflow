@@ -10,8 +10,8 @@ remove_owned_link() {
   fi
 }
 remove_owned_link "$ROOT/bin/agent-workflow" "$HOME/.local/bin/agent-workflow"
-for root in "$HOME/.agents/skills" "$HOME/.claude/skills"; do
-  for skill in delegated-implementation prompt-pack-builder phase-gate-review; do
+for root in "$HOME/.agents/skills" "$HOME/.codex/skills" "$HOME/.claude/skills"; do
+  for skill in agent-workflow-orchestrator delegated-implementation prompt-pack-builder phase-gate-review; do
     path="$root/$skill"
     remove_owned_link "$ROOT/skills/$skill" "$path"
   done

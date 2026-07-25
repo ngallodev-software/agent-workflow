@@ -85,3 +85,8 @@ Review is an independent dimension: `null -> reviewed -> accepted|rejected`. Rev
 ## Evaluation topology
 
 The accepted topology is documented in `docs/adr/0001-inspect-evaluation-topology.md`: host `agent-workflow` owns tmux and local evidence, while Inspect owns the Docker sandbox, model bridge, transcripts, and adapter lifecycle. Public `inspect_swe.codex_cli()` and `inspect_swe.claude_code()` adapters are reused whole; private Inspect internals are not copied.
+
+
+## Prompt-pack dependency and result contracts
+
+Task dependencies are validated globally before execution, including unknown references, self-dependencies, and cycles. A task may declare a pack-local JSON Schema for a structured result. The executor writes through the existing handoff boundary; the runner performs bounded non-symlink reads, validates the result, writes a collection receipt, and seals accepted evidence. This is a contract layer only; scheduling remains separate and must invoke the existing launch service.

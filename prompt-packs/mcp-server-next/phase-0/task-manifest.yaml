@@ -1,0 +1,18 @@
+phase: "0"
+name: "research-review-plan"
+mandatory_order: ["P0-00", "P0-01", "P0-02"]
+tasks:
+  - id: "P0-00"
+    tier: C
+    session: "mcp-server-next-p0-00-baseline"
+    prompt: "tickets/P0-00-baseline-and-preflight.md"
+  - id: "P0-01"
+    tier: B
+    session: "mcp-server-next-p0-01-research"
+    prompt: "tickets/P0-01-primary-research-refresh.md"
+    dependencies: ["P0-00"]
+  - id: "P0-02"
+    tier: A
+    session: "mcp-server-next-p0-02-review-plan"
+    prompt: "tickets/P0-02-architecture-review-and-plan.md"
+    dependencies: ["P0-01"]

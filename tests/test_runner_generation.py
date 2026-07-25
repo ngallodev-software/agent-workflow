@@ -357,3 +357,51 @@ class RunnerExecutionTests(unittest.TestCase):
                 "hello prompt",
                 (state / "output.log").read_text(encoding="utf-8"),
             )
+
+    def test_runner_mirrors_normalized_structured_output_to_terminal(self):
+        import subprocess
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state, work = root / "state", root / "work"
+            state.mkdir()
+            work.mkdir()
+            write_run_contracts(state, session_id="visible-output", include_final=False)
+            event = json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {"content": [{"type": "text", "text": "pane-visible"}]},
+                }
+            )
+            runner = _write_runner(
+                state,
+                work,
+                ["python3", "-c", f"print({event!r})"],
+                stream_format="claude-stream-json",
+            )
+            result = subprocess.run([str(runner)], check=False, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0)
+            self.assertIn("pane-visible", result.stdout)
+            self.assertNotIn('"type": "assistant"', result.stdout)
+
+
+class StructuredTaskResultTests(unittest.TestCase):
+    def test_collects_declared_structured_result(self):
+        from agent_workflow.runner import _collect_task_result
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state, work, pack = root / "state", root / "work", root / "pack"
+            state.mkdir(); work.mkdir(); pack.mkdir()
+            write_run_contracts(state, session_id="result-valid", include_final=False)
+            schema = {"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","required":["value"],"properties":{"value":{"type":"integer"}},"additionalProperties":False}
+            (pack / "result.schema.json").write_text(json.dumps(schema), encoding="utf-8")
+            handoff = work / ".agent-workflow-handoff" / "result-valid"
+            handoff.mkdir(parents=True)
+            (handoff / "result.json").write_text('{"value":7}', encoding="utf-8")
+            status_path = state / "status.json"
+            status = json.loads(status_path.read_text(encoding="utf-8"))
+            status.update({"handoff_dir":str(handoff), "prompt_pack_root":str(pack), "result_contract":{"schema":"result.schema.json","required":True}})
+            status_path.write_text(json.dumps(status), encoding="utf-8")
+            receipt = _collect_task_result(state, work)
+            self.assertEqual(receipt["validation_status"], "valid")
+            self.assertEqual(json.loads((state / "result.json").read_text())["value"], 7)

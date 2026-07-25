@@ -8,7 +8,12 @@
     "argv": {"type": "array", "minItems": 1, "items": {"type": "string"}},
     "shell": {"type": "string"},
     "executor": {"type": ["string", "null"]},
-    "stream_format": {"enum": ["text", "codex-jsonl", "claude-stream-json"]}
+    "stream_format": {"enum": ["text", "codex-jsonl", "claude-stream-json"]},
+    "interactive": {"type": "boolean"},
+    "model": {"type": ["string", "null"]},
+    "no_go_authorized": {"type": "boolean"},
+    "agent_name": {"type": "string"},
+    "agent_class": {"type": "string"}
   },
   "additionalProperties": false
 }

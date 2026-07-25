@@ -1,11 +1,11 @@
 ---
 name: prompt-pack-builder
-description: Build validated, self-contained implementation prompt packs with phased tickets, references, terminal delegation rules, and checksums.
+description: Build validated, self-contained agent-workflow prompt packs with phased tickets, references, lifecycle instructions, and checksums.
 ---
 
 # Prompt-pack builder
 
-Use this skill to produce the durable prompt-pack format.
+Use this skill when bounded work needs isolated worktrees, persistent evidence, independent review, recovery, or ordered multi-ticket execution. Small one-step local edits do not require a ceremonial pack. Use [`agent-workflow-orchestrator`](../agent-workflow-orchestrator/SKILL.md) to validate and launch the completed pack.
 
 ## Required archive structure
 
@@ -19,6 +19,10 @@ Use this skill to produce the durable prompt-pack format.
 - source references sufficient for a smaller model to avoid guessing;
 - internal SHA-256 manifest and external archive checksum;
 - validated `.tar.zst` archive.
+
+## Operational requirements
+
+The generated README and runbook must name `agent-workflow pack validate`, `agent-workflow worktree create`, and `agent-workflow launch`. They must state that a valid current tmux context produces a visible pane through `agent-workflow launch`, while an unusable context falls back to a detached named session. They must also state that native host subagents are not durable workflow runs unless explicitly bridged through the CLI.
 
 ## Quality rules
 

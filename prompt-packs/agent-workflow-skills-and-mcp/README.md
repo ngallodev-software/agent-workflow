@@ -1,5 +1,8 @@
 # Agent-workflow skill integration and MCP decision
 
+> Status: completed execution input retained for reproducibility. Current repository source and backlog remain authoritative.
+
+
 ## Purpose
 
 Fix P0 BKL-006 so agents can discover and operate `agent-workflow`, then
@@ -8,7 +11,7 @@ only code phase. Phase 1 is research only and must not add MCP runtime code.
 
 ## Source baseline
 
-`/lump/apps/agent-workflow`, `master`, release `0.1.6`, reviewed 2026-07-23.
+Supplied source archive, release `0.1.6`, reviewed 2026-07-23.
 The checkout and supplied source archive are authoritative when they differ
 from a historical reference.
 

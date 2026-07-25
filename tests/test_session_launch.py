@@ -7,14 +7,126 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from agent_workflow.config import defaults
+from agent_workflow.config import AgentProfile, defaults
 from agent_workflow.errors import WorkflowError
-from agent_workflow.sessions import kill, launch, restart
+from agent_workflow.sessions import _resolve_agent_identity, kill, launch, restart
 from agent_workflow.state import write_status
 from agent_workflow.tmux import PaneInfo
 
 
 class SessionLaunchTests(unittest.TestCase):
+    def setUp(self):
+        # Unit launches must not mutate the developer's ambient tmux window.
+        self._tmux_target = patch(
+            "agent_workflow.sessions.tmux.current_window_target", return_value=None
+        )
+        self._tmux_target.start()
+        self.addCleanup(self._tmux_target.stop)
+
+    def test_agent_classes_set_executor_model_and_visibility(self):
+        settings = defaults(Path("/missing.toml"))
+        with patch("agent_workflow.sessions.list_statuses", return_value=[]):
+            exploratory = _resolve_agent_identity(
+                settings,
+                requested_name=None,
+                requested_class="exploratory",
+                executor=None,
+                model=None,
+                allow_no_go_model=False,
+                explicit_command=None,
+                interactive=None,
+            )
+            implementation = _resolve_agent_identity(
+                settings,
+                requested_name=None,
+                requested_class="implementation",
+                executor=None,
+                model=None,
+                allow_no_go_model=False,
+                explicit_command=None,
+                interactive=None,
+            )
+        self.assertEqual(exploratory[1:4], ("exploratory", "claude", "haiku"))
+        self.assertFalse(exploratory[-1])
+        self.assertEqual(
+            implementation[1:4],
+            ("implementation", "codex", "gpt-5.4-mini"),
+        )
+        self.assertTrue(implementation[-1])
+
+    def test_agent_name_is_unique_across_interactive_and_detached_runs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            workdir = root / "worktree"
+            workdir.mkdir()
+            prompt = root / "task.md"
+            prompt.write_text("task", encoding="utf-8")
+            settings = defaults(root / "missing.toml")
+            settings = settings.__class__(
+                **{**settings.__dict__, "state_root": root / "state"}
+            )
+            with (
+                patch("agent_workflow.sessions.tmux.session_exists", return_value=False),
+                patch("agent_workflow.sessions.tmux.create_session"),
+                patch(
+                    "agent_workflow.sessions.tmux.pane_info",
+                    return_value=PaneInfo(pid=123, dead=False, command="cat"),
+                ),
+            ):
+                launch(
+                    settings, session_id="detached-one", workdir=workdir,
+                    prompt_path=prompt, explicit_command=["cat"],
+                    agent_name="agent-42", interactive=False,
+                )
+                with self.assertRaisesRegex(WorkflowError, "agent name is already active"):
+                    launch(
+                        settings, session_id="interactive-two", workdir=workdir,
+                        prompt_path=prompt, explicit_command=["cat"],
+                        agent_name="agent-42", interactive=True,
+                    )
+
+    def test_named_agent_profile_binds_executor_model_and_class(self):
+        base = defaults(Path("/missing.toml"))
+        settings = base.__class__(
+            **{
+                **base.__dict__,
+                "preferred_agent_names": ("larry", "moe", "curly"),
+                "agent_profiles": {
+                    "moe": AgentProfile("codex", "gpt-5.6-luna", agent_class="implementation"),
+                    "curly": AgentProfile("claude", "haiku", agent_class="implementation"),
+                },
+            }
+        )
+        active = [{"agent_name": "larry", "status": "running"}]
+        with patch("agent_workflow.sessions.list_statuses", return_value=active):
+            moe = _resolve_agent_identity(
+                settings,
+                requested_name=None,
+                requested_class=None,
+                executor=None,
+                model=None,
+                allow_no_go_model=False,
+                explicit_command=None,
+                interactive=None,
+            )
+        self.assertEqual(moe[:4], ("moe", "implementation", "codex", "gpt-5.6-luna"))
+
+    def test_agent_class_rejects_disallowed_model(self):
+        with (
+            patch("agent_workflow.sessions.list_statuses", return_value=[]),
+            self.assertRaisesRegex(WorkflowError, "does not allow"),
+        ):
+            _resolve_agent_identity(
+                defaults(Path("/missing.toml")),
+                requested_name=None,
+                requested_class="exploratory",
+                executor="claude",
+                model="sonnet",
+                allow_no_go_model=False,
+                explicit_command=None,
+                interactive=None,
+            )
+
     def _native_job_launch_inputs(self, root: Path) -> tuple[Path, Path, Path]:
         pack = root / "pack"
         workdir = pack / "worktrees" / "P0-01"
@@ -59,6 +171,7 @@ class SessionLaunchTests(unittest.TestCase):
             with (
                 patch("agent_workflow.sessions.tmux.session_exists", return_value=False),
                 patch("agent_workflow.sessions.tmux.current_window_target", return_value="parent:1"),
+                patch("agent_workflow.sessions.tmux.interactive_pane_count", return_value=1),
                 patch("agent_workflow.sessions.tmux.split_window", return_value="parent:1.3") as split,
                 patch("agent_workflow.sessions.tmux.create_session") as create,
                 patch("agent_workflow.sessions.tmux.pane_info", return_value=PaneInfo(123, False, "python3")),
@@ -69,6 +182,8 @@ class SessionLaunchTests(unittest.TestCase):
                     ticket_id="P0-01", pack_id="native-pack",
                 )
             split.assert_called_once()
+            self.assertEqual(split.call_args.kwargs["max_interactive_agent_width"], 2)
+            self.assertEqual(split.call_args.kwargs["max_interactive_agent_vertical"], 3)
             create.assert_not_called()
             self.assertEqual("shared_window", result["tmux_mode"])
             self.assertEqual("parent", result["tmux_session"])
@@ -167,6 +282,7 @@ class SessionLaunchTests(unittest.TestCase):
             )
             with (
                 patch("agent_workflow.sessions.tmux.session_exists", return_value=False),
+                patch("agent_workflow.sessions.tmux.current_window_target", return_value=None),
                 patch("agent_workflow.sessions.tmux.create_session") as create_session,
                 patch("agent_workflow.sessions.tmux.pane_info", return_value=None),
             ):
@@ -204,6 +320,7 @@ class SessionLaunchTests(unittest.TestCase):
             create_session.assert_called_once()
             with (
                 patch("agent_workflow.sessions.tmux.session_exists", return_value=False),
+                patch("agent_workflow.sessions.tmux.current_window_target", return_value=None),
                 patch("agent_workflow.sessions.tmux.create_session"),
                 patch("agent_workflow.sessions.tmux.pane_info", return_value=None),
             ):
@@ -293,6 +410,7 @@ class SessionLaunchTests(unittest.TestCase):
             )
             with (
                 patch("agent_workflow.sessions.tmux.session_exists", return_value=False),
+                patch("agent_workflow.sessions.tmux.current_window_target", return_value=None),
                 patch("agent_workflow.sessions.tmux.create_session") as create_session,
                 patch(
                     "agent_workflow.sessions.tmux.pane_info",
@@ -366,7 +484,12 @@ class SessionLaunchTests(unittest.TestCase):
             )
             self.assertEqual(command["executor"], "codex")
             self.assertEqual(command["stream_format"], "codex-jsonl")
-            self.assertEqual(command["argv"], [str(codex), "exec", "--json", "-"])
+            self.assertEqual(
+                command["argv"],
+                [str(codex), "exec", "--model", "gpt-5.4-mini", "--json", "-"],
+            )
+            self.assertEqual(provenance["model"], "gpt-5.4-mini")
+            self.assertFalse(provenance["model_policy"]["no_go_authorized"])
             self.assertEqual(provenance["executor"], "codex")
             self.assertEqual(provenance["stream_format"], "codex-jsonl")
 
@@ -412,6 +535,7 @@ class SessionLaunchTests(unittest.TestCase):
                     workdir=workdir,
                     prompt_path=prompt,
                     explicit_command=["python3", "-c", receiver],
+                    interactive=False,
                 )
             runner = Path(create_session.call_args.args[2])
             subprocess.run([str(runner)], check=True, capture_output=True, text=True)
@@ -506,6 +630,7 @@ class SessionLaunchTests(unittest.TestCase):
 
             with (
                 patch("agent_workflow.sessions.tmux.session_exists", return_value=False),
+                patch("agent_workflow.sessions.tmux.current_window_target", return_value=None),
                 patch("agent_workflow.sessions.tmux.create_session"),
                 patch(
                     "agent_workflow.sessions.tmux.pane_info",

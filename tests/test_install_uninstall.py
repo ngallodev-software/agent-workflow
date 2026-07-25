@@ -33,8 +33,13 @@ class InstallUninstallTests(unittest.TestCase):
             self.assertEqual(installed.returncode, 0, installed.stderr)
             launcher = home / ".local/bin/agent-workflow"
             self.assertEqual(launcher.resolve(), (ROOT / "bin/agent-workflow").resolve())
-            for root in (home / ".agents/skills", home / ".claude/skills"):
+            for root in (
+                home / ".agents/skills",
+                home / ".codex/skills",
+                home / ".claude/skills",
+            ):
                 for skill in (
+                    "agent-workflow-orchestrator",
                     "delegated-implementation",
                     "prompt-pack-builder",
                     "phase-gate-review",
@@ -45,7 +50,24 @@ class InstallUninstallTests(unittest.TestCase):
             self.assertEqual(removed.returncode, 0, removed.stderr)
             self.assertFalse(launcher.exists())
             self.assertFalse(any((home / ".agents/skills").iterdir()))
+            self.assertFalse(any((home / ".codex/skills").iterdir()))
             self.assertFalse(any((home / ".claude/skills").iterdir()))
+
+    def test_install_is_idempotent_and_refuses_unrelated_skill(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            first = self._run("install.sh", home, "--no-deps")
+            self.assertEqual(first.returncode, 0, first.stderr)
+            second = self._run("install.sh", home, "--no-deps")
+            self.assertEqual(second.returncode, 0, second.stderr)
+
+            target = home / ".codex/skills/agent-workflow-orchestrator"
+            target.unlink()
+            target.write_text("user-owned\n", encoding="utf-8")
+            refused = self._run("install.sh", home, "--no-deps")
+            self.assertEqual(refused.returncode, 2)
+            self.assertIn("refusing to replace non-symlink path", refused.stderr)
+            self.assertEqual(target.read_text(encoding="utf-8"), "user-owned\n")
 
     def test_uninstall_preserves_unrelated_paths(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

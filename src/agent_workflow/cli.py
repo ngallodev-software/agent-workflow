@@ -8,6 +8,11 @@ from pathlib import Path
 from typing import Any
 
 from .config import as_dict, load_settings
+from .agent_context import auto_reuse as auto_reuse_agent
+from .agent_context import candidates as reuse_candidates
+from .agent_context import complete_task as complete_agent_task
+from .agent_context import read as read_agent_context
+from .agent_context import request_reuse as reuse_agent
 from .doctor import run_doctor
 from .evaluation import validate_evaluation
 from .eval.reporting import build_report, render_markdown
@@ -15,7 +20,7 @@ from .eval.oracles import resolve_oracle
 from .eval.scoring import score_trial
 from .eval.compare import compare_trials
 from .eval.trials import collect_trials, load_trials
-from .errors import WorkflowError
+from .errors import InteractiveCapacityError, WorkflowError
 from .ledger import build_ledger, render_ledger
 from .lifecycle import record as record_lifecycle
 from .inspect_adapter import build_task as build_inspect_task
@@ -77,7 +82,7 @@ def _print_table(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="agent-workflow")
-    parser.add_argument("--version", action="version", version="%(prog)s 0.1.6")
+    parser.add_argument("--version", action="version", version="%(prog)s 0.1.12")
     parser.add_argument("--config", type=Path, help="override config.toml path")
     parser.add_argument(
         "--json",
@@ -129,6 +134,14 @@ def build_parser() -> argparse.ArgumentParser:
     launch.add_argument("--pack")
     launch.add_argument("--job", type=Path, help="validated native JSON job in the prompt pack")
     launch.add_argument("--executor")
+    launch.add_argument("--agent-name", help="preferred configured agent/pane name")
+    launch.add_argument("--agent-class", help="configured agent work classification")
+    launch.add_argument("--model", help="configured executor model")
+    launch.add_argument(
+        "--allow-no-go-model",
+        action="store_true",
+        help="explicitly authorize a configured no-go model for this run",
+    )
     launch.add_argument("--evaluation", type=Path)
     launch.add_argument(
         "--structured",
@@ -136,9 +149,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="request structured JSON events from known executors",
     )
     launch.add_argument(
+        "--interactive",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="run a known executor TUI attached to a tmux PTY",
+    )
+    launch.add_argument(
         "--allow-dirty",
         action="store_true",
         help="allow launching from a Git worktree with uncommitted changes",
+    )
+    launch.add_argument(
+        "--pane-limit-action",
+        choices=("prompt", "close-idle", "non-interactive", "cancel"),
+        default="prompt",
+        help="action when the interactive pane cap is reached",
     )
 
     commands.add_parser("list", help="list delegation runs")
@@ -209,6 +234,49 @@ def build_parser() -> argparse.ArgumentParser:
     )
     restart.add_argument("session_id")
     restart.add_argument("--new-session")
+
+    agent = commands.add_parser("agent", help="interactive agent context and reuse")
+    agent_commands = agent.add_subparsers(dest="agent_command", required=True)
+    agent_context = agent_commands.add_parser("context", help="show durable agent context")
+    agent_context.add_argument("session_id")
+    agent_complete = agent_commands.add_parser(
+        "task-complete", help="mark the current interactive assignment complete"
+    )
+    agent_complete.add_argument("session_id")
+    agent_complete.add_argument("--actor", required=True)
+    agent_complete.add_argument("--summary", required=True)
+    agent_complete.add_argument("--tag", action="append", default=[])
+    agent_complete.add_argument("--file", action="append", default=[])
+    agent_candidates = agent_commands.add_parser(
+        "candidates", help="rank reusable agents for a worktree"
+    )
+    agent_candidates.add_argument("workdir", type=Path)
+    agent_candidates.add_argument("--ticket")
+    agent_candidates.add_argument("--pack")
+    agent_candidates.add_argument("--retry-of")
+    agent_candidates.add_argument("--agent-class")
+    agent_candidates.add_argument("--tag", action="append", default=[])
+    agent_reuse = agent_commands.add_parser(
+        "reuse", help="request a new assignment from one reusable agent"
+    )
+    agent_reuse.add_argument("session_id")
+    agent_reuse.add_argument("prompt", type=Path)
+    agent_reuse.add_argument("--actor", required=True)
+    agent_reuse.add_argument("--ticket")
+    agent_reuse.add_argument("--pack")
+    agent_reuse.add_argument("--retry-of")
+    agent_reuse.add_argument("--tag", action="append", default=[])
+    agent_auto = agent_commands.add_parser(
+        "auto-reuse", help="reuse only an exact ticket or retry-lineage match"
+    )
+    agent_auto.add_argument("workdir", type=Path)
+    agent_auto.add_argument("prompt", type=Path)
+    agent_auto.add_argument("--actor", required=True)
+    agent_auto.add_argument("--ticket")
+    agent_auto.add_argument("--pack")
+    agent_auto.add_argument("--retry-of")
+    agent_auto.add_argument("--agent-class")
+    agent_auto.add_argument("--tag", action="append", default=[])
 
     for name in ("review", "accept", "reject"):
         lifecycle = commands.add_parser(name, help=f"record {name} disposition")
@@ -389,21 +457,71 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 data = list_worktrees(args.repo)
         elif args.command == "launch":
-            data = launch_session(
-                settings,
-                session_id=args.session_id,
-                workdir=args.workdir,
-                prompt_path=args.prompt,
-                executor=args.executor,
-                explicit_command=args.explicit_command,
-                ticket_id=args.ticket,
-                tier=args.tier,
-                pack_id=args.pack,
-                job_path=args.job,
-                allow_dirty=args.allow_dirty,
-                structured=args.structured,
-                evaluation_path=args.evaluation,
-            )
+            interactive_override = args.interactive
+            while True:
+                try:
+                    data = launch_session(
+                        settings,
+                        session_id=args.session_id,
+                        workdir=args.workdir,
+                        prompt_path=args.prompt,
+                        executor=args.executor,
+                        agent_name=args.agent_name,
+                        agent_class=args.agent_class,
+                        model=args.model,
+                        allow_no_go_model=args.allow_no_go_model,
+                        explicit_command=args.explicit_command,
+                        ticket_id=args.ticket,
+                        tier=args.tier,
+                        pack_id=args.pack,
+                        job_path=args.job,
+                        allow_dirty=args.allow_dirty,
+                        structured=args.structured,
+                        interactive=interactive_override,
+                        evaluation_path=args.evaluation,
+                    )
+                    break
+                except InteractiveCapacityError as exc:
+                    action = args.pane_limit_action
+                    if action == "prompt":
+                        if args.json or not sys.stdin.isatty():
+                            raise
+                        idle = ", ".join(
+                            f"{item.get('agent_name') or item['session_id']} ({item['state']})"
+                            for item in exc.idle_sessions
+                        ) or "none"
+                        print(
+                            f"Interactive pane limit reached ({exc.count}/{exc.maximum})."
+                        )
+                        print(f"Idle interactive panes: {idle}")
+                        close_label = (
+                            "[c] close idle pane(s) and continue, "
+                            if len(exc.idle_sessions) >= exc.required_closures
+                            else ""
+                        )
+                        noninteractive_label = (
+                            "[n] launch as a detached non-interactive task, "
+                            if args.explicit_command is None
+                            else ""
+                        )
+                        choice = input(close_label + noninteractive_label + "[q] cancel: ").strip().lower()
+                        action = {"c": "close-idle", "n": "non-interactive", "q": "cancel"}.get(choice, "cancel")
+                    if action == "close-idle":
+                        if len(exc.idle_sessions) < exc.required_closures:
+                            raise WorkflowError(
+                                "not enough explicitly idle interactive panes to close"
+                            )
+                        for item in exc.idle_sessions[: exc.required_closures]:
+                            kill_session(settings, str(item["session_id"]))
+                        continue
+                    if action == "non-interactive":
+                        if args.explicit_command is not None:
+                            raise WorkflowError(
+                                "cannot convert an explicit command into a non-interactive executor task"
+                            )
+                        interactive_override = False
+                        continue
+                    raise WorkflowError("interactive launch cancelled at pane limit")
         elif args.command == "list":
             rows: list[dict[str, Any]] = []
             for item in list_statuses(settings):
@@ -484,6 +602,33 @@ def main(argv: list[str] | None = None) -> int:
             data = kill_session(settings, args.session_id)
         elif args.command == "restart":
             data = restart_session(settings, args.session_id, args.new_session)
+        elif args.command == "agent":
+            if args.agent_command == "context":
+                data = read_agent_context(settings, args.session_id)
+            elif args.agent_command == "task-complete":
+                data = complete_agent_task(
+                    settings, args.session_id, actor=args.actor,
+                    summary=args.summary, tags=args.tag, files=args.file,
+                )
+            elif args.agent_command == "candidates":
+                data = reuse_candidates(
+                    settings, workdir=args.workdir, ticket_id=args.ticket,
+                    pack_id=args.pack, retry_of=args.retry_of,
+                    agent_class=args.agent_class, tags=args.tag,
+                )
+            elif args.agent_command == "reuse":
+                data = reuse_agent(
+                    settings, args.session_id, prompt_path=args.prompt,
+                    actor=args.actor, ticket_id=args.ticket, pack_id=args.pack,
+                    retry_of=args.retry_of, tags=args.tag,
+                )
+            else:
+                data = auto_reuse_agent(
+                    settings, workdir=args.workdir, prompt_path=args.prompt,
+                    actor=args.actor, ticket_id=args.ticket, pack_id=args.pack,
+                    retry_of=args.retry_of, agent_class=args.agent_class,
+                    tags=args.tag,
+                )
         elif args.command in {"review", "accept", "reject"}:
             action = "reviewed" if args.command == "review" else (
                 "accepted" if args.command == "accept" else "rejected"
@@ -687,6 +832,12 @@ def main(argv: list[str] | None = None) -> int:
         else:
             _print_json(data)
         return 0
+    except InteractiveCapacityError as exc:
+        if args.json:
+            _print_json(exc.as_dict())
+        else:
+            print(f"error: {exc}", file=sys.stderr)
+        return 2
     except WorkflowError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

@@ -1,7 +1,44 @@
+
 # Changelog
 
 ## Unreleased
 
+- Track bounded context and assignment history for interactive agents with
+  explicit completion, same-worktree ranking, stale-idle policy, and
+  exact-lineage-only automatic reuse.
+- Add pending reassignment and correlated acknowledgement states without
+  inferring task completion or delivery from terminal text.
+- Enforce globally unique active agent names across pane and detached modes.
+- Configure interactive capacity as width x vertical slots; default to two
+  right-side columns with three agents each, creating columns horizontally
+  before balancing vertical splits.
+- Prompt at the interactive pane cap to close explicitly idle panes, launch
+  detached/non-interactive, or cancel; non-TTY callers fail closed unless an
+  action is supplied.
+- Apply the workflow-foundations sequencing addendum: cross-phase dependency
+  DAGs, schema-validated task results, and MCP mutations blocked behind WF-22.
+
+- Correct the canonical backlog so every workflow prompt-pack ticket is a stable task with explicit dependencies and direct ticket links.
+- Sequence all remaining mutating MCP work after the complete workflow foundation, while preserving the completed read-only stdio adapter.
+- Extend the MCP continuation prompt pack with a workflow-aware safe-mutation phase that reuses authoritative CLI/domain services.
+
+- Validate prompt-pack dependencies as a cross-phase directed acyclic graph.
+- Add optional schema-validated structured task results with bounded handoff collection and sealed receipts.
+- Add the scoped workflow-foundations plan, backlog, and remaining-work prompt pack.
+
+## 0.1.8
+
+- Add configurable agent names, classes, executor/model allowlists, explicit
+  no-go authorization, permission defaults, and interactive/detached routing.
+- Make the orchestrator-left, vertically stacked agent-pane layout configurable;
+  enable tmux mouse support and named pane borders by default.
+- Add the global routing enforcement decision and MCP next-phase research,
+  review, planning, and implementation handoff pack.
+- Add the `agent-workflow-orchestrator` skill and install all workflow skills into shared, Codex, and Claude discovery roots with ownership-safe idempotent behavior.
+- Document the optional local stdio MCP architecture decision without adding runtime MCP code.
+- Remove stale one-off validation/implementation artifacts and generated Python bytecode from source distributions; add a cleanup audit.
+- Remove host-specific checkout and worktree paths from documentation and tests; use portable placeholders instead.
+- Remove an unrelated project-specific adapter, contracts, receipt paths, and tests so the package remains provider- and project-neutral.
 - Add versioned evaluation, completion, provenance, command, score, lifecycle, and final-receipt contracts with packaged JSON Schemas.
 - Preserve Codex/Claude structured event streams, separate stderr, enforce time/token budgets, capture patches, and seal validated run evidence.
 - Add baseline/post scope and command collectors, JUnit regression attribution, deterministic receipt-backed scorers, external oracle boundaries, public fixtures, ledgers, and reports.

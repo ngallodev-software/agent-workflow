@@ -48,6 +48,43 @@ prompt after its initial stdin closes. Executor-specific live injection is a
 later adapter with an acknowledgement contract; terminal keystrokes are not
 semantic delivery evidence.
 
+### Late-steering adapter implementation ticket
+
+`BKL-002` records the remaining runtime gap. A live July 2026 detached Codex
+run demonstrated the current boundary: `agent-workflow steer` could append a
+durable request, but the one-shot `codex exec` process had no supported input
+channel through which the running model could consume and acknowledge it.
+Captured output, process liveness, and log growth remained observational only.
+
+Implementation starts with a source-backed capability matrix for the installed
+Codex and Claude executors. Select a documented machine interface for Codex if
+one supports post-launch input and correlated responses; document Claude's
+equivalent interface and limitations in the same matrix. If neither installed
+executor exposes such a contract, finish the research report and leave the
+ticket blocked rather than injecting terminal keystrokes or parsing model prose
+as acknowledgement.
+
+The first supported adapter must:
+
+- preserve `messages.jsonl` as the authoritative request and acknowledgement
+  record, with a per-consumer cursor and idempotent replay;
+- consume a steer after launch without restarting the delegated task, including
+  a request for the child to report current progress;
+- distinguish durable request acceptance, executor delivery, child application
+  or rejection, and terminal non-delivery with correlated sealed evidence;
+- recover after orchestrator or adapter restart without losing or applying a
+  message twice;
+- report an unavailable or unsupported adapter explicitly while leaving the
+  steer pending; and
+- add fake-adapter contract tests plus an opt-in real-executor smoke test that
+  proves the running child received the exact bounded request and responded
+  through `progress` and correlated `ack` records.
+
+The adapter belongs behind the existing session and message services. It must
+not create a second launcher, executor path, mutable authority, or MCP-only
+delivery implementation. MCP may expose pending steering independently; only
+this adapter's correlated evidence can advance it to delivered or applied.
+
 ### Sealed evaluation evidence
 
 Before sealing, write `execution-metrics.json` and `control-events.jsonl`.
