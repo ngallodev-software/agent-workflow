@@ -125,7 +125,17 @@ def prepare_executor(
     policy = settings.executor_policies.get(executor)
     selected_model, authorized = _select_model(settings, executor, model, allow_no_go_model)
     if interactive and executor in {"codex", "claude"}:
-        argv = list(policy.interactive_command if policy and policy.interactive_command else [argv[0]])
+        # Built-in policies provide the provider-specific interactive flags, but
+        # a configured command may intentionally be a test double or wrapper.
+        # Do not replace that command with the default provider binary.
+        configured_executable = Path(argv[0]).name
+        policy_executable = (
+            Path(policy.interactive_command[0]).name
+            if policy and policy.interactive_command
+            else None
+        )
+        if policy and policy.interactive_command and configured_executable == policy_executable:
+            argv = list(policy.interactive_command)
         argv.extend(policy.interactive_permission_args if policy else ())
         if selected_model:
             argv.extend(list(policy.model_arg) + [selected_model] if policy else ["--model", selected_model])
