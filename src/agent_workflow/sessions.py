@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import fcntl
+import hashlib
 import json
 import os
 import platform
@@ -38,12 +39,14 @@ from .state import (
     write_status,
 )
 from .util import (
+    atomic_write_bytes,
     atomic_write_json,
     expand_path,
     sha256_file,
     utc_now,
     validate_id,
 )
+
 
 def _ignore_delegations(workdir: Path) -> None:
     _add_git_exclude(workdir, ".delegations/")
@@ -108,6 +111,7 @@ def _write_runner(
     handoff_dir: Path | None = None,
     stream_format: str = "text",
     interactive: bool = False,
+    close_tmux_on_exit: bool = False,
 ) -> Path:
     prompt = state_dir / "prompt.md"
     launch_prompt = state_dir / "launch-prompt.md"
@@ -117,23 +121,60 @@ def _write_runner(
     runner = state_dir / "run.sh"
     command_text = shlex.join(command)
     source_root = Path(__file__).resolve().parents[1]
-    runner.write_text(
+    runner_invocation = (
+        "python3 -m agent_workflow.runner "
+        f"--run-dir {shlex.quote(str(state_dir))} "
+        f"--workdir {shlex.quote(str(workdir))} "
+        f"--stream-format {shlex.quote(stream_format)} "
+        f"{'--interactive ' if interactive else ''}-- {command_text}"
+    )
+    if interactive and not close_tmux_on_exit:
+        runner_command = (
+            "if [[ -t 0 ]]; then\n"
+            f"    exec {runner_invocation}\n"
+            "else\n"
+            f"    exec {runner_invocation.replace('--interactive ', '', 1)}\n"
+            "fi"
+        )
+    elif close_tmux_on_exit:
+        fallback_invocation = runner_invocation.replace("--interactive ", "", 1)
+        runner_command = (
+            "if [[ -t 0 ]]; then\n"
+            "    set +e\n"
+            f"    {runner_invocation}\n"
+            "    runner_status=$?\n"
+            "    set -e\n"
+            "    if [[ -n \"${AGENT_WORKFLOW_TMUX_SESSION:-}\" ]]; then\n"
+            "        tmux kill-session -t \"$AGENT_WORKFLOW_TMUX_SESSION\" >/dev/null 2>&1 || true\n"
+            "    fi\n"
+            "    exit \"$runner_status\"\n"
+            "else\n"
+            f"    exec {fallback_invocation}\n"
+            "fi\n"
+        )
+    else:
+        runner_command = f"exec {runner_invocation}"
+    runner_text = (
         "#!/usr/bin/env bash\n"
         "set -Eeuo pipefail\n"
         f"readonly AGENT_WORKFLOW_SESSION_ID={shlex.quote(session_id)}\n"
         f"readonly AGENT_WORKFLOW_PROMPT_SOURCE={shlex.quote(str(prompt_source))}\n"
         f"readonly AGENT_WORKFLOW_HANDOFF_DIR={shlex.quote(str(handoff_dir or ''))}\n"
         f"readonly AGENT_WORKFLOW_PROMPT_PACK_ROOT={shlex.quote(str(prompt_pack_root or ''))}\n"
-        "export AGENT_WORKFLOW_SESSION_ID AGENT_WORKFLOW_PROMPT_SOURCE "
-        "AGENT_WORKFLOW_HANDOFF_DIR AGENT_WORKFLOW_PROMPT_PACK_ROOT\n"
-        f"export PYTHONPATH={shlex.quote(str(source_root))}${{PYTHONPATH:+:$PYTHONPATH}}\n"
-        "exec python3 -m agent_workflow.runner "
-        f"--run-dir {shlex.quote(str(state_dir))} "
-        f"--workdir {shlex.quote(str(workdir))} "
-        f"--stream-format {shlex.quote(stream_format)} "
-        f"{'--interactive ' if interactive else ''}-- {command_text}\n",
-        encoding="utf-8",
     )
+    if close_tmux_on_exit:
+        runner_text += (
+            f"readonly AGENT_WORKFLOW_TMUX_SESSION={shlex.quote(session_id)}\n"
+        )
+    runner_text += (
+        "export AGENT_WORKFLOW_SESSION_ID AGENT_WORKFLOW_PROMPT_SOURCE "
+        "AGENT_WORKFLOW_HANDOFF_DIR AGENT_WORKFLOW_PROMPT_PACK_ROOT"
+        + (" AGENT_WORKFLOW_TMUX_SESSION\n" if close_tmux_on_exit else "\n")
+        + f"export PYTHONPATH={shlex.quote(str(source_root))}${{PYTHONPATH:+:$PYTHONPATH}}\n"
+        + runner_command
+        + "\n"
+    )
+    runner.write_text(runner_text, encoding="utf-8")
     runner.chmod(0o755)
     syntax = subprocess.run(
         ["bash", "-n", str(runner)],
@@ -209,8 +250,8 @@ def _write_job_binding(state_dir: Path, job: ValidatedNativeJob, *, session_id: 
     stored = state_dir / "jobs" / "native-job.json"
     stored.parent.mkdir(parents=True, exist_ok=True)
     raw = job.job_path.read_bytes()
-    stored.write_bytes(raw)
-    source_sha256 = sha256_file(job.job_path)
+    source_sha256 = hashlib.sha256(raw).hexdigest()
+    atomic_write_bytes(stored, raw, mode=0o444)
     stored_sha256 = sha256_file(stored)
     if source_sha256 != stored_sha256:
         raise WorkflowError("native job changed while its binding was being created")
@@ -250,9 +291,7 @@ def _write_job_binding(state_dir: Path, job: ValidatedNativeJob, *, session_id: 
         },
     }
     receipt_path = state_dir / "job-binding.json"
-    atomic_write_json(receipt_path, receipt)
-    stored.chmod(0o444)
-    receipt_path.chmod(0o444)
+    atomic_write_json(receipt_path, receipt, mode=0o444)
     return receipt
 
 
@@ -265,6 +304,7 @@ def _write_launch_prompt(
     handoff_dir: Path,
     result_contract: dict[str, Any] | None = None,
     interactive: bool = False,
+    detached_interactive: bool = False,
 ) -> Path:
     context = [
         "# Agent-workflow launch context",
@@ -289,6 +329,15 @@ def _write_launch_prompt(
                 "- This interactive agent remains open after its assignment.",
                 '- Before becoming reusable, emit structured completion with `agent-workflow agent task-complete "$AGENT_WORKFLOW_SESSION_ID" --actor <agent-name> --summary <summary>`.',
                 "- For a reused assignment, acknowledge its correlated steer message before starting work.",
+            ]
+        )
+    elif detached_interactive:
+        context.extend(
+            [
+                "- This task is non-interactive from the orchestrator's perspective and runs in a private tmux session.",
+                "- Do not wait for user input or expect a user to resume this run.",
+                "- On completion, notify the calling agent through the durable completion handoff and a concise progress update.",
+                "- Exit cleanly when finished; the private tmux session will be closed automatically when possible.",
             ]
         )
     context.extend(
@@ -488,6 +537,7 @@ def launch(
     tier: str | None = None,
     job_path: Path | None = None,
     allow_active_agent_name: bool = False,
+    workflow_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     validate_id(session_id, "session ID")
     if ticket_id:
@@ -528,15 +578,27 @@ def launch(
         interactive=interactive,
         allow_active_name=allow_active_agent_name,
     )
+    # `interactive` describes user-visible/reusable assignment semantics.  A
+    # non-interactive assignment still gets a real interactive executor when
+    # it is placed in tmux, so it can complete and report without leaving a
+    # blank resumable session behind.
+    executor_interactive = not structured
     interactive_parent_target = tmux.current_window_target() if interactive else None
-    if interactive_parent_target is not None:
-        pane_count = tmux.interactive_pane_count(interactive_parent_target)
+    parent_target = (
+        interactive_parent_target
+        if interactive
+        else tmux.current_window_target()
+        if settings.non_interactive_tmux == "shared_window"
+        else None
+    )
+    if parent_target is not None:
+        pane_count = tmux.interactive_pane_count(parent_target)
         if pane_count >= settings.max_interactive_agent_panes:
             raise InteractiveCapacityError(
                 count=pane_count,
                 maximum=settings.max_interactive_agent_panes,
                 idle_sessions=idle_interactive_sessions(
-                    settings, window_target=interactive_parent_target
+                    settings, window_target=parent_target
                 ),
             )
     if tmux.session_exists(session_id):
@@ -575,7 +637,7 @@ def launch(
     )
     executor_plan = prepare_executor(
         settings, executor, explicit_command, structured=structured,
-        interactive=interactive,
+        interactive=executor_interactive,
         model=model,
         allow_no_go_model=allow_no_go_model,
     )
@@ -609,6 +671,7 @@ def launch(
             "executor": executor_plan.name,
             "stream_format": executor_plan.stream_format,
             "interactive": interactive,
+            "executor_interactive": executor_interactive,
             "model": executor_plan.model,
             "no_go_authorized": executor_plan.no_go_authorized,
             "agent_name": agent_name,
@@ -632,6 +695,7 @@ def launch(
         handoff_dir=handoff_dir,
         result_contract=result_contract,
         interactive=interactive,
+        detached_interactive=not interactive and executor_interactive,
     )
 
     git_info: dict[str, Any]
@@ -732,6 +796,7 @@ def launch(
                 "platform": platform.platform(),
                 "implementation": sys.implementation.name,
             },
+            retry_of_run_id=retry_of,
             job_binding=(
                 {
                     "path": str(state_dir / "job-binding.json"),
@@ -743,6 +808,26 @@ def launch(
             ),
         ),
     )
+    if workflow_context is not None:
+        from .contracts import validate_instance
+        validate_instance(
+            workflow_context,
+            "agent-workflow/workflow-input-bindings/v1",
+            artifact="workflow launch inputs",
+        )
+        workflow_inputs_path = state_dir / "workflow-inputs.json"
+        atomic_write_json(workflow_inputs_path, workflow_context, mode=0o444)
+        update_provenance(
+            state_dir,
+            workflow={
+                "workflow_id": workflow_context["workflow_id"],
+                "node_id": workflow_context["node_id"],
+                "attempt": workflow_context["attempt"],
+                "inputs_path": str(workflow_inputs_path),
+                "inputs_sha256": sha256_file(workflow_inputs_path),
+                "routing": None,
+            },
+        )
     if evaluation_path is not None or native_job is not None:
         evaluation = None
         evaluation_data: dict[str, Any] = {}
@@ -852,6 +937,7 @@ def launch(
         "executor": executor_plan.name,
         "model": executor_plan.model,
         "interactive": interactive,
+        "executor_interactive": executor_interactive,
         "agent_context_path": str(state_dir / "agent-context.json"),
         "prompt_sha256": sha256_file(prompt_copy),
         "prompt_pack_root": str(prompt_pack_root) if prompt_pack_root else None,
@@ -904,7 +990,8 @@ def launch(
         prompt_pack_root=prompt_pack_root,
         handoff_dir=handoff_dir,
         stream_format=executor_plan.stream_format,
-        interactive=interactive,
+        interactive=executor_interactive,
+        close_tmux_on_exit=(not interactive and executor_interactive and parent_target is None),
     )
     update_status(
         settings,
@@ -914,13 +1001,6 @@ def launch(
         runner_path=str(runner),
     )
     try:
-        parent_target = (
-            interactive_parent_target
-            if interactive
-            else tmux.current_window_target()
-            if settings.non_interactive_tmux == "shared_window"
-            else None
-        )
         if parent_target is not None:
             tmux.configure_server(mouse=settings.mouse)
             tmux_target = tmux.split_window(
@@ -929,15 +1009,9 @@ def launch(
                 str(runner),
                 orchestrator_side=settings.orchestrator_side,
                 pane_name=agent_name,
-                max_interactive_agent_panes=(
-                    settings.max_interactive_agent_panes if interactive else None
-                ),
-                max_interactive_agent_width=(
-                    settings.max_interactive_agent_width if interactive else None
-                ),
-                max_interactive_agent_vertical=(
-                    settings.max_interactive_agent_vertical if interactive else None
-                ),
+                max_interactive_agent_panes=settings.max_interactive_agent_panes,
+                max_interactive_agent_width=settings.max_interactive_agent_width,
+                max_interactive_agent_vertical=settings.max_interactive_agent_vertical,
             )
             tmux_session = tmux_target.split(":", 1)[0]
             tmux_mode = "shared_window"
@@ -1050,7 +1124,10 @@ def observe(
         else data.get("failure_category")
     )
     safe_actions = [f"agent-workflow status {session_id} --json"]
-    if observed in {"orphaned", "failed", "interrupted", "killed"}:
+    if (
+        observed in {"orphaned", "failed", "interrupted", "killed"}
+        and bool(data.get("interactive", False))
+    ):
         safe_actions.append(f"agent-workflow restart {session_id}")
     elif observed == "possibly_stalled":
         safe_actions.append(f"agent-workflow interrupt {session_id}")
@@ -1296,6 +1373,14 @@ def restart(
     command_data = json.loads(
         Path(str(old["command_path"])).read_text(encoding="utf-8")
     )
+    if (
+        not bool(command_data.get("interactive", old.get("interactive", False)))
+        and str(old.get("status")) not in TERMINAL_STATUSES
+    ):
+        raise WorkflowError(
+            "non-interactive tasks cannot be restarted while active; launch a new "
+            "task or have the calling agent delegate the work again"
+        )
     command = command_data.get("argv")
     if (
         not isinstance(command, list)

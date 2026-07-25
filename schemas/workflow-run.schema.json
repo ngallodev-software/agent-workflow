@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/workflow-run/v1",
+  "type": "object",
+  "required": [
+    "schema",
+    "workflow_id",
+    "snapshot_sha256",
+    "snapshot_path",
+    "events_path",
+    "status_path",
+    "status"
+  ],
+  "properties": {
+    "schema": {
+      "const": "agent-workflow/workflow-run/v1"
+    },
+    "workflow_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+    },
+    "snapshot_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "snapshot_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "events_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "object",
+      "required": [
+        "schema",
+        "workflow_id",
+        "snapshot_sha256",
+        "event_count",
+        "workflow_state",
+        "nodes"
+      ],
+      "properties": {
+        "schema": {
+          "const": "agent-workflow/workflow-status/v1"
+        },
+        "workflow_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+        },
+        "snapshot_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "event_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "workflow_state": {
+          "enum": [
+            "blocked",
+            "eligible",
+            "running",
+            "completed",
+            "failed",
+            "recoverable"
+          ]
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "node_id",
+              "state",
+              "run_id",
+              "attempt",
+              "retry_of_run_id",
+              "bound_at",
+              "terminal_reason"
+            ],
+            "properties": {
+              "node_id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+              },
+              "state": {
+                "enum": [
+                  "blocked",
+                  "eligible",
+                  "running",
+                  "completed",
+                  "failed",
+                  "recoverable"
+                ]
+              },
+              "run_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+              },
+              "attempt": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 1
+              },
+              "retry_of_run_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+              },
+              "bound_at": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "terminal_reason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "kind": {
+                "enum": [
+                  "task",
+                  "approval"
+                ]
+              },
+              "approval_receipt_sha256": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "input_binding_sha256": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

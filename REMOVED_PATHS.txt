@@ -1,9 +1,0 @@
-IMPLEMENTATION.patch
-IMPLEMENTATION_REPORT.md
-VALIDATION.md
-src/agent_workflow/__pycache__/
-src/agent_workflow/eval/__pycache__/
-src/agent_workflow/integrations/__pycache__/
-src/agent_workflow/tax_machine.py
-tests/__pycache__/
-tests/test_tax_machine.py

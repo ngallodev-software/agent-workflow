@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/workflow-node-result/v1",
+  "type": "object",
+  "required": [
+    "schema",
+    "workflow_id",
+    "action",
+    "result"
+  ],
+  "properties": {
+    "schema": {
+      "const": "agent-workflow/workflow-node-result/v1"
+    },
+    "workflow_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+    },
+    "action": {
+      "enum": [
+        "validate",
+        "start",
+        "status",
+        "resume",
+        "seal",
+        "verify"
+      ]
+    },
+    "result": {
+      "type": "object"
+    },
+    "snapshot_path": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "events_path": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "status_path": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "run_path": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "started": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "resumed": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "scheduled": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "receipt_path": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

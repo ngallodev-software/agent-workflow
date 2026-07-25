@@ -27,3 +27,7 @@ The generated README and runbook must name `agent-workflow pack validate`, `agen
 ## Quality rules
 
 A ticket must be independently executable but should not duplicate broad context unnecessarily. Use exact paths and current source evidence. Never use one large prompt as a substitute for dependency ordering or review gates. Keep tests narrow and semantic.
+
+## Workflow-aware packs
+
+When tickets form a graph, declare cross-phase dependencies and optional structured result contracts explicitly. Prefer one of the authorized workflow templates when its shape fits. Define every downstream input as a named bounded JSON Pointer binding with required/optional behavior; never instruct children to scrape arbitrary predecessor files. Include terminal workflow sealing and independent phase review in acceptance criteria.

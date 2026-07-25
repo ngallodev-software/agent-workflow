@@ -1,18 +1,18 @@
 phase: "0"
-name: "research-review-plan"
-mandatory_order: ["P0-00", "P0-01", "P0-02"]
+name: "workflow-aware-safe-mutation"
+mandatory_order: ["MCP3-00", "MCP3-01", "MCP3-02"]
 tasks:
-  - id: "P0-00"
-    tier: C
-    session: "mcp-server-next-p0-00-baseline"
-    prompt: "tickets/P0-00-baseline-and-preflight.md"
-  - id: "P0-01"
+  - id: "MCP3-00"
     tier: B
-    session: "mcp-server-next-p0-01-research"
-    prompt: "tickets/P0-01-primary-research-refresh.md"
-    dependencies: ["P0-00"]
-  - id: "P0-02"
+    session: "mcp-server-next-baseline"
+    prompt: "tickets/MCP3-00-workflow-baseline.md"
+  - id: "MCP3-01"
     tier: A
-    session: "mcp-server-next-p0-02-review-plan"
-    prompt: "tickets/P0-02-architecture-review-and-plan.md"
-    dependencies: ["P0-01"]
+    session: "mcp-server-next-safe-mutation"
+    prompt: "tickets/MCP3-01-workflow-aware-tools.md"
+    dependencies: ["MCP3-00"]
+  - id: "MCP3-02"
+    tier: A
+    session: "mcp-server-next-review"
+    prompt: "tickets/MCP3-02-independent-review.md"
+    dependencies: ["MCP3-01"]

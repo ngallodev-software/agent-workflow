@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/provider-evidence/v1",
+  "type": "object",
+  "required": ["schema", "session_id", "executor", "stream_format", "created_at", "raw_events_path", "raw_events_sha256", "raw_event_bytes", "capture_limit_bytes", "capture_complete", "malformed_event_count", "classified_usage_count", "retry_of_run_id", "usage_complete", "incomplete_reasons", "usage_events", "aggregate"],
+  "properties": {
+    "schema": {"const": "agent-workflow/provider-evidence/v1"},
+    "session_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"},
+    "executor": {"type": ["string", "null"]},
+    "stream_format": {"type": "string"},
+    "created_at": {"type": "string"},
+    "raw_events_path": {"const": "executor-events.jsonl"},
+    "raw_events_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+    "raw_event_bytes": {"type": "integer", "minimum": 0},
+    "capture_limit_bytes": {"type": "integer", "minimum": 1},
+    "capture_complete": {"type": "boolean"},
+    "malformed_event_count": {"type": "integer", "minimum": 0},
+    "classified_usage_count": {"type": "integer", "minimum": 0},
+    "retry_of_run_id": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"},
+    "usage_complete": {"type": "boolean"},
+    "incomplete_reasons": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "usage_events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sequence", "event_sha256", "event_type", "mode", "usage"],
+        "properties": {
+          "sequence": {"type": "integer", "minimum": 1},
+          "event_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "event_type": {"type": "string"},
+          "mode": {"enum": ["delta", "cumulative", "terminal"]},
+          "usage": {"$ref": "#/$defs/usage"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "aggregate": {"$ref": "#/$defs/usage"}
+  },
+  "$defs": {
+    "nullableNumber": {"type": ["integer", "number", "null"], "minimum": 0},
+    "usage": {
+      "type": "object",
+      "required": ["input_tokens", "cached_input_tokens", "cache_write_input_tokens", "output_tokens", "reasoning_output_tokens", "provider_total_tokens", "provider_billed_cost", "local_estimated_cost", "currency", "price_catalog_id"],
+      "properties": {
+        "input_tokens": {"$ref": "#/$defs/nullableNumber"},
+        "cached_input_tokens": {"$ref": "#/$defs/nullableNumber"},
+        "cache_write_input_tokens": {"$ref": "#/$defs/nullableNumber"},
+        "output_tokens": {"$ref": "#/$defs/nullableNumber"},
+        "reasoning_output_tokens": {"$ref": "#/$defs/nullableNumber"},
+        "provider_total_tokens": {"$ref": "#/$defs/nullableNumber"},
+        "provider_billed_cost": {"$ref": "#/$defs/nullableNumber"},
+        "local_estimated_cost": {"$ref": "#/$defs/nullableNumber"},
+        "currency": {"type": ["string", "null"]},
+        "price_catalog_id": {"type": ["string", "null"]}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

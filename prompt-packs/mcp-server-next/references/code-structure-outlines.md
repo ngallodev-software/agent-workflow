@@ -23,7 +23,7 @@ For each proposed module or interface, include:
   text.
 - `src/agent_workflow/cli.py`: preserve behavior; where practical, call the same
   service function as MCP and test the shared call boundary.
-- `tests/test_mcp_server.py` plus focused service tests: missing/invalid IDs,
+- `tests/acceptance/` installed-product MCP journeys plus focused invariant matrices: missing/invalid IDs,
   symlink escape, configured-root authorization, pagination bounds, redaction,
   receipt hashes, SDK absence, import safety, and stdio smoke/conformance.
 

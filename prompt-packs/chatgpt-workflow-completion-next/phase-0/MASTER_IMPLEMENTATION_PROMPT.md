@@ -1,1 +1,0 @@
-Implement Phase 0 tickets in dependency order. Reuse existing state, launch, lifecycle, and receipt services. The workflow event journal is append-only and authoritative; any status snapshot must be reconstructable.

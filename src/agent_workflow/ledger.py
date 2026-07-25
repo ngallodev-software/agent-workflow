@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .approval import is_approved
 from .manifests import yaml
 from .miniyaml import load_task_manifest
 
@@ -112,7 +113,10 @@ def build_ledger(pack_root: Path, runs_root: Path) -> dict[str, Any]:
         blocked = [
             dependency
             for dependency in row["dependencies"]
-            if by_ticket.get(dependency, {}).get("disposition") != "accepted"
+            if (
+                (dependency_row := by_ticket.get(dependency)) is None
+                or not is_approved(runs_root / dependency_row["session"])
+            )
         ]
         if blocked and row["status"] == "missing" and not row.get("error"):
             row["next_action"] = "wait for dependencies: " + ", ".join(blocked)

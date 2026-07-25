@@ -27,3 +27,9 @@ A host-native child process or subagent is not an `agent-workflow` run unless an
 ## Stop conditions
 
 Stop rather than guess when current source would make the ticket destructive, a required dependency is absent, a migration cannot be made recoverable, or secrets/real target data would be exposed.
+
+## Structured result and workflow child contract
+
+When the ticket declares a result schema, write only the declared bounded `result.json` contract and ensure it validates before completion. A downstream workflow receives copied values through `workflow-inputs.json`; it must not open predecessor run directories or mutable status projections directly.
+
+For structured executor runs, preserve raw event output. Do not rewrite provider usage, invent cost, or convert missing evidence into zero. Report retries, steering, and errors honestly in the completion handoff.

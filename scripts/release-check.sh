@@ -19,7 +19,7 @@ bash -n install.sh uninstall.sh bin/agent-workflow scripts/*.sh
 while IFS= read -r -d '' path; do
   bash -n "$path"
 done < <(find templates src/agent_workflow/assets -type f -name '*.sh' -print0)
-python3 -m unittest discover -s tests -v
+python3 -m pytest -q
 python3 -m agent_workflow pack validate examples/three-phase-pack
 python3 - <<'PY'
 import json

@@ -129,12 +129,29 @@ def compare_trials(
             winner = "baseline"
     efficiency: dict[str, Any] = {}
     exclusions: dict[str, int] = {}
-    for metric in ("duration_seconds", "tokens", "cost"):
+    for metric in (
+        "duration_seconds",
+        "tokens",
+        "provider_billed_cost",
+        "local_estimated_cost",
+    ):
         values: list[float] = []
         excluded = 0
         for key in paired:
             before = left[key].get(metric)
             after = right[key].get(metric)
+            if metric == "provider_billed_cost" and (
+                left[key].get("currency") != right[key].get("currency")
+            ):
+                excluded += 1
+                continue
+            if metric == "local_estimated_cost" and (
+                left[key].get("currency"), left[key].get("price_catalog_id")
+            ) != (
+                right[key].get("currency"), right[key].get("price_catalog_id")
+            ):
+                excluded += 1
+                continue
             if not isinstance(before, (int, float)) or not isinstance(
                 after, (int, float)
             ):

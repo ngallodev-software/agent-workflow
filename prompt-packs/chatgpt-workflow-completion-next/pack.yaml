@@ -1,9 +1,0 @@
-schema: agent-workflow/pack/v1
-pack_id: chatgpt-workflow-completion-next
-name: ChatGPT Workflow Foundations and Benchmark Completion
-version: 1
-phases:
-  - phase-0
-  - phase-1
-  - phase-2
-  - phase-3

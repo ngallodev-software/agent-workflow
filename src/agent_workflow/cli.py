@@ -42,7 +42,11 @@ from .sessions import terminate as terminate_session
 from .sessions import wait_for_message
 from .state import list_statuses, read_status, runs_root
 from .tmux import attach as attach_tmux
-from .util import atomic_write_json, expand_path
+from .util import atomic_write_json, expand_path, read_json
+from .scheduler import SchedulerService
+from .workflow import snapshot_sha256
+from .workflow_service import WorkflowService
+from .workflow_templates import AUTHORIZED_TEMPLATES, expand_workflow_template
 from .worktrees import create as create_worktree
 from .worktrees import list_worktrees
 from .worktrees import remove as remove_worktree
@@ -82,7 +86,7 @@ def _print_table(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="agent-workflow")
-    parser.add_argument("--version", action="version", version="%(prog)s 0.1.12")
+    parser.add_argument("--version", action="version", version="%(prog)s 0.2.2")
     parser.add_argument("--config", type=Path, help="override config.toml path")
     parser.add_argument(
         "--json",
@@ -92,6 +96,29 @@ def build_parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
 
     commands.add_parser("doctor", help="check environment and configuration")
+    workflow = commands.add_parser("workflow", help="workflow scheduler commands")
+    workflow_commands = workflow.add_subparsers(dest="workflow_command", required=True)
+    wf_validate = workflow_commands.add_parser("validate", help="validate a workflow snapshot")
+    wf_validate.add_argument("snapshot", type=Path)
+    wf_start = workflow_commands.add_parser("start", help="start a workflow from a snapshot")
+    wf_start.add_argument("run_dir", type=Path)
+    wf_start.add_argument("snapshot", type=Path)
+    wf_status = workflow_commands.add_parser("status", help="show workflow status")
+    wf_status.add_argument("run_dir", type=Path)
+    wf_status.add_argument("snapshot", type=Path)
+    wf_resume = workflow_commands.add_parser("resume", help="resume a workflow after restart")
+    wf_resume.add_argument("run_dir", type=Path)
+    wf_resume.add_argument("snapshot", type=Path)
+    wf_seal = workflow_commands.add_parser("seal", help="seal terminal workflow evidence")
+    wf_seal.add_argument("run_dir", type=Path)
+    wf_seal.add_argument("snapshot", type=Path)
+    wf_verify = workflow_commands.add_parser("verify", help="verify a workflow receipt")
+    wf_verify.add_argument("run_dir", type=Path)
+    wf_verify.add_argument("snapshot", type=Path)
+    wf_template = workflow_commands.add_parser("template", help="expand an authorized workflow template")
+    wf_template.add_argument("template", choices=AUTHORIZED_TEMPLATES)
+    wf_template.add_argument("spec", type=Path, help="JSON template request")
+    wf_template.add_argument("--output", type=Path, required=True)
 
     completion = commands.add_parser(
         "completion", help="generate shell completion from the live parser"
@@ -544,6 +571,44 @@ def main(argv: list[str] | None = None) -> int:
                     ],
                 )
             return 0
+        elif args.command == "workflow":
+            if args.workflow_command == "template":
+                spec = read_json(expand_path(args.spec))
+                snapshot = expand_workflow_template(
+                    args.template,
+                    workflow_id=str(spec.get("workflow_id", "")),
+                    pack_id=str(spec.get("pack_id", "")),
+                    pack_manifest_sha256=str(spec.get("pack_manifest_sha256", "")),
+                    parameters=spec.get("parameters", {}),
+                )
+                output = expand_path(args.output)
+                atomic_write_json(output, snapshot)
+                data = {"output": str(output), "snapshot_sha256": snapshot_sha256(snapshot)}
+                if args.json:
+                    _print_json(data)
+                else:
+                    print(output)
+                return 0
+            run_dir = expand_path(getattr(args, "run_dir", Path.cwd()))
+            service = WorkflowService(
+                scheduler=SchedulerService(
+                    settings=settings,
+                    run_dir=run_dir,
+                    workdir=run_dir,
+                )
+            )
+            if args.workflow_command == "validate":
+                data = service.validate(args.snapshot)
+            elif args.workflow_command == "start":
+                data = service.start(args.snapshot)
+            elif args.workflow_command == "status":
+                data = service.status(args.snapshot)
+            elif args.workflow_command == "resume":
+                data = service.resume(args.snapshot)
+            elif args.workflow_command == "seal":
+                data = service.seal(args.snapshot)
+            else:
+                data = service.verify(args.snapshot)
         elif args.command == "ledger":
             value = build_ledger(
                 expand_path(args.pack),

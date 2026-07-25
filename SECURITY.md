@@ -1,37 +1,40 @@
-# Security and Trust Boundaries
+# Security policy
 
-`agent-workflow` executes operator-selected coding agents and arbitrary explicit commands. Treat every delegated command, prompt pack, target repository, and generated patch as untrusted until reviewed.
+`agent-workflow` executes operator-selected coding agents and explicit commands against source repositories. Treat prompts, prompt packs, delegated processes, provider output, generated patches, and target repositories as untrusted until reviewed.
 
-## Guarantees in v0.1
+## Supported status
 
-- Commands are stored as argv arrays and rendered with shell-safe quoting.
-- Session, ticket, and pack identifiers are restricted to safe filesystem and tmux characters.
-- Prompts are copied into durable state and hashed before execution.
-- Source revision, branch, and dirty state are recorded before launch.
-- Status files are updated atomically.
-- A delegation receives a fresh named tmux session; existing session and run-state names are rejected.
-- Interrupt, terminate, kill, and restart preserve prior logs and evidence.
-- The workflow never merges branches, deletes failed worktrees automatically, or kills a merely suspected stalled process.
+The project is pre-public-release and does not yet have a monitored public vulnerability-reporting channel. This is a release blocker tracked as `REL-002` in [BACKLOG.md](BACKLOG.md). Do not publish sensitive reports in a public issue tracker.
+
+## Security boundaries
+
+- Commands are preserved as argv arrays and rendered with shell-safe quoting.
+- IDs are restricted before they become paths, tmux names, or evidence keys.
+- Configured roots are resolved and traversal/symlink escapes are rejected.
+- Prompts, source state, commands, streams, artifacts, and receipts are hashed.
+- Status files, logs, and terminal capture are projections, not authorities.
+- Final, lifecycle, score, and workflow receipts are regular read-only files verified through stable descriptors.
+- Workflow state is reconstructed from an immutable snapshot and append-only journal.
+- Approval is explicit and binds actor, reason, revision, and sealed evidence.
+- Provider usage fails closed on mixed modes, conflicting identities, malformed totals, or incomplete cost metadata.
+- MCP is optional, local stdio, bounded to configured roots, and currently read-only.
+- The project does not automatically merge, delete failed worktrees, terminate suspected stalls, expose remote execution, or authorize network MCP transport.
 
 ## Operator responsibilities
 
-- Review prompt packs before execution.
-- Run agents with the least filesystem and network access appropriate to the ticket.
-- Keep credentials out of prompts, logs, repositories, and command arguments.
-- Inspect diffs before running project tests or merging.
-- Treat model-generated shell commands, dependency changes, and network calls as untrusted.
-- Use separate operating-system accounts or containers for higher-risk repositories.
+- Run agents with the least filesystem, network, and tool access needed.
+- Keep credentials and private data out of prompts, argv, logs, repositories, and state bundles.
+- Review patches and evidence before executing project code or accepting a run.
+- Use separate operating-system accounts, containers, or disposable hosts for higher-risk targets.
+- Protect the XDG state directory; it can contain source paths, prompts, model output, provider streams, and code fragments.
+- Do not publish a receipt bundle without reviewing every sealed artifact it references.
 
-## State sensitivity
-
-The state directory can contain source paths, prompts, model output, and code fragments. Its default location is:
+The default state location is:
 
 ```text
 ~/.local/state/agent-workflow
 ```
 
-Protect it with normal user-only filesystem permissions and do not publish it as part of a source repository.
+## Reporting before public release
 
-## Reporting
-
-This initial package does not prescribe a public vulnerability-reporting address. Add one before publishing the repository beyond trusted collaborators.
+Trusted collaborators should contact the maintainer through an existing private channel and provide the smallest safe reproduction. Include version, platform, command category, and whether the issue affects path containment, evidence authority, process control, or provider accounting. Do not include secrets or private state bundles unless a secure transfer path has been agreed.

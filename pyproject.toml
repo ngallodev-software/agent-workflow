@@ -4,18 +4,22 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-workflow"
-version = "0.1.12"
+version = "0.2.2"
 description = "Terminal-first, observable workflow for bounded coding-agent delegation"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = ["jsonschema>=4.18,<5"]
 classifiers = [
+  "Development Status :: 3 - Alpha",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "Operating System :: POSIX",
 ]
 
 [project.optional-dependencies]
+dev = ["pytest>=8,<10"]
 eval = [
   "inspect-ai==0.3.247",
   "inspect-swe==0.2.66",
@@ -40,13 +44,9 @@ include-package-data = false
 
 [tool.setuptools.packages.find]
 where = ["src"]
-exclude = ["agent_workflow.mcp.sdk*"]
 
 [tool.setuptools.package-data]
 agent_workflow = ["assets/**/*"]
-
-[tool.setuptools.exclude-package-data]
-agent_workflow = ["mcp/sdk/**", "mcp/sdk/**/*"]
 
 [tool.setuptools.data-files]
 "share/agent-workflow/schemas" = ["schemas/*.json"]
@@ -54,3 +54,8 @@ agent_workflow = ["mcp/sdk/**", "mcp/sdk/**/*"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+  "live: opt-in compatibility checks requiring real tmux or paid agent executors",
+  "future: strict expected-failure acceptance specifications for approved backlog behavior",
+]

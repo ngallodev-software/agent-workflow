@@ -1,0 +1,12 @@
+flowchart TB
+  Snapshot[Workflow snapshot] --> Projection[Workflow projection]
+  Events[Append-only workflow events] --> Projection
+  Raw[Raw executor JSONL] --> Provider[Provider evidence]
+  Final[Final receipt] --> Trial[Trial evidence]
+  Provider --> Trial
+  Lifecycle[Lifecycle receipt chain] --> Approval[Approval projection]
+  Final --> WorkflowReceipt[Aggregate workflow receipt]
+  Lifecycle --> WorkflowReceipt
+  Snapshot --> WorkflowReceipt
+  Events --> WorkflowReceipt
+  Logs[Logs/tmux/status] -. observational or derived .-> Projection

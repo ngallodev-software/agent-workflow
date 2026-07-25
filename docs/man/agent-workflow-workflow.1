@@ -1,0 +1,40 @@
+.TH AGENT-WORKFLOW-WORKFLOW 1 "2026-07-25" "agent-workflow 0.2.2" "User Commands"
+.SH NAME
+agent-workflow-workflow \- restart-safe workflow graph commands
+.SH SYNOPSIS
+.B agent-workflow workflow validate
+.I SNAPSHOT
+.br
+.B agent-workflow workflow template
+.I TEMPLATE SPEC
+.B --output
+.I SNAPSHOT
+.br
+.B agent-workflow workflow start
+.I RUN_DIR SNAPSHOT
+.br
+.B agent-workflow workflow status
+.I RUN_DIR SNAPSHOT
+.br
+.B agent-workflow workflow resume
+.I RUN_DIR SNAPSHOT
+.br
+.B agent-workflow workflow seal
+.I RUN_DIR SNAPSHOT
+.br
+.B agent-workflow workflow verify
+.I RUN_DIR SNAPSHOT
+.SH DESCRIPTION
+Workflow commands operate on a normalized immutable snapshot and an append-only event journal. start stores the canonical snapshot and schedules eligible nodes through the existing session launch service. status and resume replay durable events. seal creates a read-only aggregate workflow receipt after every node is terminal. verify rebuilds that receipt from current durable evidence.
+.SH TEMPLATES
+Authorized TEMPLATE values are pipeline, parallel-review-fan-in, and implementation-independent-review. Template expansion is deterministic and produces the canonical workflow snapshot schema.
+.SH APPROVALS
+Approval nodes verify the subject run's canonical contiguous lifecycle receipt chain, sealed final receipt, exact completion revision, and score evidence. Mutable status pointers are not authority.
+.SH RESULT BINDINGS
+Task inputs may use strict RFC 6901 JSON Pointers into sealed completed ancestor results. Values are constrained by ancestry and byte limits, copied into a read-only binding snapshot, and sealed into child provenance. Arbitrary file reads and expression evaluation are not supported.
+.SH SNAPSHOT CONSISTENCY
+Every command after start must supply a snapshot whose normalized SHA-256 matches the stored started snapshot. Substitution is rejected.
+.SH FILES
+Within RUN_DIR: workflow-snapshot.json, workflow-events.jsonl, workflow-status.json, workflow-run.json, bindings/, and optional workflow-receipt.json.
+.SH SEE ALSO
+agent-workflow(1), docs/ARCHITECTURE.md, docs/diagrams/REPOSITORY_CHART_PACK.md

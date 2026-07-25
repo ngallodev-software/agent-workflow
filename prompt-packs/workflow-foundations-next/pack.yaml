@@ -1,8 +1,0 @@
-schema: agent-workflow/pack/v1
-pack_id: workflow-foundations-next
-name: Workflow Foundations Next
-version: 1
-phases:
-  - phase-0
-  - phase-1
-  - phase-2
