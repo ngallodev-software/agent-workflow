@@ -9,6 +9,7 @@ mode, including its declared core dependencies, then creates launcher and skill
 symlinks. Missing dependencies may require network access.
 
 Options:
+  --no-skills            Skip installation of agent skill symlinks.
   --no-deps              Skip Python package/dependency installation.
   --extras NAME[,NAME...] Install optional dependency groups (for example
                           eval,stats or all). Core dependencies are always

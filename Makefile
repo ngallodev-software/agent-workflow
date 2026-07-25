@@ -1,7 +1,7 @@
 .PHONY: test shell-check compile validate-example validate
 
 test:
-	PYTHONPATH=src python3 -m unittest discover -s tests -v
+	PYTHONPATH=src python3 -m pytest -q
 
 compile:
 	python3 -m compileall -q src

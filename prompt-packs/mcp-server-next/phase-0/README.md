@@ -1,28 +1,15 @@
-# Phase 0 — research, review, and executable plan
+# MCP mutation phase
 
-Refresh primary-source MCP evidence, independently review the approved decisions
-against current source, and emit an implementation-ready plan and revised ticket
-pack before production code changes.
+## Objective
 
-## Complexity and delegation
+Add the smallest useful local-stdio mutation adapter over stable services shared with the CLI.
 
-| Ticket | Tier | Risk | Dependencies | Reviewer requirement |
-|---|---|---|---|---|
-| P0-00 | C | Read-only | none | coordinator verifies baseline |
-| P0-01 | B | Read-only research | P0-00 | source links and version claims checked |
-| P0-02 | A | Architecture judgment | P0-01 | independent reviewer signs decision delta |
+## Tickets
 
-## Ordering
+1. `MCP3-00` — verify service boundaries and refresh typed contracts.
+2. `MCP3-01` — implement bounded idempotent tools.
+3. `MCP3-02` — independently review parity, security, restart behavior, and evidence.
 
-Follow `task-manifest.yaml`. Do not execute dependent tickets concurrently.
+## Non-targets
 
-No production writes. Research uses primary sources. Do not silently reopen
-approved decisions; record any challenge as a decision delta with evidence.
-
-Root README, `BACKLOG.md`, `docs/MCP_SERVER_DECISION.md`, MCP source/tests,
-official SDK dependency record, and `references/`.
-
-Evidence contains the exact source baseline, research matrix, threat review,
-decision deltas, dependency graph, bounded tickets, and revised prompt pack.
-`agent-workflow pack validate` passes and an independent review finds no
-unbounded ticket or unsupported protocol claim.
+No arbitrary workflow execution, raw shell or tmux control, direct state-file mutation, bulk cross-run operations, force kill, HTTP transport, or MCP Tasks as lifecycle authority.

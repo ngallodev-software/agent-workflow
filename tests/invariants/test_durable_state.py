@@ -1,0 +1,64 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from agent_workflow.config import defaults
+from agent_workflow.errors import WorkflowError
+from agent_workflow.messages import append_message, replay_messages
+from agent_workflow.routing import advise_routing
+from agent_workflow.scheduler import calculate_eligibility, plan_launches
+
+
+def test_message_log_is_contiguous_replayable_and_fail_closed(tmp_path: Path) -> None:
+    records = [
+        append_message(tmp_path, session_id="run", direction="parent_to_child", kind="steer", actor="parent", content="inspect"),
+        append_message(tmp_path, session_id="run", direction="child_to_parent", kind="progress", actor="child", content="working"),
+    ]
+    assert [item["sequence"] for item in records] == [1, 2]
+    assert replay_messages(tmp_path, after_sequence=1) == [records[1]]
+
+    path = tmp_path / "messages.jsonl"
+    path.write_text(path.read_text() + "not-json\n", encoding="utf-8")
+    with pytest.raises(WorkflowError):
+        replay_messages(tmp_path)
+
+
+def test_scheduler_capacity_and_dependency_release_are_graph_invariants() -> None:
+    snapshot = {
+        "nodes": [
+            {"node_id": "a", "kind": "task", "dependencies": []},
+            {"node_id": "b", "kind": "task", "dependencies": ["a"]},
+            {"node_id": "c", "kind": "task", "dependencies": []},
+        ]
+    }
+    status = {
+        "nodes": [
+            {"node_id": "a", "state": "completed"},
+            {"node_id": "b", "state": "eligible"},
+            {"node_id": "c", "state": "running"},
+        ]
+    }
+    assert calculate_eligibility(snapshot, status) == ["b"]
+    assert plan_launches(snapshot, status, max_parallelism=1) == []
+    assert plan_launches(snapshot, status, max_parallelism=2) == ["b"]
+
+
+def test_routing_is_deterministic_advisory_and_cannot_override_enforced_policy() -> None:
+    metadata = {"task_type": "review", "risk": "high", "interactive": True}
+    enforced = {"agent_class": "implementation", "executor": "codex", "model": "gpt-5.4-mini", "interactive": False}
+    settings = defaults()
+    first = advise_routing(metadata, settings, enforced_selection=enforced)
+    second = advise_routing(dict(metadata), settings, enforced_selection=dict(enforced))
+    assert first == second
+    recommendation = first["recommendation"]
+    assert recommendation["agent_class"] in settings.agent_classes
+    assert recommendation["executor"] in settings.executors
+    assert first["enforced_selection"] == enforced
+    assert first["policy_disagreements"]
+
+
+def test_invalid_scheduler_parallelism_is_rejected() -> None:
+    with pytest.raises(WorkflowError):
+        plan_launches({"nodes": []}, {"nodes": []}, max_parallelism=0)

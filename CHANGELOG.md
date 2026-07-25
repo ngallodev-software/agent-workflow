@@ -5,6 +5,19 @@
 
 No unreleased changes.
 
+## 0.2.2 — 2026-07-25
+
+- Replace the 239-test, 46-file implementation-heavy suite with installed-wheel acceptance journeys, compact security/state/accounting matrices, release checks, opt-in live compatibility, and strict expected-failure future specifications.
+- Exercise real public CLI journeys for installation surfaces, Git worktrees, external executors, durable messages, retries, structured provider evidence, workflow approvals, sealed result binding, aggregate receipts, interactive-agent reuse, prompt packs, and evaluation comparisons.
+- Publish the previously missing `evaluation-runtime` schema after the installed evaluation lifecycle exposed that sealed collection could not validate its own runtime contract.
+- Remove private-helper and mock-driven tests that primarily locked parser, dictionary, command-vector, or prose assumptions.
+- Add GitHub Actions coverage for Python 3.11 through 3.13 and document the acceptance-first test policy.
+- Consolidate operations, prompt-pack, evidence/evaluation, MCP, testing, and public-release guidance into a small canonical documentation set.
+- Remove completed prompt packs, ticket-completion ledgers, session checkpoints, changed-file/cleanup artifacts, and historical design reports from the public source surface while preserving history in Git.
+- Reduce the MCP follow-on pack to the single active mutation phase and align it with shared-service, idempotency, evidence, and acceptance-test requirements.
+- Add contributing, support, public-release-readiness, testing-strategy, and release-path documentation and diagrams.
+- Mark license selection, vulnerability reporting, supported-host compatibility, and release ownership as explicit blockers rather than implying public-release readiness.
+
 ## 0.2.1 — 2026-07-24
 
 - Reconcile running workflow nodes from verified child provenance and sealed terminal evidence; count existing running nodes against parallelism and require a durable child footprint before recording `running`.

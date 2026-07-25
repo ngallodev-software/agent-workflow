@@ -1,6 +1,6 @@
 # agent-workflow repository chart pack
 
-**Release:** 0.2.1
+**Release:** 0.2.2
 **Purpose:** current-state architecture, data/evidence model, execution flows, security boundaries, and planned MCP evolution.
 
 Mermaid sources for the highest-value diagrams are also stored as individual `.mmd` files in this directory.
@@ -396,9 +396,11 @@ flowchart LR
 flowchart LR
   Source[Git source checkout] --> Audit[audit-release-assets.py]
   Audit --> Manifest[MANIFEST.sha256]
-  Source --> Tests[pytest + compileall + shell syntax]
+  Source --> Tests[installed-wheel acceptance + invariant matrices]
+  Source --> Static[release/schema/shell/compile checks]
   Manifest --> ReleaseCheck[scripts/release-check.sh]
   Tests --> ReleaseCheck
+  Static --> ReleaseCheck
   ReleaseCheck --> Archive[deterministic tar.zst + SHA-256]
   Source --> Install[install.sh editable install]
   Install --> Launcher[~/.local/bin/agent-workflow]
@@ -492,6 +494,40 @@ flowchart TB
   Collector --> Seals[Immutable digests/receipts]
   StateBoundary --> Seals
   Seals --> Review[Independent review/acceptance]
+```
+
+## 23. Acceptance-first test architecture
+
+```mermaid
+flowchart TB
+  Source[Clean source copy] --> Wheel[Build wheel]
+  Wheel --> Venv[Install isolated virtualenv]
+  Venv --> CLI[Invoke installed executables]
+  CLI --> Journeys[Acceptance journeys]
+  Journeys --> Git[Real Git/worktrees]
+  Journeys --> Proc[External tmux/executor shims]
+  Journeys --> State[Durable state and receipts]
+  Invariants[Compact invariant matrices] --> Security[Path/seal/symlink rules]
+  Invariants --> Replay[Message/workflow replay]
+  Invariants --> Accounting[Provider/cohort accounting]
+  Future[Strict xfail future journeys] --> Backlog[Approved backlog outcomes]
+  Live[Opt-in live compatibility] --> RealHost[Real tmux/providers/MCP host]
+  Release[Release checks] --> Distribution[schemas/help/shell/manifest]
+```
+
+## 24. Public release path
+
+```mermaid
+flowchart LR
+  Core[Core CLI/workflow/evidence] --> Acceptance[Acceptance-first suite]
+  Acceptance --> CI[Supported Python CI]
+  CI --> Host[Clean-host live compatibility]
+  Host --> Governance[License + security contact + ownership]
+  Governance --> Metadata[Package/repository metadata]
+  Metadata --> RC[Signed reproducible release candidate]
+  RC --> Public[Supported public release]
+  MCPMutation[MCP mutation] -. not a prerequisite .-> Public
+  MultiHost[Multi-host orchestration] -. not a prerequisite .-> Public
 ```
 
 ## Diagram maintenance rule
