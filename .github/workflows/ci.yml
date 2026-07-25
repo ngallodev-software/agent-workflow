@@ -21,12 +21,15 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install system tools
         run: sudo apt-get update && sudo apt-get install -y tmux zstd
-      - name: Install project
-        run: python -m pip install -e '.[dev]'
+      - name: Install test dependencies in isolated CI environment
+        run: |
+          python -m venv "$RUNNER_TEMP/agent-workflow-venv"
+          "$RUNNER_TEMP/agent-workflow-venv/bin/python" -m pip install \
+            'setuptools>=61' 'pytest>=8,<10' 'jsonschema>=4.18,<5'
       - name: Acceptance and invariant suite
-        run: pytest
+        run: "$RUNNER_TEMP/agent-workflow-venv/bin/python" -m pytest
       - name: Compile and release assets
         run: |
-          python -m compileall -q src
+          "$RUNNER_TEMP/agent-workflow-venv/bin/python" -m compileall -q src
           bash -n install.sh uninstall.sh scripts/*.sh
-          python scripts/audit-release-assets.py
+          "$RUNNER_TEMP/agent-workflow-venv/bin/python" scripts/audit-release-assets.py
