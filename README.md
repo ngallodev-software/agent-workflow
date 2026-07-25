@@ -181,12 +181,17 @@ non-interactive and permits only Claude Haiku or `gpt-5.6-luna`; review is also
 non-interactive; implementation is interactive by default. Additional classes
 are ordinary `[agent_classes.NAME]` config tables.
 Interactive agents share the orchestrator window by default. Non-interactive
-agents use detached named tmux sessions when `non_interactive_tmux` is
-`"dedicated_session"`, so invisible workers do not consume a visible pane.
+assignments use an interactive executor in a detached named tmux session when
+`non_interactive_tmux` is `"dedicated_session"`, so they can report completion
+and close themselves without leaving a blank user-resumable session. They are
+not offered as user-resumable agents; the calling agent should inspect their
+durable status or delegate a new attempt. Set `non_interactive_tmux` to
+`"shared_window"` only when those panes should be visible in the current
+window.
 Claude agents are interactive by default, including exploratory and review
-classes. Use the explicit `--no-interactive` (or `--structured`) mode when a
-Claude run must be detached/non-interactive. Use `--interactive` to make the
-choice explicit for any executor.
+classes. `--no-interactive` controls assignment visibility and reuse policy; it
+does not create a blank terminal. Use `--structured` when a truly
+non-interactive executor stream is required.
 Use `--model MODEL`; configured defaults apply when it is omitted. Models must
 be listed for that executor. A `no_go_models` match is rejected unless the run
 uses `--allow-no-go-model`, which is recorded in provenance. Executor-specific
@@ -255,6 +260,8 @@ anything destructive: close enough explicitly idle panes, run the new job as a
 detached non-interactive task, or cancel. Automation can choose explicitly with
 `--pane-limit-action close-idle|non-interactive|cancel`; non-TTY callers using
 the default `prompt` policy fail closed with structured choices.
+The pane count and grid apply only to the exact tmux window used for the
+launch. Separate tmux windows have independent limits and layouts.
 
 The default interactive grid creates two agent columns to the right of the
 orchestrator before adding vertical splits. It then balances agents across the

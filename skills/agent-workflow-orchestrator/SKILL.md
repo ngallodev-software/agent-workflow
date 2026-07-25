@@ -17,8 +17,10 @@ Use this skill when deciding whether work needs a durable delegation or when ope
 | User-visible child panes are required while the orchestrator is inside tmux | Invoke `agent-workflow launch`; never hand-create the tmux session or pane. |
 
 Select an agent class explicitly when the task differs from the configured
-default. `exploratory` and `review` are normally non-interactive detached runs;
-`implementation` is normally an interactive pane. The application validates
+default. `exploratory` and `review` are normally non-interactive assignments;
+they use an interactive executor in a private tmux session by default so they
+can report completion and close themselves, while `implementation` is normally
+an interactive pane. The application validates
 the class against configured executor/model pairs and rejects no-go models
 unless the caller supplies the explicit authorization flag.
 | A running agent needs new guidance | Append `steer`; treat it as pending until a correlated executor acknowledgement exists. |
@@ -37,7 +39,14 @@ agent-workflow status project-p0-01 --capture 50
 agent-workflow watch project-p0-01 --after 0 --timeout 300
 ```
 
-When launched from a valid current tmux window, `agent-workflow launch` creates a visible pane in that window. Without a usable tmux context, it falls back to a detached named session. Always use the CLI so source baselines, prompts, commands, logs, and receipts are recorded.
+When launched from a valid current tmux window, `agent-workflow launch` creates
+a visible pane in that window for interactive assignments. Non-interactive
+assignments default to a private named tmux session and are not user-resumable;
+that private session is a detached named session from the orchestrator's
+window;
+their launch prompt requires durable completion notification and clean exit.
+Always use the CLI so source baselines, prompts, commands, logs, and receipts
+are recorded.
 
 ## Control and recovery
 
@@ -51,6 +60,11 @@ agent-workflow restart project-p0-01
 ```
 
 `steer` persists a durable request. It does not prove that a one-shot executor consumed semantic input. Only a correlated acknowledgement from a supported executor adapter establishes delivery/application.
+
+Do not use `restart` as a user-facing recovery path for a non-interactive
+assignment. Inspect its durable status and have the calling agent launch a new
+attempt when needed. Pane limits and layout are scoped to the exact tmux
+window; another tmux window has its own independent capacity.
 
 ## Review and acceptance
 
