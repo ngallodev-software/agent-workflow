@@ -59,6 +59,8 @@ and `--disallowedTools`. Configure command-mode differences with
 `interactive_permission_args` and `non_interactive_permission_args`.
 Configured model allowlists are executor-specific, and no-go models require
 the explicit, provenance-recorded `--allow-no-go-model` launch permission.
+Claude launches default to interactive, including exploratory and review
+classes; `--no-interactive` or `--structured` is the explicit opt-out.
 
 `agent task-complete` is the only transition from `busy` to
 `idle_reusable`. `agent reuse` records a pending assignment and steer;

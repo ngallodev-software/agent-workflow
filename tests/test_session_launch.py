@@ -47,12 +47,38 @@ class SessionLaunchTests(unittest.TestCase):
                 interactive=None,
             )
         self.assertEqual(exploratory[1:4], ("exploratory", "claude", "haiku"))
-        self.assertFalse(exploratory[-1])
+        self.assertTrue(exploratory[-1])
         self.assertEqual(
             implementation[1:4],
             ("implementation", "codex", "gpt-5.4-mini"),
         )
         self.assertTrue(implementation[-1])
+
+    def test_claude_defaults_interactive_but_explicit_opt_out_is_honored(self):
+        settings = defaults(Path("/missing.toml"))
+        with patch("agent_workflow.sessions.list_statuses", return_value=[]):
+            default = _resolve_agent_identity(
+                settings,
+                requested_name=None,
+                requested_class="review",
+                executor="claude",
+                model="haiku",
+                allow_no_go_model=False,
+                explicit_command=None,
+                interactive=None,
+            )
+            opted_out = _resolve_agent_identity(
+                settings,
+                requested_name=None,
+                requested_class="review",
+                executor="claude",
+                model="haiku",
+                allow_no_go_model=False,
+                explicit_command=None,
+                interactive=False,
+            )
+        self.assertTrue(default[-1])
+        self.assertFalse(opted_out[-1])
 
     def test_agent_name_is_unique_across_interactive_and_detached_runs(self):
         with tempfile.TemporaryDirectory() as tmp:

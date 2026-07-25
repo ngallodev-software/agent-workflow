@@ -110,31 +110,31 @@ default_model = "haiku"
 
 [agent_classes.exploratory.models]
 claude = ["haiku"]
-codex = ["gpt-5.4-mini"]
+codex = ["gpt-5.6-luna"]
 
 [agent_classes.review]
 interactive = false
 default_executor = "codex"
-default_model = "gpt-5.4-mini"
+default_model = "gpt-5.6-luna"
 
 [agent_classes.review.models]
 claude = ["haiku", "sonnet"]
-codex = ["gpt-5.4-mini", "gpt-5.6-luna"]
+codex = ["gpt-5.6-luna", "gpt-5.6-luna"]
 
 [agent_classes.implementation]
 interactive = true
 default_executor = "codex"
-default_model = "gpt-5.4-mini"
+default_model = "gpt-5.6-luna"
 
 [agent_classes.implementation.models]
 claude = ["haiku", "sonnet"]
-codex = ["gpt-5.4-mini", "gpt-5.6-luna", "gpt-5.6-terra"]
+codex = ["gpt-5.6-luna", "gpt-5.6-luna", "gpt-5.6-terra"]
 
 [executors.codex]
 command = ["codex", "exec", "--sandbox", "workspace-write", "--skip-git-repo-check", "-"]
 interactive_command = ["codex"]
-models = ["gpt-5.4-mini", "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"]
-default_model = "gpt-5.4-mini"
+models = ["gpt-5.6-luna", "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"]
+default_model = "gpt-5.6-luna"
 no_go_models = ["gpt-5.6-sol", "*fast*"]
 permission_args = ["--ask-for-approval", "on-request"]
 
@@ -174,13 +174,16 @@ tmux pane border.
 Use `--agent-class exploratory|review|implementation` to select work policy.
 Classes define interactivity and allowed executor/model pairs; named profiles
 may narrow a class but cannot escape it. The built-in exploratory class is
-non-interactive and permits only Claude Haiku or `gpt-5.4-mini`; review is also
+non-interactive and permits only Claude Haiku or `gpt-5.6-luna`; review is also
 non-interactive; implementation is interactive by default. Additional classes
 are ordinary `[agent_classes.NAME]` config tables.
 Interactive agents share the orchestrator window by default. Non-interactive
 agents use detached named tmux sessions when `non_interactive_tmux` is
 `"dedicated_session"`, so invisible workers do not consume a visible pane.
-Use `--interactive` or `--no-interactive` to override the configured default.
+Claude agents are interactive by default, including exploratory and review
+classes. Use the explicit `--no-interactive` (or `--structured`) mode when a
+Claude run must be detached/non-interactive. Use `--interactive` to make the
+choice explicit for any executor.
 Use `--model MODEL`; configured defaults apply when it is omitted. Models must
 be listed for that executor. A `no_go_models` match is rejected unless the run
 uses `--allow-no-go-model`, which is recorded in provenance. Executor-specific

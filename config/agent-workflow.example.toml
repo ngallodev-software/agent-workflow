@@ -39,6 +39,9 @@ executor = "claude"
 model = "haiku"
 
 [agent_classes.exploratory]
+# Claude launches are interactive by default; --no-interactive is an explicit
+# per-launch opt-out. This class flag remains the default for non-Claude
+# executors and custom executor policies.
 interactive = false
 default_executor = "claude"
 default_model = "haiku"
@@ -48,6 +51,9 @@ claude = ["haiku"]
 codex = ["gpt-5.4-mini"]
 
 [agent_classes.review]
+# Claude launches are interactive by default; --no-interactive is an explicit
+# per-launch opt-out. This class flag remains the default for non-Claude
+# executors and custom executor policies.
 interactive = false
 default_executor = "codex"
 default_model = "gpt-5.4-mini"

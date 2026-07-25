@@ -341,6 +341,7 @@ def _resolve_agent_identity(
     interactive: bool | None,
     allow_active_name: bool = False,
 ) -> tuple[str, str, str | None, str | None, bool, bool]:
+    interactive_explicit = interactive is not None
     active_names = {
         str(item["agent_name"])
         for item in list_statuses(settings)
@@ -403,6 +404,8 @@ def _resolve_agent_identity(
             )
     if interactive is None:
         interactive = class_policy.interactive
+    if executor == "claude" and not interactive_explicit:
+        interactive = True
     return agent_name, agent_class, executor, model, allow_no_go_model, interactive
 
 
@@ -510,6 +513,8 @@ def launch(
         raise WorkflowError(
             f"unsupported terminal backend {settings.terminal_backend!r}; v0.1 supports tmux"
         )
+    # Claude's native command is interactive by default.  The explicit
+    # --structured/--no-interactive paths remain opt-outs for automation.
     if structured and interactive is None:
         interactive = False
     agent_name, agent_class, executor, model, allow_no_go_model, interactive = _resolve_agent_identity(
