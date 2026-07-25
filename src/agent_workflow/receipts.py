@@ -366,6 +366,14 @@ def _seal_run_unlocked(run_dir: Path, *, session_id: str) -> dict[str, Any]:
                 if path.is_file()
                 and path.relative_to(run_dir).as_posix() not in listed_paths
             )
+    unique_artifacts: dict[str, dict[str, Any]] = {}
+    for artifact in artifacts:
+        path = str(artifact["path"])
+        previous = unique_artifacts.get(path)
+        if previous is not None and previous != artifact:
+            raise WorkflowError(f"conflicting sealed artifact entries for {path}")
+        unique_artifacts[path] = artifact
+    artifacts = list(unique_artifacts.values())
     required = set(SEALED_ARTIFACTS)
     present = {item["path"] for item in artifacts}
     missing = sorted(required - present)

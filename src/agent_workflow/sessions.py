@@ -1373,10 +1373,13 @@ def restart(
     command_data = json.loads(
         Path(str(old["command_path"])).read_text(encoding="utf-8")
     )
-    if not bool(command_data.get("interactive", old.get("interactive", False))):
+    if (
+        not bool(command_data.get("interactive", old.get("interactive", False)))
+        and str(old.get("status")) not in TERMINAL_STATUSES
+    ):
         raise WorkflowError(
-            "non-interactive tasks are not user-resumable; launch a new task "
-            "or have the calling agent delegate the work again"
+            "non-interactive tasks cannot be restarted while active; launch a new "
+            "task or have the calling agent delegate the work again"
         )
     command = command_data.get("argv")
     if (
