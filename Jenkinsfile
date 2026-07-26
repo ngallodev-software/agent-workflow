@@ -21,7 +21,7 @@ pipeline {
         stage('Prepare Python environment') {
             steps {
                 sh '''
-                    rm -rf "$WORKSPACE/.jenkins-venv"
+                    rm -rf "$WORKSPACE/.jenkins-venv" "$WORKSPACE/.jenkins-local-venv"
                     rm -rf "$VENV"
                     python3 -m venv "$VENV"
                     "$VENV/bin/python" -m pip install \
