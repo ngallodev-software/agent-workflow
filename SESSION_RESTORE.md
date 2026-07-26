@@ -1,7 +1,7 @@
 # Session restore
 
 **Repository:** `/lump/apps/agent-workflow`  
-**Snapshot date:** 2026-07-25
+**Snapshot date:** 2026-07-26
 **Branch:** `master`
 **Version:** `0.2.2`
 **Latest overlay commit:** `a62a24c` (`merge determinism security backlog overlay`)
@@ -28,7 +28,7 @@ Overlay content now present includes:
 - `python3 scripts/audit-release-assets.py`: passed.
 - shell syntax checks for installer/uninstaller and scripts: passed.
 - all four prompt packs validated: passed.
-- `python3 -m build --wheel --no-isolation`: passed; built `dist/agent_workflow-0.2.2-py3-none-any.whl`.
+- `python3 -m build --no-isolation`: passed; built both `agent_workflow-0.2.2.tar.gz` and `agent_workflow-0.2.2-py3-none-any.whl`.
 - global host install: passed with `./install.sh --python /home/nate/.pyenv/shims/python3 --extras mcp`.
 - installed checks: `agent-workflow --version`, `agent-workflow-mcp --help`, all three release-drift-auditor skill links, host assets, and man page passed.
 - no test files were modified.
@@ -44,7 +44,11 @@ The global install intentionally used only the `mcp` extra. Installing the optio
 
 ## Working tree and next work
 
-The overlay changes are committed in `a62a24c`; the handoff refresh follows in later commits, and the checkout is clean. Do not modify tests unless explicitly authorized. Next work is the P0 hardening sequence: HARD-001/HARD-002 first, then HARD-004/HARD-005, followed by the isolation, identity, drift, and supply-chain gates. Keep MCP-003 blocked until its prerequisites are accepted.
+The overlay changes are committed in `a62a24c`; the current handoff revision is `fd1aba1`, and the checkout is clean on `master` ahead of `origin/master`. Do not modify tests unless explicitly authorized. Next work is the P0 hardening sequence: HARD-001/HARD-002 first, then HARD-004/HARD-005, followed by the isolation, identity, drift, and supply-chain gates. Keep MCP-003 blocked until its prerequisites are accepted.
+
+## Live runtime observations
+
+At handoff capture, the main tmux server showed only the live orchestrator pane (`0:0.0`). Process inspection also found an active stdio MCP process from the repository virtualenv and older workflow tail/wait processes, including the `aw-model-effort-20260724` log tail. These are runtime leftovers rather than uncommitted repository work; inspect and stop them explicitly before treating the host as fully quiescent. Separate `the-tax-machine` monitoring processes were also visible and are outside this repository.
 
 Useful restart commands:
 
