@@ -18,11 +18,17 @@ Current exclusions:
 ## Trust boundaries
 
 - Local stdio is the only authorized transport.
-- Every path is resolved beneath configured roots and checked against symlink/traversal escape.
-- Responses are bounded and redact sensitive fields where required.
+- Configured roots and every selected path are opened component-wise with no-follow descriptors; traversal and symlink components fail closed.
+- Responses use versioned bounded envelopes, bounded pagination, and metadata-only message/receipt summaries.
 - Actor identity uses a local server-instance identity rather than pretending to be a human reviewer.
 - Resource reads do not make mutable projections authoritative.
-- Optional dependency failure is explicit and actionable.
+- Optional dependency failure is deterministic and actionable; the stdio child receives only a sanitized environment.
+
+Message resources never return message bodies. They expose identity, type, placeholder principal, timestamp, correlation/disposition metadata, byte length, digest, and `redaction_state: "body_omitted"`. A separately authorized and redacted content capability is intentionally deferred; no casual boolean enables it.
+
+Receipt resources verify the same contiguous, regular, read-only lifecycle receipt chain used by lifecycle verification. Replacement, writable, irregular, duplicate, malformed, and noncontiguous entries fail closed rather than producing a partial summary.
+
+Errors use stable categories. Unexpected failures return only an opaque correlation ID; local logging records that ID without exception text, paths, or captured content.
 
 ## Planned mutation phase
 

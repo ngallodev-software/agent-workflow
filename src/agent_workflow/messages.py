@@ -252,6 +252,19 @@ def replay_messages(run_dir: Path, *, after_sequence: int = 0) -> list[dict[str,
     return [message for message in messages if message["sequence"] > after_sequence]
 
 
+def replay_messages_descriptor(descriptor: int, *, after_sequence: int = 0) -> list[dict[str, Any]]:
+    """Replay messages from an already opened descriptor without reopening a path."""
+    if not isinstance(after_sequence, int) or isinstance(after_sequence, bool) or after_sequence < 0:
+        raise WorkflowError("after_sequence must be a non-negative integer")
+    with os.fdopen(os.dup(descriptor), "rb") as stream:
+        fcntl.flock(stream.fileno(), fcntl.LOCK_SH)
+        try:
+            messages = _read_locked(stream)
+        finally:
+            fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+    return [message for message in messages if message["sequence"] > after_sequence]
+
+
 def wait_for_messages(
     run_dir: Path,
     *,

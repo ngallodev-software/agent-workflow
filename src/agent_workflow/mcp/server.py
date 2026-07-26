@@ -4,16 +4,25 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import sys
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
 from ..config import Settings, load_settings
 from ..errors import WorkflowError
-from ..path import absolute_path
 from .services import PackValidationRequest, PageRequest, ServiceError, WorkflowReadService
+
+_LOGGER = logging.getLogger("agent_workflow.mcp")
+_SAFE_ENVIRONMENT = frozenset(
+    {
+        "HOME", "LANG", "LC_ALL", "LC_CTYPE", "PATH", "TMPDIR",
+        "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME",
+    }
+)
 
 
 def _json(value: Any) -> str:
@@ -21,8 +30,8 @@ def _json(value: Any) -> str:
 
 
 def _repo_root(value: str | None) -> Path:
-    candidate = Path(value or os.environ.get("AGENT_WORKFLOW_MCP_REPO_ROOT", Path.cwd()))
-    return absolute_path(candidate)
+    candidate = Path(value or Path.cwd())
+    return candidate.expanduser()
 
 
 def _service_result(call: Any) -> Any:
@@ -30,16 +39,39 @@ def _service_result(call: Any) -> Any:
         return call()
     except ServiceError as exc:
         return exc.as_dict()
+    except WorkflowError:
+        return ServiceError("request_rejected", "MCP request could not be satisfied").as_dict()
+    except Exception:
+        correlation_id = str(uuid.uuid4())
+        _LOGGER.error("MCP internal failure correlation_id=%s", correlation_id)
+        return {
+            "schema": "agent-workflow/mcp-error/v1",
+            "error": "internal_error",
+            "message": "internal MCP failure",
+            "correlation_id": correlation_id,
+        }
+
+
+@contextmanager
+def _sanitized_environment():
+    original = dict(os.environ)
+    os.environ.clear()
+    os.environ.update({key: value for key, value in original.items() if key in _SAFE_ENVIRONMENT})
+    try:
+        yield
+    finally:
+        os.environ.clear()
+        os.environ.update(original)
 
 
 def build_server(settings: Settings, *, repo_root: Path | None = None) -> Any:
     """Build the optional FastMCP server using only public SDK imports."""
     try:
         from mcp.server.fastmcp import FastMCP
-    except ModuleNotFoundError as exc:  # pragma: no cover - exercised without extra
+    except ImportError as exc:  # pragma: no cover - exercised without extra
         raise WorkflowError(
-            "MCP support requires the optional dependency: "
-            "python -m pip install 'agent-workflow[mcp]'"
+            "agent-workflow[mcp]: optional MCP SDK is unavailable; install "
+            "'agent-workflow[mcp]'"
         ) from exc
 
     service = WorkflowReadService(settings, repository_root=_repo_root(str(repo_root) if repo_root else None))
@@ -81,11 +113,22 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repo-root", type=Path)
     args = parser.parse_args(argv)
     try:
-        server = build_server(load_settings(args.config), repo_root=args.repo_root)
-        server.run(transport="stdio")
+        settings = load_settings(args.config)
+        server = build_server(settings, repo_root=args.repo_root)
+        with _sanitized_environment():
+            server.run(transport="stdio")
     except WorkflowError as exc:
-        print(str(exc), file=sys.stderr)
+        message = str(exc)
+        if message.startswith("agent-workflow[mcp]: optional MCP SDK is unavailable"):
+            print(message, file=sys.stderr)
+        else:
+            print("agent-workflow[mcp]: startup configuration is unavailable", file=sys.stderr)
         return 2
+    except Exception:
+        correlation_id = str(uuid.uuid4())
+        _LOGGER.error("MCP startup failure correlation_id=%s", correlation_id)
+        print(f"agent-workflow[mcp]: startup failure; correlation_id={correlation_id}", file=sys.stderr)
+        return 1
     return 0
 
 

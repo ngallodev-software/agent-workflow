@@ -15,36 +15,39 @@ from .eval.scoring import validate_score_set
 from .receipts import read_sealed_contract, verify_seal_details
 from .state import run_dir, update_status
 from .util import fsync_directory, utc_now
+from .path_security import open_relative, validate_directory
 
 Action = Literal["reviewed", "accepted", "rejected"]
 _RECEIPT_NAME = re.compile(r"^(?P<sequence>[0-9]{6})-(?P<action>reviewed|accepted|rejected)\.json$")
 
 
-def _read_lifecycle_receipt(path: Path) -> tuple[dict[str, Any], str]:
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
-    try:
-        descriptor = os.open(path, flags)
-    except OSError as exc:
-        raise WorkflowError(f"cannot open lifecycle receipt {path}: {exc}") from exc
+def _read_lifecycle_receipt_descriptor(descriptor: int, display_name: str) -> tuple[dict[str, Any], str]:
     with os.fdopen(descriptor, "rb") as stream:
         info = os.fstat(stream.fileno())
         if not stat.S_ISREG(info.st_mode):
-            raise WorkflowError(
-                f"lifecycle receipt must be a regular non-symlink file: {path}"
-            )
+            raise WorkflowError("lifecycle receipt must be a regular non-symlink file")
         if info.st_mode & 0o222:
-            raise WorkflowError(f"lifecycle receipt must be read-only: {path}")
+            raise WorkflowError("lifecycle receipt must be read-only")
         data = stream.read()
     try:
         receipt = json.loads(data.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise WorkflowError(f"cannot read lifecycle receipt {path}: {exc}") from exc
+        raise WorkflowError(f"cannot read lifecycle receipt {display_name}") from exc
     if not isinstance(receipt, dict):
-        raise WorkflowError(f"lifecycle receipt must be a JSON object: {path}")
+        raise WorkflowError("lifecycle receipt must be a JSON object")
     validate_instance(
-        receipt, "agent-workflow/lifecycle-receipt/v1", artifact=str(path)
+        receipt, "agent-workflow/lifecycle-receipt/v1", artifact="lifecycle receipt"
     )
     return receipt, hashlib.sha256(data).hexdigest()
+
+
+def _read_lifecycle_receipt(path: Path) -> tuple[dict[str, Any], str]:
+    """Read one lifecycle receipt with no-follow final-component protection."""
+    try:
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    except OSError as exc:
+        raise WorkflowError("cannot open lifecycle receipt") from exc
+    return _read_lifecycle_receipt_descriptor(descriptor, path.name)
 
 
 def lifecycle_receipts(run: Path, *, expected_final_receipt_sha256: str | None = None) -> list[dict[str, Any]]:
@@ -54,50 +57,55 @@ def lifecycle_receipts(run: Path, *, expected_final_receipt_sha256: str | None =
     contiguous, read-only, regular file directly below ``receipts/`` and must
     identify the run whose directory contains it.
     """
+    run = validate_directory(run, label="run directory")
     root = run / "receipts"
     if not root.exists() and not root.is_symlink():
         return []
     try:
-        root_info = root.lstat()
-    except OSError as exc:
-        raise WorkflowError(f"cannot inspect lifecycle receipt root {root}: {exc}") from exc
-    if stat.S_ISLNK(root_info.st_mode) or not stat.S_ISDIR(root_info.st_mode):
-        raise WorkflowError(f"lifecycle receipt root is unsafe: {root}")
-    try:
-        root.resolve().relative_to(run.resolve())
-    except ValueError as exc:
-        raise WorkflowError(f"lifecycle receipt root escapes run directory: {root}") from exc
-    entries: list[dict[str, Any]] = []
-    paths = sorted(root.iterdir(), key=lambda item: item.name)
-    expected_sequence = 1
-    for path in paths:
-        match = _RECEIPT_NAME.fullmatch(path.name)
-        if match is None:
-            raise WorkflowError(f"unexpected lifecycle receipt artifact: {path.name}")
-        sequence = int(match.group("sequence"))
-        if sequence != expected_sequence:
-            raise WorkflowError(
-                f"lifecycle receipt sequence mismatch: expected {expected_sequence:06d}"
-            )
-        receipt, receipt_sha256 = _read_lifecycle_receipt(path)
-        if receipt.get("action") != match.group("action"):
-            raise WorkflowError(f"lifecycle receipt action does not match filename: {path}")
-        if receipt.get("session_id") != run.name:
-            raise WorkflowError(f"lifecycle receipt belongs to another run: {path}")
-        if (
-            expected_final_receipt_sha256 is not None
-            and receipt.get("final_receipt_sha256") != expected_final_receipt_sha256
-        ):
-            raise WorkflowError(f"lifecycle receipt final-receipt digest mismatch: {path}")
-        entries.append(
-            {
-                "sequence": sequence,
-                "path": path,
-                "sha256": receipt_sha256,
-                "receipt": receipt,
-            }
+        root_fd = os.open(
+            root,
+            os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0),
         )
-        expected_sequence += 1
+    except OSError as exc:
+        raise WorkflowError("lifecycle receipt root is unsafe") from exc
+    entries: list[dict[str, Any]] = []
+    try:
+        names = sorted(os.listdir(root_fd))
+        expected_sequence = 1
+        for name in names:
+            match = _RECEIPT_NAME.fullmatch(name)
+            if match is None:
+                raise WorkflowError("unexpected lifecycle receipt artifact")
+            sequence = int(match.group("sequence"))
+            if sequence != expected_sequence:
+                raise WorkflowError(
+                    f"lifecycle receipt sequence mismatch: expected {expected_sequence:06d}"
+                )
+            try:
+                descriptor = open_relative(root_fd, name, flags=os.O_RDONLY)
+            except OSError as exc:
+                raise WorkflowError("lifecycle receipt entry is unsafe") from exc
+            receipt, receipt_sha256 = _read_lifecycle_receipt_descriptor(descriptor, name)
+            if receipt.get("action") != match.group("action"):
+                raise WorkflowError("lifecycle receipt action does not match filename")
+            if receipt.get("session_id") != run.name:
+                raise WorkflowError("lifecycle receipt belongs to another run")
+            if (
+                expected_final_receipt_sha256 is not None
+                and receipt.get("final_receipt_sha256") != expected_final_receipt_sha256
+            ):
+                raise WorkflowError("lifecycle receipt final-receipt digest mismatch")
+            entries.append(
+                {
+                    "sequence": sequence,
+                    "path": root / name,
+                    "sha256": receipt_sha256,
+                    "receipt": receipt,
+                }
+            )
+            expected_sequence += 1
+    finally:
+        os.close(root_fd)
     return entries
 
 
