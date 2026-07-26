@@ -5,12 +5,14 @@
 **Coordinator branch:** `master`  
 **Coordinator revision at start of this handoff:** `8b937a021f8940da61adfb8b0afec63f2cf12d2e` (`ci: force Jenkins tests to install current wheel`)
 **Handoff baseline commit:** `747b9f8` (`docs: record release blockers and session handoff`)
+**Current handoff revision:** `1dec2cf` (`docs: finalize session handoff metadata`)
 
 ## Work completed in this session
 
 - Terminated the orphaned Claude Sonnet run `pr-1-sonnet-fix-20260725` with the workflow CLI.
 - Removed its shared-window pane `0:0.1` after the run was interrupted.
 - Verified no matching Claude Sonnet or agent-workflow runner process remains.
+- Stopped the stale `workflow-demo-coordinator-20260725-r2` run and its four orphaned Claude child runners; their deleted worktrees had no commits or completion handoffs to merge.
 - Updated `BACKLOG.md` with release-governance, deterministic-security, release-evidence, and Jenkins-trigger tasks.
 - Updated `docs/RELEASE_BLOCKERS_AUDIT.md`, `docs/PUBLIC_RELEASE_READINESS.md`, and `docs/RELEASE_CHECK_AUDIT.md` with the new task mappings and current Jenkins evidence.
 
@@ -37,16 +39,19 @@ The primary tmux session now contains only the orchestrator pane:
 - `0:0.0` — live orchestrator pane
 - Removed: `0:0.1` — Claude Sonnet PR #1 repair pane
 
-The separate session `workflow-demo-coordinator-20260725-r2` still exists with five live-looking panes, but its associated workflow runs are `interrupted` or `killed`. Do not assume pane liveness means run liveness. Inspect those panes/runs before reusing or removing them.
+The separate session `workflow-demo-coordinator-20260725-r2` was removed after its five panes were confirmed stale. Its durable run records remain as interrupted historical evidence; no worktree or branch remains for those runs.
 
-## Uncommitted workspace artifacts
+## Workspace state
 
-At handoff creation, the workspace contains the documentation changes made in this session plus two pre-existing untracked assessment artifacts:
+The documentation changes and the determinism/security assessment artifacts are committed. The repository has no uncommitted changes and has only the primary worktree:
 
-- `docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md`
-- `docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.html`
+- `master` at `1dec2cf`
+- one worktree: `/lump/apps/agent-workflow`
+- no agent-workflow feature branches or registered agent worktrees
 
-The Markdown assessment is the source for the new `SEC-001` through `SEC-004` backlog tasks. Review both artifacts, decide whether the HTML export belongs in the public source, then commit or remove them deliberately. Do not overwrite them without reviewing the originating agent work.
+The branch is ahead of `origin/master` by two local documentation commits. Push them before treating the remote as the canonical fresh-session baseline.
+
+The Markdown assessment is the source for the new `SEC-001` through `SEC-004` backlog tasks; the HTML export is tracked alongside it.
 
 ## Next work, in order
 
