@@ -45,9 +45,30 @@ pipeline {
                 sh 'python3 -m build --wheel --no-isolation'
             }
         }
-        stage('Local install') {
+        stage('Host install') {
             steps {
-                sh './scripts/jenkins-local-install.sh'
+                sh '''
+                    set -eu
+                    target_user="${AGENT_WORKFLOW_HOST_INSTALL_USER:-}"
+                    if [ -z "$target_user" ]; then
+                        echo 'AGENT_WORKFLOW_HOST_INSTALL_USER must name the host account to update' >&2
+                        exit 2
+                    fi
+                    host_python="${AGENT_WORKFLOW_HOST_PYTHON:-/usr/bin/python3}"
+                    test -x "$host_python" || {
+                        echo "host Python interpreter is not executable: $host_python" >&2
+                        exit 2
+                    }
+                    if [ "$(id -un)" = "$target_user" ]; then
+                        AGENT_WORKFLOW_INSTALL_PYTHON="$host_python" "$WORKSPACE/install.sh" --extras mcp
+                    else
+                        command -v sudo >/dev/null || {
+                            echo 'sudo is required when Jenkins deploys to another host account' >&2
+                            exit 2
+                        }
+                        sudo -n -u "$target_user" -H env AGENT_WORKFLOW_INSTALL_PYTHON="$host_python" "$WORKSPACE/install.sh" --extras mcp
+                    fi
+                '''
             }
         }
     }

@@ -33,6 +33,7 @@ EXCLUDED_DIRS = {
     "dist",
     "scripts.orig",
     "templates.orig",
+    "testing-output",
 }
 EXCLUDED_FILES = {".coverage", "MANIFEST.sha256"}
 

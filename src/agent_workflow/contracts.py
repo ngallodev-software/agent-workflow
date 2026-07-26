@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import site
 import sys
 from functools import lru_cache
@@ -11,8 +12,10 @@ from .errors import WorkflowError
 
 
 def _schema_roots() -> tuple[Path, ...]:
+    data_home = Path(os.environ.get("XDG_DATA_HOME", "~/.local/share")).expanduser()
     return (
         Path(__file__).resolve().parents[2] / "schemas",
+        data_home / "agent-workflow" / "schemas",
         Path(site.getuserbase()) / "share" / "agent-workflow" / "schemas",
         Path(sys.prefix) / "share" / "agent-workflow" / "schemas",
     )

@@ -20,8 +20,9 @@ cd ~/src/agent-workflow
 ```
 
 This installs the package and its core Python dependencies in editable user
-mode, then wires the launcher and skills. To install optional integrations,
-use `./install.sh --extras eval,stats` or `./install.sh --extras all`. The
+mode, then wires the launcher, skills, man pages, schemas, evaluation assets,
+and active prompt packs. To install optional integrations, use
+`./install.sh --extras eval,stats` or `./install.sh --extras all`. The
 optional local MCP server uses the pinned stable Python SDK:
 
 ```bash
@@ -38,6 +39,10 @@ destructive lifecycle tools, or HTTP transport.
 ```text
 ~/.local/bin/agent-workflow
 ~/.config/agent-workflow/config.toml
+~/.local/share/agent-workflow/schemas/
+~/.local/share/agent-workflow/evals/
+~/.local/share/agent-workflow/prompt-packs/
+~/.local/share/man/man1/
 ~/.local/state/agent-workflow/runs/
 ~/.agents/skills/
 ~/.codex/skills/
@@ -52,3 +57,15 @@ divergent copies. See `DELEGATION_RUNBOOK.md` for invocation names and
 paired executor launch examples.
 
 XDG environment variables override config, state, and data roots.
+
+## Jenkins host deployment
+
+Jenkins runs builds and tests in an isolated venv. The final pipeline stage
+calls this installer against the host account named by
+`AGENT_WORKFLOW_HOST_INSTALL_USER`, using `AGENT_WORKFLOW_HOST_PYTHON` (default
+`/usr/bin/python3`) rather than the build venv. If Jenkins runs as a different
+account, configure narrowly scoped passwordless sudo for this deployment or
+run the job under the target host account. The pipeline fails if the target is
+not configured; it never silently installs only into Jenkins's private home.
+The pipeline requests the lightweight `mcp` extra; use `--extras eval` only
+when the host is intentionally dedicated to the optional evaluator stack.

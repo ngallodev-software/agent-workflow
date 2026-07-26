@@ -5,6 +5,8 @@ cd "$ROOT"
 
 export PYTHONDONTWRITEBYTECODE=1
 export PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONNOUSERSITE=1
+export PIP_IGNORE_INSTALLED=1
 
 cleanup_bytecode() {
   find src tests scripts -type d -name __pycache__ -prune -exec rm -rf {} +
