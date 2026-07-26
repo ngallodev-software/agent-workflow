@@ -55,6 +55,8 @@ APP_DATA_DIR="$DATA_HOME/agent-workflow"
 HOOKS_DATA_DIR="$APP_DATA_DIR/hooks"
 CODEX_HOME_DIR="${CODEX_HOME:-$HOME/.codex}"
 CODEX_CONFIG_FILE="$CODEX_HOME_DIR/config.toml"
+CLAUDE_CONFIG_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+CLAUDE_SETTINGS_FILE="$CLAUDE_CONFIG_DIR/settings.json"
 MCP_CONFIG_REQUESTED=0
 if [[ "$EXTRAS" == "all" || ",$EXTRAS," == *,mcp,* ]]; then
   MCP_CONFIG_REQUESTED=1
@@ -273,7 +275,7 @@ if [[ $INSTALL_HOOKS -eq 1 ]]; then
   fi
   "$PYTHON_PATH" "$ROOT/scripts/configure-hooks.py" \
     --codex-config "$CODEX_CONFIG_FILE" \
-    --claude-config "$HOME/.claude.json" \
+    --claude-settings "$CLAUDE_SETTINGS_FILE" \
     --hooks-dir "$HOOKS_DATA_DIR" \
     --cbm-gate "$CBM_GATE" \
     --claude-cbm-gate "$CLAUDE_CBM_GATE"
@@ -286,7 +288,7 @@ if [[ $MCP_CONFIG_REQUESTED -eq 1 ]]; then
 fi
 HOOK_CLIENTS=""
 if [[ $INSTALL_HOOKS -eq 1 ]]; then
-  HOOK_CLIENTS="hooks: Codex ($CODEX_CONFIG_FILE), Claude Code ($HOME/.claude.json)"
+  HOOK_CLIENTS="hooks: Codex ($CODEX_CONFIG_FILE), Claude Code ($CLAUDE_SETTINGS_FILE)"
 fi
 cat <<EOF2
 installed launcher: $BIN_DIR/agent-workflow

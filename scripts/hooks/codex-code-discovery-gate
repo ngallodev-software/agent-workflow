@@ -1,0 +1,107 @@
+#!/usr/bin/env python3
+"""Adapt a Codex PreToolUse payload for the shared CBM discovery gate.
+
+Codex exposes unified ``exec_command`` as the ``Bash`` hook tool. This adapter
+only forwards commands that contain an identifiable code-file path and
+uses the Codex session id for the once-per-session behavior expected by the
+shared gate. Ambiguous or malformed payloads are deliberately allowed through.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+
+CODE_EXTENSIONS = {
+    "c",
+    "cc",
+    "cpp",
+    "cs",
+    "go",
+    "h",
+    "java",
+    "js",
+    "jsx",
+    "kt",
+    "php",
+    "py",
+    "rb",
+    "rs",
+    "scala",
+    "swift",
+    "ts",
+    "tsx",
+}
+DISCOVERY_COMMANDS = re.compile(r"(?:^|[;&|]\s*)(?:cat|awk|find|grep|head|rg|sed|tail)\b")
+CODE_PATH = re.compile(r"(?:^|[\s/'\"])([^\s'\"]+\.([A-Za-z0-9]+))(?:$|[\s'\"])")
+
+
+def code_path(command: str) -> str | None:
+    if not DISCOVERY_COMMANDS.search(command):
+        return None
+    for match in CODE_PATH.finditer(command):
+        if match.group(2).lower() in CODE_EXTENSIONS:
+            return match.group(1)
+    return None
+
+
+def main() -> int:
+    if len(sys.argv) != 2 or not os.access(sys.argv[1], os.X_OK):
+        return 0
+    try:
+        payload = json.load(sys.stdin)
+    except (json.JSONDecodeError, TypeError):
+        return 0
+    if not isinstance(payload, dict) or payload.get("hook_event_name") != "PreToolUse":
+        return 0
+    if payload.get("tool_name") != "Bash" or not isinstance(payload.get("session_id"), str):
+        return 0
+    tool_input = payload.get("tool_input")
+    if not isinstance(tool_input, dict):
+        return 0
+    command = tool_input.get("cmd")
+    if not isinstance(command, str):
+        command = tool_input.get("command")
+    if not isinstance(command, str):
+        return 0
+    path = code_path(command)
+    if path is None:
+        return 0
+
+    marker_prefix = "cbm-code-discovery-gate-codex-"
+    marker_root = Path(tempfile.gettempdir())
+    cutoff = time.time() - 86400
+    for stale in marker_root.glob(f"{marker_prefix}*"):
+        try:
+            if stale.stat().st_mtime < cutoff:
+                stale.unlink()
+        except OSError:
+            pass
+    digest = hashlib.sha256(payload["session_id"].encode("utf-8")).hexdigest()
+    gate_state = marker_root / f"{marker_prefix}{digest}"
+    if gate_state.exists():
+        return 0
+    try:
+        gate_state.touch(exist_ok=False)
+    except FileExistsError:
+        return 0
+
+    normalized = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {"file_path": path},
+    }
+    result = subprocess.run([sys.argv[1]], input=json.dumps(normalized), text=True, check=False)
+    return result.returncode
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

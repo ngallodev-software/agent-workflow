@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shlex
+import shutil
 import subprocess
 import tomllib
 from pathlib import Path
@@ -91,7 +93,15 @@ def test_source_installer_round_trip_preserves_user_owned_paths(
     )
     (home / ".codex").mkdir(parents=True)
     (home / ".codex" / "config.toml").write_text('model = "keep-me"\n', encoding="utf-8")
+    cbm_gate = home / ".codex" / "hooks" / "cbm-code-discovery-gate"
+    cbm_gate.parent.mkdir()
+    cbm_gate.write_text("#!/bin/sh\nexit 2\n", encoding="utf-8")
+    cbm_gate.chmod(0o700)
     (home / ".claude.json").write_text('{"userSetting": "keep-me"}\n', encoding="utf-8")
+    (home / ".claude").mkdir()
+    (home / ".claude" / "settings.json").write_text(
+        '{"permissions": {"mode": "acceptEdits"}}\n', encoding="utf-8"
+    )
 
     def run(script: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
@@ -121,20 +131,63 @@ def test_source_installer_round_trip_preserves_user_owned_paths(
     ]
     assert len(codex_hook_commands) == 3
     assert all(Path(command).is_file() for command in codex_hook_commands)
+    codex_pre_tool_use = codex_config["hooks"]["PreToolUse"]
+    assert [group["matcher"] for group in codex_pre_tool_use] == ["^Bash$"]
+    adapter_command = codex_pre_tool_use[0]["hooks"][0]["command"]
+    assert "codex-code-discovery-gate" in adapter_command
+    assert "Read|Grep|Glob" not in (home / ".codex" / "config.toml").read_text(encoding="utf-8")
+    adapter, configured_gate = shlex.split(adapter_command)
+    code_payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "session_id": str(tmp_path),
+        "tool_input": {"command": "sed -n '1,20p' src/example.py"},
+    }
+    first_gate = subprocess.run(
+        [adapter, configured_gate], input=json.dumps(code_payload), text=True, capture_output=True, check=False
+    )
+    assert first_gate.returncode == 2
+    second_gate = subprocess.run(
+        [adapter, configured_gate], input=json.dumps(code_payload), text=True, capture_output=True, check=False
+    )
+    assert second_gate.returncode == 0
+    no_path_gate = subprocess.run(
+        [adapter, configured_gate],
+        input=json.dumps({**code_payload, "tool_input": {"command": "git status --short"}}),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert no_path_gate.returncode == 0
+    codex_cli = shutil.which("codex")
+    if codex_cli:
+        codex_help = subprocess.run(
+            [codex_cli, "--strict-config", "--help"],
+            env={**env, "CODEX_HOME": str(home / ".codex")},
+            text=True,
+            capture_output=True,
+            timeout=30,
+            check=False,
+        )
+        assert codex_help.returncode == 0, codex_help.stdout + codex_help.stderr
     claude_config = json.loads((home / ".claude.json").read_text(encoding="utf-8"))
     assert claude_config["userSetting"] == "keep-me"
     claude_server = claude_config["mcpServers"]["agent-workflow"]
     assert claude_server["type"] == "stdio"
     assert claude_server["args"][-1] == str(REPO_ROOT)
+    claude_settings = json.loads((home / ".claude" / "settings.json").read_text(encoding="utf-8"))
     claude_hook_commands = [
         entry["command"]
-        for group in claude_config["hooks"]["SessionStart"]
+        for group in claude_settings["hooks"]["SessionStart"]
         for entry in group["hooks"]
     ]
     assert len(claude_hook_commands) == 3
     assert all(Path(command).is_file() for command in claude_hook_commands)
+    assert claude_settings["permissions"] == {"mode": "acceptEdits"}
+    assert len(claude_settings["hooks"]["SessionStart"][0]["hooks"]) == 3
     assert (home / ".codex" / "config.toml").read_text(encoding="utf-8").count("[mcp_servers.agent-workflow]") == 1
     assert (home / ".claude.json").read_text(encoding="utf-8").count('"agent-workflow"') == 1
+    assert (home / ".claude.json").read_text(encoding="utf-8").count('"hooks"') == 0
     version = subprocess.run(
         [str(launcher), "--version"], env=env, text=True, capture_output=True, timeout=30, check=False
     )
@@ -152,6 +205,39 @@ def test_source_installer_round_trip_preserves_user_owned_paths(
     assert user_owned.read_text(encoding="utf-8") == "user-owned\n"
     assert (home / ".config" / "agent-workflow" / "config.toml").is_file()
     assert "preserved unrelated path" in removed.stderr
+
+
+def test_source_installer_without_cbm_gate_keeps_pretooluse_disabled(
+    product_env: dict[str, str], tmp_path: Path
+) -> None:
+    home = tmp_path / "install-home"
+    env = dict(product_env)
+    env.update(
+        {
+            "HOME": str(home),
+            "XDG_CONFIG_HOME": str(home / ".config"),
+            "XDG_DATA_HOME": str(home / ".local" / "share"),
+            "XDG_STATE_HOME": str(home / ".local" / "state"),
+            "PYTHONNOUSERSITE": "1",
+            "PYTHONPATH": "",
+        }
+    )
+    codex_home = home / ".codex"
+    codex_home.mkdir(parents=True)
+    (codex_home / "config.toml").write_text('model = "keep-me"\n', encoding="utf-8")
+    result = subprocess.run(
+        [str(REPO_ROOT / "install.sh"), "--no-deps", "--no-skills"],
+        cwd=REPO_ROOT,
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    config = tomllib.loads((codex_home / "config.toml").read_text(encoding="utf-8"))
+    assert len(config["hooks"]["SessionStart"]) == 3
+    assert "PreToolUse" not in config["hooks"]
 
 
 def test_public_errors_are_actionable_and_nonzero(

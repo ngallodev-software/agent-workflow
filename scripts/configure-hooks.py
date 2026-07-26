@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shlex
 import stat
 import tempfile
 from pathlib import Path
@@ -40,19 +41,17 @@ def atomic_json(path: Path, data: object) -> None:
         raise
 
 
-def configure_codex(path: Path, hooks_dir: Path, cbm_gate: str) -> None:
-    regular_file(path, "Codex hooks")
-    marker = "# agent-workflow managed reminder hooks"
-    existing = path.read_text(encoding="utf-8") if path.exists() else ""
-    if marker in existing:
-        print(f"kept existing agent-workflow Codex hooks: {path}")
-        return
+def codex_gate_command(hooks_dir: Path, cbm_gate: str) -> str:
+    return shlex.join([str(hooks_dir / "codex-code-discovery-gate"), cbm_gate])
+
+
+def render_codex_hooks(hooks_dir: Path, cbm_gate: str) -> str:
     entries = [
         ("agent-workflow-session-reminder", "Loading agent-workflow delegation policy"),
         ("rtk-session-reminder", "Loading RTK command policy"),
         ("codebase-memory-session-reminder", "Loading codebase-memory discovery policy"),
     ]
-    block = [marker]
+    block = ["# agent-workflow managed reminder hooks"]
     for name, status in entries:
         block.extend(
             [
@@ -69,19 +68,40 @@ def configure_codex(path: Path, hooks_dir: Path, cbm_gate: str) -> None:
         block.extend(
             [
                 "[[hooks.PreToolUse]]",
-                'matcher = "^(Read|Grep|Glob)$"',
+                'matcher = "^Bash$"',
                 "",
                 "[[hooks.PreToolUse.hooks]]",
                 'type = "command"',
-                f"command = {json.dumps(cbm_gate)}",
+                f"command = {json.dumps(codex_gate_command(hooks_dir, cbm_gate))}",
                 "timeout = 10",
                 'statusMessage = "Checking graph-first code discovery"',
                 "",
             ]
         )
-    separator = "\n" if existing and not existing.endswith("\n\n") else ""
+    block.append("# end agent-workflow managed reminder hooks")
+    return "\n".join(block)
+
+
+def configure_codex(path: Path, hooks_dir: Path, cbm_gate: str) -> None:
+    regular_file(path, "Codex hooks")
+    marker = "# agent-workflow managed reminder hooks"
+    existing = path.read_text(encoding="utf-8") if path.exists() else ""
+    managed = render_codex_hooks(hooks_dir, cbm_gate)
+    if marker in existing:
+        prefix = existing[: existing.index(marker)].rstrip()
+        end_marker = "# end agent-workflow managed reminder hooks"
+        if end_marker in existing:
+            suffix = existing[existing.index(end_marker) + len(end_marker) :].lstrip()
+            content = "\n\n".join(part for part in (prefix, managed, suffix) if part)
+        else:
+            # Older releases appended the managed block without an end marker;
+            # that block was always terminal, so replace it during migration.
+            content = "\n\n".join(part for part in (prefix, managed) if part)
+    else:
+        separator = "\n" if existing and not existing.endswith("\n\n") else ""
+        content = existing + separator + managed
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(existing + separator + "\n".join(block), encoding="utf-8")
+    path.write_text(content + ("\n" if not content.endswith("\n") else ""), encoding="utf-8")
     print(f"configured agent-workflow Codex hooks: {path}")
 
 
@@ -131,13 +151,13 @@ def configure_claude(path: Path, hooks_dir: Path, cbm_gate: str) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--codex-config", type=Path, required=True)
-    parser.add_argument("--claude-config", type=Path, required=True)
+    parser.add_argument("--claude-settings", type=Path, required=True)
     parser.add_argument("--hooks-dir", type=Path, required=True)
     parser.add_argument("--cbm-gate", default="")
     parser.add_argument("--claude-cbm-gate", default="")
     args = parser.parse_args()
     configure_codex(args.codex_config, args.hooks_dir, args.cbm_gate)
-    configure_claude(args.claude_config, args.hooks_dir, args.claude_cbm_gate)
+    configure_claude(args.claude_settings, args.hooks_dir, args.claude_cbm_gate)
     return 0
 
 
