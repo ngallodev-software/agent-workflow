@@ -4,7 +4,7 @@
 **Snapshot date:** 2026-07-26  
 **Coordinator branch:** `master`  
 **Coordinator revision at start of this handoff:** `8b937a021f8940da61adfb8b0afec63f2cf12d2e` (`ci: force Jenkins tests to install current wheel`)
-**Handoff commit:** `4fb1d6a` (`docs: record release blockers and session handoff`)
+**Handoff baseline commit:** `747b9f8` (`docs: record release blockers and session handoff`)
 
 ## Work completed in this session
 
