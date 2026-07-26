@@ -4,6 +4,7 @@
 **Snapshot date:** 2026-07-25
 **Branch:** `master`
 **Version:** `0.2.2`
+**Current commit:** `a62a24c` (`merge determinism security backlog overlay`)
 
 ## Current state
 
@@ -43,7 +44,7 @@ The global install intentionally used only the `mcp` extra. Installing the optio
 
 ## Working tree and next work
 
-The overlay changes are in the working tree and should be committed after this handoff is reviewed. Do not modify tests unless explicitly authorized. Next work is the P0 hardening sequence: HARD-001/HARD-002 first, then HARD-004/HARD-005, followed by the isolation, identity, drift, and supply-chain gates. Keep MCP-003 blocked until its prerequisites are accepted.
+The overlay changes are committed in `a62a24c`; the checkout is clean and is six commits ahead of `origin/master`. Do not modify tests unless explicitly authorized. Next work is the P0 hardening sequence: HARD-001/HARD-002 first, then HARD-004/HARD-005, followed by the isolation, identity, drift, and supply-chain gates. Keep MCP-003 blocked until its prerequisites are accepted.
 
 Useful restart commands:
 
