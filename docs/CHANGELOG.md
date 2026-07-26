@@ -19,6 +19,7 @@
 - Correct Codex/Claude hook configuration separation and add a Codex-specific code-discovery gate.
 - Add focused process, path-integrity, MCP-boundary, and hook installation acceptance/invariant coverage.
 - Record the foundation-run ledger and sealed-evidence assessment handoff for independent review.
+- Add evidence-first exported sealed-run assessment, truthful ledger evaluation states, and strict future journeys for the next hardening and messaging work.
 - Correct security documentation that previously overstated symlink containment, preventative sandboxing, authenticated review, and release-integrity guarantees.
 - Add hardening dependency and parallel-execution diagrams plus a public-release gate plan.
 

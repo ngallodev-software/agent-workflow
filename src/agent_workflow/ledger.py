@@ -27,7 +27,7 @@ def _next_action(row: dict[str, Any]) -> str:
         return f"agent-workflow status {session}"
     if state in {"failed", "interrupted", "killed"}:
         return f"agent-workflow restart {session}"
-    if not row.get("score_verdict"):
+    if row.get("evaluation_required") and not row.get("score_verdict"):
         return f"agent-workflow eval score {session}"
     if row.get("disposition") != "accepted":
         return f"agent-workflow review {session} --actor ID --reason TEXT"
@@ -99,6 +99,8 @@ def build_ledger(pack_root: Path, runs_root: Path) -> dict[str, Any]:
                 "disposition": status.get("disposition"),
                 "retry_of": status.get("retry_of"),
                 "executor": status.get("executor"),
+                "evaluation_required": bool(status.get("evaluation_path")),
+                "evaluation_state": ("missing-score-set" if status.get("evaluation_path") and not score_verdict else "complete" if status.get("evaluation_path") else "not-planned"),
                 "score_verdict": score_verdict,
                 "accepted_revision": status.get("accepted_revision"),
                 "error": error,

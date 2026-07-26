@@ -12,6 +12,7 @@ Use this skill after all implementation tickets in a phase have completion repor
 - inspect complete diffs and writable-scope compliance;
 - inspect authoritative run artifacts and sealed receipts through the CLI;
 - treat terminal capture and tmux output as context, not proof of completion;
+- do not infer phase acceptance from completion or a final receipt; require the immutable disposition evidence;
 - independently rerun the smallest gate commands;
 - verify migration/recovery and secret handling manually;
 - reject unrelated cleanup and superfluous tests;

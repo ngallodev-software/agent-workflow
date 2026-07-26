@@ -20,6 +20,7 @@ from .eval.oracles import resolve_oracle
 from .eval.scoring import score_trial
 from .eval.compare import compare_trials
 from .eval.trials import collect_trials, load_trials
+from .eval.assessment import assess_exported_runs
 from .errors import InteractiveCapacityError, WorkflowError
 from .ledger import build_ledger, render_ledger
 from .lifecycle import record as record_lifecycle
@@ -195,6 +196,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     commands.add_parser("list", help="list delegation runs")
+
+    assess = commands.add_parser("assess-sealed-runs", help="assess exported sealed-run evidence without inventing unavailable evaluation results")
+    assess.add_argument("root", type=Path)
+    assess.add_argument("--output", type=Path)
 
     ledger = commands.add_parser("ledger", help="render a pack run ledger")
     ledger.add_argument("pack", type=Path)
@@ -610,6 +615,13 @@ def main(argv: list[str] | None = None) -> int:
                 data = service.seal(args.snapshot)
             else:
                 data = service.verify(args.snapshot)
+        elif args.command == "assess-sealed-runs":
+            data = assess_exported_runs(expand_path(args.root))
+            if args.output:
+                output = expand_path(args.output)
+                atomic_write_json(output, data)
+            _print_json(data)
+            return 0
         elif args.command == "ledger":
             value = build_ledger(
                 expand_path(args.pack),

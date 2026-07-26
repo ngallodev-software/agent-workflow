@@ -1,9 +1,13 @@
-# Future acceptance specifications
+# Future acceptance journeys
 
-These are black-box journeys for backlog behavior that is intentionally not implemented yet.
-They run against the installed wheel and are marked `xfail(strict=True)`: the expected failure
-keeps the specification visible, while an unexpected pass fails the suite until the scenario is
-reviewed and promoted into `tests/acceptance/`.
+These tests specify approved backlog outcomes that are intentionally absent. Every test is marked `future` and `xfail(strict=True)` so an unexpected pass forces review rather than silently claiming completion.
 
-Do not add parser, dictionary-shape, or mocked-helper expectations here. A future test must name
-an approved backlog item and exercise a complete operator-visible outcome.
+Current coverage:
+
+- `BKL-002`: detached late steering and correlated acknowledgement;
+- `HARD-004`: immutable launch and final-receipt authority;
+- `MSG-005`: durable restart replay without duplicate semantic effects;
+- `BKL-004`: complete, comparable evaluation cohorts and truthful ledger state;
+- `MCP-003` / `HARD-007`: authenticated mutation with preserved read-only MCP boundaries.
+
+Run only these specifications with `pytest -q tests/future`. A backlog item may lose its `xfail` only after implementation, installed-product acceptance evidence, and the owning phase gate are accepted.

@@ -26,7 +26,7 @@ The determinism and security work below is derived from the [feature determinism
 | [`public-beta-trust-and-release`](../prompt-packs/public-beta-trust-and-release/) | HARD-007, HARD-009, HARD-010, REL-003, REL-004 | Blocked until the first two packs are accepted. |
 | [`mcp-server-next`](../prompt-packs/mcp-server-next/) | MCP-003 | Blocked on HARD-004, HARD-005, and HARD-007. |
 | [`orchestrator-two-way-messaging`](../prompt-packs/orchestrator-two-way-messaging/) | BKL-001, BKL-002, MSG-001 through MSG-007 | Planning complete; phase 0 is blocked on DEC-001, HARD-002, and HARD-004. |
-| [`chatgpt-sealed-run-assessment`](../prompt-packs/chatgpt-sealed-run-assessment/) | CHATGPT-EVAL-001, CHATGPT-TDD-001 | Assessment pack; TDD generation is blocked until the sealed-evidence evaluation update is reviewed. |
+| [`chatgpt-sealed-run-assessment`](../prompt-packs/chatgpt-sealed-run-assessment/) | CHATGPT-EVAL-001, CHATGPT-TDD-001 | Assessment and future-TDD artifacts completed; future journeys remain strict expected failures and do not unblock planned runtime work. |
 
 ## Ready now
 
@@ -46,7 +46,7 @@ These items remain tracked separately from the hardening ownership above; they a
 | REL-005 | P1 | ready | Add automated release-blocker checks and durable release evidence: license/security-channel metadata, declared compatibility matrix, structured test results, SBOM, dependency lock, and build provenance. | [Release check audit](RELEASE_CHECK_AUDIT.md#gap-analysis) |
 | REL-006 | P1 | ready | Configure the local Jenkins job to trigger from commits to the local repository and verify that the trigger builds the matching master revision; the pipeline itself is already green. | [Release check audit](RELEASE_CHECK_AUDIT.md#jenkins-verification) |
 | REL-007 | P1 | ready | Run and record clean-machine install/uninstall evidence and a controlled real workflow/provider cohort before describing the project as publicly supported. | [Public release readiness](PUBLIC_RELEASE_READINESS.md#governance-and-compatibility-blockers) |
-| CHATGPT-EVAL-001 | P1 | High | ready | Analyze sealed implementation/gate evidence, identify missing evaluation-plan/score/ledger contracts, and update the evaluation system with durable evidence-first coverage. | [Sealed foundation evidence](EVIDENCE_SEALED_FOUNDATION_RUNS_20260726.md) |
+| CHATGPT-EVAL-001 | P1 | High | completed | Added evidence-first exported-run assessment, truthful ledger evaluation state, and focused invariant coverage. | [Sealed foundation evidence](EVIDENCE_SEALED_FOUNDATION_RUNS_20260726.md) |
 
 ## Integrated pending phase gate
 
@@ -60,7 +60,7 @@ These items remain tracked separately from the hardening ownership above; they a
 
 | ID | Priority | Risk | State | Work and exit evidence | Reference |
 |---|---|---:|---|---|---|
-| CHATGPT-TDD-001 | P1 | High | blocked | After CHATGPT-EVAL-001, generate strict future installed-product TDD journeys for the planned hardening and messaging work. Tests must remain honest expected failures until implementation and phase gates exist. | [ChatGPT assessment pack](../prompt-packs/chatgpt-sealed-run-assessment/) |
+| CHATGPT-TDD-001 | P1 | High | completed | Added strict future journeys for HARD-004, MSG-005, BKL-004, and MCP-003/HARD-007; all remain honest expected failures pending implementation and accepted gates. | [Future tests](../tests/future/) |
 
 ## Blocked prerequisites
 

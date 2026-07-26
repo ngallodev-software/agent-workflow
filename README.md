@@ -120,9 +120,10 @@ agent-workflow eval validate ./evaluation.json --pack ./prompt-pack
 agent-workflow eval score SESSION
 agent-workflow eval report SESSION --format markdown
 agent-workflow eval compare ./baseline.json ./candidate.json --output ./comparison.json
+agent-workflow assess-sealed-runs ./exported-runs --output ./assessment.json
 ```
 
-Raw provider streams are bounded and sealed before normalization. Usage evidence distinguishes delta, cumulative, and terminal totals and never mixes provider-billed cost with local estimates. Cohort comparison requires matched task identities and remains descriptive when samples are too small. See [Evidence and evaluation](docs/EVIDENCE_AND_EVALUATION.md).
+Raw provider streams are bounded and sealed before normalization. Usage evidence distinguishes delta, cumulative, and terminal totals and never mixes provider-billed cost with local estimates. Exported-run assessment keeps completion, lifecycle sealing, evaluation artifacts, phase acceptance, and comparability separate; missing plans or scores remain explicit absence. Cohort comparison requires matched task identities and remains descriptive when samples are too small. See [Evidence and evaluation](docs/EVIDENCE_AND_EVALUATION.md).
 
 ## Optional MCP server
 

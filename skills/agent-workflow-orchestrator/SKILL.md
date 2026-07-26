@@ -86,6 +86,8 @@ Use only the three authorized `workflow template` shapes. Treat the normalized s
 
 ## Provider and MCP boundaries
 
+An exported completion/final-receipt pair is not automatically a portable verified run: verify every receipt-listed artifact or record seal verification as unavailable. Keep completion validity, lifecycle sealing, evaluation artifacts, phase disposition, and cohort comparability separate.
+
 A structured run is comparison-ready only when its bounded raw executor stream, provider evidence, metrics, completion, and final receipt are sealed and complete. Do not infer tokens or cost from prose/logs, add cached or reasoning details twice, or combine provider-billed and locally estimated cost.
 
 The current `agent-workflow-mcp` adapter is local stdio and read-only. Do not claim planned MCP-003 mutation tools exist. Any future MCP mutation must reuse shared services and durable idempotency.

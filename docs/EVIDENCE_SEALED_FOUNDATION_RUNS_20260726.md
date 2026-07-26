@@ -22,8 +22,10 @@ This report records the authoritative agent-workflow lifecycle evidence used for
 
 ## Eval and ledger result
 
-No run supplied an evaluation plan (`evaluation_path: null` for all six). Therefore no score, report, or score-set collection exists. `agent-workflow eval collect` was attempted against the sealed runs and failed closed because `scores/score-set.json` is absent; this is recorded as unavailable evidence, not a score.
+No run supplied an evaluation plan (`evaluation_path: null` for all six). Therefore no score, report, or score-set collection exists. `agent-workflow eval collect` failed closed because `scores/score-set.json` is absent; this is unavailable evidence, not a score.
 
-`agent-workflow ledger deterministic-enforcement-foundations` produced a zero-row ledger because these were implementation/review runs without attached evaluation plans. The exact output is retained in [`deterministic-foundation-ledger-20260726.tsv`](deterministic-foundation-ledger-20260726.tsv).
+The retained zero-row ledger does **not** prove that evaluation plans were absent. Ledger rows are derived from task manifests, regardless of evaluation-plan presence. A zero-row result means the command discovered no manifest tasks at the supplied pack root (or was pointed at the wrong root). The exported evidence does not retain enough invocation context to distinguish those causes.
+
+The exported pairs validate each completion digest against the final-receipt entry, but omit most receipt-listed artifacts and lifecycle dispositions. Full portable seal verification and phase acceptance therefore remain unavailable from this export alone.
 
 The independent phase gate remains rejected; the backlog uses `in-review` for integrated HARD-001/HARD-002/HARD-005 and keeps HARD-004 blocked pending a subsequent accepted shared gate.
