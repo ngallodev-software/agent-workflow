@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         VENV = "${WORKSPACE}/.jenkins-venv"
-        PATH+PYTHON = "${WORKSPACE}/.jenkins-venv/bin"
+        PATH = "${WORKSPACE}/.jenkins-venv/bin:${env.PATH}"
     }
 
     options {
