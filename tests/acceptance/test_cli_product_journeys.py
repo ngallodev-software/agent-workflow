@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import subprocess
+import tomllib
 from pathlib import Path
 
 from tests.conftest import InstalledProduct, REPO_ROOT, git_repo
@@ -83,12 +85,19 @@ def test_source_installer_round_trip_preserves_user_owned_paths(
             "XDG_CONFIG_HOME": str(home / ".config"),
             "XDG_DATA_HOME": str(home / ".local" / "share"),
             "XDG_STATE_HOME": str(home / ".local" / "state"),
+            "PYTHONNOUSERSITE": "1",
+            "PYTHONPATH": "",
         }
     )
+    (home / ".codex").mkdir(parents=True)
+    (home / ".codex" / "config.toml").write_text('model = "keep-me"\n', encoding="utf-8")
+    (home / ".claude.json").write_text('{"userSetting": "keep-me"}\n', encoding="utf-8")
 
     def run(script: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            [str(REPO_ROOT / script), "--no-deps"] if script == "install.sh" else [str(REPO_ROOT / script)],
+            [str(REPO_ROOT / script), "--no-deps", "--extras", "mcp"]
+            if script == "install.sh"
+            else [str(REPO_ROOT / script)],
             cwd=REPO_ROOT,
             env=env,
             text=True,
@@ -102,6 +111,30 @@ def test_source_installer_round_trip_preserves_user_owned_paths(
     launcher = home / ".local" / "bin" / "agent-workflow"
     assert launcher.resolve() == (REPO_ROOT / "bin" / "agent-workflow").resolve()
     assert (home / ".config" / "agent-workflow" / "config.toml").is_file()
+    codex_config = tomllib.loads((home / ".codex" / "config.toml").read_text(encoding="utf-8"))
+    assert codex_config["model"] == "keep-me"
+    codex_server = codex_config["mcp_servers"]["agent-workflow"]
+    assert Path(codex_server["command"]).name == "python3"
+    assert codex_server["args"][-1] == str(REPO_ROOT)
+    codex_hook_commands = [
+        entry["hooks"][0]["command"] for entry in codex_config["hooks"]["SessionStart"]
+    ]
+    assert len(codex_hook_commands) == 3
+    assert all(Path(command).is_file() for command in codex_hook_commands)
+    claude_config = json.loads((home / ".claude.json").read_text(encoding="utf-8"))
+    assert claude_config["userSetting"] == "keep-me"
+    claude_server = claude_config["mcpServers"]["agent-workflow"]
+    assert claude_server["type"] == "stdio"
+    assert claude_server["args"][-1] == str(REPO_ROOT)
+    claude_hook_commands = [
+        entry["command"]
+        for group in claude_config["hooks"]["SessionStart"]
+        for entry in group["hooks"]
+    ]
+    assert len(claude_hook_commands) == 3
+    assert all(Path(command).is_file() for command in claude_hook_commands)
+    assert (home / ".codex" / "config.toml").read_text(encoding="utf-8").count("[mcp_servers.agent-workflow]") == 1
+    assert (home / ".claude.json").read_text(encoding="utf-8").count('"agent-workflow"') == 1
     version = subprocess.run(
         [str(launcher), "--version"], env=env, text=True, capture_output=True, timeout=30, check=False
     )

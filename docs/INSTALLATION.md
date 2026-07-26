@@ -25,10 +25,20 @@ and active prompt packs. To install optional integrations, use
 `./install.sh --extras eval,stats` or `./install.sh --extras all`. The
 optional local MCP server uses the pinned stable Python SDK:
 
+The installer does not require an activated virtual environment. It uses the
+selected `python3` interpreter, bootstraps pip with `ensurepip` when available,
+and otherwise reports the exact interpreter that needs pip. To select another
+host Python, use `./install.sh --python /path/to/python3`.
+
 ```bash
 ./install.sh --extras mcp
 agent-workflow-mcp --help
 ```
+
+When the `mcp` extra is requested, the installer also registers the local
+stdio server as `agent-workflow` in the user-level Codex and Claude Code
+configuration. Existing entries with that name are preserved. The `all`
+extra includes `mcp`.
 
 The first MCP release is stdio-only. It exposes bounded run resources and
 prompt-pack validation; it does not expose shell execution, raw tmux control,

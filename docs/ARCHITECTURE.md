@@ -157,3 +157,9 @@ The repository is pre-public-release. License, reporting, supported-host, and re
 ## Hardening roadmap
 
 The current deterministic versus guidance-driven feature inventory is maintained in [Feature determinism and security assessment](FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md). The priority/dependency plan is [Determinism and security hardening plan](DETERMINISM_SECURITY_HARDENING_PLAN.md). These documents do not replace `BACKLOG.md`; they explain why the active HARD/REL tasks exist and which authority boundaries they close.
+
+## Planned aggregate orchestrator messaging
+
+The current implementation has durable per-session steer/progress/ack records and explicit reusable-agent lifecycle transitions. It does not yet have a multi-session aggregate orchestrator inbox or deterministic supervisor that resumes an orchestrator when children complete.
+
+The planned design keeps per-session journals and sealed lifecycle evidence authoritative, adds a supervisor-owned append-only aggregate inbox as delivery authority, and uses one shared hashed `tmux wait-for` channel only as a wake hint. Fixed orchestrator notifications contain opaque event IDs rather than child-controlled text. See [Durable two-way messaging](ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md) and the collision-safe [`orchestrator-two-way-messaging`](../prompt-packs/orchestrator-two-way-messaging/) pack.

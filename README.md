@@ -126,7 +126,12 @@ Raw provider streams are bounded and sealed before normalization. Usage evidence
 
 ## Optional MCP server
 
-Install the `mcp` extra and configure `agent-workflow-mcp` as a local stdio server. The current adapter is read-only and bounded to configured roots. It does not expose launch, workflow mutation, review, destructive lifecycle commands, raw shell, arbitrary paths, terminal capture, or HTTP. See [MCP server](docs/MCP_SERVER.md).
+Install the `mcp` extra to configure `agent-workflow-mcp` as a local stdio
+server in the user-level Codex and Claude Code MCP settings. Existing entries
+are preserved. The current adapter is read-only and bounded to configured
+roots. It does not expose launch, workflow mutation, review, destructive
+lifecycle commands, raw shell, arbitrary paths, terminal capture, or HTTP. See
+[MCP server](docs/MCP_SERVER.md).
 
 ## State and trust
 
@@ -154,6 +159,7 @@ The default suite is acceptance-first: it builds and installs a wheel, invokes p
 - [Architecture](docs/ARCHITECTURE.md)
 - [Repository diagrams](docs/diagrams/REPOSITORY_CHART_PACK.md)
 - [Operations](docs/OPERATIONS.md)
+- [Durable two-way orchestrator messaging design](docs/ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md)
 - [Prompt packs](docs/PROMPT_PACKS.md)
 - [Evidence and evaluation](docs/EVIDENCE_AND_EVALUATION.md)
 - [Testing](docs/TESTING.md)

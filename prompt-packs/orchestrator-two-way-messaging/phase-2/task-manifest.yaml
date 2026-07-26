@@ -1,0 +1,20 @@
+phase: "2"
+name: "safe-wake-and-restart-reconstruction"
+mandatory_order: []
+tasks:
+  - id: "MSG-003"
+    tier: A
+    session: "messaging-orchestrator-resume"
+    prompt: "tickets/MSG-003-safe-orchestrator-wake-resume.md"
+    backlog_id: "MSG-003"
+    dependencies:
+      - "MSG-002"
+  - id: "MSG-005"
+    tier: A
+    session: "messaging-restart-reconstruction"
+    prompt: "tickets/MSG-005-restart-reconstruction.md"
+    backlog_id: "MSG-005"
+    dependencies:
+      - "BKL-001"
+      - "MSG-001"
+      - "MSG-002"

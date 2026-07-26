@@ -1,0 +1,19 @@
+phase: "1"
+name: "supervisor-and-late-delivery"
+mandatory_order: []
+tasks:
+  - id: "MSG-002"
+    tier: A
+    session: "messaging-supervisor"
+    prompt: "tickets/MSG-002-supervisor-shared-wakeup.md"
+    backlog_id: "MSG-002"
+    dependencies:
+      - "BKL-001"
+      - "MSG-001"
+  - id: "BKL-002"
+    tier: A
+    session: "messaging-late-steering"
+    prompt: "tickets/BKL-002-executor-late-steering.md"
+    backlog_id: "BKL-002"
+    dependencies:
+      - "BKL-001"

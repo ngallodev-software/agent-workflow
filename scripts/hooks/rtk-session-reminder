@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Codex/Claude SessionStart reminder for RTK command routing.
+cat <<'REMINDER'
+CRITICAL - RTK command policy:
+1. If rtk is installed and a task needs a shell command, prefer rtk <command> by default.
+2. Use plain commands only when RTK is unavailable, incompatible, or you are debugging RTK itself.
+3. Use rtk proxy <command> only when raw output is explicitly required.
+REMINDER

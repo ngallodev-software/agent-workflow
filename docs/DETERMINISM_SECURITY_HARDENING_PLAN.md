@@ -184,3 +184,11 @@ The phase reviewers must distinguish:
 4. Execute `REL-004` and record a no-go when any prerequisite is absent.
 5. Only after `REL-004` passes, describe the result as a public security-hardening preview.
 6. Run `MCP-003` only after HARD-004, HARD-005, and HARD-007; MCP mutation is not a prerequisite for the first public CLI preview.
+
+## Downstream two-way messaging implementation
+
+The [`orchestrator-two-way-messaging`](../prompt-packs/orchestrator-two-way-messaging/) pack is intentionally downstream of the deterministic hardening work. It owns the previously unowned `BKL-001` and `BKL-002` items plus `MSG-001` through `MSG-007`; it does not duplicate any `HARD-*` or `MCP-003` item.
+
+Phase 0 is blocked on the `DEC-001` service-objective decision and accepted `HARD-002`/`HARD-004` authority foundations. Later phases additionally depend on bounded process execution, sensitive-content policy, authenticated principals, and configuration/executable trust. This sequencing prevents the messaging supervisor from embedding weak path, identity, process, or disclosure assumptions that would later require a second implementation.
+
+See [Durable two-way messaging](ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md) and its [dependency diagram](diagrams/orchestrator-two-way-messaging-dependencies.mmd).

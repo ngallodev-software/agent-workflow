@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Codex/Claude SessionStart reminder for graph-first code discovery.
+cat <<'REMINDER'
+CRITICAL - codebase-memory-mcp discovery policy:
+1. For code structure, symbols, callers, dependencies, and impact, use codebase-memory-mcp first: list_projects, search_graph, trace_path, get_code_snippet, query_graph, or get_architecture.
+2. If the repository is not indexed or stale, use index_repository/index_status before code discovery.
+3. Fall back to grep/glob/file reads for text literals, configuration, scripts, and non-code documents.
+REMINDER

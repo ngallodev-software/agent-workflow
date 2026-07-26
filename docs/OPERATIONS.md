@@ -105,3 +105,11 @@ Use `worktree remove` only after deciding whether the branch should be retained.
 ## Host routing
 
 Global instructions may recommend `agent-workflow` for bounded delegation. They are guidance, not a security boundary. Future installer-owned hooks may block a narrowly defined set of direct delegation commands, but only after explicit maintainer authorization and an audited break-glass path. See `BKL-007` in [BACKLOG.md](../BACKLOG.md).
+
+## Planned orchestrator supervisor
+
+The repository does not yet provide an aggregate `orchestrator watch` service. Planned work is tracked under `BKL-001`, `BKL-002`, and `MSG-001` through `MSG-007`.
+
+The supervisor will be a foregroundable deterministic process. It will replay registered child journals after durable cursors, append normalized events to an orchestrator inbox, and use tmux only as a wake accelerator. It will never inject child-controlled summaries into the orchestrator pane. Commands shown in the design document are proposed interfaces until their tickets are implemented and accepted.
+
+See [Durable two-way messaging](ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md).

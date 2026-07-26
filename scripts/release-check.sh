@@ -21,6 +21,9 @@ bash -n install.sh uninstall.sh bin/agent-workflow scripts/*.sh
 while IFS= read -r -d '' path; do
   bash -n "$path"
 done < <(find templates src/agent_workflow/assets -type f -name '*.sh' -print0)
+for path in scripts/hooks/agent-workflow-session-reminder scripts/hooks/codebase-memory-session-reminder scripts/hooks/rtk-session-reminder; do
+  bash -n "$path"
+done
 python3 -m pytest -q
 python3 -m agent_workflow pack validate examples/three-phase-pack
 for pack in prompt-packs/*; do

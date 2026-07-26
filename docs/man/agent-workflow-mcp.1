@@ -12,6 +12,6 @@ The current server does not expose launch, workflow mutation, steering, review/a
 .SH SECURITY
 Access is restricted to configured roots with identifier, traversal, symlink, redaction, pagination, and response-size controls. Standard output is reserved for protocol traffic; diagnostics go to standard error.
 .SH DEPENDENCY
-Install the optional mcp extra. The SDK is not vendored; the selected dependency is mcp==1.28.1.
+Install the optional mcp extra. The SDK is not vendored; the selected dependency is mcp==1.28.1. The installer registers this server as agent-workflow in the user-level Codex config.toml and Claude Code .claude.json when invoked with --extras mcp or --extras all. Existing entries are preserved.
 .SH SEE ALSO
 agent-workflow(1), docs/MCP_SERVER.md, docs/ARCHITECTURE.md, SECURITY.md

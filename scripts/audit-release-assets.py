@@ -449,6 +449,9 @@ def main(argv: list[str] | None = None) -> int:
         ROOT / "uninstall.sh",
         ROOT / "bin/agent-workflow",
         *sorted((ROOT / "scripts").glob("*.sh")),
+        ROOT / "scripts/hooks/agent-workflow-session-reminder",
+        ROOT / "scripts/hooks/codebase-memory-session-reminder",
+        ROOT / "scripts/hooks/rtk-session-reminder",
     ]:
         if not path.stat().st_mode & stat.S_IXUSR:
             fail(f"{path.relative_to(ROOT)}: is not executable")

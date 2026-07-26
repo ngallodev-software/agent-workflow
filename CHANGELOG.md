@@ -3,6 +3,9 @@
 
 ## Unreleased
 
+- Add the complete durable two-way orchestrator messaging design, authority/failure model, security requirements, acceptance strategy, and four supporting Mermaid diagrams.
+- Add collision-free backlog items `MSG-001` through `MSG-007`, assign the previously unowned `BKL-001` and `BKL-002` work, and preserve `HARD-*`, `DEC-001`, and `MCP-003` ownership boundaries.
+- Add a six-phase multi-agent `orchestrator-two-way-messaging` prompt pack with parallel foundation, delivery, recovery, and security/acceptance lanes plus an independent gate.
 - Add the repository-wide feature determinism and security assessment as a canonical planning reference.
 - Add priority-ordered HARD/REL backlog tasks with explicit dependencies, prompt-pack ownership, release blockers, and collision rules.
 - Add three detailed multi-agent prompt packs for deterministic enforcement foundations, execution isolation/sensitive content, and public-beta trust/release work.

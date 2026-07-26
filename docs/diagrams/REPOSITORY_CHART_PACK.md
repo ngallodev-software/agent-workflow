@@ -622,3 +622,42 @@ Each parallel node runs in a separate worktree and durable session. Gate nodes i
 ## Diagram maintenance rule
 
 Update this chart pack whenever a release changes a durable authority, package boundary, workflow state, public CLI family, MCP capability, evidence schema, or release/install flow. Historical plans may retain old diagrams only when clearly labeled as historical.
+
+## Planned two-way orchestrator messaging
+
+These diagrams describe approved planned work, not current executable behavior. Canonical status is in [`BACKLOG.md`](../../BACKLOG.md).
+
+### Aggregate fan-in and wake sequence
+
+```mermaid
+sequenceDiagram
+    participant C as Child agent
+    participant CL as Child journal
+    participant S as Supervisor
+    participant I as Orchestrator inbox
+    participant W as Shared wake hint
+    participant O as Orchestrator
+    C->>CL: append task_complete + fsync
+    C-->>W: best-effort signal
+    S->>W: bounded wait
+    S->>CL: replay after durable cursor
+    S->>I: append normalized event + fsync
+    S->>O: fixed opaque event token
+    O->>I: read, acknowledge, action
+```
+
+Source: [`orchestrator-two-way-messaging-sequence.mmd`](orchestrator-two-way-messaging-sequence.mmd).
+
+### Authority flow
+
+```mermaid
+flowchart LR
+    J[(Per-session journals)] --> S[Deterministic supervisor]
+    W[tmux wake hint] --> S
+    S --> I[(Aggregate inbox)]
+    I --> O[Orchestrator turn]
+    O --> A[(Acknowledgements/actions)]
+    O --> J
+```
+
+Source: [`orchestrator-inbox-authority.mmd`](orchestrator-inbox-authority.mmd). The full design, failure model, security controls, and dependency graph are in [Durable two-way messaging](../ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md).

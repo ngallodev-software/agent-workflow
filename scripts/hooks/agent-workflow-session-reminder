@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Codex/Claude SessionStart reminder for agent-workflow's durable delegation rules.
+cat <<'REMINDER'
+CRITICAL - agent-workflow delegation policy:
+1. Implementation work uses a dedicated worktree, stable ticket/pack identity, and an evaluation plan.
+2. For post-run evaluation, launch with structured evidence and a non-interactive provider stream; native TUI output is not evaluation evidence.
+3. Before accepting a run, verify completion handoff, sealed receipt, evaluation score/report/collection, writable scope, and ledger row.
+4. Treat BACKLOG.md and the active pack manifest as authoritative; do not copy status from an external overlay or child session.
+5. After completion, terminate the agent session through agent-workflow and verify the tmux pane/session is closed.
+REMINDER
