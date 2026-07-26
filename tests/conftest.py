@@ -96,7 +96,7 @@ def installed_product(tmp_path_factory: pytest.TempPathFactory) -> InstalledProd
     venv.EnvBuilder(with_pip=True, system_site_packages=True).create(environment)
     python = environment / "bin" / "python"
     subprocess.run(
-        [str(python), "-m", "pip", "install", "--no-deps", str(wheel)],
+        [str(python), "-m", "pip", "install", "--ignore-installed", "--no-deps", str(wheel)],
         text=True,
         capture_output=True,
         check=True,
@@ -212,6 +212,8 @@ handoff.mkdir(parents=True, exist_ok=True)
 (handoff / "prompt-seen.txt").write_text(prompt, encoding="utf-8")
 if mode == "slow":
     time.sleep(float(os.environ.get("FAKE_AGENT_DELAY", "1.0")))
+if mode == "hang":
+    time.sleep(float(os.environ.get("FAKE_AGENT_DELAY", "30.0")))
 try:
     head = subprocess.run(
         ["git", "rev-parse", "HEAD"], text=True, capture_output=True, check=True
@@ -242,6 +244,11 @@ if mode == "structured":
     print(json.dumps({"event_id": "usage-1", "type": "turn.completed", "usage": {"input_tokens": 5, "cached_input_tokens": 1, "output_tokens": 3}}))
 else:
     print("fake agent completed")
+if "--secret" in sys.argv:
+    print("argv=" + repr(sys.argv))
+if mode == "noisy":
+    sys.stdout.write("O" * (17 * 1024 * 1024))
+    sys.stderr.write("E" * (17 * 1024 * 1024))
 if mode == "fail":
     print("intentional executor failure", file=sys.stderr)
     raise SystemExit(7)
@@ -249,6 +256,10 @@ if mode == "fail":
     )
 
     environment = os.environ.copy()
+    # The fake tmux executable models a dedicated session. Do not let the
+    # host test runner's real tmux topology select its unsupported shared path.
+    environment.pop("TMUX", None)
+    environment.pop("TMUX_PANE", None)
     environment.update(
         {
             "HOME": str(home),
@@ -260,7 +271,8 @@ if mode == "fail":
                 [str(fake_bin), str(installed_product.cli.parent), environment.get("PATH", "")]
             ),
             "PYTHONUNBUFFERED": "1",
-            "PYTHONPATH": str(Path(jsonschema.__file__).resolve().parents[1]),
+            "PYTHONNOUSERSITE": "1",
+            "PYTHONPATH": "",
         }
     )
     return environment
@@ -311,6 +323,7 @@ def write_config(env: dict[str, str], *, fake_agent: Path, structured_executor: 
                 'model_arg = ["--model"]',
                 'interactive_permission_args = []',
                 'non_interactive_permission_args = []',
+                'environment_allowlist = ["FAKE_AGENT_MODE", "FAKE_AGENT_DELAY", "FAKE_AGENT_RESULT_JSON"]',
                 "",
                 "[git]",
                 "require_clean_source = false",

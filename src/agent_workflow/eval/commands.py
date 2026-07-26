@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import subprocess
-import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, Sequence
 
 from ..errors import WorkflowError
+from ..process import run_bytes
 from ..util import atomic_write_json, sha256_file
 from .junit import parse_junit
 
@@ -66,42 +65,37 @@ def collect_commands(
         command_path = command_root / "command.json"
         stdout_path = command_root / "stdout.log"
         stderr_path = command_root / "stderr.log"
-        started = time.monotonic()
-        timed_out = False
-        try:
-            result = subprocess.run(
-                spec.argv,
-                cwd=cwd,
-                capture_output=True,
-                check=False,
-                timeout=spec.timeout_seconds,
-            )
-            exit_code = result.returncode
-            stdout = result.stdout
-            stderr = result.stderr
-        except subprocess.TimeoutExpired as exc:
-            timed_out = True
-            exit_code = 124
-            stdout = exc.stdout or b""
-            stderr = exc.stderr or b""
-        except OSError as exc:
-            exit_code = 127
-            stdout = b""
-            stderr = str(exc).encode()
+        result = run_bytes(
+            spec.argv,
+            cwd=cwd,
+            check=False,
+            timeout_seconds=spec.timeout_seconds,
+            max_stdout_bytes=1 * 1024 * 1024,
+            max_stderr_bytes=1 * 1024 * 1024,
+        )
+        timed_out = result.timed_out
+        exit_code = 124 if timed_out else result.returncode
+        stdout = result.stdout
+        stderr = result.stderr
         stdout_path.write_bytes(stdout)
         stderr_path.write_bytes(stderr)
         command = {
             "schema": "agent-workflow/command-collection/v1",
             "id": spec.id,
             "phase": phase,
-            "argv": list(spec.argv),
+            "argv": list(result.argv),
             "cwd": spec.cwd,
             "exit_code": exit_code,
             "timed_out": timed_out,
-            "duration_seconds": round(time.monotonic() - started, 6),
+            "duration_seconds": result.duration_seconds,
             "result_format": spec.result_format,
             "stdout_sha256": sha256_file(stdout_path),
             "stderr_sha256": sha256_file(stderr_path),
+            "stdout_truncated": result.stdout_truncated,
+            "stderr_truncated": result.stderr_truncated,
+            "error_category": result.error_category,
+            "resolved_executable": result.resolved_executable,
+            "executable_sha256": result.executable_sha256,
             "junit": None,
         }
         if spec.result_format == "junit":

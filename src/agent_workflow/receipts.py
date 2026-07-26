@@ -256,6 +256,7 @@ def initial_provenance(
     argv: list[str],
     stream_format: str,
     executor_version: str | None,
+    executable: dict[str, Any] | None = None,
     agent_name: str | None = None,
     agent_class: str | None = None,
     model: str | None = None,
@@ -280,6 +281,7 @@ def initial_provenance(
         "argv": argv,
         "stream_format": stream_format,
         "executor_version": executor_version,
+        "executable": executable,
         "model": model,
         "model_policy": model_policy or {
             "no_go_authorized": False,
@@ -306,15 +308,19 @@ def initial_provenance(
 
 def update_provenance(run_dir: Path, **changes: Any) -> dict[str, Any]:
     path = run_dir / "run-provenance.json"
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise WorkflowError(f"cannot update provenance {path}: {exc}") from exc
-    if not isinstance(value, dict):
-        raise WorkflowError(f"provenance must be an object: {path}")
-    value.update(changes)
-    atomic_write_json(path, value)
-    return value
+    with _seal_lock(run_dir, exclusive=True):
+        final_receipt = run_dir / "final-receipt.json"
+        if final_receipt.exists() or final_receipt.is_symlink():
+            raise WorkflowError(f"cannot update sealed provenance: {path}")
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise WorkflowError(f"cannot update provenance {path}: {exc}") from exc
+        if not isinstance(value, dict):
+            raise WorkflowError(f"provenance must be an object: {path}")
+        value.update(changes)
+        atomic_write_json(path, value)
+        return value
 
 
 def _artifact_receipt(path: Path, root: Path) -> dict[str, Any]:

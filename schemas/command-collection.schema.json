@@ -15,6 +15,14 @@
     "result_format": {"enum": ["junit", "exit-code"]},
     "stdout_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "stderr_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "stdout_truncated": {"type": "boolean"},
+    "stderr_truncated": {"type": "boolean"},
+    "error_category": {"type": "string"},
+    "resolved_executable": {"type": ["string", "null"]},
+    "executable_sha256": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{64}$"
+    },
     "junit": {"type": ["object", "null"]}
   },
   "additionalProperties": false

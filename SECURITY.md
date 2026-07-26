@@ -18,13 +18,13 @@ The project is pre-public-release and does not yet have a monitored public vulne
 - Approval is explicit and binds an actor label, reason, revision, and sealed evidence.
 - Provider usage fails closed on mixed modes, conflicting identities, malformed totals, or incomplete cost metadata.
 - MCP is optional, local stdio, bounded to configured roots, and currently read-only.
+- Repository-owned subprocesses use one argv-only substrate with process-group timeout/cancellation, per-stream caps, controlled environments, executable identity, and configured-value/secret-argument redaction.
 - The project does not automatically merge, delete failed worktrees, terminate suspected stalls, expose remote execution, or authorize network MCP transport.
 
 ## Known pre-public limitations
 
 These are active release blockers, not theoretical future hardening:
 
-- subprocess calls are not yet uniformly bounded by timeout, output cap, sanitized environment, and process-group cancellation (`HARD-001`);
 - prompt-pack/native-job/schema/MCP path integrity is not yet uniformly no-follow and content-complete (`HARD-002`, `HARD-005`);
 - writable-path policy for untrusted commands is primarily post-run detection rather than a preventative OS sandbox (`HARD-003`);
 - some runner/evaluation decisions still depend on mutable status projections rather than one immutable launch authority (`HARD-004`);

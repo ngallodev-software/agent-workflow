@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import json
 import os
 import signal
 import stat
-import subprocess
 import sys
 import threading
 import time
@@ -22,10 +22,34 @@ from .executors import accumulate_usage, event_text, parse_event, usage_update
 from .receipts import final_receipt_sha256, make_read_only, seal_run, update_provenance
 from .metrics import write_execution_evidence
 from .provider_evidence import MAX_PROVIDER_EVENT_BYTES, write_provider_evidence
+from .process import (
+    EnvironmentPolicy,
+    ProcessRequest,
+    redact_bytes,
+    redact_text,
+    run_bytes,
+    secret_values_from_argv,
+    spawn,
+)
 from .util import atomic_write_json, sha256_file, utc_now
 
 
 MAX_COMPLETION_HANDOFF_BYTES = 1024 * 1024
+MAX_EXECUTOR_STDOUT_BYTES = 16 * 1024 * 1024
+MAX_EXECUTOR_STDERR_BYTES = 16 * 1024 * 1024
+_RUNTIME_ENVIRONMENT = (
+    "AGENT_WORKFLOW_SESSION_ID",
+    "AGENT_WORKFLOW_PROMPT_SOURCE",
+    "AGENT_WORKFLOW_HANDOFF_DIR",
+    "AGENT_WORKFLOW_PROMPT_PACK_ROOT",
+    "AGENT_WORKFLOW_TMUX_SESSION",
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "XDG_STATE_HOME",
+    "FAKE_AGENT_MODE",
+    "FAKE_AGENT_DELAY",
+    "FAKE_AGENT_RESULT_JSON",
+)
 
 
 def _read_handoff_completion(path: Path) -> bytes:
@@ -85,7 +109,9 @@ def _require_real_handoff_dir(handoff: Path, workdir: Path) -> None:
             raise WorkflowError("completion handoff directory must not contain symlinks")
 
 
-def _collect_completion(run_dir: Path, workdir: Path) -> dict[str, Any]:
+def _collect_completion(
+    run_dir: Path, workdir: Path, *, secret_values: tuple[str, ...] = ()
+) -> dict[str, Any]:
     """Collect native executor evidence before downstream collectors and sealing."""
     status = _read_status(run_dir / "status.json")
     handoff_value = status.get("handoff_dir")
@@ -110,7 +136,7 @@ def _collect_completion(run_dir: Path, workdir: Path) -> dict[str, Any]:
             raise FileNotFoundError("launch has no completion handoff")
         _require_real_handoff_dir(handoff, workdir)
         assert source is not None
-        data = _read_handoff_completion(source)
+        data = redact_bytes(_read_handoff_completion(source), secret_values)
     except FileNotFoundError as exc:
         receipt["validation_errors"] = [str(exc)]
     except WorkflowError as exc:
@@ -147,7 +173,9 @@ def _collect_completion(run_dir: Path, workdir: Path) -> dict[str, Any]:
     return receipt
 
 
-def _collect_task_result(run_dir: Path, workdir: Path) -> dict[str, Any] | None:
+def _collect_task_result(
+    run_dir: Path, workdir: Path, *, secret_values: tuple[str, ...] = ()
+) -> dict[str, Any] | None:
     """Collect and validate an optional ticket-specific structured result."""
     status = _read_status(run_dir / "status.json")
     contract = status.get("result_contract")
@@ -189,7 +217,7 @@ def _collect_task_result(run_dir: Path, workdir: Path) -> dict[str, Any] | None:
         if schema_path.is_symlink() or not schema_path.is_file():
             raise WorkflowError("result contract schema must be a regular non-symlink file")
         assert source is not None
-        data = _read_handoff_completion(source)
+        data = redact_bytes(_read_handoff_completion(source), secret_values)
         value = json.loads(data.decode("utf-8"))
         schema_value = json.loads(schema_path.read_text(encoding="utf-8"))
         if not isinstance(value, dict):
@@ -282,39 +310,30 @@ def _capture_patch(workdir: Path, run_dir: Path, path: Path) -> None:
         baseline = source.get("components", {}).get("primary", {}).get("head")
     except (OSError, json.JSONDecodeError, AttributeError):
         pass
-    result = subprocess.run(
+    result = run_bytes(
         [
-            "git",
-            "-C",
-            str(workdir),
-            "diff",
-            "--binary",
-            "--full-index",
+            "git", "-C", str(workdir), "diff", "--binary", "--full-index",
             str(baseline or "HEAD"),
         ],
-        capture_output=True,
         check=False,
+        timeout_seconds=60,
+        max_stdout_bytes=MAX_EXECUTOR_STDOUT_BYTES,
+        max_stderr_bytes=64 * 1024,
     )
     patch = bytearray(result.stdout if result.returncode == 0 else b"")
-    untracked = subprocess.run(
-        [
-            "git",
-            "-C",
-            str(workdir),
-            "ls-files",
-            "--others",
-            "--exclude-standard",
-            "-z",
-        ],
-        capture_output=True,
+    untracked = run_bytes(
+        ["git", "-C", str(workdir), "ls-files", "--others", "--exclude-standard", "-z"],
         check=False,
+        timeout_seconds=60,
+        max_stdout_bytes=MAX_EXECUTOR_STDOUT_BYTES,
+        max_stderr_bytes=64 * 1024,
     )
     if untracked.returncode == 0:
         for raw in untracked.stdout.split(b"\0"):
             if not raw:
                 continue
             relative = raw.decode("utf-8", errors="surrogateescape")
-            addition = subprocess.run(
+            addition = run_bytes(
                 [
                     "git",
                     "-C",
@@ -326,12 +345,26 @@ def _capture_patch(workdir: Path, run_dir: Path, path: Path) -> None:
                     "/dev/null",
                     relative,
                 ],
-                capture_output=True,
                 check=False,
+                timeout_seconds=60,
+                max_stdout_bytes=MAX_EXECUTOR_STDOUT_BYTES,
+                max_stderr_bytes=64 * 1024,
             )
             if addition.returncode in {0, 1}:
                 patch.extend(addition.stdout)
     path.write_bytes(patch)
+
+
+def _child_environment(run_dir: Path) -> EnvironmentPolicy:
+    try:
+        contract = json.loads((run_dir / "command.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        contract = {}
+    configured = contract.get("environment_allowlist", []) if isinstance(contract, dict) else []
+    names = set(_RUNTIME_ENVIRONMENT)
+    if isinstance(configured, list):
+        names.update(value for value in configured if isinstance(value, str) and value)
+    return EnvironmentPolicy(allowlist=tuple(sorted(names)))
 
 
 def execute(
@@ -387,17 +420,23 @@ def execute(
     )
 
     _update_status(status_path, status="running", started_at=utc_now())
+    secret_values = secret_values_from_argv(command)
     try:
         launch_command = command + ([prompt.decode("utf-8")] if interactive else [])
-        process = subprocess.Popen(
-            launch_command,
+        process = spawn(
+            ProcessRequest(
+            argv=tuple(launch_command),
             cwd=workdir,
-            stdin=None if interactive else subprocess.PIPE,
-            stdout=None if interactive else subprocess.PIPE,
-            stderr=None if interactive else subprocess.PIPE,
-            start_new_session=not interactive,
+            timeout_seconds=timeout_seconds,
+            create_process_group=not interactive,
+            max_stdout_bytes=MAX_EXECUTOR_STDOUT_BYTES,
+            max_stderr_bytes=MAX_EXECUTOR_STDERR_BYTES,
+            environment=_child_environment(run_dir),
+            secret_values=secret_values,
+            interactive=interactive,
+            )
         )
-    except OSError as exc:
+    except WorkflowError as exc:
         finished_at = utc_now()
         update_provenance(
             run_dir,
@@ -405,8 +444,8 @@ def execute(
             exit_code=127,
         )
         _capture_patch(workdir, run_dir, run_dir / "patch.diff")
-        _collect_completion(run_dir, workdir)
-        _collect_task_result(run_dir, workdir)
+        _collect_completion(run_dir, workdir, secret_values=secret_values)
+        _collect_task_result(run_dir, workdir, secret_values=secret_values)
         current = _read_status(status_path)
         final_status = {
             **current,
@@ -445,18 +484,15 @@ def execute(
         make_read_only(run_dir)
         return 127
     if not interactive:
-        assert process.stdin is not None
+        assert process.process.stdin is not None
         assert process.stdout is not None
         assert process.stderr is not None
-        process.stdin.write(prompt)
-        process.stdin.close()
+        process.process.stdin.write(prompt)
+        process.process.stdin.close()
 
     def forward_signal(signum: int, _frame: Any) -> None:
         if process.poll() is None:
-            if interactive:
-                process.send_signal(signum)
-            else:
-                os.killpg(process.pid, signum)
+            process.send_signal(signum)
 
     signal.signal(signal.SIGINT, forward_signal)
     signal.signal(signal.SIGTERM, forward_signal)
@@ -500,7 +536,7 @@ def execute(
                                 _write_bytes(output, visible)
                                 _mirror_terminal(sys.stdout.buffer, visible)
         except Exception as exc:  # pragma: no cover - defensive thread boundary
-            pump_errors.append(f"stdout: {exc}")
+            pump_errors.append(redact_text(f"stdout: {exc}", secret_values))
 
     def stderr_pump() -> None:
         nonlocal first_output_at
@@ -514,7 +550,7 @@ def execute(
                         _write_bytes(output, raw)
                         _mirror_terminal(sys.stderr.buffer, raw)
         except Exception as exc:  # pragma: no cover - defensive thread boundary
-            pump_errors.append(f"stderr: {exc}")
+            pump_errors.append(redact_text(f"stderr: {exc}", secret_values))
 
     threads = [] if interactive else [
         threading.Thread(target=stdout_pump, daemon=True),
@@ -538,38 +574,25 @@ def execute(
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 timed_out = True
-                if interactive:
-                    process.terminate()
-                else:
-                    os.killpg(process.pid, signal.SIGTERM)
-                try:
-                    return_code = process.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    if interactive:
-                        process.kill()
-                    else:
-                        os.killpg(process.pid, signal.SIGKILL)
-                    return_code = process.wait()
+                process.cancel(timed_out=True)
+                return_code = process.poll()
+                if return_code is None:
+                    return_code = process.process.returncode or 124
                 break
             wait_seconds = min(wait_seconds, remaining)
-        try:
-            return_code = process.wait(timeout=wait_seconds)
+        waited = process.wait_for(wait_seconds)
+        if waited is not None:
+            return_code = waited
             break
-        except subprocess.TimeoutExpired:
-            continue
     for thread in threads:
         thread.join(timeout=5)
     if any(thread.is_alive() for thread in threads):
         pump_errors.append("stream drain deadline exceeded")
         try:
-            if interactive:
-                process.terminate()
-            else:
-                os.killpg(process.pid, signal.SIGTERM)
-        except ProcessLookupError:
+            process.cancel()
+        except OSError:
             pass
-        process.stdout.close()
-        process.stderr.close()
+        process.close_streams()
         for thread in threads:
             thread.join(timeout=2)
         if any(thread.is_alive() for thread in threads):
@@ -577,8 +600,8 @@ def execute(
     if pump_errors:
         return_code = return_code or 1
 
-    _collect_completion(run_dir, workdir)
-    _collect_task_result(run_dir, workdir)
+    _collect_completion(run_dir, workdir, secret_values=secret_values)
+    _collect_task_result(run_dir, workdir, secret_values=secret_values)
 
     if isinstance(runtime, dict):
         try:
@@ -741,10 +764,22 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--workdir", type=Path, required=True)
     parser.add_argument("--stream-format", default="text")
     parser.add_argument("--interactive", action="store_true")
+    parser.add_argument("--command-b64")
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     command = list(args.command)
-    if command and command[0] == "--":
+    if args.command_b64:
+        if command:
+            parser.error("cannot combine --command-b64 with command arguments")
+        try:
+            decoded = base64.b64decode(args.command_b64, validate=True)
+            value = json.loads(decoded.decode("utf-8"))
+        except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            parser.error(f"invalid --command-b64: {exc}")
+        if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+            parser.error("--command-b64 must contain a JSON string list")
+        command = value
+    elif command and command[0] == "--":
         command = command[1:]
     if not command:
         parser.error("missing command after --")

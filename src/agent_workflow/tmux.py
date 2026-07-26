@@ -1,7 +1,6 @@
 from __future__ import annotations
 import os
 import hashlib
-import subprocess
 from dataclasses import dataclass
 from .errors import WorkflowError
 from .process import require_command, run
@@ -61,27 +60,17 @@ def wait_for_wakeup(channel: str, timeout_seconds: float) -> bool:
     """
     if timeout_seconds <= 0:
         return False
-    process: subprocess.Popen[bytes] | None = None
     try:
-        process = subprocess.Popen(
+        result = run(
             ["tmux", "wait-for", channel],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            check=False,
+            timeout_seconds=timeout_seconds,
+            max_stdout_bytes=0,
+            max_stderr_bytes=0,
         )
-        try:
-            return process.wait(timeout=timeout_seconds) == 0
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait()
-            return False
-    except OSError:
+        return result.returncode == 0
+    except WorkflowError:
         return False
-    except KeyboardInterrupt:
-        if process is not None:
-            process.kill()
-            process.wait()
-        raise
 
 
 def current_window_target() -> str | None:

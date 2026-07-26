@@ -21,7 +21,7 @@ def write_minimal_run(root: Path, *, session_id: str = "test-run", terminal: str
         (root / name).write_text(content, encoding="utf-8")
     atomic_write_json(
         root / "command.json",
-        {"schema": "agent-workflow/command/v1", "argv": ["cat"], "shell": "cat", "executor": None, "stream_format": "text"},
+        {"schema": "agent-workflow/command/v1", "argv": ["cat"], "shell": "cat", "executor": None, "classification": "unclassified", "stream_format": "text", "environment_allowlist": []},
     )
     atomic_write_json(
         root / "source-baseline.json",

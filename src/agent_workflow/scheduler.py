@@ -171,7 +171,15 @@ class SchedulerService:
         workflow.setdefault("inputs_path", None)
         workflow.setdefault("inputs_sha256", None)
         workflow["routing"] = routing_record
-        update_provenance(child_dir, workflow=workflow)
+        try:
+            update_provenance(child_dir, workflow=workflow)
+        except WorkflowError as exc:
+            if not (child_dir / "final-receipt.json").is_file():
+                raise
+            # The detached child sealed before routing enrichment acquired the
+            # seal lock. Its immutable receipt is authoritative already.
+            if "cannot update sealed provenance" not in str(exc):
+                raise
         return result
 
     @staticmethod
@@ -204,8 +212,13 @@ class SchedulerService:
             try:
                 receipt = verify_seal(child)
             except WorkflowError:
-                return False
-            return receipt.get("session_id") == run_id
+                # A detached child may publish the receipt before its final
+                # artifact set is visible. Provenance is the minimum launch
+                # authority; terminal reconciliation still requires a valid
+                # sealed receipt.
+                pass
+            else:
+                return receipt.get("session_id") == run_id
         provenance_path = child / "run-provenance.json"
         if provenance_path.is_symlink() or not provenance_path.is_file():
             return False

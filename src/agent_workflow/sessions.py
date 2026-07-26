@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import fcntl
 import hashlib
 import json
@@ -7,7 +8,6 @@ import os
 import platform
 import shlex
 import shutil
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -23,12 +23,16 @@ from .errors import InteractiveCapacityError, WorkflowError
 from .eval.commands import collect_commands, specs_from_data
 from .eval.scope import ScopePolicy, collect_scope
 from .evaluation import validate_evaluation
-from .executors import ExecutorPlan, executor_version, prepare_executor
+from .executors import (
+    ExecutorPlan,
+    executor_identity_for_plan,
+    prepare_executor,
+)
 from .git import snapshot
 from .native_jobs import ValidatedNativeJob, validate_native_job
 from .messages import append_message, replay_messages, wait_for_messages
 from .manifests import task_result_contract
-from .process import run
+from .process import redact_argv, require_command, run, secret_values_from_argv
 from .receipts import initial_completion, initial_provenance, update_provenance
 from .state import (
     TERMINAL_STATUSES,
@@ -119,14 +123,16 @@ def _write_runner(
         shutil.copy2(prompt, launch_prompt)
     prompt_source = prompt_source or prompt
     runner = state_dir / "run.sh"
-    command_text = shlex.join(command)
+    command_blob = base64.b64encode(
+        json.dumps(command, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    ).decode("ascii")
     source_root = Path(__file__).resolve().parents[1]
     runner_invocation = (
         "python3 -m agent_workflow.runner "
         f"--run-dir {shlex.quote(str(state_dir))} "
         f"--workdir {shlex.quote(str(workdir))} "
         f"--stream-format {shlex.quote(stream_format)} "
-        f"{'--interactive ' if interactive else ''}-- {command_text}"
+        f"{'--interactive ' if interactive else ''}--command-b64 {shlex.quote(command_blob)}"
     )
     if interactive and not close_tmux_on_exit:
         runner_command = (
@@ -176,11 +182,12 @@ def _write_runner(
     )
     runner.write_text(runner_text, encoding="utf-8")
     runner.chmod(0o755)
-    syntax = subprocess.run(
+    syntax = run(
         ["bash", "-n", str(runner)],
-        capture_output=True,
-        text=True,
         check=False,
+        timeout_seconds=10,
+        max_stdout_bytes=64 * 1024,
+        max_stderr_bytes=64 * 1024,
     )
     if syntax.returncode:
         raise WorkflowError(
@@ -650,8 +657,12 @@ def launch(
             executor_plan.no_go_authorized,
         )
     command = list(executor_plan.argv)
-    if not shutil.which(command[0]):
-        raise WorkflowError(f"executor command not found on PATH: {command[0]}")
+    require_command(command[0])
+
+    secret_values = secret_values_from_argv(command)
+    redacted_command = redact_argv(command, secret_values=secret_values)
+    executor_policy = settings.executor_policies.get(executor_plan.name)
+    environment_allowlist = list(executor_policy.environment_allowlist) if executor_policy else []
 
     prompt_copy = state_dir / "prompt.md"
     shutil.copy2(prompt_path, prompt_copy)
@@ -666,9 +677,10 @@ def launch(
         state_dir / "command.json",
         {
             "schema": "agent-workflow/command/v1",
-            "argv": command,
-            "shell": shlex.join(command),
+            "argv": redacted_command,
+            "shell": shlex.join(redacted_command),
             "executor": executor_plan.name,
+            "classification": "named" if executor_plan.name else "unclassified",
             "stream_format": executor_plan.stream_format,
             "interactive": interactive,
             "executor_interactive": executor_interactive,
@@ -676,6 +688,7 @@ def launch(
             "no_go_authorized": executor_plan.no_go_authorized,
             "agent_name": agent_name,
             "agent_class": agent_class,
+            "environment_allowlist": environment_allowlist,
         },
     )
     (state_dir / "completion.md").write_bytes(
@@ -767,10 +780,15 @@ def launch(
         initial_provenance(
             session_id=session_id,
             executor=executor_plan.name,
-            argv=command,
+            argv=list(redacted_command),
             stream_format=executor_plan.stream_format,
             executor_version=(
-                executor_version(executor_plan)
+                executor_identity_for_plan(executor_plan).version
+                if executor_plan.name is not None
+                else None
+            ),
+            executable=(
+                executor_identity_for_plan(executor_plan).as_dict()
                 if executor_plan.name is not None
                 else None
             ),
@@ -795,6 +813,8 @@ def launch(
                 "python": platform.python_version(),
                 "platform": platform.platform(),
                 "implementation": sys.implementation.name,
+                "policy": "controlled",
+                "allowlist": environment_allowlist,
             },
             retry_of_run_id=retry_of,
             job_binding=(

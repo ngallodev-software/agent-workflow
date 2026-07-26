@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import shutil
-import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -103,6 +102,7 @@ def archive(
         staged = staged_parent / source.name
         shutil.copytree(source, staged, symlinks=True)
         write_checksum_manifest(staged)
+        tar_path = staged_parent / "pack.tar"
         tar_command = [
             "tar",
             "--sort=name",
@@ -113,7 +113,7 @@ def archive(
             "-C",
             str(staged_parent),
             "-cf",
-            "-",
+            str(tar_path),
             staged.name,
         ]
         zstd_command = [
@@ -121,26 +121,28 @@ def archive(
             f"-{settings.archive_level}",
             "--threads=0",
             "-q",
-            "-o",
-            str(output),
+            "-o", str(output), str(tar_path),
         ]
-        tar_process = subprocess.Popen(tar_command, stdout=subprocess.PIPE)
-        assert tar_process.stdout is not None
-        zstd_process = subprocess.run(
-            zstd_command,
-            stdin=tar_process.stdout,
-            capture_output=True,
-            text=True,
+        tar_result = run(
+            tar_command,
             check=False,
+            timeout_seconds=300,
+            max_stdout_bytes=64 * 1024,
+            max_stderr_bytes=256 * 1024,
         )
-        tar_process.stdout.close()
-        tar_code = tar_process.wait()
-        if tar_code or zstd_process.returncode:
+        zstd_result = run(
+            zstd_command,
+            check=False,
+            timeout_seconds=300,
+            max_stdout_bytes=64 * 1024,
+            max_stderr_bytes=256 * 1024,
+        )
+        if tar_result.returncode or zstd_result.returncode:
             output.unlink(missing_ok=True)
             raise WorkflowError(
                 "archive failed: "
-                f"tar={tar_code}, zstd={zstd_process.returncode}: "
-                f"{zstd_process.stderr.strip()}"
+                f"tar={tar_result.returncode}, zstd={zstd_result.returncode}: "
+                f"{zstd_result.stderr.strip()}"
             )
 
     run(["zstd", "-t", "-q", str(output)])

@@ -8,7 +8,7 @@ from typing import Any
 
 from .config import Settings
 from .errors import WorkflowError
-from .process import run
+from .process import ExecutableIdentity, executor_identity
 
 StreamFormat = str
 
@@ -161,10 +161,11 @@ def prepare_executor(
 
 
 def executor_version(plan: ExecutorPlan) -> str | None:
-    result = run([plan.argv[0], "--version"], check=False)
-    if result.returncode:
-        return None
-    return (result.stdout or result.stderr).strip() or None
+    return executor_identity(plan.argv).version
+
+
+def executor_identity_for_plan(plan: ExecutorPlan) -> ExecutableIdentity:
+    return executor_identity(plan.argv)
 
 
 def parse_event(line: str, stream_format: StreamFormat) -> dict[str, Any] | None:

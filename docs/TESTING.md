@@ -14,6 +14,7 @@ The acceptance layer covers:
 - prompt-pack scaffold, validation, and deterministic archive output;
 - real Git worktree creation, listing, and removal;
 - external executor launch, completion, failure, restart, review, acceptance, and interactive-agent reuse;
+- bounded executor lifecycle and sealed evidence through the installed product; the compact process invariant matrix covers timeout/process-group cancellation, output caps, environment policy, and synthetic secret redaction;
 - durable steer/watch/ack replay across process boundaries;
 - structured provider-event collection into sealed normalized evidence;
 - workflow validation, scheduling, restart/resume, approval, idempotency, sealing, and verification;

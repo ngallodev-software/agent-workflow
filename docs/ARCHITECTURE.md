@@ -90,6 +90,10 @@ The session service resolves agent identity, class, executor, model, permissions
 
 Retries create a new run ID and preserve `retry_of` lineage. They do not overwrite prior evidence.
 
+All repository-owned non-interactive subprocesses use `process.py`. Requests are argv-only, shell-disabled, process-group owned, timeout-bounded, and capped per output stream. A timeout sends `SIGTERM` to the group and escalates to `SIGKILL` after the request grace period. Captured and optional spooled output is redacted before retention, and results record duration, truncation, exit/signal outcome, stable error category, controlled-environment policy, and resolved executable identity. The child environment is rebuilt with a fixed locale and controlled `PATH`; ambient variables are copied only through an executor policy allowlist. Explicit command launches are retained as argv but classified `unclassified`.
+
+The one deliberate terminal boundary is tmux itself: pane creation, observation, wake hints, and attach remain host-terminal operations. They use bounded process calls where capture is possible; `attach-session` uses `os.execvp` to transfer terminal ownership and is not a captured child execution.
+
 ## Durable messages and wakeups
 
 Control/progress/acknowledgement records are appended and fsynced. Consumers replay by sequence/cursor. `tmux wait-for` is only a local wakeup accelerator; a missed or coalesced signal cannot lose a record. A steer remains pending until a correlated acknowledgement or executor-specific delivery record proves a stronger state.

@@ -17,6 +17,7 @@ class ExecutorPolicy:
     model_arg: tuple[str, ...] = ("--model",)
     interactive_permission_args: tuple[str, ...] = ()
     non_interactive_permission_args: tuple[str, ...] = ()
+    environment_allowlist: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -222,6 +223,9 @@ def load_settings(path: Path | None = None) -> Settings:
                 "non_interactive_permission_args",
                 legacy_permission_args or prior.non_interactive_permission_args,
             ),
+            environment_allowlist=strings(
+                "environment_allowlist", prior.environment_allowlist
+            ),
         )
     stall = _integer(data, "terminal", "stall_minutes", base.stall_minutes)
     capture = _integer(data, "terminal", "capture_lines", base.capture_lines)
@@ -420,6 +424,9 @@ def as_dict(s: Settings) -> dict[str, Any]:
                 ),
                 "non_interactive_permission_args": list(
                     s.executor_policies.get(name, ExecutorPolicy()).non_interactive_permission_args
+                ),
+                "environment_allowlist": list(
+                    s.executor_policies.get(name, ExecutorPolicy()).environment_allowlist
                 ),
             }
             for name, command in s.executors.items()

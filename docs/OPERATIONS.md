@@ -16,6 +16,12 @@ Each delegation has:
 
 The CLI and MCP adapter call shared services. Shell scripts are compatibility wrappers only.
 
+## Process and environment policy
+
+Governed commands are argv arrays and never use `shell=True` or command-string fallback. The shared process substrate applies a timeout, owns the complete non-interactive process group, caps stdout/stderr, and performs graceful cancellation followed by bounded escalation. `command.json`, provenance, logs, completion collection, and diagnostics contain redacted argv/output; explicit launches are classified as `unclassified`.
+
+Child environments start from fixed `PATH`/locale defaults. A configured executor may name variables in `environment_allowlist`; only those ambient values, plus named values supplied by the caller, are passed through. Credential-agent and cloud credential variables are not inherited by default. `unsafe_inherit` is an explicit break-glass policy and is not used by governed launch paths.
+
 ## Launch policy
 
 Agent classes constrain interactivity, executor, and model combinations. Named profiles may narrow those choices but cannot escape class policy. Explicit no-go authorization is recorded in provenance.

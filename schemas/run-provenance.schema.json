@@ -57,6 +57,23 @@
         "null"
       ]
     },
+    "executable": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": ["requested", "resolved_path", "version", "sha256"],
+      "properties": {
+        "requested": {"type": "string"},
+        "resolved_path": {"type": ["string", "null"]},
+        "version": {"type": ["string", "null"]},
+        "sha256": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "additionalProperties": false
+    },
     "model": {
       "type": [
         "string",

@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import os
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
 from .config import Settings
+from .process import run
 
 
 def _executor_capability(name: str, command: list[str]) -> dict[str, Any]:
@@ -22,17 +22,13 @@ def _executor_capability(name: str, command: list[str]) -> dict[str, Any]:
     }
     if not binary:
         return value
-    version = subprocess.run(
-        [binary, "--version"], capture_output=True, text=True, check=False
-    )
+    version = run([binary, "--version"], check=False, timeout_seconds=10, max_stdout_bytes=16 * 1024, max_stderr_bytes=16 * 1024)
     if version.returncode == 0:
         value["version"] = (version.stdout or version.stderr).strip()
     else:
         value["probe_error"] = (version.stderr or version.stdout).strip()
     help_argv = [binary, "exec", "--help"] if name == "codex" else [binary, "--help"]
-    help_result = subprocess.run(
-        help_argv, capture_output=True, text=True, check=False
-    )
+    help_result = run(help_argv, check=False, timeout_seconds=10, max_stdout_bytes=256 * 1024, max_stderr_bytes=256 * 1024)
     help_text = help_result.stdout + help_result.stderr
     expected = "--json" if name == "codex" else "--output-format"
     value["structured_output"] = help_result.returncode == 0 and expected in help_text
@@ -43,11 +39,12 @@ def _archive_commands_supported(commands: dict[str, str | None]) -> bool:
     tar = commands.get("tar")
     if not tar or not commands.get("zstd"):
         return False
-    result = subprocess.run(
+    result = run(
         [tar, "--help"],
-        capture_output=True,
-        text=True,
         check=False,
+        timeout_seconds=10,
+        max_stdout_bytes=256 * 1024,
+        max_stderr_bytes=256 * 1024,
     )
     help_text = result.stdout + result.stderr
     return result.returncode == 0 and all(

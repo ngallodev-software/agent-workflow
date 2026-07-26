@@ -42,7 +42,16 @@ def _git_facts(
     repo: Path, root: Path, baseline_head: str | None = None
 ) -> dict[str, Any]:
     def git(*args: str, check: bool = True) -> bytes:
-        return run_bytes(["git", "-C", str(repo), *args], check=check).stdout
+        result = run_bytes(
+            ["git", "-C", str(repo), *args],
+            check=check,
+            timeout_seconds=60,
+            max_stdout_bytes=4 * 1024 * 1024,
+            max_stderr_bytes=256 * 1024,
+        )
+        if result.stdout_truncated:
+            raise WorkflowError(f"git scope output exceeded capture limit: {args[0] if args else 'command'}")
+        return result.stdout
 
     head = git("rev-parse", "HEAD", check=False).decode().strip() or None
     branch = git("branch", "--show-current", check=False).decode().strip() or "(detached)"
@@ -65,7 +74,13 @@ def _git_facts(
         "unstaged": _nul_values(git("diff", "--name-status", "-z", "--find-renames", "--find-copies", check=False)),
         "untracked": _nul_values(git("ls-files", "--others", "--exclude-standard", "-z", check=False)),
         "ignored": _nul_values(git("ls-files", "--others", "--ignored", "--exclude-standard", "-z", check=False)),
-        "submodules": run(["git", "-C", str(repo), "submodule", "status", "--recursive"], check=False).stdout.splitlines(),
+        "submodules": run(
+            ["git", "-C", str(repo), "submodule", "status", "--recursive"],
+            check=False,
+            timeout_seconds=60,
+            max_stdout_bytes=256 * 1024,
+            max_stderr_bytes=64 * 1024,
+        ).stdout.splitlines(),
     }
 
 
