@@ -1,6 +1,11 @@
 pipeline {
     agent any
 
+    environment {
+        VENV = "${WORKSPACE}/.jenkins-venv"
+        PATH+PYTHON = "${WORKSPACE}/.jenkins-venv/bin"
+    }
+
     options {
         disableConcurrentBuilds()
         buildDiscarder(logRotator(numToKeepStr: '10'))
@@ -11,6 +16,19 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
+            }
+        }
+        stage('Prepare Python environment') {
+            steps {
+                sh '''
+                    rm -rf "$VENV"
+                    python3 -m venv "$VENV"
+                    "$VENV/bin/python" -m pip install \
+                        --disable-pip-version-check \
+                        'pytest>=8,<10' \
+                        'jsonschema>=4.18,<5' \
+                        'build'
+                '''
             }
         }
         stage('Test and release checks') {
