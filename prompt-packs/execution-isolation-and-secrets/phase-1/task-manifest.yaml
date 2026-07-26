@@ -1,0 +1,16 @@
+phase: "1"
+name: "preventative-isolation-and-sensitive-content"
+mandatory_order: []
+tasks:
+  - id: "HARD-003"
+    tier: A
+    session: "hardening-execution-sandbox"
+    prompt: "tickets/HARD-003-preventative-execution-sandbox.md"
+    backlog_id: "HARD-003"
+    dependencies: ["HARD-008"]
+  - id: "HARD-006"
+    tier: A
+    session: "hardening-sensitive-content"
+    prompt: "tickets/HARD-006-sensitive-content-retention.md"
+    backlog_id: "HARD-006"
+    dependencies: ["HARD-008"]

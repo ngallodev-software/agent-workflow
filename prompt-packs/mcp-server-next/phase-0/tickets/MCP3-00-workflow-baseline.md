@@ -1,5 +1,7 @@
 # MCP3-00 — workflow baseline and MCP contract refresh
 
+> **Execution prerequisite:** Do not execute this ticket until `HARD-004`, `HARD-005`, and `HARD-007` are accepted and integrated. `MCP-003` is the only backlog item owned by this pack.
+
 ## Goal
 
 Identify the exact stable services and typed contracts MCP can reuse for workflow validation, launch, status, resume, routing

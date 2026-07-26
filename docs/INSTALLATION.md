@@ -51,10 +51,11 @@ destructive lifecycle tools, or HTTP transport.
 
 The installer links the same repo-owned skill directories into the shared root
 `~/.agents/skills`, the Codex root `~/.codex/skills`, and the Claude root
-`~/.claude/skills`. Each name must resolve to the same source directory; the
-installer refuses unrelated files or symlinks rather than creating ambiguous
-divergent copies. See `DELEGATION_RUNBOOK.md` for invocation names and
-paired executor launch examples.
+`~/.claude/skills`: `agent-workflow-orchestrator`, `delegated-implementation`,
+`prompt-pack-builder`, `phase-gate-review`, and `release-drift-auditor`. Each
+name must resolve to the same source directory; the installer refuses unrelated
+files or symlinks rather than creating ambiguous divergent copies. See
+`DELEGATION_RUNBOOK.md` for invocation names and paired executor launch examples.
 
 XDG environment variables override config, state, and data roots.
 

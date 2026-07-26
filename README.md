@@ -2,7 +2,7 @@
 
 `agent-workflow` is a terminal-first control plane for bounded coding-agent work. It launches agents in isolated Git worktrees and tmux sessions, preserves durable evidence, supports restart-safe dependency graphs, and keeps review and acceptance under operator control.
 
-The project is **pre-public-release**. Core behavior is usable, but public distribution is blocked on license selection, external compatibility runs, and release-governance decisions tracked in [Public release readiness](docs/PUBLIC_RELEASE_READINESS.md).
+The project is **pre-public-release**. Core behavior is usable, but public distribution is blocked on deterministic execution/security controls, license selection, a monitored vulnerability channel, external compatibility runs, and release-governance decisions tracked in [Public release readiness](docs/PUBLIC_RELEASE_READINESS.md).
 
 ## What it does
 
@@ -158,6 +158,8 @@ The default suite is acceptance-first: it builds and installs a wheel, invokes p
 - [Evidence and evaluation](docs/EVIDENCE_AND_EVALUATION.md)
 - [Testing](docs/TESTING.md)
 - [MCP server](docs/MCP_SERVER.md)
+- [Feature determinism and security assessment](docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md)
+- [Determinism and security hardening plan](docs/DETERMINISM_SECURITY_HARDENING_PLAN.md)
 - [Public release readiness](docs/PUBLIC_RELEASE_READINESS.md)
 - [Backlog](BACKLOG.md)
 - [Contributing](CONTRIBUTING.md)

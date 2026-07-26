@@ -530,6 +530,95 @@ flowchart LR
   MultiHost[Multi-host orchestration] -. not a prerequisite .-> Public
 ```
 
+## 25. Determinism hardening dependencies
+
+```mermaid
+flowchart LR
+  H1[HARD-001 bounded process]
+  H2[HARD-002 artifact/path integrity]
+  H4[HARD-004 immutable launch authority]
+  H5[HARD-005 MCP read boundary]
+  H8[HARD-008 config/executor trust]
+  H3[HARD-003 preventative sandbox]
+  H6[HARD-006 classification/retention]
+  H7[HARD-007 authenticated principals]
+  H9[HARD-009 generated drift gate]
+  H10[HARD-010 supply chain]
+  R3[REL-003 compatibility]
+  R4[REL-004 public-preview gate]
+  MCP[MCP-003 mutation]
+
+  H1 --> H4
+  H2 --> H4
+  H2 --> H5
+  H1 --> H8
+  H1 --> H3
+  H2 --> H3
+  H8 --> H3
+  H1 --> H6
+  H5 --> H6
+  H4 --> H7
+  H3 --> H9
+  H4 --> H9
+  H5 --> H9
+  H6 --> H9
+  H7 --> H9
+  H8 --> H9
+  H8 --> R3
+  H4 --> MCP
+  H5 --> MCP
+  H7 --> MCP
+  H3 --> R4
+  H4 --> R4
+  H5 --> R4
+  H6 --> R4
+  H7 --> R4
+  H8 --> R4
+  H9 --> R4
+  H10 --> R4
+  R3 --> R4
+```
+
+## 26. Parallel hardening pack execution
+
+```mermaid
+flowchart TB
+  subgraph Foundations
+    F1[HARD-001]:::parallel
+    F2[HARD-002]:::parallel
+    F1 --> F4[HARD-004]:::parallel
+    F2 --> F4
+    F2 --> F5[HARD-005]:::parallel
+    F4 --> FG[FOUND-GATE-01]
+    F5 --> FG
+  end
+  subgraph Isolation
+    I8[HARD-008]
+    I8 --> I3[HARD-003]:::parallel
+    I8 --> I6[HARD-006]:::parallel
+    I3 --> IG[ISO-GATE-01]
+    I6 --> IG
+  end
+  subgraph PublicBeta
+    P7[HARD-007]:::parallel
+    P9[HARD-009]:::parallel
+    P10[HARD-010]:::parallel
+    P3[REL-003]:::parallel
+    P7 --> P4[REL-004]
+    P9 --> P4
+    P10 --> P4
+    P3 --> P4
+  end
+  FG --> I8
+  IG --> P7
+  IG --> P9
+  IG --> P10
+  IG --> P3
+  classDef parallel stroke-width:2px;
+```
+
+Each parallel node runs in a separate worktree and durable session. Gate nodes integrate diffs, rerun shared acceptance journeys, and apply both `phase-gate-review` and `release-drift-auditor`.
+
 ## Diagram maintenance rule
 
 Update this chart pack whenever a release changes a durable authority, package boundary, workflow state, public CLI family, MCP capability, evidence schema, or release/install flow. Historical plans may retain old diagrams only when clearly labeled as historical.

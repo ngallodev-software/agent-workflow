@@ -38,7 +38,7 @@ Prefer one parameterized matrix to many nearly identical tests.
 
 ### Release checks
 
-`tests/release/` validates distribution properties: repository release assets, JSON Schemas, shell syntax, and agreement between documented primary commands and installed help. Static documentation and metadata checks belong here, not in behavioral unit tests.
+`tests/release/` validates distribution properties: repository release assets, JSON Schemas, shell syntax, agreement between documented primary commands and installed help, and the deterministic backlog/prompt-pack ownership audit. Static documentation and metadata checks belong here, not in behavioral unit tests.
 
 ### Future acceptance specifications
 
@@ -91,7 +91,7 @@ AGENT_WORKFLOW_LIVE_EXECUTOR=codex pytest -m live
 AGENT_WORKFLOW_LIVE_EXECUTOR=claude pytest -m live
 ```
 
-`./scripts/release-check.sh` runs the default suite plus compile, shell, schema, and release-asset checks.
+`./scripts/release-check.sh` runs the default suite plus compile, shell, schema, release-asset, prompt-pack ownership, and documentation-drift checks. Apply the `release-drift-auditor` skill after parallel integration because deterministic checks cannot judge every semantic security overclaim.
 
 ## Current shape
 

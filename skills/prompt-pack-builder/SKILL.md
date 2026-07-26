@@ -12,7 +12,7 @@ Use this skill when bounded work needs isolated worktrees, persistent evidence, 
 - root README, execution protocol, and delegation runbook;
 - one directory per phase;
 - phase README, master prompt, task manifest, and bounded tickets;
-- complexity/model tiers and dependency ordering;
+- complexity/model tiers, `backlog_id` ownership, and dependency ordering;
 - writable paths, acceptance criteria, necessary tests, and stop conditions;
 - concrete code structures and interfaces where possible;
 - reusable templates and portable helper scripts;
@@ -26,8 +26,8 @@ The generated README and runbook must name `agent-workflow pack validate`, `agen
 
 ## Quality rules
 
-A ticket must be independently executable but should not duplicate broad context unnecessarily. Use exact paths and current source evidence. Never use one large prompt as a substitute for dependency ordering or review gates. Keep tests narrow and semantic.
+A ticket must be independently executable but should not duplicate broad context unnecessarily. Parallel tickets use separate worktrees and sessions; absence of a dependency edge permits concurrency, while integration and gate review remain serialized. Use exact paths and current source evidence. Never use one large prompt as a substitute for dependency ordering or review gates. Keep tests narrow and semantic.
 
 ## Workflow-aware packs
 
-When tickets form a graph, declare cross-phase dependencies and optional structured result contracts explicitly. Prefer one of the authorized workflow templates when its shape fits. Define every downstream input as a named bounded JSON Pointer binding with required/optional behavior; never instruct children to scrape arbitrary predecessor files. Include terminal workflow sealing and independent phase review in acceptance criteria.
+When tickets form a graph, declare cross-phase dependencies and optional structured result contracts explicitly. Prefer one of the authorized workflow templates when its shape fits. Define every downstream input as a named bounded JSON Pointer binding with required/optional behavior; never instruct children to scrape arbitrary predecessor files. Include terminal workflow sealing and independent phase review in acceptance criteria. Repository-owned packs must pass the `release-drift-auditor` ownership/collision checks before archive creation.

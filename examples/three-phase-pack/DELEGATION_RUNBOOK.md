@@ -5,18 +5,25 @@
 ```bash
 agent-workflow doctor
 agent-workflow config show
+python3 scripts/audit-release-assets.py
 agent-workflow pack validate /path/to/prompt-pack
-agent-workflow worktree create /path/to/repository P0-01 HEAD
+agent-workflow worktree create /path/to/repository TICKET-ID HEAD
 ```
 
-## Launch in a fresh terminal
+Confirm the ticket's `backlog_id` is owned by exactly one active prompt pack and that all external prerequisites are complete before launch.
+
+## Parallel launch
+
+Tasks with no dependency edge between them may run concurrently in separate worktrees and sessions. Never place two agents in the same writable worktree.
 
 ```bash
-agent-workflow launch   project-p0-01-components   /path/to/worktree   /path/to/pack/phase-0/tickets/P0-01.md   --ticket P0-01   --pack project-phases-0-2   --executor codex
-agent-workflow launch   project-p0-02-components   /path/to/worktree   /path/to/pack/phase-0/tickets/P0-02.md   --ticket P0-02   --pack project-phases-0-2   --executor claude
+agent-workflow launch project-ticket-a /path/to/worktree-a /path/to/pack/phase-0/tickets/TICKET-A.md \
+  --ticket TICKET-A --pack /path/to/pack --executor codex
+agent-workflow launch project-ticket-b /path/to/worktree-b /path/to/pack/phase-0/tickets/TICKET-B.md \
+  --ticket TICKET-B --pack /path/to/pack --executor claude
 ```
 
-The prompt is passed to the command over standard input.
+The prompt is passed to the command over standard input. Use the pack's dependency graph as the authority for parallelism; prose ordering does not override manifest dependencies.
 
 ## Workflow skills
 
@@ -25,14 +32,15 @@ The prompt is passed to the command over standard input.
 | Build a prompt pack | `$prompt-pack-builder` | `/prompt-pack-builder` |
 | Implement one ticket | `$delegated-implementation` | `/delegated-implementation` |
 | Review a completed phase | `$phase-gate-review` | `/phase-gate-review` |
+| Audit backlog, pack, docs, and release drift | `$release-drift-auditor` | `/release-drift-auditor` |
 
 ## Observe and foreground
 
 ```bash
 agent-workflow list
-agent-workflow status project-p0-01 --capture 60
-agent-workflow attach project-p0-01
-agent-workflow tail project-p0-01
+agent-workflow status SESSION --capture 60
+agent-workflow attach SESSION
+agent-workflow tail SESSION
 ```
 
 `possibly_stalled` is advisory. It means tmux is alive while the log has not grown during the configured threshold.
@@ -44,7 +52,7 @@ agent-workflow tail project-p0-01
 3. Classify input wait, package/network wait, test deadlock, model loop, or legitimate long operation.
 4. Interrupt without deleting evidence.
 5. Correct the prompt or environment.
-6. Restart into a new `-retryN` session.
+6. Restart into a new retry session so lineage remains explicit.
 
 ## Stop controls
 
@@ -56,6 +64,16 @@ agent-workflow kill SESSION
 
 Use immediate kill only for an unresponsive process. All controls preserve durable evidence.
 
-## Completion and review
+## Completion, integration, and review
 
-Require a ticket completion report, inspect the diff before running tests, independently rerun narrow acceptance commands, and create a phase-gate report. A high-risk implementer should not be the only reviewer.
+Require a ticket completion report. Integrate parallel tickets only after inspecting each complete diff and resolving overlap intentionally. Rerun the shared acceptance journeys after integration, not only in each ticket worktree.
+
+Before the phase gate:
+
+```bash
+python3 scripts/audit-release-assets.py
+agent-workflow pack validate /path/to/prompt-pack
+pytest
+```
+
+Then apply the `phase-gate-review` and `release-drift-auditor` skills. A high-risk implementer must not be the only reviewer, and actor labels alone do not prove reviewer independence.

@@ -60,7 +60,7 @@ agent-workflow review project-p0-01 --actor reviewer --reason "Diff and gates in
 agent-workflow accept project-p0-01 --actor reviewer --reason "Approved" --revision COMMIT_SHA
 ```
 
-Terminal text is operational context, not sealed proof. Inspect the authoritative run evidence and receipts before review or acceptance.
+Terminal text is operational context, not sealed proof. Inspect the authoritative run evidence and receipts before review or acceptance. After integrating parallel tickets, apply the `release-drift-auditor` skill before phase acceptance or packaging.
 
 ## Canonical references
 

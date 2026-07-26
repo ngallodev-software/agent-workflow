@@ -1,41 +1,69 @@
 # agent-workflow backlog
 
-This is the only task register for unfinished work. Design documents explain architecture and constraints; they do not maintain parallel checklists. Completed implementation detail belongs in Git history and [CHANGELOG.md](CHANGELOG.md).
+This is the only task register for unfinished work. Design documents explain architecture and constraints; they do not maintain parallel status checklists. Completed implementation detail belongs in Git history and [CHANGELOG.md](CHANGELOG.md).
+
+The determinism and security work below is derived from the [feature determinism and security assessment](docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md) and sequenced in the [hardening plan](docs/DETERMINISM_SECURITY_HARDENING_PLAN.md).
 
 ## Rules
 
-- Every active item has a stable ID, priority, state, and observable exit evidence.
-- `done` means the behavior and evidence exist; completed items move to the history summary.
-- `blocked` names the missing external prerequisite.
-- `decision` requires explicit maintainer authorization before implementation.
+- Every active item has a stable ID, priority, state, observable exit evidence, and one canonical owner.
+- `done` means behavior and evidence exist; completed items move to the history summary.
+- `blocked` names the missing prerequisite.
+- `needs-decision` requires explicit maintainer authorization before implementation.
 - New features require an installed-product acceptance journey or an approved strict future specification.
+- Repository-owned prompt-pack tasks declare `backlog_id`. Exactly one active prompt pack may own a backlog item.
+- Review-only tasks use `task_type: gate`, do not claim a backlog item, and may not implement new scope.
+- Parallel agents use separate worktrees. Missing dependency edges permit concurrency; prose may not bypass manifest dependencies.
+- Run the `release-drift-auditor` skill and `scripts/audit-release-assets.py` before every phase gate and archive.
 
-## Now
+## Active prompt-pack ownership
+
+| Prompt pack | Canonical backlog ownership | Execution status |
+|---|---|---|
+| [`deterministic-enforcement-foundations`](prompt-packs/deterministic-enforcement-foundations/) | HARD-001, HARD-002, HARD-004, HARD-005 | Start now; phase-0 tickets run in parallel. |
+| [`execution-isolation-and-secrets`](prompt-packs/execution-isolation-and-secrets/) | HARD-008, HARD-003, HARD-006 | Blocked until the foundations gate is accepted. |
+| [`public-beta-trust-and-release`](prompt-packs/public-beta-trust-and-release/) | HARD-007, HARD-009, HARD-010, REL-003, REL-004 | Blocked until the first two packs are accepted. |
+| [`mcp-server-next`](prompt-packs/mcp-server-next/) | MCP-003 | Blocked on HARD-004, HARD-005, and HARD-007. |
+
+## Ready now
+
+| ID | Priority | Risk | State | Work and exit evidence | Reference |
+|---|---|---:|---|---|---|
+| BKL-001 | P0 | High | ready | Add durable per-consumer message cursors and idempotent handling dispositions. Prove restart recovery, duplicate safety, and cursor advancement only after successful handling. | [Operations](docs/OPERATIONS.md#durable-messages) |
+| BKL-002 | P0 | High | ready | Add executor-specific post-launch steering for detached runs. A running executor must consume a steer without restart and emit correlated delivered/applied/rejected evidence; terminal text or process liveness is not proof. | Strict future journey in `tests/future/test_late_steering_journey.py` |
+| HARD-001 | P0 | Critical | ready | Replace ad hoc subprocess calls with one bounded process substrate: timeout, process groups, cancellation, capped/spooled output, sanitized environment, executable identity, and argv redaction. Migrate doctor, Git, runner, archive, probe, and evaluation call sites. | [Assessment F04-F06, F18-F20, F71](docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#4-feature-and-component-inventory) |
+| HARD-002 | P0 | Critical | ready | Make prompt packs, schemas, native jobs, and bounded paths content-complete and no-follow: reject symlinks/special files, manifest every accepted entry, fail on duplicate schema IDs, and remove resolve-before-validation gaps. | [Assessment F11, F34-F38, F87](docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#10-source-observations-supporting-the-highest-priority-findings) |
+| REL-001 | P0 | Critical | needs-decision | Select and add the project license, matching package metadata, and distribution policy. | [Public release readiness](docs/PUBLIC_RELEASE_READINESS.md#governance-and-compatibility-blockers) |
+| REL-002 | P0 | Critical | blocked | Establish a real monitored vulnerability-reporting channel and update `SECURITY.md`. | [Public release readiness](docs/PUBLIC_RELEASE_READINESS.md#governance-and-compatibility-blockers) |
+
+## Additional release follow-up
+
+These items remain tracked separately from the hardening ownership above; they are release-evidence and local-CI follow-up, not alternate owners for HARD or MCP work.
 
 | ID | Priority | State | Work and exit evidence | Reference |
 |---|---|---|---|---|
-| BKL-001 | P0 | ready | Add durable per-consumer message cursors and idempotent handling dispositions. Prove restart recovery, duplicate safety, and cursor advancement only after successful handling. | [Operations](docs/OPERATIONS.md#durable-messages) |
-| BKL-002 | P0 | ready | Add executor-specific post-launch steering for detached runs. A running executor must consume a steer without restart and emit correlated delivered/applied/rejected evidence; terminal text or process liveness is not proof. | Strict future journey in `tests/future/test_late_steering_journey.py` |
-| REL-001 | P0 | needs-decision | Select and add the project license, matching package metadata, and distribution policy. | [Public release readiness](docs/PUBLIC_RELEASE_READINESS.md#blocking-decisions) |
-| REL-002 | P0 | blocked | Establish a real monitored vulnerability-reporting channel and update `SECURITY.md`. | [Public release readiness](docs/PUBLIC_RELEASE_READINESS.md#blocking-decisions) |
-| REL-003 | P0 | ready | Define the supported Linux/Python/tmux/executor matrix and run live compatibility journeys on representative clean hosts. | [Testing](docs/TESTING.md#live-compatibility) |
-| REL-004 | P0 | needs-decision | Define release ownership, protected-tag/signing policy, support policy, and security-update ownership. Exit evidence is a named maintainer process, protected release path, signed artifact policy, and documented support window. | [Public release readiness](docs/PUBLIC_RELEASE_READINESS.md#blocking-decisions) |
-| SEC-001 | P0 | ready | Replace unbounded subprocess capture with a shared bounded execution substrate: timeout, output limits/spooling, process-group ownership, cancellation, sanitized environment, and redacted errors. | [Determinism/security assessment](docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#6-prioritized-change-plan) |
-| SEC-002 | P0 | ready | Enforce preventative execution scope and prompt-pack integrity: sandbox writable paths, reject or canonically manifest symlinks/special files, and retain post-run scope evidence. | [Determinism/security assessment](docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#6-prioritized-change-plan) |
-| SEC-003 | P0 | ready | Harden the read-only MCP boundary: metadata-only message views by default, no-follow/component-safe path validation, stable bounded errors, and descriptor-safe receipt reads. | [MCP server](docs/MCP_SERVER.md#current-boundary) and [security assessment](docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#46-mcp-adapter) |
-| SEC-004 | P0 | ready | Introduce an immutable launch contract and remove runner/evaluation authority dependencies on mutable status projections. | [Determinism/security assessment](docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#6-prioritized-change-plan) |
-| BKL-004 | P1 | ready | Run a controlled real-executor baseline/candidate cohort with pinned model, executor, environment, tools, cache policy, repetitions, exclusions, and sealed evidence. | [Evidence and evaluation](docs/EVIDENCE_AND_EVALUATION.md#cohort-comparison) |
-| BKL-007 | P1 | ready | Add opt-in installer-owned host routing enforcement only for narrowly defined direct delegation commands, with preserved hooks and an audited break-glass path. | [Operations](docs/OPERATIONS.md#host-routing) |
 | REL-005 | P1 | ready | Add automated release-blocker checks and durable release evidence: license/security-channel metadata, declared compatibility matrix, structured test results, SBOM, dependency lock, and build provenance. | [Release check audit](docs/RELEASE_CHECK_AUDIT.md#gap-analysis) |
-| REL-006 | P1 | ready | Configure the local Jenkins job to poll/trigger from commits to the local repository and verify that the trigger builds the checked-out master revision; the pipeline itself is already green. | [Release check audit](docs/RELEASE_CHECK_AUDIT.md#jenkins-verification) |
-| REL-007 | P1 | ready | Run and record clean-machine install/uninstall evidence and a controlled real workflow/provider cohort before describing the project as publicly supported. | [Public release readiness](docs/PUBLIC_RELEASE_READINESS.md#blocking-decisions) |
-| MCP-003 | P1 | ready | Add idempotent pack validation, worktree creation, bounded launch, workflow validate/start/status/resume, progress, ack, and steer tools through existing services. | [MCP server](docs/MCP_SERVER.md#planned-mutation-phase) and [`prompt-packs/mcp-server-next/`](prompt-packs/mcp-server-next/) |
+| REL-006 | P1 | ready | Configure the local Jenkins job to trigger from commits to the local repository and verify that the trigger builds the matching master revision; the pipeline itself is already green. | [Release check audit](docs/RELEASE_CHECK_AUDIT.md#jenkins-verification) |
+| REL-007 | P1 | ready | Run and record clean-machine install/uninstall evidence and a controlled real workflow/provider cohort before describing the project as publicly supported. | [Public release readiness](docs/PUBLIC_RELEASE_READINESS.md#governance-and-compatibility-blockers) |
 
 ## Blocked prerequisites
 
-| ID | Priority | State | Missing input and exit evidence | Reference |
-|---|---|---|---|---|
-| BKL-010 | P1 | blocked | Supply a pinned browser-image digest, font manifest, and verified pre-seal browser/Inspect evidence bridge before implementing the visual priority-picker fixture. | [Evidence and evaluation](docs/EVIDENCE_AND_EVALUATION.md) |
+| ID | Priority | Risk | State | Missing prerequisite and exit evidence | Reference |
+|---|---|---:|---|---|---|
+| HARD-004 | P0 | Critical | blocked | After HARD-001 and HARD-002, add one immutable launch contract consumed by runners and collectors; remove remaining `status.json` authority, and return the digest of the exact receipt verified. | [Assessment F17, F24, F68](docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#5-guidance-that-should-become-deterministic-enforcement) |
+| HARD-005 | P0 | Critical | blocked | After HARD-002, make MCP reads metadata-minimal, no-follow, bounded, descriptor-stable, and error-normalized. Full message bodies require a separately authorized/redacted capability. | [Assessment F83-F88](docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#46-mcp-adapter) |
+| HARD-008 | P1 | High | blocked | After HARD-001, validate config ownership/mode, reject unknown policy keys, record executable version/path/digest, sanitize Git/executor environments, and separate compatibility data from hard-coded defaults. | [Assessment F03-F06, F15, F20](docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#41-entry-points-configuration-host-integration-and-release-tooling) |
+| HARD-003 | P0 | Critical | blocked | After HARD-001, HARD-002, and HARD-008, enforce allowed writes, home/credential isolation, network default-deny, and CPU/memory/time/output limits for native jobs and evaluation/acceptance commands. Post-run scope comparison remains evidence, not the barrier. | [Assessment F39-F42, F69-F73](docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#5-guidance-that-should-become-deterministic-enforcement) |
+| HARD-006 | P1 | High | blocked | After HARD-001 and HARD-005, add content classification, redaction, explicit sensitive-content opt-in, and retention/deletion policy for prompts, argv, logs, messages, provider events, telemetry, and exported reports. | [Assessment F44-F47, F64, F81-F85](docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#7-security-posture-by-trust-boundary) |
+| HARD-007 | P1 | Critical | blocked | After HARD-004, replace caller-selected actor labels with authenticated principals for review, acceptance, steering, and future MCP mutation. Enforce independent-review policy from immutable identity evidence. | [Assessment F48-F52, F89](docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#5-guidance-that-should-become-deterministic-enforcement) |
+| HARD-009 | P1 | High | blocked | After HARD-003 through HARD-008, generate command/man/schema/service inventories from code, enforce backlog-to-pack ownership, detect stale docs/skills/diagrams/future tests, and make drift audit a release gate. | [Assessment F01-F02, F09-F10, F90-F96](docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#8-public-release-direction) |
+| HARD-010 | P1 | High | blocked | After FOUND-GATE-01 and ISO-GATE-01, add locked dependencies, SBOM generation, wheel/source provenance, independent reproducibility checks, and authenticated release signing/attestation against the integrated hardened tree. | [Assessment F13-F14](docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#4-feature-and-component-inventory) |
+| REL-003 | P0 | High | blocked | After HARD-008, define the supported Linux/Python/tmux/executor matrix and run opt-in live compatibility journeys on representative clean hosts. | [Testing](docs/TESTING.md#live-compatibility) |
+| BKL-004 | P1 | High | blocked | After HARD-003, HARD-006, and REL-003, run a controlled real-executor baseline/candidate cohort with pinned model, executor, environment, tools, cache policy, repetitions, exclusions, and sealed evidence. | [Evidence and evaluation](docs/EVIDENCE_AND_EVALUATION.md#cohort-comparison) |
+| BKL-007 | P1 | High | blocked | After HARD-001 and HARD-008, add opt-in installer-owned host routing enforcement only for narrowly defined direct delegation commands, with preserved hooks and an audited break-glass path. | [Operations](docs/OPERATIONS.md#host-routing) |
+| MCP-003 | P1 | Critical | blocked | After HARD-004, HARD-005, and HARD-007, add idempotent pack validation, worktree creation, bounded launch, workflow validate/start/status/resume, progress, ack, and steer tools through existing services. | [MCP server](docs/MCP_SERVER.md#planned-mutation-phase) and [`mcp-server-next`](prompt-packs/mcp-server-next/) |
+| REL-004 | P1 | Critical | blocked | After all P0 HARD items, HARD-010, REL-001, REL-002, and REL-003, execute the public-preview gate: clean-source build/install/uninstall, signed artifacts, drift audit, live compatibility, threat-model review, and explicit go/no-go record. | [Public release readiness](docs/PUBLIC_RELEASE_READINESS.md#release-gate) |
+| BKL-010 | P1 | Medium | blocked | Supply a pinned browser-image digest, font manifest, and verified pre-seal browser/Inspect evidence bridge before implementing the visual priority-picker fixture. | [Evidence and evaluation](docs/EVIDENCE_AND_EVALUATION.md) |
 
 ## Decisions
 
@@ -47,6 +75,8 @@ This is the only task register for unfinished work. Design documents explain arc
 | DEC-MCP-HTTP | P2 | deferred | Authorize any non-stdio MCP transport only through a separate security ADR after local adoption evidence. |
 
 ## Deferred architecture
+
+These existing items already own the assessment's P2 recommendations. The hardening packs must not create competing tickets for them.
 
 | ID | Priority | Trigger |
 |---|---|---|

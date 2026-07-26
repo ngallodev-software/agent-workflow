@@ -1,0 +1,20 @@
+schema: agent-workflow/pack/v1
+pack_id: "public-beta-trust-and-release"
+backlog_items:
+  - "HARD-007"
+  - "HARD-009"
+  - "HARD-010"
+  - "REL-003"
+  - "REL-004"
+workflow:
+  name: agent-workflow
+  minimum_version: "0.2.2"
+  terminal_backend: tmux
+  requires:
+    - isolated_worktree
+    - foregroundable_session
+    - persistent_log
+    - source_baseline
+    - completion_report
+    - independent_phase_gate
+    - release_drift_audit

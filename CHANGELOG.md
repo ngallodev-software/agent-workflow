@@ -3,7 +3,14 @@
 
 ## Unreleased
 
-No unreleased changes.
+- Add the repository-wide feature determinism and security assessment as a canonical planning reference.
+- Add priority-ordered HARD/REL backlog tasks with explicit dependencies, prompt-pack ownership, release blockers, and collision rules.
+- Add three detailed multi-agent prompt packs for deterministic enforcement foundations, execution isolation/sensitive content, and public-beta trust/release work.
+- Block the existing MCP mutation pack on immutable authority, MCP read-boundary hardening, and authenticated principals without duplicating MCP-003 ownership.
+- Add the `release-drift-auditor` skill and deterministic release-audit checks for duplicate task IDs, unknown backlog ownership, cross-pack collisions, undocumented active packs, and stale future-test IDs.
+- Align the execution protocol with acceptance-first testing and separate-worktree parallel delegation.
+- Correct security documentation that previously overstated symlink containment, preventative sandboxing, authenticated review, and release-integrity guarantees.
+- Add hardening dependency and parallel-execution diagrams plus a public-release gate plan.
 
 ## 0.2.2 — 2026-07-25
 

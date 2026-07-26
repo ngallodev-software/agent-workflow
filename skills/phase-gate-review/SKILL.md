@@ -5,7 +5,7 @@ description: Independently review completed agent-workflow phases, inspect durab
 
 # Independent phase-gate review
 
-Use this skill after all implementation tickets in a phase have completion reports. Use [`agent-workflow-orchestrator`](../agent-workflow-orchestrator/SKILL.md) for `status`, `review`, `accept`, and recovery commands.
+Use this skill after all implementation tickets in a phase have completion reports. Use [`agent-workflow-orchestrator`](../agent-workflow-orchestrator/SKILL.md) for `status`, `review`, `accept`, and recovery commands. Apply [`release-drift-auditor`](../release-drift-auditor/SKILL.md) after parallel ticket integration and before issuing the gate decision.
 
 ## Review duties
 
@@ -16,6 +16,8 @@ Use this skill after all implementation tickets in a phase have completion repor
 - verify migration/recovery and secret handling manually;
 - reject unrelated cleanup and superfluous tests;
 - compare documentation claims with implemented behavior;
+- verify backlog IDs, active prompt-pack ownership, and strict future-test references are collision-free;
+- run the deterministic release drift audit and inspect any generated inventory drift;
 - confirm ticket dependencies and unresolved issues;
 - record `review`, then `accept` or `reject`, only after evidence is checked;
 - produce a phase-gate report with an explicit decision.

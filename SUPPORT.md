@@ -8,7 +8,7 @@ For trusted-collaborator use:
 2. capture the command, public error output, platform, Python, Git, and tmux versions;
 3. identify the affected session or workflow without publishing private prompts or state artifacts;
 4. reproduce with the smallest safe repository or prompt pack;
-5. check [BACKLOG.md](BACKLOG.md) and [docs/OPERATIONS.md](docs/OPERATIONS.md).
+5. check [BACKLOG.md](BACKLOG.md), [docs/OPERATIONS.md](docs/OPERATIONS.md), and the [feature determinism/security assessment](docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md).
 
 Do not publish XDG state directories, prompts, source fragments, provider streams, credentials, or sealed evidence bundles without reviewing their contents.
 

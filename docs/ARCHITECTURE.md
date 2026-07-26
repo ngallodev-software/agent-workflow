@@ -153,3 +153,7 @@ The default test authority is the installed product, not private Python helpers.
 Release assets are checked by `scripts/audit-release-assets.py`; `MANIFEST.sha256` must cover every distributable file. The release gate runs tests, compile checks, shell syntax checks, prompt-pack validation, manifest verification, and deterministic archive tooling checks. Third-party MCP SDK source is not vendored or packaged; only the pinned optional dependency and dependency record remain.
 
 The repository is pre-public-release. License, reporting, supported-host, and release-ownership decisions remain blockers in [Public release readiness](PUBLIC_RELEASE_READINESS.md).
+
+## Hardening roadmap
+
+The current deterministic versus guidance-driven feature inventory is maintained in [Feature determinism and security assessment](FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md). The priority/dependency plan is [Determinism and security hardening plan](DETERMINISM_SECURITY_HARDENING_PLAN.md). These documents do not replace `BACKLOG.md`; they explain why the active HARD/REL tasks exist and which authority boundaries they close.

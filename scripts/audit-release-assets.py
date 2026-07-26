@@ -82,6 +82,160 @@ def parse_frontmatter(path: Path) -> dict[str, str]:
     return data
 
 
+
+
+def _unquote(value: str) -> str:
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"\"", "'"}:
+        return value[1:-1]
+    return value
+
+
+def _backlog_rows() -> dict[str, dict[str, str]]:
+    path = ROOT / "BACKLOG.md"
+    rows: dict[str, dict[str, str]] = {}
+    section = ""
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        if raw.startswith("## "):
+            section = raw[3:].strip()
+            continue
+        if not raw.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in raw.strip().strip("|").split("|")]
+        if not cells:
+            continue
+        item_id = cells[0]
+        if item_id in {"ID", "Release", "---"} or set(item_id) <= {"-", ":"}:
+            continue
+        if not re.fullmatch(r"[A-Z][A-Z0-9-]*", item_id) or "-" not in item_id:
+            continue
+        if item_id in rows:
+            fail(f"BACKLOG.md: duplicate active ID {item_id}")
+            continue
+        state = ""
+        for candidate in cells[1:5]:
+            if candidate in {"ready", "blocked", "needs-decision", "deferred", "done", "in-progress"}:
+                state = candidate
+                break
+        rows[item_id] = {"section": section, "state": state}
+    return rows
+
+
+def _manifest_tasks(path: Path) -> list[dict[str, str]]:
+    tasks: list[dict[str, str]] = []
+    current: dict[str, str] | None = None
+    for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        if raw.startswith("  - "):
+            if current is not None:
+                tasks.append(current)
+            current = {"_line": str(number)}
+            remainder = raw[4:].strip()
+            key, sep, value = remainder.partition(":")
+            if sep:
+                current[key.strip()] = _unquote(value)
+            continue
+        if current is not None and raw.startswith("    "):
+            key, sep, value = raw.strip().partition(":")
+            if sep:
+                current[key.strip()] = _unquote(value)
+    if current is not None:
+        tasks.append(current)
+    return tasks
+
+
+def _pack_declared_backlog_ids(path: Path) -> set[str]:
+    declared: set[str] = set()
+    in_items = False
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        if raw.startswith("backlog_items:"):
+            in_items = True
+            continue
+        if in_items:
+            if raw.startswith("  - "):
+                declared.add(_unquote(raw[4:].strip()))
+                continue
+            if raw and not raw.startswith(" "):
+                break
+    return declared
+
+
+def _audit_backlog_and_prompt_pack_ownership() -> None:
+    backlog = _backlog_rows()
+    packs_root = ROOT / "prompt-packs"
+    documented = (ROOT / "docs" / "PROMPT_PACKS.md").read_text(encoding="utf-8")
+    global_task_ids: dict[str, str] = {}
+    owners: dict[str, set[str]] = {}
+
+    for pack_dir in sorted(path for path in packs_root.iterdir() if path.is_dir()):
+        pack_name = pack_dir.name
+        if pack_name not in documented:
+            fail(f"docs/PROMPT_PACKS.md: active pack {pack_name!r} is not documented")
+        pack_yaml = pack_dir / "pack.yaml"
+        if not pack_yaml.is_file():
+            fail(f"prompt-packs/{pack_name}: missing pack.yaml")
+            continue
+        match = re.search(r'^pack_id:\s*["\']?([^"\']+)["\']?\s*$', pack_yaml.read_text(encoding="utf-8"), re.MULTILINE)
+        if match is None or match.group(1).strip() != pack_name:
+            fail(f"prompt-packs/{pack_name}/pack.yaml: pack_id must match directory")
+        declared = _pack_declared_backlog_ids(pack_yaml)
+        claimed: set[str] = set()
+        manifests = sorted(pack_dir.glob("phase-*/task-manifest.yaml"))
+        if not manifests:
+            fail(f"prompt-packs/{pack_name}: no task manifests")
+        for manifest in manifests:
+            for task in _manifest_tasks(manifest):
+                task_id = task.get("id", "")
+                if not task_id:
+                    continue
+                prior = global_task_ids.get(task_id)
+                if prior is not None:
+                    fail(f"{manifest.relative_to(ROOT)}: task ID {task_id} already used by {prior}")
+                else:
+                    global_task_ids[task_id] = str(manifest.relative_to(ROOT))
+                task_type = task.get("task_type", "implementation")
+                backlog_id = task.get("backlog_id", "")
+                if task_type in {"gate", "review"}:
+                    if backlog_id:
+                        fail(f"{manifest.relative_to(ROOT)}:{task.get('_line')}: gate task {task_id} must not claim backlog_id")
+                    continue
+                if not backlog_id:
+                    fail(f"{manifest.relative_to(ROOT)}:{task.get('_line')}: implementation task {task_id} missing backlog_id")
+                    continue
+                if backlog_id not in backlog:
+                    fail(f"{manifest.relative_to(ROOT)}:{task.get('_line')}: unknown backlog_id {backlog_id}")
+                    continue
+                if backlog[backlog_id].get("state") == "done":
+                    fail(f"{manifest.relative_to(ROOT)}:{task.get('_line')}: active task owns completed backlog item {backlog_id}")
+                claimed.add(backlog_id)
+                owners.setdefault(backlog_id, set()).add(pack_name)
+        if declared != claimed:
+            fail(
+                f"prompt-packs/{pack_name}/pack.yaml: backlog_items {sorted(declared)} "
+                f"do not match task ownership {sorted(claimed)}"
+            )
+
+    for backlog_id, pack_names in sorted(owners.items()):
+        if len(pack_names) > 1:
+            fail(f"BACKLOG.md: {backlog_id} is owned by multiple active packs: {sorted(pack_names)}")
+
+    skill = ROOT / "skills" / "release-drift-auditor" / "SKILL.md"
+    if not skill.is_file():
+        fail("skills/release-drift-auditor/SKILL.md: missing specialized drift skill")
+    for required in [ROOT / "DELEGATION_RUNBOOK.md", ROOT / "skills" / "phase-gate-review" / "SKILL.md"]:
+        if "release-drift-auditor" not in required.read_text(encoding="utf-8"):
+            fail(f"{required.relative_to(ROOT)}: does not invoke release-drift-auditor")
+
+    future_root = ROOT / "tests" / "future"
+    for path in sorted(future_root.glob("test_*.py")):
+        ids = set(re.findall(r"\b[A-Z][A-Z0-9-]*-\d+\b", path.read_text(encoding="utf-8")))
+        if not ids:
+            fail(f"{path.relative_to(ROOT)}: strict future test does not name a backlog ID")
+            continue
+        unknown = sorted(item for item in ids if item not in backlog)
+        if unknown:
+            fail(f"{path.relative_to(ROOT)}: unknown backlog IDs {unknown}")
+
+
 def main(argv: list[str] | None = None) -> int:
     global errors
     errors = []
@@ -317,6 +471,10 @@ def main(argv: list[str] | None = None) -> int:
                 continue
             if not resolved.exists():
                 fail(f"{path.relative_to(ROOT)}: broken local link: {target}")
+
+
+    # Canonical backlog/prompt-pack ownership and drift policy.
+    _audit_backlog_and_prompt_pack_ownership()
 
     # Manifest must cover every regular non-symlink file except itself.
     manifest = ROOT / "MANIFEST.sha256"

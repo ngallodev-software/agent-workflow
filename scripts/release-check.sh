@@ -23,6 +23,10 @@ while IFS= read -r -d '' path; do
 done < <(find templates src/agent_workflow/assets -type f -name '*.sh' -print0)
 python3 -m pytest -q
 python3 -m agent_workflow pack validate examples/three-phase-pack
+for pack in prompt-packs/*; do
+  [[ -d "$pack" ]] || continue
+  python3 -m agent_workflow pack validate "$pack"
+done
 python3 - <<'PY'
 import json
 from pathlib import Path

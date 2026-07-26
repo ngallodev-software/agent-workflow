@@ -1,5 +1,7 @@
 # MCP3-02 — independent workflow-aware MCP review
 
+> **Execution prerequisite:** Do not execute this ticket until `HARD-004`, `HARD-005`, and `HARD-007` are accepted and integrated. `MCP-003` is the only backlog item owned by this pack.
+
 ## Goal
 
 Independently verify that the MCP mutation phase is a thin adapter and did not create a second workflow, routing, lifecycle, or evidence authority.

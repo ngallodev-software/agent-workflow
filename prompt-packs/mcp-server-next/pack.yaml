@@ -1,5 +1,7 @@
 schema: agent-workflow/pack/v1
 pack_id: "mcp-server-next"
+backlog_items:
+  - "MCP-003"
 workflow:
   name: agent-workflow
   minimum_version: "0.2.2"

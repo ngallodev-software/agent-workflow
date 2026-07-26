@@ -6,13 +6,16 @@ tasks:
     tier: B
     session: "mcp-server-next-baseline"
     prompt: "tickets/MCP3-00-workflow-baseline.md"
+    backlog_id: "MCP-003"
   - id: "MCP3-01"
     tier: A
     session: "mcp-server-next-safe-mutation"
     prompt: "tickets/MCP3-01-workflow-aware-tools.md"
+    backlog_id: "MCP-003"
     dependencies: ["MCP3-00"]
   - id: "MCP3-02"
     tier: A
     session: "mcp-server-next-review"
     prompt: "tickets/MCP3-02-independent-review.md"
+    backlog_id: "MCP-003"
     dependencies: ["MCP3-01"]

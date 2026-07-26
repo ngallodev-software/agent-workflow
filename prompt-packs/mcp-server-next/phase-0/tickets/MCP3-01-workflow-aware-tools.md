@@ -1,5 +1,7 @@
 # MCP3-01 — workflow-aware safe mutation tools
 
+> **Execution prerequisite:** Do not execute this ticket until `HARD-004`, `HARD-005`, and `HARD-007` are accepted and integrated. `MCP-003` is the only backlog item owned by this pack.
+
 ## Goal
 
 Add the minimal remaining stdio MCP mutation tools by wrapping authoritative

@@ -1,0 +1,24 @@
+phase: "0"
+name: "trust-drift-supply-chain-compatibility"
+mandatory_order: []
+tasks:
+  - id: "HARD-007"
+    tier: A
+    session: "hardening-authenticated-principals"
+    prompt: "tickets/HARD-007-authenticated-principals.md"
+    backlog_id: "HARD-007"
+  - id: "HARD-009"
+    tier: B
+    session: "hardening-generated-drift-gate"
+    prompt: "tickets/HARD-009-generated-inventories-drift-gate.md"
+    backlog_id: "HARD-009"
+  - id: "HARD-010"
+    tier: A
+    session: "hardening-supply-chain"
+    prompt: "tickets/HARD-010-supply-chain-integrity.md"
+    backlog_id: "HARD-010"
+  - id: "REL-003"
+    tier: B
+    session: "release-clean-host-compatibility"
+    prompt: "tickets/REL-003-clean-host-compatibility.md"
+    backlog_id: "REL-003"

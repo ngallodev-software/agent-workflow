@@ -1,5 +1,7 @@
 # MCP mutation phase master implementation prompt
 
+> **Execution prerequisite:** Do not execute this ticket until `HARD-004`, `HARD-005`, and `HARD-007` are accepted and integrated. `MCP-003` is the only backlog item owned by this pack.
+
 Read the current workflow services, receipts, routing policy, MCP documentation, testing policy, and all phase tickets before editing.
 
 Implement the smallest useful local-stdio mutation surface. Every MCP tool must call an existing validated service used by the CLI or a transport-neutral service added for both CLI and MCP. MCP must never parse or mutate workflow/run state directly.
