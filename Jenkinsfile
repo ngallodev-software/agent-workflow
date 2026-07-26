@@ -35,7 +35,9 @@ pipeline {
         }
         stage('Test and release checks') {
             steps {
-                sh './scripts/release-check.sh'
+                withEnv(['PIP_IGNORE_INSTALLED=1']) {
+                    sh './scripts/release-check.sh'
+                }
             }
         }
         stage('Build') {
