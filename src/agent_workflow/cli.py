@@ -376,10 +376,14 @@ def build_parser() -> argparse.ArgumentParser:
     scaffold.add_argument("--name")
 
     validate = pack_commands.add_parser(
-        "validate", help="validate pack structure and checksums"
+        "validate", help="validate pack structure and contracts"
     )
     validate.add_argument("source", type=Path)
-    validate.add_argument("--skip-checksums", action="store_true")
+    validate.add_argument(
+        "--verify-checksums",
+        action="store_true",
+        help="verify an optional MANIFEST.sha256 before transfer",
+    )
 
     checksum = pack_commands.add_parser("checksum", help="write MANIFEST.sha256")
     checksum.add_argument("source", type=Path)
@@ -878,7 +882,7 @@ def main(argv: list[str] | None = None) -> int:
             elif args.pack_command == "validate":
                 report = validate_pack(
                     absolute_path(args.source),
-                    verify_checksums=not args.skip_checksums,
+                    verify_checksums=args.verify_checksums,
                 )
                 data = report.as_dict()
                 if args.json:

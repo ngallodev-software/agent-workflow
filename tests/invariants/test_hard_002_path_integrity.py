@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import socket
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -50,6 +51,32 @@ def test_archive_is_reproducible_and_manifest_covers_validated_inventory(tmp_pat
     archive(defaults(), pack, first)
     archive(defaults(), pack, second)
     assert hashlib.sha256(first.read_bytes()).digest() == hashlib.sha256(second.read_bytes()).digest()
+
+
+def test_pack_validation_treats_checksum_manifest_as_optional_transfer_state(tmp_path: Path) -> None:
+    pack = tmp_path / "valid"
+    scaffold(pack, 1, "valid")
+    (pack / "MANIFEST.sha256").write_text("stale checksum\n", encoding="utf-8")
+
+    assert validate_pack(pack).ok
+    verified = validate_pack(pack, verify_checksums=True)
+    assert not verified.ok
+    assert any("MANIFEST.sha256" in error for error in verified.errors)
+
+
+def test_archive_excludes_mutable_checksum_sidecar(tmp_path: Path) -> None:
+    pack = tmp_path / "valid"
+    scaffold(pack, 1, "valid")
+    (pack / "MANIFEST.sha256").write_text("stale checksum\n", encoding="utf-8")
+    output = tmp_path / "pack.tar.zst"
+    archive(defaults(), pack, output)
+
+    compressed = subprocess.run(["zstd", "-dc", str(output)], check=True, capture_output=True)
+    listing = subprocess.run(
+        ["tar", "-tf", "-"], input=compressed.stdout, check=True, capture_output=True
+    ).stdout.decode("utf-8")
+    assert "MANIFEST.sha256" not in listing
+    assert "MANIFEST.json" in listing
 
 
 def test_archive_rejects_a_replaced_entry_after_inventory(tmp_path: Path) -> None:

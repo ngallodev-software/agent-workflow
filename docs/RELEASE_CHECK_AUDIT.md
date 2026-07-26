@@ -13,8 +13,8 @@ description: Audit of release-check.sh coverage against P0 blockers and evidence
 - **Evidence:** Implicit (trap runs before exit)
 - **BACKLOG mapping:** None directly, but supports clean reproducible builds
 
-### 2. Release Asset Audit with Manifest
-- **Check:** `python3 scripts/audit-release-assets.py --write-manifest` followed by `python3 scripts/audit-release-assets.py`
+### 2. Release Asset Audit
+- **Check:** `python3 scripts/audit-release-assets.py`
 - **Validates:**
   - All repository files are present and correctly enumerated
   - Text integrity (no NUL bytes, no CRLF line endings)
@@ -29,8 +29,8 @@ description: Audit of release-check.sh coverage against P0 blockers and evidence
   - Documentation mirror groups stay synchronized
   - Shell entrypoint executability
   - Markdown link resolution (no broken local links)
-  - SHA256 manifest completeness and checksum integrity
-- **Evidence:** Manifest file (MANIFEST.sha256) with SHA256 per file; audit script prints "release assets: valid"
+  - ignored/generated checksum files are excluded from repository cleanliness checks
+- **Evidence:** audit script prints "release assets: valid"; transfer archives carry their own canonical manifest and optional sidecar checksum
 - **BACKLOG mapping:** None directly, but foundational for reproducible distribution
 
 ### 3. Python Compile Check
@@ -183,11 +183,11 @@ This closes the local pipeline execution failure, not the public release gates. 
 
 | Check | Type | Reproducibility | Reviewer Proof |
 |---|---|---|---|---|
-| Release asset audit | **Objective** | Fully reproducible; deterministic file list and hash verification | SHA256 manifest diffs; no human judgment required |
+| Release asset audit | **Objective** | Fully reproducible; deterministic source inventory and syntax/link checks | Audit exit code; transfer archive manifest/checksum when an archive is produced |
 | Python compile | **Objective** | Fully reproducible; deterministic syntax check | compileall exit code; file-by-file validation |
 | Shell syntax | **Objective** | Fully reproducible; deterministic AST check | bash -n exit code per file |
 | Test suite | **Mostly objective** | Reproducible if executor/model output is seeded; pytest journals events | Test output, sealed evidence from executor runs, acceptance journey state |
-| Pack validation | **Objective** | Reproducible if pack structure is static | pack validate exit code; pack manifest verification |
+| Pack validation | **Objective** | Reproducible if pack structure is static | pack validate exit code; optional transfer checksum verification |
 | JSON Schema syntax | **Objective** | Fully reproducible; deterministic validation | JSON schema validator exit code |
 | License presence | **Objective** | Fully reproducible; file existence check | LICENSE file existence |
 | Vulnerability channel | **Partly subjective** | Heuristic pattern matching (email, security contact); human review still needed | SECURITY.md text search + manual review of actual contact mechanism |
@@ -196,7 +196,7 @@ This closes the local pipeline execution failure, not the public release gates. 
 ### Durability of Evidence
 
 - **Permanent (suitable for release archive):**
-  - SHA256 manifest (MANIFEST.sha256 file)
+  - Archive `MANIFEST.json` and optional archive sidecar SHA256
   - Test output from acceptance suite (pytest JSON report)
   - Sealed evidence from live executor runs (in XDG state directory)
   - License file copy
@@ -213,8 +213,8 @@ This closes the local pipeline execution failure, not the public release gates. 
    pytest --json-report --json-report-file=release-test-results.json
    ```
 
-2. **Seal the manifest and license** in release artifacts:
-   - Commit MANIFEST.sha256 to git (already done)
+2. **Seal the archive manifest and license** in release artifacts:
+   - Generate a transfer checksum only when producing the archive
    - Include LICENSE in distribution package (setuptools does this automatically)
 
 3. **Document live compatibility runs** as a separate gate:

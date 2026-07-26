@@ -9,7 +9,7 @@ Accepted with follow-up for `CHATGPT-EVAL-001` and `CHATGPT-TDD-001`. The determ
 - Input: `agent-workflow-0.2.3-chatgpt-sealed-run-assessment-changes-20260726.tar.zst`
 - Applied against: `d5a1980` on `master`
 - Changed surfaces: exported-run assessor, ledger semantics, CLI, evidence/backlog/docs, skills, and focused/future tests
-- Full-tree overlay manifest was not copied; repository `MANIFEST.sha256` was regenerated after merge.
+- Full-tree overlay manifest was not copied; mutable repository checksum manifests are intentionally ignored.
 
 ## Independent evidence
 

@@ -111,12 +111,12 @@ agent-workflow ledger PACK [--runs-root PATH] [--output PATH]
 
 ```text
 agent-workflow pack scaffold DEST [--phases N] [--name NAME]
-agent-workflow pack validate SOURCE [--skip-checksums]
+agent-workflow pack validate SOURCE [--verify-checksums]
 agent-workflow pack checksum SOURCE
 agent-workflow pack archive SOURCE OUTPUT.tar.zst
 ```
 
-Validation checks required files, manifests, cross-phase dependency DAGs, result contracts, paths, checksums, and bounded portable assets. Archive creation is deterministic when GNU tar and zstd are available.
+Validation checks required files, manifests, cross-phase dependency DAGs, result contracts, paths, and bounded portable assets. It does not require the ignored `MANIFEST.sha256`, which would become stale during implementation. `--verify-checksums` opts into checking that transfer artifact; `pack checksum` creates it. Archive creation is deterministic when GNU tar and zstd are available.
 
 ## MCP entry point
 

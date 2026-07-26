@@ -129,7 +129,7 @@ def _find_dependency_cycle(graph: dict[str, list[str]]) -> list[str] | None:
     return None
 
 
-def validate_pack(root: Path, verify_checksums: bool = True) -> ValidationReport:
+def validate_pack(root: Path, verify_checksums: bool = False) -> ValidationReport:
     root = absolute_path(root)
     report = ValidationReport(root=root)
     try:

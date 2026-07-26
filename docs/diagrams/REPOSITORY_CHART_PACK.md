@@ -395,10 +395,10 @@ flowchart LR
 ```mermaid
 flowchart LR
   Source[Git source checkout] --> Audit[audit-release-assets.py]
-  Audit --> Manifest[MANIFEST.sha256]
+  Audit --> ArchiveManifest[archive MANIFEST.json]
   Source --> Tests[installed-wheel acceptance + invariant matrices]
   Source --> Static[release/schema/shell/compile checks]
-  Manifest --> ReleaseCheck[scripts/release-check.sh]
+  ArchiveManifest --> ReleaseCheck[scripts/release-check.sh]
   Tests --> ReleaseCheck
   Static --> ReleaseCheck
   ReleaseCheck --> Archive[deterministic tar.zst + SHA-256]

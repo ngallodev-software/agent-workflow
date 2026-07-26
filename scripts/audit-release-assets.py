@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import re
 import stat
@@ -35,7 +34,7 @@ EXCLUDED_DIRS = {
     "templates.orig",
     "testing-output",
 }
-EXCLUDED_FILES = {".coverage", "MANIFEST.sha256"}
+EXCLUDED_FILES = {".coverage", "docs/BACKLOG.html"}
 
 
 def release_files(root: Path = ROOT) -> tuple[Path, ...]:
@@ -51,7 +50,7 @@ def release_files(root: Path = ROOT) -> tuple[Path, ...]:
             continue
         if any(part == ".git" for part in rel.parts):
             continue
-        if rel.name in EXCLUDED_FILES or rel.suffix in {".pyc", ".sha256", ".zst"}:
+        if rel.as_posix() in EXCLUDED_FILES or rel.suffix in {".pyc", ".sha256", ".zst"}:
             continue
         files.append(path)
     return tuple(sorted(files))
@@ -80,8 +79,6 @@ def parse_frontmatter(path: Path) -> dict[str, str]:
             continue
         data[key.strip()] = value.strip().strip('"\'')
     return data
-
-
 
 
 def _unquote(value: str) -> str:
@@ -240,24 +237,9 @@ def main(argv: list[str] | None = None) -> int:
     global errors
     errors = []
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--write-manifest",
-        action="store_true",
-        help="regenerate the repository release manifest before validating it",
-    )
     args = parser.parse_args(argv)
     release_files_root = ROOT
     release_files_list = release_files(release_files_root)
-
-    if args.write_manifest:
-        manifest_lines = [
-            f"{hashlib.sha256(path.read_bytes()).hexdigest()}  "
-            f"{path.relative_to(ROOT).as_posix()}"
-            for path in release_files_list
-        ]
-        (ROOT / "MANIFEST.sha256").write_text(
-            "\n".join(manifest_lines) + "\n", encoding="utf-8"
-        )
 
     # Basic text integrity and placeholder policy.
     for path in release_files_list:
@@ -478,32 +460,6 @@ def main(argv: list[str] | None = None) -> int:
 
     # Canonical backlog/prompt-pack ownership and drift policy.
     _audit_backlog_and_prompt_pack_ownership()
-
-    # Manifest must cover every regular non-symlink file except itself.
-    manifest = ROOT / "MANIFEST.sha256"
-    if manifest.is_file():
-        listed: dict[str, str] = {}
-        for number, line in enumerate(manifest.read_text(encoding="utf-8").splitlines(), 1):
-            digest, sep, rel = line.partition("  ")
-            if not sep or len(digest) != 64:
-                fail(f"MANIFEST.sha256:{number}: malformed line")
-                continue
-            if rel in listed:
-                fail(f"MANIFEST.sha256:{number}: duplicate path {rel}")
-            listed[rel] = digest
-        actual = {
-            path.relative_to(ROOT).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
-            for path in release_files_list
-        }
-        for rel in sorted(actual.keys() - listed.keys()):
-            fail(f"MANIFEST.sha256: missing file {rel}")
-        for rel in sorted(listed.keys() - actual.keys()):
-            fail(f"MANIFEST.sha256: lists nonexistent file {rel}")
-        for rel in sorted(actual.keys() & listed.keys()):
-            if actual[rel] != listed[rel]:
-                fail(f"MANIFEST.sha256: checksum mismatch for {rel}")
-    else:
-        fail("MANIFEST.sha256: missing")
 
     if errors:
         for error in errors:

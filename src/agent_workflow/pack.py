@@ -9,7 +9,7 @@ from .assets import copy_asset_tree
 from .config import Settings
 from .contracts import validate_instance
 from .errors import WorkflowError
-from .manifests import validate_pack, write_checksum_manifest
+from .manifests import validate_pack
 from .path import absolute_path, read_inventory_file
 from .process import require_command, run
 from .util import expand_path, sha256_file, slug
@@ -72,7 +72,6 @@ def scaffold(
         for script in scripts_dir.glob("*.sh"):
             script.chmod(script.stat().st_mode | 0o111)
 
-    write_checksum_manifest(destination)
     return {
         "destination": str(destination),
         "phases": phases,
@@ -90,7 +89,7 @@ def archive(
     if output.suffixes[-2:] != [".tar", ".zst"]:
         raise WorkflowError("archive output must end in .tar.zst")
 
-    report = validate_pack(source, verify_checksums=True)
+    report = validate_pack(source, verify_checksums=False)
     if not report.ok:
         raise WorkflowError(
             "prompt pack validation failed:\n- " + "\n- ".join(report.errors)
@@ -103,7 +102,9 @@ def archive(
         staged_parent = Path(tmp)
         staged = staged_parent / source.name
         staged.mkdir()
-        inventory = tuple(report.inventory)
+        # MANIFEST.sha256 is a mutable, ignored transfer sidecar. The archive's
+        # canonical MANIFEST.json must describe the bytes actually archived.
+        inventory = tuple(entry for entry in report.inventory if entry.path != "MANIFEST.sha256")
         if any(entry.path == "MANIFEST.json" for entry in inventory):
             raise WorkflowError("pack entry MANIFEST.json is reserved for archive integrity")
         for entry in inventory:

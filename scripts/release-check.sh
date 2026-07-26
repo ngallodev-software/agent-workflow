@@ -14,7 +14,6 @@ cleanup_bytecode() {
 trap cleanup_bytecode EXIT
 cleanup_bytecode
 
-python3 scripts/audit-release-assets.py --write-manifest
 python3 scripts/audit-release-assets.py
 python3 -m compileall -q src tests scripts
 bash -n install.sh uninstall.sh bin/agent-workflow scripts/*.sh

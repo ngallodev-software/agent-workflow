@@ -17,7 +17,6 @@ pack/
 ├── EXECUTION_PROTOCOL.md
 ├── DELEGATION_RUNBOOK.md
 ├── pack.yaml
-├── MANIFEST.sha256
 ├── phase-0/
 │   ├── README.md
 │   ├── MASTER_IMPLEMENTATION_PROMPT.md
@@ -36,7 +35,7 @@ agent-workflow pack validate ./pack
 agent-workflow pack archive ./pack ./pack.tar.zst
 ```
 
-Repository-owned packs additionally pass `python3 scripts/audit-release-assets.py`, which validates backlog ownership, task-ID uniqueness, active-pack documentation, skill integration, links, mirrors, and checksums.
+Repository-owned packs additionally pass `python3 scripts/audit-release-assets.py`, which validates backlog ownership, task-ID uniqueness, active-pack documentation, skill integration, links, and mirrors. A `MANIFEST.sha256` is an optional ignored transfer artifact; it is not required while a pack is being edited.
 
 ## Task manifests and ownership
 
@@ -103,6 +102,8 @@ The dependency/collision rationale is in [Determinism and security hardening pla
 The pack describes work; it does not override runtime policy. Agent class, executor, model, authenticated principal, permissions, no-go authorization, worktree safety, sandbox policy, lifecycle controls, and backlog state remain enforced by application services and human decisions.
 
 `docs/references/EXECUTION_PROTOCOL.md` and `docs/references/DELEGATION_RUNBOOK.md` are the canonical portable files mirrored into scaffold assets. Update those conditional steering references first and run the release audit to detect drift.
+
+Use `agent-workflow pack checksum` only when preparing a pack for transfer or unarchiving verification.
 
 ## Migration and maintenance
 

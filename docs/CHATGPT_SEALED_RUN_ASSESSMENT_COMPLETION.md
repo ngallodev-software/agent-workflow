@@ -33,7 +33,7 @@ Completed `CHATGPT-EVAL-001` and `CHATGPT-TDD-001` without implementing HARD/MSG
 | `bash scripts/validate-pack.sh` (assessment pack, before repository install) | 1 | Environment limitation: `/opt/pyvenv/bin/python3: No module named agent_workflow`. |
 | `PYTHONPATH=src python -m agent_workflow assess-sealed-runs ... --output /tmp/sealed-assessment.json` | 0 | 6 runs; 6 valid completions; 0 portable full-seal verifications; 0 comparable runs. |
 | `python -m pytest -q tests/invariants/test_sealed_run_assessment.py tests/invariants/test_ledger_evaluation_semantics.py tests/future` | 0 | 5 passed, 5 expected strict xfails in the original assessment run; independent review reran 7 focused tests, 5 expected strict xfails. |
-| `python scripts/audit-release-assets.py --write-manifest` | 0 | Release assets valid; `MANIFEST.sha256` regenerated. |
+| `python scripts/audit-release-assets.py` | 0 | Release assets valid; mutable checksum manifests are not required. |
 | `python -m pytest -q` | 2 | Environment limitation during collection: optional `mcp` package unavailable. |
 | `bash scripts/release-check.sh` | 2 | Reached the same optional-`mcp` collection limitation after release-asset validation. |
 

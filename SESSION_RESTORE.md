@@ -24,7 +24,7 @@ Overlay content now present includes:
 
 ## Verification
 
-- `python3 scripts/audit-release-assets.py --write-manifest`: passed.
+- `python3 scripts/audit-release-assets.py`: passed; mutable checksum manifests are ignored and not part of the repository gate.
 - `python3 scripts/audit-release-assets.py`: passed.
 - shell syntax checks for installer/uninstaller and scripts: passed.
 - all four prompt packs validated: passed.

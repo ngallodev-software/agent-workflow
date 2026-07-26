@@ -41,6 +41,7 @@ def test_prompt_pack_scaffold_validate_and_archive_round_trip_is_deterministic(
     )
     assert scaffold["phases"] == 2
     assert (pack / "phase-0" / "task-manifest.yaml").is_file()
+    assert not (pack / "MANIFEST.sha256").exists()
 
     validation = installed_product.json("pack", "validate", pack, env=product_env)
     assert validation["ok"] is True

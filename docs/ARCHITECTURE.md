@@ -155,7 +155,7 @@ See [Security](SECURITY.md) and [MCP server](MCP_SERVER.md).
 
 The default test authority is the installed product, not private Python helpers. Acceptance tests build a wheel, install it into an isolated virtual environment, and invoke public executables across real process, Git, and filesystem boundaries. A compact invariant layer covers security, replay, scheduler, provider-accounting, and cohort rules that need exhaustive matrices. Strict future tests describe approved backlog outcomes; live tmux/provider compatibility is opt-in. See [Testing](TESTING.md).
 
-Release assets are checked by `scripts/audit-release-assets.py`; `MANIFEST.sha256` must cover every distributable file. The release gate runs tests, compile checks, shell syntax checks, prompt-pack validation, manifest verification, and deterministic archive tooling checks. Third-party MCP SDK source is not vendored or packaged; only the pinned optional dependency and dependency record remain.
+Release assets are checked by `scripts/audit-release-assets.py`; no mutable `MANIFEST.sha256` is required in the source tree. Prompt-pack transfer checksums are opt-in, while deterministic archives carry their own canonical `MANIFEST.json`. The release gate runs tests, compile checks, shell syntax checks, prompt-pack validation, and deterministic archive tooling checks. Third-party MCP SDK source is not vendored or packaged; only the pinned optional dependency and dependency record remain.
 
 The repository is pre-public-release. License, reporting, supported-host, and release-ownership decisions remain blockers in [Public release readiness](PUBLIC_RELEASE_READINESS.md).
 

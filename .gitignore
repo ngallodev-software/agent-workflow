@@ -13,5 +13,4 @@ testing-output/
 .delegations/
 *.tar.zst
 *.sha256
-!MANIFEST.sha256
-!examples/three-phase-pack/MANIFEST.sha256
+docs/BACKLOG.html
