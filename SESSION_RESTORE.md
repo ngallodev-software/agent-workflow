@@ -44,7 +44,7 @@ The global install intentionally used only the `mcp` extra. Installing the optio
 
 ## Working tree and next work
 
-The overlay changes are committed in `a62a24c`; the handoff refresh follows in the latest commit, and the checkout is clean and seven commits ahead of `origin/master`. Do not modify tests unless explicitly authorized. Next work is the P0 hardening sequence: HARD-001/HARD-002 first, then HARD-004/HARD-005, followed by the isolation, identity, drift, and supply-chain gates. Keep MCP-003 blocked until its prerequisites are accepted.
+The overlay changes are committed in `a62a24c`; the handoff refresh follows in later commits, and the checkout is clean. Do not modify tests unless explicitly authorized. Next work is the P0 hardening sequence: HARD-001/HARD-002 first, then HARD-004/HARD-005, followed by the isolation, identity, drift, and supply-chain gates. Keep MCP-003 blocked until its prerequisites are accepted.
 
 Useful restart commands:
 
