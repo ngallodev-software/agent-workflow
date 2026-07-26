@@ -12,6 +12,7 @@ from typing import Any
 
 from ..config import Settings, load_settings
 from ..errors import WorkflowError
+from ..path import absolute_path
 from .services import PackValidationRequest, PageRequest, ServiceError, WorkflowReadService
 
 
@@ -21,7 +22,7 @@ def _json(value: Any) -> str:
 
 def _repo_root(value: str | None) -> Path:
     candidate = Path(value or os.environ.get("AGENT_WORKFLOW_MCP_REPO_ROOT", Path.cwd()))
-    return candidate.expanduser().resolve()
+    return absolute_path(candidate)
 
 
 def _service_result(call: Any) -> Any:

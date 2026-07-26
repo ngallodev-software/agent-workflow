@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/pack-manifest/v1",
+  "type": "object",
+  "required": ["schema", "mode_policy", "entries"],
+  "properties": {
+    "schema": {"const": "agent-workflow/pack-manifest/v1"},
+    "mode_policy": {
+      "type": "object",
+      "required": ["directory", "file"],
+      "properties": {
+        "directory": {"const": "0755"},
+        "file": {"const": "0644"}
+      },
+      "additionalProperties": false
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "path", "size", "mode"],
+        "properties": {
+          "type": {"enum": ["directory", "file"]},
+          "path": {"type": "string", "pattern": "^[^/].*[^/]$|^[^/]$"},
+          "size": {"type": "integer", "minimum": 0},
+          "mode": {"enum": ["0755", "0644"]},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        },
+        "allOf": [
+          {
+            "if": {"properties": {"type": {"const": "file"}}},
+            "then": {"required": ["sha256"], "properties": {"mode": {"const": "0644"}}}
+          },
+          {
+            "if": {"properties": {"type": {"const": "directory"}}},
+            "then": {"properties": {"mode": {"const": "0755"}}}
+          }
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

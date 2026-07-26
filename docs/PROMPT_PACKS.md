@@ -2,6 +2,13 @@
 
 A prompt pack is a portable, reviewable execution plan for bounded delegated work. It contains phase manifests, ticket prompts, execution rules, evidence templates, and deterministic checksums.
 
+Pack roots are validated component-by-component without following links. Only
+regular files and directories are accepted; symlinks, hard-linked files, FIFOs,
+sockets, devices, and type changes are rejected and reported by relative entry
+name. Archive staging consumes the exact validated inventory and adds a typed,
+canonical `MANIFEST.json` with normalized paths, sizes, mode policy, and file
+digests.
+
 ## Canonical structure
 
 ```text

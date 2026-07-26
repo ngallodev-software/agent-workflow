@@ -36,7 +36,7 @@ target repository/worktree
 | Durable state | `state.py`, `events.py`, `messages.py`, `ledger.py` | status projections, append-only lifecycle/control records, ledgers |
 | Evidence | `receipts.py`, `metrics.py`, `provider_evidence.py`, `lifecycle.py` | final seals, metrics, provider usage, review/accept/reject receipts |
 | Workflows | `workflow.py`, `scheduler.py`, `workflow_service.py`, `approval.py`, `bindings.py`, `workflow_receipt.py`, `workflow_templates.py`, `routing.py` | graph validation/replay, scheduling, approvals, result binding, aggregate seals, templates, advice |
-| Prompt packs | `pack.py`, `manifests.py`, `native_jobs.py`, `contracts.py` | scaffold, DAG validation, checksums/archive, structured results |
+| Prompt packs | `pack.py`, `manifests.py`, `native_jobs.py`, `contracts.py`, `path.py` | scaffold, no-follow inventory validation, checksums/archive, structured results |
 | Evaluation | `evaluation.py`, `eval/*`, `inspect_adapter.py`, `integrations/*` | collectors, scoring, immutable trials, cohort comparison, optional adapters |
 | MCP | `mcp/server.py`, `mcp/services.py` | optional bounded read-only stdio adapter over shared read services |
 | Tests | `tests/acceptance`, `tests/invariants`, `tests/future`, `tests/live`, `tests/release` | installed-product journeys, compact authority matrices, executable future specifications, live compatibility, and distribution checks |
@@ -132,14 +132,15 @@ Raw executor events must be stable regular non-symlink files, are capped at 16 M
 
 ## MCP boundary
 
-The current MCP server is optional, local stdio, and read-only except for pack validation. It uses the public pinned `mcp` package and bounded shared read services. It exposes no launch, workflow mutation, lifecycle mutation, raw shell, tmux, arbitrary paths, terminal capture, or HTTP transport.
+The current MCP server is optional, local stdio, and read-only except for pack validation. It uses the public pinned `mcp` package and bounded shared read services. Configured repository/state roots and pack paths are checked component-by-component without following links; unsafe entries fail closed. It exposes no launch, workflow mutation, lifecycle mutation, raw shell, tmux, arbitrary paths, terminal capture, or HTTP transport.
 
 The current and planned boundary is in [MCP server](MCP_SERVER.md). Future tools must add durable idempotency and call existing services. Streamable HTTP requires a separate authorization ADR.
 
 ## Security posture
 
 - schema, ID, type, size, and path validation at every external boundary;
-- configured-root containment after resolution and symlink rejection;
+- component-wise no-follow traversal and configured-root containment for pack, native-job, prompt, and MCP paths;
+- packaged schemas are the sole runtime contract authority; duplicate IDs, malformed assets, and missing assets fail closed. Source-checkout lookup is selected only when the executing package is the checkout; migration lookup is not runtime schema resolution;
 - atomic writes and append/fsync-before-projection event ordering;
 - canonical receipts are regular, non-symlink, read-only files; sealed authority inputs are reopened only through receipt-matched beneath-root descriptors;
 - prompt/source/config/command/artifact SHA-256 provenance;

@@ -19,13 +19,16 @@ The project is pre-public-release and does not yet have a monitored public vulne
 - Provider usage fails closed on mixed modes, conflicting identities, malformed totals, or incomplete cost metadata.
 - MCP is optional, local stdio, bounded to configured roots, and currently read-only.
 - Repository-owned subprocesses use one argv-only substrate with process-group timeout/cancellation, per-stream caps, controlled environments, executable identity, and configured-value/secret-argument redaction.
+- Prompt packs, native jobs, prompts, and MCP repository/state roots use component-wise no-follow traversal; irregular entries and content changes during validation are rejected. Pack archives are built from the validated inventory and include a typed canonical manifest.
+- Runtime schemas come only from the executing source checkout or installed package asset set; duplicate IDs, malformed assets, and missing packaged assets fail closed.
 - The project does not automatically merge, delete failed worktrees, terminate suspected stalls, expose remote execution, or authorize network MCP transport.
 
 ## Known pre-public limitations
 
 These are active release blockers, not theoretical future hardening:
 
-- prompt-pack/native-job/schema/MCP path integrity is not yet uniformly no-follow and content-complete (`HARD-002`, `HARD-005`);
+- subprocess calls are not yet uniformly bounded by timeout, output cap, sanitized environment, and process-group cancellation (`HARD-001`);
+- MCP read bodies remain metadata-minimal and bounded work for `HARD-005`; pack/native-job/schema path integrity enforcement is implemented by `HARD-002` and still requires the integrated phase gate evidence;
 - writable-path policy for untrusted commands is primarily post-run detection rather than a preventative OS sandbox (`HARD-003`);
 - some runner/evaluation decisions still depend on mutable status projections rather than one immutable launch authority (`HARD-004`);
 - default sensitive-content classification, redaction, and retention controls are incomplete (`HARD-006`);

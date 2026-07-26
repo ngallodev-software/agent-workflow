@@ -10,8 +10,9 @@ from ..config import Settings
 from ..errors import WorkflowError
 from ..manifests import validate_pack
 from ..messages import replay_messages
+from ..path import absolute_path, inventory_tree, require_directory
 from ..state import list_statuses, read_status, run_dir, runs_root
-from ..util import sha256_file, validate_id
+from ..util import validate_id
 
 T = TypeVar("T")
 MAX_PAGE_SIZE = 100
@@ -90,26 +91,31 @@ def _validated_run_root(settings: Settings, session_id: str) -> Path:
         validate_id(session_id, "session ID")
     except WorkflowError as exc:
         raise ServiceError("invalid_identifier", "invalid session identifier") from exc
-    base = runs_root(settings).resolve()
+    try:
+        base = require_directory(runs_root(settings), label="configured state run root")
+    except WorkflowError as exc:
+        raise ServiceError("forbidden_root", "configured state root is unsafe") from exc
     candidate = run_dir(settings, session_id)
-    if candidate.is_symlink():
-        raise ServiceError("forbidden_root", "run root must not be a symlink")
-    resolved = candidate.resolve()
+    resolved = absolute_path(candidate)
     try:
         resolved.relative_to(base)
     except ValueError as exc:
         raise ServiceError("forbidden_root", "run root escapes configured state root") from exc
-    if not resolved.is_dir():
+    try:
+        require_directory(resolved, label="run root")
+    except WorkflowError as exc:
         raise ServiceError("not_found", "run not found")
     return resolved
 
 
 def contained_path(root: Path, value: str, label: str) -> Path:
-    base = root.expanduser().resolve()
+    base = require_directory(root, label="configured repository root")
     candidate = Path(value).expanduser()
     if not candidate.is_absolute():
         candidate = base / candidate
-    resolved = candidate.resolve()
+    resolved = absolute_path(candidate)
+    if any(part == ".." for part in resolved.parts):
+        raise ServiceError("forbidden_root", f"{label} escapes configured root")
     try:
         resolved.relative_to(base)
     except ValueError as exc:
@@ -120,8 +126,9 @@ def contained_path(root: Path, value: str, label: str) -> Path:
 class WorkflowReadService:
     def __init__(self, settings: Settings, *, repository_root: Path):
         self.settings = settings
-        self.repository_root = repository_root.expanduser().resolve()
-        if not self.repository_root.is_dir():
+        try:
+            self.repository_root = require_directory(repository_root, label="configured repository root")
+        except WorkflowError as exc:
             raise ServiceError("invalid_configuration", "configured repository root is not a directory")
 
     def list_runs(self, request: PageRequest = PageRequest()) -> Page[dict[str, Any]]:
@@ -149,14 +156,17 @@ class WorkflowReadService:
     ) -> Page[dict[str, str]]:
         root = _validated_run_root(self.settings, session_id)
         receipt_root = root / "receipts"
-        if receipt_root.is_symlink():
-            raise ServiceError("forbidden_root", "receipt root must not be a symlink")
+        try:
+            receipt_inventory = inventory_tree(receipt_root)
+        except WorkflowError as exc:
+            if not receipt_root.exists() and not receipt_root.is_symlink():
+                receipt_inventory = ()
+            else:
+                raise ServiceError("forbidden_root", "receipt tree contains an unsafe entry") from exc
         values: list[dict[str, str]] = []
-        if receipt_root.is_dir():
-            for path in sorted(receipt_root.glob("[0-9]*-*.json")):
-                if path.is_symlink() or not path.is_file():
-                    continue
-                values.append({"name": path.name, "sha256": sha256_file(path)})
+        for entry in receipt_inventory:
+            if entry.kind == "file" and Path(entry.path).match("[0-9]*-*.json"):
+                values.append({"name": entry.path, "sha256": str(entry.sha256)})
         return _page(request, values)
 
     def validate_pack(self, request: PackValidationRequest) -> dict[str, Any]:

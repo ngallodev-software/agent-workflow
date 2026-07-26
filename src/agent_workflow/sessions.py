@@ -50,6 +50,7 @@ from .util import (
     utc_now,
     validate_id,
 )
+from .path import absolute_path, read_regular_file, require_directory
 
 
 def _ignore_delegations(workdir: Path) -> None:
@@ -198,7 +199,11 @@ def _write_runner(
 
 def _discover_prompt_pack_root(prompt_source: Path) -> Path | None:
     for candidate in prompt_source.parents:
-        if (candidate / "pack.yaml").is_file():
+        try:
+            read_regular_file(candidate / "pack.yaml")
+        except WorkflowError:
+            continue
+        else:
             return candidate
     return None
 
@@ -207,7 +212,7 @@ def _pack_id(pack_root: Path) -> str:
     """Read the deliberately small, stable identity field from pack.yaml."""
     pack_file = pack_root / "pack.yaml"
     try:
-        for line in pack_file.read_text(encoding="utf-8").splitlines():
+        for line in read_regular_file(pack_file).data.decode("utf-8").splitlines():
             key, separator, value = line.partition(":")
             if key.strip() == "pack_id" and separator and value.strip():
                 return value.strip().strip("\"'")
@@ -228,17 +233,17 @@ def _bind_native_job(
     pack_root = _discover_prompt_pack_root(prompt_path)
     if pack_root is None:
         raise WorkflowError("--job requires a prompt under a selected prompt pack")
-    job = validate_native_job(expand_path(job_path), pack_root=pack_root)
-    if job.prompt_path != prompt_path.resolve():
+    job = validate_native_job(absolute_path(job_path), pack_root=pack_root)
+    if job.prompt_path != absolute_path(prompt_path):
         raise WorkflowError(
             "native job prompt_path disagrees with launch prompt: "
             f"{job.prompt_relative_path}"
         )
-    expected_workdir = (pack_root / job.worktree_target).resolve()
-    if expected_workdir != workdir.resolve():
+    expected_workdir = require_directory(pack_root / job.worktree_target, label="native job worktree target")
+    if expected_workdir != absolute_path(workdir):
         raise WorkflowError(
             "native job worktree_target disagrees with launch workdir: "
-            f"expected {expected_workdir}, got {workdir.resolve()}"
+            f"expected {expected_workdir}, got {absolute_path(workdir)}"
         )
     if ticket_id is not None and ticket_id != job.ticket_id:
         raise WorkflowError(
@@ -256,8 +261,8 @@ def _write_job_binding(state_dir: Path, job: ValidatedNativeJob, *, session_id: 
     """Snapshot the validated source bytes and write the immutable binding receipt."""
     stored = state_dir / "jobs" / "native-job.json"
     stored.parent.mkdir(parents=True, exist_ok=True)
-    raw = job.job_path.read_bytes()
-    source_sha256 = hashlib.sha256(raw).hexdigest()
+    raw = job.job_bytes
+    source_sha256 = job.job_sha256
     atomic_write_bytes(stored, raw, mode=0o444)
     stored_sha256 = sha256_file(stored)
     if source_sha256 != stored_sha256:
@@ -551,16 +556,17 @@ def launch(
         validate_id(ticket_id, "ticket ID")
     if pack_id:
         validate_id(pack_id, "pack ID")
-    workdir = expand_path(workdir)
-    prompt_path = expand_path(prompt_path)
-    if not workdir.is_dir():
-        raise WorkflowError(f"workdir not found: {workdir}")
-    if not prompt_path.is_file():
-        raise WorkflowError(f"prompt not found: {prompt_path}")
+    workdir = require_directory(absolute_path(workdir), label="workdir")
+    prompt_path = absolute_path(prompt_path)
+    prompt_source = absolute_path(prompt_source_override or prompt_path)
+    try:
+        prompt_read = read_regular_file(prompt_source)
+    except WorkflowError as exc:
+        raise WorkflowError(f"prompt is not a regular file: {prompt_source.name}") from exc
     native_job: ValidatedNativeJob | None = None
     if job_path is not None:
         native_job = _bind_native_job(
-            job_path=job_path, prompt_path=prompt_source_override or prompt_path,
+            job_path=job_path, prompt_path=prompt_source,
             workdir=workdir, ticket_id=ticket_id, pack_id=pack_id,
         )
     if native_job is not None:
@@ -665,8 +671,11 @@ def launch(
     environment_allowlist = list(executor_policy.environment_allowlist) if executor_policy else []
 
     prompt_copy = state_dir / "prompt.md"
-    shutil.copy2(prompt_path, prompt_copy)
-    prompt_source = prompt_source_override or prompt_path
+    atomic_write_bytes(
+        prompt_copy,
+        native_job.prompt_bytes if native_job is not None else prompt_read.data,
+        mode=0o444,
+    )
     prompt_pack_root = (
         prompt_pack_root_override
         if prompt_pack_root_override is not None

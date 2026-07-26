@@ -1,14 +1,16 @@
 from __future__ import annotations
 
-import shutil
+import json
 import tempfile
 from pathlib import Path
 from typing import Any
 
 from .assets import copy_asset_tree
 from .config import Settings
+from .contracts import validate_instance
 from .errors import WorkflowError
 from .manifests import validate_pack, write_checksum_manifest
+from .path import absolute_path, read_inventory_file
 from .process import require_command, run
 from .util import expand_path, sha256_file, slug
 
@@ -83,13 +85,13 @@ def archive(
     source: Path,
     output: Path,
 ) -> dict[str, Any]:
-    source = expand_path(source)
+    source = absolute_path(source)
     output = expand_path(output)
     if output.suffixes[-2:] != [".tar", ".zst"]:
         raise WorkflowError("archive output must end in .tar.zst")
 
-    report = validate_pack(source, verify_checksums=False)
-    if settings.validate_before_archive and not report.ok:
+    report = validate_pack(source, verify_checksums=True)
+    if not report.ok:
         raise WorkflowError(
             "prompt pack validation failed:\n- " + "\n- ".join(report.errors)
         )
@@ -100,8 +102,42 @@ def archive(
     with tempfile.TemporaryDirectory(prefix="agent-workflow-pack-") as tmp:
         staged_parent = Path(tmp)
         staged = staged_parent / source.name
-        shutil.copytree(source, staged, symlinks=True)
-        write_checksum_manifest(staged)
+        staged.mkdir()
+        inventory = tuple(report.inventory)
+        if any(entry.path == "MANIFEST.json" for entry in inventory):
+            raise WorkflowError("pack entry MANIFEST.json is reserved for archive integrity")
+        for entry in inventory:
+            target = staged / entry.path
+            if entry.kind == "directory":
+                target.mkdir(parents=True, exist_ok=True)
+                target.chmod(0o755)
+        for entry in inventory:
+            if entry.kind != "file":
+                continue
+            target = staged / entry.path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            read = read_inventory_file(source, entry)
+            target.write_bytes(read.data)
+            target.chmod(0o644)
+        canonical_manifest = {
+            "schema": "agent-workflow/pack-manifest/v1",
+            "mode_policy": {"directory": "0755", "file": "0644"},
+            "entries": [
+                {
+                    "type": entry.kind,
+                    "path": entry.path,
+                    "size": entry.size,
+                    "mode": "0755" if entry.kind == "directory" else "0644",
+                    **({"sha256": entry.sha256} if entry.kind == "file" else {}),
+                }
+                for entry in inventory
+            ],
+        }
+        validate_instance(canonical_manifest, "agent-workflow/pack-manifest/v1", artifact="archive manifest")
+        (staged / "MANIFEST.json").write_text(
+            json.dumps(canonical_manifest, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
         tar_path = staged_parent / "pack.tar"
         tar_command = [
             "tar",

@@ -15,6 +15,7 @@ from typing import Any
 from .contracts import validate_instance
 from .errors import WorkflowError
 from .eval.commands import CommandSpec, specs_from_data
+from .path import absolute_path, read_regular_file, require_directory
 
 
 NATIVE_JOB_SCHEMA = "agent-workflow/native-job/v1"
@@ -42,6 +43,9 @@ class ValidatedNativeJob:
     job_id: str
     ticket_id: str
     prompt_path: Path
+    prompt_bytes: bytes
+    job_bytes: bytes
+    job_sha256: str
     prompt_relative_path: str
     worktree_target: str
     path_policy: PathPolicy
@@ -53,7 +57,7 @@ def _resolve_relative(root: Path, value: str, label: str) -> Path:
     candidate = Path(value)
     if candidate.is_absolute() or any(part == ".." for part in candidate.parts):
         raise WorkflowError(f"{label} must be a relative path without '..': {value}")
-    resolved = (root / candidate).resolve()
+    resolved = absolute_path(root / candidate)
     try:
         resolved.relative_to(root)
     except ValueError as exc:
@@ -70,13 +74,13 @@ def _validate_policy_path(value: str, label: str) -> str:
     return value
 
 
-def _read_json_job(job_path: Path) -> dict[str, Any]:
+def _read_json_job(job_path: Path, raw: bytes | None = None) -> dict[str, Any]:
     if job_path.suffix.lower() != ".json":
         raise WorkflowError(f"native job must be a .json file: {job_path}")
     try:
-        value = json.loads(job_path.read_text(encoding="utf-8"))
-    except OSError as exc:
-        raise WorkflowError(f"cannot read native job {job_path}: {exc}") from exc
+        value = json.loads((raw if raw is not None else read_regular_file(job_path).data).decode("utf-8"))
+    except (OSError, UnicodeDecodeError, WorkflowError) as exc:
+        raise WorkflowError(f"cannot read native job {job_path.name}") from exc
     except json.JSONDecodeError as exc:
         raise WorkflowError(f"invalid JSON in native job {job_path}: {exc}") from exc
     if not isinstance(value, dict):
@@ -92,15 +96,14 @@ def validate_native_job(job_path: Path, *, pack_root: Path) -> ValidatedNativeJo
     relative, traversal-free paths; B2 binds them to a selected worktree.
     """
 
-    root = pack_root.resolve()
-    if not root.is_dir():
-        raise WorkflowError(f"pack root is not a directory: {pack_root}")
-    path = job_path.resolve()
+    root = require_directory(pack_root, label="pack root")
+    path = absolute_path(job_path)
     try:
         path.relative_to(root)
     except ValueError as exc:
         raise WorkflowError(f"native job is outside pack root: {job_path}") from exc
-    value = _read_json_job(path)
+    job_read = read_regular_file(path)
+    value = _read_json_job(path, job_read.data)
     if value.get("schema") != NATIVE_JOB_SCHEMA:
         raise WorkflowError(
             f"unsupported native job schema in {path}: {value.get('schema')!r}"
@@ -109,8 +112,10 @@ def validate_native_job(job_path: Path, *, pack_root: Path) -> ValidatedNativeJo
 
     prompt_relative = str(value["prompt_path"])
     prompt_path = _resolve_relative(root, prompt_relative, "prompt_path")
-    if not prompt_path.is_file():
-        raise WorkflowError(f"prompt_path is not a file under pack root: {prompt_relative}")
+    try:
+        prompt_read = read_regular_file(prompt_path)
+    except WorkflowError as exc:
+        raise WorkflowError(f"prompt_path is not a regular file: {prompt_relative}") from exc
 
     worktree_target = str(value["worktree_target"])
     _validate_policy_path(worktree_target, "worktree_target")
@@ -138,6 +143,9 @@ def validate_native_job(job_path: Path, *, pack_root: Path) -> ValidatedNativeJo
         job_id=str(value["job_id"]),
         ticket_id=str(value["ticket_id"]),
         prompt_path=prompt_path,
+        prompt_bytes=prompt_read.data,
+        job_bytes=job_read.data,
+        job_sha256=job_read.sha256,
         prompt_relative_path=prompt_relative,
         worktree_target=worktree_target,
         path_policy=PathPolicy(allowed_paths=allowed, forbidden_paths=forbidden),

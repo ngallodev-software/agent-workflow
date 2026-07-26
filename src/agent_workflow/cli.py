@@ -27,6 +27,7 @@ from .inspect_adapter import build_task as build_inspect_task
 from .inspect_adapter import run_inspect
 from .integrations.swebench import write_prediction
 from .manifests import validate_pack, write_checksum_manifest
+from .path import absolute_path
 from .pack import archive as archive_pack
 from .pack import scaffold as scaffold_pack
 from .receipts import verify_seal
@@ -864,7 +865,7 @@ def main(argv: list[str] | None = None) -> int:
                 data = scaffold_pack(args.destination, args.phases, args.name)
             elif args.pack_command == "validate":
                 report = validate_pack(
-                    expand_path(args.source),
+                    absolute_path(args.source),
                     verify_checksums=not args.skip_checksums,
                 )
                 data = report.as_dict()
@@ -882,7 +883,7 @@ def main(argv: list[str] | None = None) -> int:
                         print(f"error: {error}", file=sys.stderr)
                 return 0 if report.ok else 1
             elif args.pack_command == "checksum":
-                path = write_checksum_manifest(expand_path(args.source))
+                path = write_checksum_manifest(absolute_path(args.source))
                 data = {"manifest": str(path)}
             else:
                 data = archive_pack(settings, args.source, args.output)
