@@ -1,6 +1,6 @@
 # Determinism and security hardening plan
 
-This document explains the execution plan behind the canonical tasks in [BACKLOG.md](../BACKLOG.md). Status lives only in the backlog. Findings and feature classifications come from the [feature determinism and security assessment](FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md).
+This document explains the execution plan behind the canonical tasks in [BACKLOG.md](BACKLOG.md). Status lives only in the backlog. Findings and feature classifications come from the [feature determinism and security assessment](FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md).
 
 ## Goal
 

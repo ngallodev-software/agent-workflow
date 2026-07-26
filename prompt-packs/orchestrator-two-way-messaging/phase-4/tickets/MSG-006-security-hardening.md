@@ -1,6 +1,6 @@
 # MSG-006 — adversarial messaging security hardening
 
-**Backlog:** [`MSG-006`](../../../../BACKLOG.md)  
+**Backlog:** [`MSG-006`](../../../../docs/BACKLOG.md)  
 **Priority:** P1 / Critical  
 **Design:** [Security requirements](../../../../docs/ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md#security-requirements)
 

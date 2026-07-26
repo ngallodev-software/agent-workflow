@@ -1,6 +1,6 @@
 # REL-004 — public security-hardening preview gate
 
-**Backlog:** [`REL-004`](../../../../BACKLOG.md)  
+**Backlog:** [`REL-004`](../../../../docs/BACKLOG.md)  
 **Priority:** P1 / Critical  
 **Assessment:** [F13-F14 and F94-F96](../../../../docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#8-public-release-direction) and the [hardening plan](../../../../docs/DETERMINISM_SECURITY_HARDENING_PLAN.md)
 

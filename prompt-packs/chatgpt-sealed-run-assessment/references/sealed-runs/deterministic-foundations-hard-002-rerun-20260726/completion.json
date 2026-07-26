@@ -1,0 +1,189 @@
+{
+  "base_revision": "8f7cdd4c5ae167708266e174ae27b1f547e70f2b",
+  "changed_files": [
+    "MANIFEST.sha256",
+    "SECURITY.md",
+    "docs/ARCHITECTURE.md",
+    "docs/PROMPT_PACKS.md",
+    "schemas/pack-manifest.schema.json",
+    "src/agent_workflow/cli.py",
+    "src/agent_workflow/contracts.py",
+    "src/agent_workflow/manifests.py",
+    "src/agent_workflow/mcp/server.py",
+    "src/agent_workflow/mcp/services.py",
+    "src/agent_workflow/native_jobs.py",
+    "src/agent_workflow/pack.py",
+    "src/agent_workflow/path.py",
+    "src/agent_workflow/sessions.py",
+    "tests/invariants/test_hard_002_path_integrity.py"
+  ],
+  "commands": [
+    {
+      "argv": [
+        "python3",
+        "-m",
+        "compileall",
+        "-q",
+        "src"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "receipt": "compileall:0"
+    },
+    {
+      "argv": [
+        "PYTHONPATH=src",
+        "pytest",
+        "-q",
+        "tests/invariants",
+        "tests/release",
+        "-k",
+        "not installed_product and not documented_commands"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "receipt": "23 passed, 1 skipped, 1 deselected"
+    },
+    {
+      "argv": [
+        "PYTHONPATH=src",
+        "agent-workflow",
+        "pack",
+        "validate",
+        "all four active packs"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "receipt": "four pack validations each exit 0"
+    },
+    {
+      "argv": [
+        "python3",
+        "scripts/audit-release-assets.py"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "receipt": "release assets: valid"
+    },
+    {
+      "argv": [
+        "python3",
+        "-m",
+        "pip",
+        "wheel",
+        ".",
+        "--no-deps"
+      ],
+      "cwd": ".",
+      "exit_code": 1,
+      "receipt": "build isolation could not download setuptools because network resolution is unavailable; rerun with local --no-build-isolation passed"
+    },
+    {
+      "argv": [
+        "python3",
+        "-m",
+        "pip",
+        "wheel",
+        "--no-build-isolation",
+        ".",
+        "--no-deps"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "receipt": "wheel built; fresh venv install, wheel pack validation, and packaged schema load all exit 0"
+    },
+    {
+      "argv": [
+        "PYTHONPATH=src",
+        "pytest",
+        "-q",
+        "tests/acceptance/..."
+      ],
+      "cwd": ".",
+      "exit_code": 16,
+      "receipt": "pre-existing environment failure before application code: installed product imports incompatible /home/nate/.local/lib/python3.13/site-packages/argparse.py and rejects subparsers(required=...)"
+    },
+    {
+      "argv": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "receipt": "diff_check:0"
+    },
+    {
+      "argv": [
+        "python3",
+        "-m",
+        "agent_workflow",
+        "progress",
+        "deterministic-foundations-hard-002-rerun-20260726",
+        "...",
+        "--actor",
+        "child"
+      ],
+      "cwd": ".",
+      "exit_code": 1,
+      "receipt": "canonical state directory is read-only: OSError Errno 30"
+    }
+  ],
+  "criteria": [
+    {
+      "evidence": [
+        "tests/invariants/test_hard_002_path_integrity.py",
+        "focused pytest: 23 passed, 1 skipped"
+      ],
+      "id": "pack-entry-integrity",
+      "result": "pass"
+    },
+    {
+      "evidence": [
+        "direct archive smoke: identical SHA-256 bytes; canonical MANIFEST.json present and schema-validated"
+      ],
+      "id": "deterministic-archive",
+      "result": "pass"
+    },
+    {
+      "evidence": [
+        "focused native-job symlink matrix; source launch boundary uses descriptor-safe prompt bytes"
+      ],
+      "id": "native-job-prompt-paths",
+      "result": "pass"
+    },
+    {
+      "evidence": [
+        "duplicate-ID fail-closed invariant; isolated wheel load_schema(pack-manifest/v1) exit 0"
+      ],
+      "id": "authoritative-schemas",
+      "result": "pass"
+    },
+    {
+      "evidence": [
+        "all four source pack validations exit 0; isolated wheel pack validation exit 0"
+      ],
+      "id": "source-and-wheel-pack-validation",
+      "result": "pass"
+    },
+    {
+      "evidence": [
+        "python3 scripts/audit-release-assets.py exit 0"
+      ],
+      "id": "release-drift-audit",
+      "result": "pass"
+    }
+  ],
+  "head_revision": "8f7cdd4c5ae167708266e174ae27b1f547e70f2b",
+  "pack_id": "deterministic-enforcement-foundations",
+  "result": "completed",
+  "schema": "agent-workflow/completion/v1",
+  "session_id": "deterministic-foundations-hard-002-rerun-20260726",
+  "ticket_id": "HARD-002",
+  "unresolved": [
+    "Installed-product acceptance suite was not verifiable in this host environment because its fixture injects a contaminated PYTHONPATH and an incompatible user-local argparse module; failure occurs before agent-workflow code runs.",
+    "Filesystem-socket parameter was skipped because this host denies AF_UNIX filesystem socket creation; symlink and FIFO rejection passed, and inventory code rejects sockets by stat type.",
+    "The worktree remains uncommitted; base and head revision are both 8f7cdd4c5ae167708266e174ae27b1f547e70f2b.",
+    "Optional durable progress emission failed because the canonical state directory is read-only; completion handoff write and schema validation succeeded."
+  ]
+}

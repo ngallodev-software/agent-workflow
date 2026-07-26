@@ -1,0 +1,97 @@
+{
+  "artifacts": [
+    {
+      "path": "prompt.md",
+      "sha256": "4d299236dd5caf6c6ac8add3920335f8d015c1270cacbb0a9389bef3b716cf70",
+      "size": 2419
+    },
+    {
+      "path": "launch-prompt.md",
+      "sha256": "9433d5d95ef8c0ac8ea6dc261712af509d0f887fe9a005768b4e1007144fc270",
+      "size": 3888
+    },
+    {
+      "path": "command.json",
+      "sha256": "32ff15addb5e55adac7b4bd6acafebcd10e6dfa493b052f6d713f37eb1f1a356",
+      "size": 541
+    },
+    {
+      "path": "source-baseline.json",
+      "sha256": "86f72b9d7cdf2a407ce89ceec5103c59a9aea98f717e56a34acf54e026f2fae7",
+      "size": 369
+    },
+    {
+      "path": "completion.md",
+      "sha256": "c63402cff4ffcfebbc43395b33cde4f1e64860b0e40f4d90a25c995eb20bf7a2",
+      "size": 1317
+    },
+    {
+      "path": "completion.json",
+      "sha256": "8c7865186bf242b59df26522f943294186f090ae2127b0b13694f3ff5e2740e4",
+      "size": 4591
+    },
+    {
+      "path": "run-provenance.json",
+      "sha256": "91c2d8c401a45f10a0cf69412190d2fbb9dc3f70ee8c71986ee80bfd461d8a72",
+      "size": 2019
+    },
+    {
+      "path": "executor-events.jsonl",
+      "sha256": "6233f234e0bb8e261568d6d6949148d0f943d8650db336b6ee4c4fecd2772c67",
+      "size": 674684
+    },
+    {
+      "path": "executor-stderr.log",
+      "sha256": "330e99df16831c2169dc37980e0ac67e6832576d5f8b05d16dc621f452affd51",
+      "size": 108336
+    },
+    {
+      "path": "output.log",
+      "sha256": "3a51023ba461c06bd77e2af282604ce42bb427fc50d1a23bdb5d27fc77b28173",
+      "size": 111902
+    },
+    {
+      "path": "final-status.json",
+      "sha256": "9b21d045ae269cff4666b5309932d6827aaa0e0b8c36b3352d39868f5115da76",
+      "size": 3947
+    },
+    {
+      "path": "patch.diff",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "collections/completion.json",
+      "sha256": "f6c41877e1803cd840ceaa41af3ac4d9c1480d8fd5c35c8cd428bdcbbe0ca5de",
+      "size": 728
+    },
+    {
+      "path": "execution-metrics.json",
+      "sha256": "64b7b25fc2ee4e30a09e800e8a1989aecee9661f421d722cb83550f503bc2da6",
+      "size": 1994
+    },
+    {
+      "path": "control-events.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "agent-context.json",
+      "sha256": "56bd03e89175cfc579fc9c7bcc74687a2187ae35dd075951504441b9d6c9728b",
+      "size": 1196
+    },
+    {
+      "path": "provider-evidence.json",
+      "sha256": "7b782eac776e9bf8d61fd0d8212ae0e798197fee94ef479579881458a3259891",
+      "size": 1541
+    },
+    {
+      "path": "assignments.jsonl",
+      "sha256": "ef4ef4eccbade01ad52c052c82b07987ed9253cf9ac76de507a13dc02f1add46",
+      "size": 371
+    }
+  ],
+  "schema": "agent-workflow/final-receipt/v1",
+  "sealed_at": "2026-07-26T17:04:16.956486+00:00",
+  "session_id": "deterministic-foundations-gate-parallel-20260726"
+}

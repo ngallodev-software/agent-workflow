@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Implement only the next authorized MCP mutation phase for canonical backlog item [`MCP-003`](../../BACKLOG.md). The read-only local stdio adapter and shared read services already exist. This pack adds no new orchestrator and must wrap the same application services used by the CLI.
+Implement only the next authorized MCP mutation phase for canonical backlog item [`MCP-003`](../../docs/BACKLOG.md). The read-only local stdio adapter and shared read services already exist. This pack adds no new orchestrator and must wrap the same application services used by the CLI.
 
 ## Hard prerequisites
 
@@ -12,7 +12,7 @@ Do not execute this pack until all of the following are accepted and integrated:
 - `HARD-005` — MCP read-boundary privacy/path hardening;
 - `HARD-007` — authenticated principals and reviewer-independence policy.
 
-Presence of this pack does not make `MCP-003` ready. Canonical state is recorded in [`BACKLOG.md`](../../BACKLOG.md), and `scripts/audit-release-assets.py` enforces that this is the only active pack owning `MCP-003`.
+Presence of this pack does not make `MCP-003` ready. Canonical state is recorded in [`BACKLOG.md`](../../docs/BACKLOG.md), and `scripts/audit-release-assets.py` enforces that this is the only active pack owning `MCP-003`.
 
 ## Scope
 

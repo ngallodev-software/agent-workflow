@@ -89,11 +89,12 @@ Do not embed host-specific absolute paths, credentials, private project names, m
 
 | Pack | Backlog ownership | State |
 |---|---|---|
-| [`deterministic-enforcement-foundations`](../prompt-packs/deterministic-enforcement-foundations/) | HARD-001, HARD-002, HARD-004, HARD-005 | Executable now. |
+| [`deterministic-enforcement-foundations`](../prompt-packs/deterministic-enforcement-foundations/) | HARD-001, HARD-002, HARD-004, HARD-005 | HARD-001, HARD-002, and HARD-005 implementations integrated; independent foundation gate rejected pending shared acceptance and HARD-004. |
 | [`execution-isolation-and-secrets`](../prompt-packs/execution-isolation-and-secrets/) | HARD-008, HARD-003, HARD-006 | Blocked until the foundation gate. |
 | [`public-beta-trust-and-release`](../prompt-packs/public-beta-trust-and-release/) | HARD-007, HARD-009, HARD-010, REL-003, REL-004 | Blocked until both technical hardening gates. |
 | [`mcp-server-next`](../prompt-packs/mcp-server-next/) | MCP-003 | Blocked until HARD-004, HARD-005, and HARD-007. |
 | [`orchestrator-two-way-messaging`](../prompt-packs/orchestrator-two-way-messaging/) | BKL-001, BKL-002, MSG-001 through MSG-007 | Planning complete; phase 0 blocked until DEC-001, HARD-002, and HARD-004. |
+| [`chatgpt-sealed-run-assessment`](../prompt-packs/chatgpt-sealed-run-assessment/) | CHATGPT-EVAL-001, CHATGPT-TDD-001 | Evidence assessment first; future TDD generation is blocked until the eval update is reviewed. |
 
 The dependency/collision rationale is in [Determinism and security hardening plan](DETERMINISM_SECURITY_HARDENING_PLAN.md). The local two-way messaging architecture and its collision-free implementation sequence are in [Durable two-way messaging](ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md). The source findings are in [Feature determinism and security assessment](FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md).
 
@@ -101,7 +102,7 @@ The dependency/collision rationale is in [Determinism and security hardening pla
 
 The pack describes work; it does not override runtime policy. Agent class, executor, model, authenticated principal, permissions, no-go authorization, worktree safety, sandbox policy, lifecycle controls, and backlog state remain enforced by application services and human decisions.
 
-`EXECUTION_PROTOCOL.md` and `DELEGATION_RUNBOOK.md` are canonical portable files mirrored into scaffold assets. Update their canonical root copies first and run the release audit to detect drift.
+`docs/references/EXECUTION_PROTOCOL.md` and `docs/references/DELEGATION_RUNBOOK.md` are the canonical portable files mirrored into scaffold assets. Update those conditional steering references first and run the release audit to detect drift.
 
 ## Migration and maintenance
 

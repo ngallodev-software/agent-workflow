@@ -1,6 +1,6 @@
 # BKL-001 — durable per-consumer cursors and handling dispositions
 
-**Backlog:** [`BKL-001`](../../../../BACKLOG.md)  
+**Backlog:** [`BKL-001`](../../../../docs/BACKLOG.md)  
 **Priority:** P0 / High  
 **Design:** [Durable two-way messaging](../../../../docs/ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md#add-one-shared-orchestrator-inbox)
 

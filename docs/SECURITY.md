@@ -2,7 +2,7 @@
 
 `agent-workflow` executes operator-selected coding agents and explicit commands against source repositories. Treat prompts, prompt packs, delegated processes, provider output, generated patches, and target repositories as untrusted until reviewed.
 
-The repository-wide security classification and residual-risk inventory is [Feature determinism and security assessment](docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md). Canonical remediation state is in [BACKLOG.md](BACKLOG.md) and the dependency plan is [Determinism and security hardening plan](docs/DETERMINISM_SECURITY_HARDENING_PLAN.md).
+The repository-wide security classification and residual-risk inventory is [Feature determinism and security assessment](FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md). Canonical remediation state is in [BACKLOG.md](BACKLOG.md) and the dependency plan is [Determinism and security hardening plan](DETERMINISM_SECURITY_HARDENING_PLAN.md).
 
 ## Supported status
 
@@ -17,20 +17,19 @@ The project is pre-public-release and does not yet have a monitored public vulne
 - Workflow state is reconstructed from an immutable snapshot and append-only journal.
 - Approval is explicit and binds an actor label, reason, revision, and sealed evidence.
 - Provider usage fails closed on mixed modes, conflicting identities, malformed totals, or incomplete cost metadata.
-- MCP is optional, local stdio, bounded to configured roots, and currently read-only.
+- MCP is optional, local stdio, read-only, metadata-minimal, bounded to configured roots with component-wise no-follow reads, and stable bounded errors.
 - Repository-owned subprocesses use one argv-only substrate with process-group timeout/cancellation, per-stream caps, controlled environments, executable identity, and configured-value/secret-argument redaction.
 - Prompt packs, native jobs, prompts, and MCP repository/state roots use component-wise no-follow traversal; irregular entries and content changes during validation are rejected. Pack archives are built from the validated inventory and include a typed canonical manifest.
 - Runtime schemas come only from the executing source checkout or installed package asset set; duplicate IDs, malformed assets, and missing packaged assets fail closed.
-- MCP is optional, local stdio, bounded to configured roots with component-wise no-follow reads, metadata-only message disclosure, and currently read-only.
 - The project does not automatically merge, delete failed worktrees, terminate suspected stalls, expose remote execution, or authorize network MCP transport.
 
 ## Known pre-public limitations
 
 These are active release blockers, not theoretical future hardening:
 
-- subprocess calls are not yet uniformly bounded by timeout, output cap, sanitized environment, and process-group cancellation (`HARD-001`);
-- MCP read bodies remain metadata-minimal and bounded work for `HARD-005`; pack/native-job/schema path integrity enforcement is implemented by `HARD-002` and still requires the integrated phase gate evidence;
-- prompt-pack/native-job/schema path integrity is not yet uniformly no-follow and content-complete (`HARD-002`);
+- The bounded process substrate is integrated for governed call sites, but shared installed-product acceptance and the foundation phase gate remain open (`HARD-001`); `tmux.attach` remains the documented interactive-only terminal ownership boundary.
+- Prompt-pack, native-job, schema, and bounded-path integrity controls are integrated, but filesystem-socket coverage was unavailable on this host and shared phase-gate acceptance remains open (`HARD-002`).
+- MCP reads are metadata-minimal, bounded, and component-wise no-follow, but the installed stdio journey remains unverified and phase-gate acceptance remains open (`HARD-005`).
 - writable-path policy for untrusted commands is primarily post-run detection rather than a preventative OS sandbox (`HARD-003`);
 - some runner/evaluation decisions still depend on mutable status projections rather than one immutable launch authority (`HARD-004`);
 - default sensitive-content classification, redaction, and retention controls are incomplete (`HARD-006`);

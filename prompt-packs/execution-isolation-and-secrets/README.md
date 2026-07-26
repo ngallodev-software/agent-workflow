@@ -4,7 +4,7 @@
 
 Convert writable-scope, credential, network, executable-trust, and sensitive-content guidance into enforceable local controls.
 
-This pack owns `HARD-008`, `HARD-003`, `HARD-006`. Canonical status remains in [`BACKLOG.md`](../../BACKLOG.md); the [determinism/security assessment](../../docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md) supplies the findings and the [hardening plan](../../docs/DETERMINISM_SECURITY_HARDENING_PLAN.md) supplies the dependency model.
+This pack owns `HARD-008`, `HARD-003`, `HARD-006`. Canonical status remains in [`BACKLOG.md`](../../docs/BACKLOG.md); the [determinism/security assessment](../../docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md) supplies the findings and the [hardening plan](../../docs/DETERMINISM_SECURITY_HARDENING_PLAN.md) supplies the dependency model.
 
 ## External prerequisites
 

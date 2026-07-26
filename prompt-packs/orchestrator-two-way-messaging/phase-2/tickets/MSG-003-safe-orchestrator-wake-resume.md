@@ -1,6 +1,6 @@
 # MSG-003 — safe orchestrator wake and resume adapters
 
-**Backlog:** [`MSG-003`](../../../../BACKLOG.md)  
+**Backlog:** [`MSG-003`](../../../../docs/BACKLOG.md)  
 **Priority:** P0 / Critical  
 **Design:** [Wake the orchestrator safely](../../../../docs/ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md#the-supervisor-must-wake-the-orchestrator-safely)
 

@@ -1,6 +1,6 @@
 # HARD-003 — preventative execution sandbox
 
-**Backlog:** [`HARD-003`](../../../../BACKLOG.md)  
+**Backlog:** [`HARD-003`](../../../../docs/BACKLOG.md)  
 **Priority:** P0 / Critical  
 **Assessment:** [F39-F42 and F69-F73](../../../../docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#5-guidance-that-should-become-deterministic-enforcement) and the [hardening plan](../../../../docs/DETERMINISM_SECURITY_HARDENING_PLAN.md)
 

@@ -1,0 +1,44 @@
+{
+  "schema": "agent-workflow/completion/v1",
+  "session_id": "deterministic-foundations-gate-parallel-20260726",
+  "ticket_id": "FOUND-GATE-01",
+  "pack_id": "deterministic-enforcement-foundations",
+  "result": "failed",
+  "base_revision": "8f7cdd4c5ae167708266e174ae27b1f547e70f2b",
+  "head_revision": "8f7cdd4c5ae167708266e174ae27b1f547e70f2b",
+  "changed_files": [],
+  "criteria": [
+    {"id": "prerequisites-accepted-and-integrated", "result": "fail", "evidence": ["HARD-001 invalid/blocked", "HARD-002 partial/unaccepted", "HARD-004 blocked", "HARD-005 blocked without final receipt"]},
+    {"id": "release-drift-audit", "result": "pass", "evidence": ["scripts/audit-release-assets.py exit 0", "all four required pack validations exit 0", "unique task IDs and collision-free declared ownership"]},
+    {"id": "installed-product-journeys", "result": "fail", "evidence": ["17 failed, 18 passed; installed-product fixture could not find venv/bin/agent-workflow"]},
+    {"id": "authority-and-security-boundaries", "result": "fail", "evidence": ["mutable status authority remains", "native/schema symlink replacements accepted", "MCP default messages expose content", "direct subprocess inventory remains unmigrated"]},
+    {"id": "explicit-gate-decision", "result": "pass", "evidence": ["phase-gate-report.md records REJECT"]}
+  ],
+  "commands": [
+    {"argv": ["python3", "scripts/audit-release-assets.py"], "cwd": ".", "exit_code": 0, "receipt": "release assets: valid"},
+    {"argv": ["agent-workflow", "pack", "validate", "prompt-packs/deterministic-enforcement-foundations"], "cwd": ".", "exit_code": 0, "receipt": "phases: 3; tasks: 5; valid: True"},
+    {"argv": ["agent-workflow", "pack", "validate", "prompt-packs/execution-isolation-and-secrets"], "cwd": ".", "exit_code": 0, "receipt": "phases: 3; tasks: 4; valid: True"},
+    {"argv": ["agent-workflow", "pack", "validate", "prompt-packs/public-beta-trust-and-release"], "cwd": ".", "exit_code": 0, "receipt": "phases: 2; tasks: 5; valid: True"},
+    {"argv": ["agent-workflow", "pack", "validate", "prompt-packs/mcp-server-next"], "cwd": ".", "exit_code": 0, "receipt": "phases: 1; tasks: 3; valid: True"},
+    {"argv": ["git", "diff", "--check"], "cwd": ".", "exit_code": 0, "receipt": "no whitespace errors"},
+    {"argv": ["python3", "-m", "pytest", "-q", "tests/invariants", "tests/release/test_distribution.py::test_release_asset_audit_is_the_single_static_repository_gate", "tests/release/test_distribution.py::test_all_published_json_schemas_are_valid_draft_2020_12", "tests/release/test_distribution.py::test_shell_entrypoints_and_installer_are_syntax_valid"], "cwd": ".", "exit_code": 0, "receipt": "17 passed"},
+    {"argv": ["python3", "-m", "pytest", "-q", "tests/acceptance", "tests/invariants", "tests/release"], "cwd": ".", "exit_code": 1, "receipt": "17 failed, 18 passed; installed-product executable absent"},
+    {"argv": ["python3", "-m", "pytest", "-q", "tests/acceptance", "tests/invariants", "tests/release", "env=PYTHONNOUSERSITE=1"], "cwd": ".", "exit_code": 1, "receipt": "pytest unavailable in clean interpreter"},
+    {"argv": ["agent-workflow", "progress", "deterministic-foundations-gate-parallel-20260726", "<redacted gate checkpoint>", "--actor", "child"], "cwd": ".", "exit_code": 1, "receipt": "canonical messages.jsonl is read-only"},
+    {"argv": ["agent-workflow", "review", "deterministic-foundations-gate-parallel-20260726", "--actor", "reviewer", "--reason", "<redacted>"], "cwd": ".", "exit_code": 2, "receipt": "canonical seal.lock is read-only"},
+    {"argv": ["agent-workflow", "reject", "deterministic-foundations-gate-parallel-20260726", "--actor", "reviewer", "--reason", "<redacted>"], "cwd": ".", "exit_code": 2, "receipt": "canonical seal.lock is read-only"}
+  ],
+  "unresolved": [
+    "HARD-001 accepted completion is absent: canonical validation invalid and rerun blocked.",
+    "HARD-002 completion is partial and has no acceptance disposition; implementation is not integrated.",
+    "HARD-004 is blocked and has no implementation diff.",
+    "HARD-005 has no final receipt or accepted disposition.",
+    "The full installed-product acceptance gate is not reproducible.",
+    "Mutable status remains an authority input for runner/evaluation paths.",
+    "Direct subprocess calls remain unmigrated and undocumented as exemptions.",
+    "Native-job and schema symlink replacements are accepted.",
+    "MCP default message responses expose durable message bodies.",
+    "Canonical lifecycle state is read-only, preventing CLI review/reject recording."
+  ],
+  "usage": null
+}

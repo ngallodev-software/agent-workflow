@@ -140,11 +140,11 @@ This closes the local pipeline execution failure, not the public release gates. 
 - **Why:** `REL-002` requires a real channel; placeholder text indicates blocker is not resolved
 - **How to implement:**
   ```python
-  security_text = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
+  security_text = (ROOT / "docs" / "SECURITY.md").read_text(encoding="utf-8")
   if "pre-public-release" in security_text or "does not yet have a monitored" in security_text:
-      fail("SECURITY.md: vulnerability-reporting channel not yet established (REL-002 blocker)")
+      fail("docs/SECURITY.md: vulnerability-reporting channel not yet established (REL-002 blocker)")
   if not any(pattern in security_text for pattern in ["security@", "vulnerabilities@", "security.md", "OpenSSF"]):
-      fail("SECURITY.md: no monitored contact mechanism found (REL-002 blocker)")
+      fail("docs/SECURITY.md: no monitored contact mechanism found (REL-002 blocker)")
   ```
 - **Evidence produced:** Pass/fail from audit script
 - **Suggested integration:** Add to `scripts/audit-release-assets.py`

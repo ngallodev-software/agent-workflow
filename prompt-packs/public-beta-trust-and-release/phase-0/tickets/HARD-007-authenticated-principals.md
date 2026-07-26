@@ -1,6 +1,6 @@
 # HARD-007 — authenticated principals and reviewer independence
 
-**Backlog:** [`HARD-007`](../../../../BACKLOG.md)  
+**Backlog:** [`HARD-007`](../../../../docs/BACKLOG.md)  
 **Priority:** P1 / Critical  
 **Assessment:** [F48-F52 and F89](../../../../docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#5-guidance-that-should-become-deterministic-enforcement) and the [hardening plan](../../../../docs/DETERMINISM_SECURITY_HARDENING_PLAN.md)
 

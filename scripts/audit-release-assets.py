@@ -92,7 +92,7 @@ def _unquote(value: str) -> str:
 
 
 def _backlog_rows() -> dict[str, dict[str, str]]:
-    path = ROOT / "BACKLOG.md"
+    path = ROOT / "docs" / "BACKLOG.md"
     rows: dict[str, dict[str, str]] = {}
     section = ""
     for raw in path.read_text(encoding="utf-8").splitlines():
@@ -110,7 +110,7 @@ def _backlog_rows() -> dict[str, dict[str, str]]:
         if not re.fullmatch(r"[A-Z][A-Z0-9-]*", item_id) or "-" not in item_id:
             continue
         if item_id in rows:
-            fail(f"BACKLOG.md: duplicate active ID {item_id}")
+            fail(f"docs/BACKLOG.md: duplicate active ID {item_id}")
             continue
         state = ""
         for candidate in cells[1:5]:
@@ -216,12 +216,12 @@ def _audit_backlog_and_prompt_pack_ownership() -> None:
 
     for backlog_id, pack_names in sorted(owners.items()):
         if len(pack_names) > 1:
-            fail(f"BACKLOG.md: {backlog_id} is owned by multiple active packs: {sorted(pack_names)}")
+            fail(f"docs/BACKLOG.md: {backlog_id} is owned by multiple active packs: {sorted(pack_names)}")
 
     skill = ROOT / "skills" / "release-drift-auditor" / "SKILL.md"
     if not skill.is_file():
         fail("skills/release-drift-auditor/SKILL.md: missing specialized drift skill")
-    for required in [ROOT / "DELEGATION_RUNBOOK.md", ROOT / "skills" / "phase-gate-review" / "SKILL.md"]:
+    for required in [ROOT / "docs" / "references" / "DELEGATION_RUNBOOK.md", ROOT / "skills" / "phase-gate-review" / "SKILL.md"]:
         if "release-drift-auditor" not in required.read_text(encoding="utf-8"):
             fail(f"{required.relative_to(ROOT)}: does not invoke release-drift-auditor")
 
@@ -391,11 +391,11 @@ def main(argv: list[str] | None = None) -> int:
                 fail(f"{mirror.relative_to(ROOT)}: differs from canonical scripts/{canonical.name}")
 
     mirror_groups = {
-        ROOT / "EXECUTION_PROTOCOL.md": [
+        ROOT / "docs" / "references" / "EXECUTION_PROTOCOL.md": [
             ROOT / "src/agent_workflow/assets/prompt-pack-root/EXECUTION_PROTOCOL.md",
             ROOT / "examples/three-phase-pack/EXECUTION_PROTOCOL.md",
         ],
-        ROOT / "DELEGATION_RUNBOOK.md": [
+        ROOT / "docs" / "references" / "DELEGATION_RUNBOOK.md": [
             ROOT / "src/agent_workflow/assets/prompt-pack-root/DELEGATION_RUNBOOK.md",
             ROOT / "examples/three-phase-pack/DELEGATION_RUNBOOK.md",
         ],

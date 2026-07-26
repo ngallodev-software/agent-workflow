@@ -149,7 +149,7 @@ The current and planned boundary is in [MCP server](MCP_SERVER.md). Future tools
 - external evaluator/oracle material stays outside delegated worktrees;
 - logs and terminal capture never grant approval or prove message delivery.
 
-See [Security](../SECURITY.md) and [MCP server](MCP_SERVER.md).
+See [Security](SECURITY.md) and [MCP server](MCP_SERVER.md).
 
 ## Testing, release, and packaging
 

@@ -1,6 +1,6 @@
 # HARD-009 — generated inventories and deterministic drift gate
 
-**Backlog:** [`HARD-009`](../../../../BACKLOG.md)  
+**Backlog:** [`HARD-009`](../../../../docs/BACKLOG.md)  
 **Priority:** P1 / High  
 **Assessment:** [F01-F02, F09-F10, and F90-F96](../../../../docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#8-public-release-direction) and the [hardening plan](../../../../docs/DETERMINISM_SECURITY_HARDENING_PLAN.md)
 

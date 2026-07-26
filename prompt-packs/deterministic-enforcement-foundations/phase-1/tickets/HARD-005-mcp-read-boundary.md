@@ -1,6 +1,6 @@
 # HARD-005 — MCP read-boundary privacy and path hardening
 
-**Backlog:** [`HARD-005`](../../../../BACKLOG.md)  
+**Backlog:** [`HARD-005`](../../../../docs/BACKLOG.md)  
 **Priority:** P0 / Critical  
 **Assessment:** [F83-F88](../../../../docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#46-mcp-adapter) and the [hardening plan](../../../../docs/DETERMINISM_SECURITY_HARDENING_PLAN.md)
 

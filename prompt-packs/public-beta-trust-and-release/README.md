@@ -4,7 +4,7 @@
 
 Add authenticated review, deterministic drift detection, supply-chain evidence, clean-host compatibility, and an explicit public-preview decision gate.
 
-This pack owns `HARD-007`, `HARD-009`, `HARD-010`, `REL-003`, `REL-004`. Canonical status remains in [`BACKLOG.md`](../../BACKLOG.md); the [determinism/security assessment](../../docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md) supplies the findings and the [hardening plan](../../docs/DETERMINISM_SECURITY_HARDENING_PLAN.md) supplies the dependency model.
+This pack owns `HARD-007`, `HARD-009`, `HARD-010`, `REL-003`, `REL-004`. Canonical status remains in [`BACKLOG.md`](../../docs/BACKLOG.md); the [determinism/security assessment](../../docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md) supplies the findings and the [hardening plan](../../docs/DETERMINISM_SECURITY_HARDENING_PLAN.md) supplies the dependency model.
 
 ## External prerequisites
 

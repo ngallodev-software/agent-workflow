@@ -2,7 +2,7 @@
 
 The repository is moving toward a public release, but it is not ready to publish as a supported open-source project. This document distinguishes product readiness from repository polish so the project does not accumulate release-shaped artifacts without resolving actual blockers.
 
-The detailed findings are in [Feature determinism and security assessment](FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md). Canonical task state remains in [BACKLOG.md](../BACKLOG.md), with sequencing in [Determinism and security hardening plan](DETERMINISM_SECURITY_HARDENING_PLAN.md).
+The detailed findings are in [Feature determinism and security assessment](FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md). Canonical task state remains in [BACKLOG.md](BACKLOG.md), with sequencing in [Determinism and security hardening plan](DETERMINISM_SECURITY_HARDENING_PLAN.md).
 
 ## Current strengths
 

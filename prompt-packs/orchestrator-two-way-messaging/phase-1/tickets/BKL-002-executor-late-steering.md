@@ -1,6 +1,6 @@
 # BKL-002 — executor-specific post-launch steering
 
-**Backlog:** [`BKL-002`](../../../../BACKLOG.md)  
+**Backlog:** [`BKL-002`](../../../../docs/BACKLOG.md)  
 **Priority:** P0 / High  
 **Design:** [Acknowledgement model](../../../../docs/ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md#acknowledgement-model)
 

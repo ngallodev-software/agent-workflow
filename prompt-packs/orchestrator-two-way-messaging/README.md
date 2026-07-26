@@ -4,7 +4,7 @@
 
 Implement reliable two-way messaging between spawned agents and the orchestrator without making tmux, terminal output, polling, or prompt prose authoritative.
 
-The target architecture is documented in [`docs/ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md`](../../docs/ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md). This pack owns `BKL-001`, `BKL-002`, and `MSG-001` through `MSG-007`. Canonical status remains in [`BACKLOG.md`](../../BACKLOG.md).
+The target architecture is documented in [`docs/ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md`](../../docs/ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md). This pack owns `BKL-001`, `BKL-002`, and `MSG-001` through `MSG-007`. Canonical status remains in [`BACKLOG.md`](../../docs/BACKLOG.md).
 
 ## Collision-free ownership
 

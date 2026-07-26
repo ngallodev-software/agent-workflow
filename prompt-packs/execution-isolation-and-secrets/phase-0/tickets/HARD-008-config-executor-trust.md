@@ -1,6 +1,6 @@
 # HARD-008 — configuration and executor trust
 
-**Backlog:** [`HARD-008`](../../../../BACKLOG.md)  
+**Backlog:** [`HARD-008`](../../../../docs/BACKLOG.md)  
 **Priority:** P1 / High  
 **Assessment:** [F03-F06, F15, and F20](../../../../docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#41-entry-points-configuration-host-integration-and-release-tooling) and the [hardening plan](../../../../docs/DETERMINISM_SECURITY_HARDENING_PLAN.md)
 

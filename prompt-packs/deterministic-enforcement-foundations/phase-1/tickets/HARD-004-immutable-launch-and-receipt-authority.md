@@ -1,6 +1,6 @@
 # HARD-004 — immutable launch and final-receipt authority
 
-**Backlog:** [`HARD-004`](../../../../BACKLOG.md)  
+**Backlog:** [`HARD-004`](../../../../docs/BACKLOG.md)  
 **Priority:** P0 / Critical  
 **Assessment:** [F17, F24, F68, and source observations](../../../../docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#10-source-observations-supporting-the-highest-priority-findings) and the [hardening plan](../../../../docs/DETERMINISM_SECURITY_HARDENING_PLAN.md)
 

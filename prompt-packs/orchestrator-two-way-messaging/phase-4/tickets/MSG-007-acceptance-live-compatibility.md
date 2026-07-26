@@ -1,6 +1,6 @@
 # MSG-007 — installed-product acceptance and live compatibility
 
-**Backlog:** [`MSG-007`](../../../../BACKLOG.md)  
+**Backlog:** [`MSG-007`](../../../../docs/BACKLOG.md)  
 **Priority:** P1 / High  
 **Design:** [Acceptance strategy](../../../../docs/ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md#acceptance-strategy)
 

@@ -80,7 +80,7 @@ agent-workflow progress ticket-1 "Tests are green." --actor child
 agent-workflow ack ticket-1 MESSAGE_ID "Applied." --actor child
 ```
 
-The append-only message log is authoritative. tmux wakeups are only best-effort hints. A steer remains pending until the child emits correlated acknowledgement evidence; the current detached-executor late-steering gap is tracked in [BACKLOG.md](BACKLOG.md).
+The append-only message log is authoritative. tmux wakeups are only best-effort hints. A steer remains pending until the child emits correlated acknowledgement evidence; the current detached-executor late-steering gap is tracked in [BACKLOG.md](docs/BACKLOG.md).
 
 ## Workflow graphs
 
@@ -141,7 +141,7 @@ Authoritative run evidence is stored below the configured XDG state root, normal
 ~/.local/state/agent-workflow/runs/<session-id>/
 ```
 
-Worktree `.delegations/` entries are discoverability links, not evidence authorities. Status files and terminal captures are projections. Sealed receipts, lifecycle records, workflow snapshots, workflow journals, and verified child evidence determine state transitions. See [Architecture](docs/ARCHITECTURE.md) and [Security](SECURITY.md).
+Worktree `.delegations/` entries are discoverability links, not evidence authorities. Status files and terminal captures are projections. Sealed receipts, lifecycle records, workflow snapshots, workflow journals, and verified child evidence determine state transitions. See [Architecture](docs/ARCHITECTURE.md) and [Security](docs/SECURITY.md).
 
 ## Development and testing
 
@@ -167,8 +167,8 @@ The default suite is acceptance-first: it builds and installs a wheel, invokes p
 - [Feature determinism and security assessment](docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md)
 - [Determinism and security hardening plan](docs/DETERMINISM_SECURITY_HARDENING_PLAN.md)
 - [Public release readiness](docs/PUBLIC_RELEASE_READINESS.md)
-- [Backlog](BACKLOG.md)
-- [Contributing](CONTRIBUTING.md)
-- [Support](SUPPORT.md)
+- [Backlog](docs/BACKLOG.md)
+- [Contributing](docs/CONTRIBUTING.md)
+- [Support](docs/SUPPORT.md)
 
 The repository is the source of truth. Completed implementation prompt packs, release-run ledgers, and one-off audit reports are intentionally not retained as parallel documentation; Git history and the changelog preserve that history.

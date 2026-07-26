@@ -1,6 +1,6 @@
 # MSG-001 — orchestrator identity registry and durable aggregate inbox
 
-**Backlog:** [`MSG-001`](../../../../BACKLOG.md)  
+**Backlog:** [`MSG-001`](../../../../docs/BACKLOG.md)  
 **Priority:** P0 / Critical  
 **Design:** [Shared orchestrator inbox](../../../../docs/ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md#add-one-shared-orchestrator-inbox)
 

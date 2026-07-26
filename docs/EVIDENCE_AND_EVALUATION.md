@@ -46,4 +46,4 @@ Score-set verdicts are accepted only after their content-addressed scorer receip
 
 Baseline and candidate cohorts must contain matching task/repetition identities and compatible evidence semantics. Comparisons report descriptive rates and paired outcomes. They do not declare a winner when sample size or configured evidence is insufficient.
 
-Real paid-provider comparisons remain an operator-run gate. Before publishing a claim, pin executor version, model, environment, tool policy, prompt/fixture revision, repetitions, exclusions, billing meaning, and cache policy. Track that work under `BKL-004` in [BACKLOG.md](../BACKLOG.md).
+Real paid-provider comparisons remain an operator-run gate. Before publishing a claim, pin executor version, model, environment, tool policy, prompt/fixture revision, repetitions, exclusions, billing meaning, and cache policy. Track that work under `BKL-004` in [BACKLOG.md](BACKLOG.md).

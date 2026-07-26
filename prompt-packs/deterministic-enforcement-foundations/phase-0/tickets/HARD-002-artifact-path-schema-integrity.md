@@ -1,6 +1,6 @@
 # HARD-002 — artifact, path, and schema integrity
 
-**Backlog:** [`HARD-002`](../../../../BACKLOG.md)  
+**Backlog:** [`HARD-002`](../../../../docs/BACKLOG.md)  
 **Priority:** P0 / Critical  
 **Assessment:** [F11, F34-F38, F87, and source observations](../../../../docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#10-source-observations-supporting-the-highest-priority-findings) and the [hardening plan](../../../../docs/DETERMINISM_SECURITY_HARDENING_PLAN.md)
 

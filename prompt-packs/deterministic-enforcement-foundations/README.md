@@ -4,7 +4,7 @@
 
 Close the P0 process, filesystem, authority, and read-only MCP gaps that underpin every later hardening task.
 
-This pack owns `HARD-001`, `HARD-002`, `HARD-004`, `HARD-005`. Canonical status remains in [`BACKLOG.md`](../../BACKLOG.md); the [determinism/security assessment](../../docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md) supplies the findings and the [hardening plan](../../docs/DETERMINISM_SECURITY_HARDENING_PLAN.md) supplies the dependency model.
+This pack owns `HARD-001`, `HARD-002`, `HARD-004`, `HARD-005`. Canonical status remains in [`BACKLOG.md`](../../docs/BACKLOG.md); the [determinism/security assessment](../../docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md) supplies the findings and the [hardening plan](../../docs/DETERMINISM_SECURITY_HARDENING_PLAN.md) supplies the dependency model.
 
 ## External prerequisites
 

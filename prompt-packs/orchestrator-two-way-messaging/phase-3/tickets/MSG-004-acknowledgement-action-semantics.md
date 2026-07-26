@@ -1,6 +1,6 @@
 # MSG-004 — delivery, application, and action acknowledgement semantics
 
-**Backlog:** [`MSG-004`](../../../../BACKLOG.md)  
+**Backlog:** [`MSG-004`](../../../../docs/BACKLOG.md)  
 **Priority:** P1 / High  
 **Design:** [Acknowledgement model](../../../../docs/ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md#acknowledgement-model)
 

@@ -1,6 +1,6 @@
 # MSG-002 — foregroundable supervisor and shared wakeup channel
 
-**Backlog:** [`MSG-002`](../../../../BACKLOG.md)  
+**Backlog:** [`MSG-002`](../../../../docs/BACKLOG.md)  
 **Priority:** P0 / Critical  
 **Design:** [Use one shared wake channel](../../../../docs/ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md#use-one-shared-wake-channel)
 

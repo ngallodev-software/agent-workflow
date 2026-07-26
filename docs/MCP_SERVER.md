@@ -48,7 +48,7 @@ Destructive lifecycle and review/disposition tools are a later policy-gated phas
 
 Read-only resources should remain URI-addressable and bounded. Mutation tools should use typed request/result schemas, stable error categories, idempotency keys, and actor provenance. Tool names must describe existing domain operations rather than expose internal Python functions.
 
-The active implementation pack is [`prompt-packs/mcp-server-next/`](../prompt-packs/mcp-server-next/). The canonical backlog entry is `MCP-003` in [BACKLOG.md](../BACKLOG.md).
+The active implementation pack is [`prompt-packs/mcp-server-next/`](../prompt-packs/mcp-server-next/). The canonical backlog entry is `MCP-003` in [BACKLOG.md](BACKLOG.md).
 
 ## Acceptance requirements
 

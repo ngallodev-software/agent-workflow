@@ -1,6 +1,6 @@
 # HARD-010 — supply-chain integrity and authenticated release artifacts
 
-**Backlog:** [`HARD-010`](../../../../BACKLOG.md)  
+**Backlog:** [`HARD-010`](../../../../docs/BACKLOG.md)  
 **Priority:** P1 / High  
 **Assessment:** [F13-F14](../../../../docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#41-entry-points-configuration-host-integration-and-release-tooling) and the [hardening plan](../../../../docs/DETERMINISM_SECURITY_HARDENING_PLAN.md)
 

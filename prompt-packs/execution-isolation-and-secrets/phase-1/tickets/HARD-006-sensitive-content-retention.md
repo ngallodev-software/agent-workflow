@@ -1,6 +1,6 @@
 # HARD-006 — sensitive-content classification, redaction, and retention
 
-**Backlog:** [`HARD-006`](../../../../BACKLOG.md)  
+**Backlog:** [`HARD-006`](../../../../docs/BACKLOG.md)  
 **Priority:** P1 / High  
 **Assessment:** [F44-F47, F64, F81-F85](../../../../docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#7-security-posture-by-trust-boundary) and the [hardening plan](../../../../docs/DETERMINISM_SECURITY_HARDENING_PLAN.md)
 

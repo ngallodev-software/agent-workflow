@@ -1,0 +1,187 @@
+{
+  "schema": "agent-workflow/completion/v1",
+  "session_id": "hook-dogfood-001-20260726",
+  "ticket_id": "HOOK-DOGFOOD-001",
+  "pack_id": null,
+  "result": "completed",
+  "base_revision": "8f7cdd4c5ae167708266e174ae27b1f547e70f2b",
+  "head_revision": "8f7cdd4c5ae167708266e174ae27b1f547e70f2b",
+  "changed_files": [
+    "MANIFEST.sha256",
+    "install.sh",
+    "scripts/configure-hooks.py",
+    "scripts/hooks/codex-code-discovery-gate",
+    "tests/acceptance/test_cli_product_journeys.py"
+  ],
+  "criteria": [
+    {
+      "id": "codex-hook-contract",
+      "result": "pass",
+      "evidence": [
+        "Generated matcher is ^Bash$, matching current Codex unified exec semantics; installed Codex --strict-config --help accepted fixture config."
+      ]
+    },
+    {
+      "id": "claude-settings-separation",
+      "result": "pass",
+      "evidence": [
+        "MCP remains in .claude.json and hooks are written to .claude/settings.json or CLAUDE_CONFIG_DIR/settings.json; fixture preserves permissions.mode."
+      ]
+    },
+    {
+      "id": "idempotent-preservation",
+      "result": "pass",
+      "evidence": [
+        "Round-trip acceptance test passes and verifies one MCP entry, managed hook commands, unrelated Codex model, Claude state, and Claude settings mode."
+      ]
+    },
+    {
+      "id": "cbm-gate-behavior",
+      "result": "pass",
+      "evidence": [
+        "Codex adapter test blocks an identifiable code discovery payload on first session call, allows the repeat, and safely no-ops for git status with no identifiable code path."
+      ]
+    },
+    {
+      "id": "no-cbm-gate",
+      "result": "pass",
+      "evidence": [
+        "Installer acceptance test confirms SessionStart hooks remain valid and PreToolUse is omitted when no executable CBM gate is present."
+      ]
+    },
+    {
+      "id": "release-gates",
+      "result": "pass",
+      "evidence": [
+        "Release asset audit, published schema validation, shell syntax, Python compilation, and git diff checks pass; MANIFEST.sha256 was regenerated and validates."
+      ]
+    }
+  ],
+  "commands": [
+    {
+      "argv": [
+        "PYTHONPATH=src",
+        "python3",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/acceptance/test_cli_product_journeys.py::test_source_installer_round_trip_preserves_user_owned_paths",
+        "tests/acceptance/test_cli_product_journeys.py::test_source_installer_without_cbm_gate_keeps_pretooluse_disabled"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "receipt": "2 passed."
+    },
+    {
+      "argv": [
+        "PYTHONPATH=src",
+        "python3",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/release/test_distribution.py::test_release_asset_audit_is_the_single_static_repository_gate",
+        "tests/release/test_distribution.py::test_all_published_json_schemas_are_valid_draft_2020_12",
+        "tests/release/test_distribution.py::test_shell_entrypoints_and_installer_are_syntax_valid"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "receipt": "3 passed."
+    },
+    {
+      "argv": [
+        "python3",
+        "-m",
+        "py_compile",
+        "scripts/configure-hooks.py",
+        "scripts/hooks/codex-code-discovery-gate"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "receipt": "Python syntax compilation passed."
+    },
+    {
+      "argv": [
+        "bash",
+        "-n",
+        "install.sh",
+        "scripts/hooks/agent-workflow-session-reminder",
+        "scripts/hooks/codebase-memory-session-reminder",
+        "scripts/hooks/rtk-session-reminder"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "receipt": "Shell syntax checks passed."
+    },
+    {
+      "argv": [
+        "python3",
+        "scripts/audit-release-assets.py",
+        "--write-manifest"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "receipt": "Regenerated MANIFEST.sha256."
+    },
+    {
+      "argv": [
+        "python3",
+        "scripts/audit-release-assets.py"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "receipt": "release assets: valid"
+    },
+    {
+      "argv": [
+        "scripts/release-check.sh"
+      ],
+      "cwd": ".",
+      "exit_code": 1,
+      "receipt": "Pre-existing environment failure: /usr/bin/python3: No module named pytest."
+    },
+    {
+      "argv": [
+        "PYTHONPATH=src",
+        "python3",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/acceptance",
+        "tests/release"
+      ],
+      "cwd": ".",
+      "exit_code": 1,
+      "receipt": "18 failed, 4 passed; failures occur before ticket behavior due argparse shadowing from /home/nate/.local/lib/python3.13/site-packages/argparse.py."
+    },
+    {
+      "argv": [
+        "python3",
+        "-m",
+        "agent_workflow",
+        "progress",
+        "hook-dogfood-001-20260726",
+        "...",
+        "--actor",
+        "child"
+      ],
+      "cwd": ".",
+      "exit_code": 1,
+      "receipt": "Host workflow state directory is read-only; progress record could not be written."
+    },
+    {
+      "argv": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "receipt": "No whitespace errors."
+    }
+  ],
+  "unresolved": [
+    "scripts/release-check.sh cannot run its pytest phase because /usr/bin/python3 lacks pytest; targeted release checks pass under the available Python.",
+    "The full acceptance/release suite remains blocked by a pre-existing argparse shadowing incompatibility in /home/nate/.local/lib/python3.13/site-packages/argparse.py; no ticket files modify that environment.",
+    "The requested durable progress update could not be emitted because /home/nate/.local/state/agent-workflow/runs is read-only."
+  ]
+}

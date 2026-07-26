@@ -1,6 +1,6 @@
 # REL-003 — supported clean-host and executor compatibility
 
-**Backlog:** [`REL-003`](../../../../BACKLOG.md)  
+**Backlog:** [`REL-003`](../../../../docs/BACKLOG.md)  
 **Priority:** P0 / High  
 **Assessment:** [F14, F20, and F92](../../../../docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#47-testing-documentation-and-governance) and the [hardening plan](../../../../docs/DETERMINISM_SECURITY_HARDENING_PLAN.md)
 

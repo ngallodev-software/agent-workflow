@@ -1,0 +1,9 @@
+phase: "0"
+name: "sealed-evidence-evaluation"
+mandatory_order: []
+tasks:
+  - id: "CHATGPT-EVAL-001"
+    tier: B
+    session: "chatgpt-sealed-evidence-eval"
+    prompt: "tickets/CHATGPT-EVAL-001-sealed-evidence-eval.md"
+    backlog_id: "CHATGPT-EVAL-001"

@@ -19,7 +19,7 @@ Run the complete release gate before submitting changes:
 
 - Preserve one canonical execution path shared by CLI and MCP surfaces.
 - Treat status files and terminal output as projections, not authorities.
-- Add tests through the acceptance-first structure in [docs/TESTING.md](docs/TESTING.md).
+- Add tests through the acceptance-first structure in [Testing](TESTING.md).
 - Extend an installed-product journey before adding a narrow invariant.
 - Do not add completed prompt packs, one-off implementation reports, generated caches, vendored SDK source, or local paths.
 - Update the backlog for unfinished work and the changelog for user-visible completed work.

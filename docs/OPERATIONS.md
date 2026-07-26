@@ -110,7 +110,7 @@ Use `worktree remove` only after deciding whether the branch should be retained.
 
 ## Host routing
 
-Global instructions may recommend `agent-workflow` for bounded delegation. They are guidance, not a security boundary. Future installer-owned hooks may block a narrowly defined set of direct delegation commands, but only after explicit maintainer authorization and an audited break-glass path. See `BKL-007` in [BACKLOG.md](../BACKLOG.md).
+Global instructions may recommend `agent-workflow` for bounded delegation. They are guidance, not a security boundary. Future installer-owned hooks may block a narrowly defined set of direct delegation commands, but only after explicit maintainer authorization and an audited break-glass path. See `BKL-007` in [BACKLOG.md](BACKLOG.md).
 
 ## Planned orchestrator supervisor
 

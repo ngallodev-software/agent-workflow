@@ -12,6 +12,13 @@
 - Block the existing MCP mutation pack on immutable authority, MCP read-boundary hardening, and authenticated principals without duplicating MCP-003 ownership.
 - Add the `release-drift-auditor` skill and deterministic release-audit checks for duplicate task IDs, unknown backlog ownership, cross-pack collisions, undocumented active packs, and stale future-test IDs.
 - Align the execution protocol with acceptance-first testing and separate-worktree parallel delegation.
+
+## 0.2.3 — 2026-07-26
+
+- Integrate the bounded process substrate, artifact/path/schema integrity controls, and MCP read-boundary hardening from the sealed foundation runs.
+- Correct Codex/Claude hook configuration separation and add a Codex-specific code-discovery gate.
+- Add focused process, path-integrity, MCP-boundary, and hook installation acceptance/invariant coverage.
+- Record the foundation-run ledger and sealed-evidence assessment handoff for independent review.
 - Correct security documentation that previously overstated symlink containment, preventative sandboxing, authenticated review, and release-integrity guarantees.
 - Add hardening dependency and parallel-execution diagrams plus a public-release gate plan.
 

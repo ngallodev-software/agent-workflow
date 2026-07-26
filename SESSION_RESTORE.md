@@ -3,12 +3,12 @@
 **Repository:** `/lump/apps/agent-workflow`  
 **Snapshot date:** 2026-07-26
 **Branch:** `master`
-**Version:** `0.2.2`
-**Latest overlay commit:** `a62a24c` (`merge determinism security backlog overlay`)
+**Version:** `0.2.3`
+**Current integration:** foundation hardening and ChatGPT sealed-run assessment pack are staged on `master`.
 
 ## Current state
 
-The overlay archive `agent-workflow-0.2.2-determinism-security-backlog-prompt-packs-changes.tar.zst` was extracted and merged. Existing local installer/uninstaller behavior was retained and reconciled with the overlay; the new `release-drift-auditor` skill is discovered dynamically. The archive was verified path-by-path and deleted.
+The foundation implementation runs were sealed, integrated, and independently gated. HARD-001, HARD-002, and HARD-005 remain `in-review` pending shared acceptance; HARD-004 remains blocked. No score/report/score-set evidence was fabricated: all six sealed runs had no evaluation plan and collection failed closed on the missing score-set file.
 
 Overlay content now present includes:
 
@@ -20,7 +20,7 @@ Overlay content now present includes:
 - release-drift-auditor skill;
 - release-audit, documentation, and delegation-protocol updates.
 
-`BACKLOG.md` is canonical. HARD-001 through HARD-010, REL-003/004, and MCP-003 now have explicit pack ownership and sequencing. Local Jenkins/release follow-up remains tracked as REL-005 through REL-007. The MCP mutation pack remains blocked behind HARD-004, HARD-005, and HARD-007.
+`docs/BACKLOG.md` is canonical. Root steering is in `AGENTS.md`; conditional delegation references are in `docs/references/`. HARD-001 through HARD-010, REL-003/004, and MCP-003 retain explicit pack ownership and sequencing. Local Jenkins/release follow-up remains tracked as REL-005 through REL-007. The MCP mutation pack remains blocked behind HARD-004, HARD-005, and HARD-007.
 
 ## Verification
 
@@ -28,8 +28,9 @@ Overlay content now present includes:
 - `python3 scripts/audit-release-assets.py`: passed.
 - shell syntax checks for installer/uninstaller and scripts: passed.
 - all four prompt packs validated: passed.
-- `python3 -m build --no-isolation`: passed; built both `agent_workflow-0.2.2.tar.gz` and `agent_workflow-0.2.2-py3-none-any.whl`.
-- global host install: passed with `./install.sh --python /home/nate/.pyenv/shims/python3 --extras mcp`.
+- `python3 -m pip wheel . --no-deps`: passed; built `agent_workflow-0.2.3-py3-none-any.whl`.
+- full suite: 41 passed, 12 failed, 2 skipped, 1 strict future xfail; failures remain installed-product/executor-environment limitations and are not represented as release acceptance.
+- global host install: pending final 0.2.3 deployment verification with `./install.sh --python /home/nate/.pyenv/shims/python3 --extras mcp`.
 - installed checks: `agent-workflow --version`, `agent-workflow-mcp --help`, all three release-drift-auditor skill links, host assets, and man page passed.
 - no test files were modified.
 

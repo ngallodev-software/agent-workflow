@@ -68,8 +68,8 @@ Terminal text is operational context, not sealed proof. Inspect the authoritativ
 - [`docs/OPERATIONS.md`](../../docs/OPERATIONS.md)
 - [`docs/PROMPT_PACKS.md`](../../docs/PROMPT_PACKS.md)
 - [`docs/TESTING.md`](../../docs/TESTING.md)
-- [`EXECUTION_PROTOCOL.md`](../../EXECUTION_PROTOCOL.md)
-- [`DELEGATION_RUNBOOK.md`](../../DELEGATION_RUNBOOK.md)
+- [`EXECUTION_PROTOCOL.md`](../../docs/references/EXECUTION_PROTOCOL.md)
+- [`DELEGATION_RUNBOOK.md`](../../docs/references/DELEGATION_RUNBOOK.md)
 
 ## Workflow graphs
 

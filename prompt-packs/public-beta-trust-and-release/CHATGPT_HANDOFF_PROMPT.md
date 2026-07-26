@@ -1,6 +1,6 @@
 # ChatGPT handoff — public beta trust and release
 
-Treat current source, [`BACKLOG.md`](../../BACKLOG.md), the [feature assessment](../../docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md), and the [hardening plan](../../docs/DETERMINISM_SECURITY_HARDENING_PLAN.md) as authoritative.
+Treat current source, [`BACKLOG.md`](../../docs/BACKLOG.md), the [feature assessment](../../docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md), and the [hardening plan](../../docs/DETERMINISM_SECURITY_HARDENING_PLAN.md) as authoritative.
 
 1. Run the deterministic release drift audit and validate this pack.
 2. Confirm all external prerequisites and prior phase gates.

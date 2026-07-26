@@ -1,0 +1,97 @@
+{
+  "artifacts": [
+    {
+      "path": "prompt.md",
+      "sha256": "9837cf03f9996c036b1b9b5fa15566135443e8692a31a10132f97b280b7c7312",
+      "size": 4756
+    },
+    {
+      "path": "launch-prompt.md",
+      "sha256": "334298d5e1619432ffb0c756a54b86d0b143286d1910096b5ec354b156deba8c",
+      "size": 6226
+    },
+    {
+      "path": "command.json",
+      "sha256": "e5c961e6e2b0690314a774f65ebee4ed68917dd6db9621e55b5a972e3ce0aa9f",
+      "size": 549
+    },
+    {
+      "path": "source-baseline.json",
+      "sha256": "4e72caff3198982e5d7c7de184a6025e238a6d782bd1ce2238880d8ce91b338b",
+      "size": 359
+    },
+    {
+      "path": "completion.md",
+      "sha256": "c63402cff4ffcfebbc43395b33cde4f1e64860b0e40f4d90a25c995eb20bf7a2",
+      "size": 1317
+    },
+    {
+      "path": "completion.json",
+      "sha256": "e9db5f463e4e5323be33b32048fe4e4394655c14e30ac7ee7fcd4bd2acadea6f",
+      "size": 3272
+    },
+    {
+      "path": "run-provenance.json",
+      "sha256": "522190de366bc43a2c8ee6a035374cd1afc323fe342100f9b02974747f41ea64",
+      "size": 2029
+    },
+    {
+      "path": "executor-events.jsonl",
+      "sha256": "bf969b708c012ecd60fd5681939fa1b8fddafd13ce9bbe8844106d721f580f79",
+      "size": 557289
+    },
+    {
+      "path": "executor-stderr.log",
+      "sha256": "072a61e3ed75f7558c2af04360d848fbfe7e6f0dbaca912a5384362456b3e87f",
+      "size": 274874
+    },
+    {
+      "path": "output.log",
+      "sha256": "2328f736c0425a6234c7c1de275dfe7c942b7e0a3bcf8e86faf885cb9264d744",
+      "size": 278172
+    },
+    {
+      "path": "final-status.json",
+      "sha256": "a3e29b954b6505eb58936e197c8c4af541b2e6bc7e1152b342ca471d0aa9653e",
+      "size": 3997
+    },
+    {
+      "path": "patch.diff",
+      "sha256": "46883b6fffe89f4d519e28602ef51e9f8d69f2d1806f35531ca658be846cb316",
+      "size": 50420
+    },
+    {
+      "path": "collections/completion.json",
+      "sha256": "e7377abd40151decb018a48f396726143d72ddf05639c5591c5a88c3752070cc",
+      "size": 731
+    },
+    {
+      "path": "execution-metrics.json",
+      "sha256": "bdca6b626ec2563d26b9509d4cff7a8f462ad27f571aadf96524d130e742fe0e",
+      "size": 2006
+    },
+    {
+      "path": "control-events.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "agent-context.json",
+      "sha256": "1107e6314c4e0c25d4a4d4d421173f8397ecbbb062327b292bbc2ad7f2b8dc50",
+      "size": 1197
+    },
+    {
+      "path": "provider-evidence.json",
+      "sha256": "748b4e6f78c66da2936f6f444dc489d481b7bd090f95746964a4f1d17b084a4c",
+      "size": 1551
+    },
+    {
+      "path": "assignments.jsonl",
+      "sha256": "3cdc9dbf46cbd495aeb76815f1cb03ad8a788386fabba2a87dd9464903f49616",
+      "size": 370
+    }
+  ],
+  "schema": "agent-workflow/final-receipt/v1",
+  "sealed_at": "2026-07-26T17:20:42.062146+00:00",
+  "session_id": "deterministic-foundations-hard-005-parallel-20260726"
+}

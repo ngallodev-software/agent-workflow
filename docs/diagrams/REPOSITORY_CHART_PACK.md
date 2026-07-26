@@ -1,6 +1,6 @@
 # agent-workflow repository chart pack
 
-**Release:** 0.2.2
+**Release:** 0.2.3
 **Purpose:** current-state architecture, data/evidence model, execution flows, security boundaries, and planned MCP evolution.
 
 Mermaid sources for the highest-value diagrams are also stored as individual `.mmd` files in this directory.
@@ -625,7 +625,7 @@ Update this chart pack whenever a release changes a durable authority, package b
 
 ## Planned two-way orchestrator messaging
 
-These diagrams describe approved planned work, not current executable behavior. Canonical status is in [`BACKLOG.md`](../../BACKLOG.md).
+These diagrams describe approved planned work, not current executable behavior. Canonical status is in [`BACKLOG.md`](../BACKLOG.md).
 
 ### Aggregate fan-in and wake sequence
 

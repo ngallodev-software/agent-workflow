@@ -1,6 +1,6 @@
 # MSG-005 — restart reconstruction and missed-wakeup recovery
 
-**Backlog:** [`MSG-005`](../../../../BACKLOG.md)  
+**Backlog:** [`MSG-005`](../../../../docs/BACKLOG.md)  
 **Priority:** P1 / Critical  
 **Design:** [Failure and restart behavior](../../../../docs/ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md#failure-and-restart-behavior)
 

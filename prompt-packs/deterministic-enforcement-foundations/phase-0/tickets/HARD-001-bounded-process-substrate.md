@@ -1,6 +1,6 @@
 # HARD-001 — bounded subprocess execution substrate
 
-**Backlog:** [`HARD-001`](../../../../BACKLOG.md)  
+**Backlog:** [`HARD-001`](../../../../docs/BACKLOG.md)  
 **Priority:** P0 / Critical  
 **Assessment:** [F04-F06, F18-F20, and F71](../../../../docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#4-feature-and-component-inventory) and the [hardening plan](../../../../docs/DETERMINISM_SECURITY_HARDENING_PLAN.md)
 

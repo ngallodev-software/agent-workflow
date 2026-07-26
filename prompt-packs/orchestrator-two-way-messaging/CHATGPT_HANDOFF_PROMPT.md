@@ -1,6 +1,6 @@
 # ChatGPT handoff — orchestrator two-way messaging
 
-Treat current source, [`BACKLOG.md`](../../BACKLOG.md), the [messaging design](../../docs/ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md), and this pack’s collision matrix as authoritative.
+Treat current source, [`BACKLOG.md`](../../docs/BACKLOG.md), the [messaging design](../../docs/ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md), and this pack’s collision matrix as authoritative.
 
 1. Run the deterministic release drift audit and validate this pack.
 2. Confirm `DEC-001` and every ticket-specific `HARD-*` prerequisite before editing.

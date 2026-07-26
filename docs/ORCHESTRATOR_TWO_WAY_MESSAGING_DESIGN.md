@@ -4,7 +4,7 @@
 
 This document is the complete design proposal for reliable two-way messaging between agents launched by `agent-workflow` and the orchestrator responsible for assigning and integrating their work.
 
-The design is **planned work**, not a statement that the supervisor, aggregate inbox, or orchestrator-resume commands already exist. Canonical implementation status is maintained in [`BACKLOG.md`](../BACKLOG.md), and detailed execution tickets live in [`prompt-packs/orchestrator-two-way-messaging`](../prompt-packs/orchestrator-two-way-messaging/).
+The design is **planned work**, not a statement that the supervisor, aggregate inbox, or orchestrator-resume commands already exist. Canonical implementation status is maintained in [`BACKLOG.md`](BACKLOG.md), and detailed execution tickets live in [`prompt-packs/orchestrator-two-way-messaging`](../prompt-packs/orchestrator-two-way-messaging/).
 
 The target is the current single-host, tmux-backed architecture. Durable append-only records remain the source of truth. Wake transports are accelerators only. Multi-host messaging is explicitly outside this implementation pack.
 
