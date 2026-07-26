@@ -2,8 +2,8 @@ pipeline {
     agent any
 
     environment {
-        VENV = "${WORKSPACE}/.jenkins-venv"
-        PATH = "${WORKSPACE}/.jenkins-venv/bin:${env.PATH}"
+        VENV = "${WORKSPACE}@tmp/agent-workflow-venv"
+        PATH = "${WORKSPACE}@tmp/agent-workflow-venv/bin:${env.PATH}"
     }
 
     options {
@@ -21,6 +21,7 @@ pipeline {
         stage('Prepare Python environment') {
             steps {
                 sh '''
+                    rm -rf "$WORKSPACE/.jenkins-venv"
                     rm -rf "$VENV"
                     python3 -m venv "$VENV"
                     "$VENV/bin/python" -m pip install \
