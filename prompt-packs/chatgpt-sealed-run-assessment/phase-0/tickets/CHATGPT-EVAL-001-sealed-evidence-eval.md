@@ -13,3 +13,5 @@ Non-targets: HARD/MSG runtime implementation, host configuration, backlog status
 - Add focused tests protecting missing-evaluation-plan, incomplete-score-set, sealed-receipt, and unavailable-environment semantics.
 - Run the smallest relevant installed-product/invariant gates and release drift audit.
 - Write truthful completion JSON/Markdown with hashes/paths and unresolved limitations.
+
+Stop after the evaluation-system changes, focused evidence tests, and completion report are sealed; do not begin the dependent TDD phase in this ticket.
