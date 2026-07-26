@@ -1,6 +1,6 @@
 # Release Blockers Audit
 
-**Date:** 2026-07-25  
+**Date:** 2026-07-26
 **Status:** Release candidate assessment  
 **Scope:** P0 blockers from BACKLOG.md and PUBLIC_RELEASE_READINESS.md
 
@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-Five P0 blockers prevent public release. Three are decisions requiring maintainer authorization; one requires external coordination (vulnerability reporting); one requires live platform testing. All other work is feature-complete or deferred to post-release phases.
+The governance blockers remain open: license selection, durable-control objectives, vulnerability reporting, supported-host evidence, and release ownership/signing. The determinism/security assessment also identifies four P0 engineering controls required before a public preview. Jenkins build #16 proves the local CI pipeline can build, test, and install the current tree, but it does not close release governance or clean-host/provider evidence.
 
 ---
 
@@ -20,7 +20,12 @@ Five P0 blockers prevent public release. Three are decisions requiring maintaine
 | DEC-001 | Durable-control service objectives | needs-decision | Recorded decision: storage model, failure semantics, ordering scope, idempotency, max latency SLO | None (independent) | 4-8h (design workshop) |
 | REL-002 | Vulnerability reporting channel | blocked | Real monitored email or private disclosure mechanism + updated `SECURITY.md` with contact details | None (independent, external coordination) | 4-8h (infrastructure + doc update) |
 | REL-003 | Supported host/executor matrix | ready | Live compatibility test results on clean hosts for each declared Linux/Python/tmux/executor/model combination | None (independent, but requires execution) | 8-16h (per-platform testing) |
+| REL-004 | Release ownership and signing policy | needs-decision | Named maintainer process, protected tags, signed artifact policy, support window, and security-update ownership | None | 4-8h (governance decision) |
 | DEC-001 (blocking BKL-001) | Service objectives for durable messages | needs-decision | Decision on cursor durability, restart recovery guarantees, handling idempotency scope | Prerequisite for BKL-001 implementation | Included in DEC-001 |
+| SEC-001 | Bounded subprocess substrate | ready | Timeout/output/process-group/resource controls and sanitized/redacted execution evidence across host-tool call sites | None | 16-24h |
+| SEC-002 | Preventative execution and pack integrity controls | ready | Sandbox/write boundary plus symlink/special-file policy with acceptance evidence | None | 16-32h |
+| SEC-003 | MCP read-boundary hardening | ready | Metadata-only message default, no-follow path validation, stable errors, and safe receipt reads | None | 8-16h |
+| SEC-004 | Immutable launch authority | ready | Immutable launch contract consumed by runner/evaluator; mutable status is projection only | None | 8-16h |
 
 ---
 
@@ -92,6 +97,27 @@ Five P0 blockers prevent public release. Three are decisions requiring maintaine
 ---
 
 ## Exit Evidence Checklist
+
+### Jenkins local pipeline verification
+
+- [x] Jenkins job `agent-workflow-local` completed build #16 successfully on `origin/master` at `8b937a0`
+- [x] Isolated Jenkins Python environment provisioned with `pytest`, `jsonschema`, `build`, and `setuptools`
+- [x] Release checks passed: `35 passed, 2 skipped, 1 xfailed`
+- [x] Wheel built: `agent_workflow-0.2.2-py3-none-any.whl`
+- [x] Local editable install completed successfully
+- [ ] Commit-trigger/polling behavior is configured and verified; current job configuration has no SCM trigger
+- [ ] Jenkins output is archived as structured, scrubbed release evidence
+
+This is internal CI evidence only. It does not substitute for REL-003 clean-host compatibility, REL-007 install/uninstall evidence, or a supported provider cohort.
+
+### Determinism/security P0 controls
+
+- [ ] SEC-001: bounded subprocess substrate is implemented and migrated across host-tool/evaluation call sites
+- [ ] SEC-002: preventative writable-path enforcement and prompt-pack symlink/special-file policy are implemented
+- [ ] SEC-003: MCP message privacy and component-safe path/receipt handling are implemented
+- [ ] SEC-004: immutable launch contract is authoritative for runner and evaluation inputs
+
+Detailed findings and source observations are recorded in [FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md](FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md).
 
 ### REL-001: License Selection
 

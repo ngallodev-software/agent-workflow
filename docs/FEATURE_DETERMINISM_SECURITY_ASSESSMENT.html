@@ -1,0 +1,1337 @@
+<!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>agent-workflow feature determinism and security assessment</title>
+            <style>
+/* From extension vscode.github */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+.vscode-dark img[src$=\#gh-light-mode-only],
+.vscode-light img[src$=\#gh-dark-mode-only],
+.vscode-high-contrast:not(.vscode-high-contrast-light) img[src$=\#gh-light-mode-only],
+.vscode-high-contrast-light img[src$=\#gh-dark-mode-only] {
+	display: none;
+}
+
+</style>
+            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.css">
+<link href="https://cdn.jsdelivr.net/npm/katex-copytex@latest/dist/katex-copytex.min.css" rel="stylesheet" type="text/css">
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Microsoft/vscode/extensions/markdown-language-features/media/markdown.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Microsoft/vscode/extensions/markdown-language-features/media/highlight.css">
+<style>
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe WPC', 'Segoe UI', system-ui, 'Ubuntu', 'Droid Sans', sans-serif;
+                font-size: 14px;
+                line-height: 1.6;
+            }
+        </style>
+        <style>
+.task-list-item {
+    list-style-type: none;
+}
+
+.task-list-item-checkbox {
+    margin-left: -20px;
+    vertical-align: middle;
+    pointer-events: none;
+}
+</style>
+<style>
+:root {
+  --color-note: #0969da;
+  --color-tip: #1a7f37;
+  --color-warning: #9a6700;
+  --color-severe: #bc4c00;
+  --color-caution: #d1242f;
+  --color-important: #8250df;
+}
+
+</style>
+<style>
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-note: #2f81f7;
+    --color-tip: #3fb950;
+    --color-warning: #d29922;
+    --color-severe: #db6d28;
+    --color-caution: #f85149;
+    --color-important: #a371f7;
+  }
+}
+
+</style>
+<style>
+.markdown-alert {
+  padding: 0.5rem 1rem;
+  margin-bottom: 16px;
+  color: inherit;
+  border-left: .25em solid #888;
+}
+
+.markdown-alert>:first-child {
+  margin-top: 0
+}
+
+.markdown-alert>:last-child {
+  margin-bottom: 0
+}
+
+.markdown-alert .markdown-alert-title {
+  display: flex;
+  font-weight: 500;
+  align-items: center;
+  line-height: 1
+}
+
+.markdown-alert .markdown-alert-title .octicon {
+  margin-right: 0.5rem;
+  display: inline-block;
+  overflow: visible !important;
+  vertical-align: text-bottom;
+  fill: currentColor;
+}
+
+.markdown-alert.markdown-alert-note {
+  border-left-color: var(--color-note);
+}
+
+.markdown-alert.markdown-alert-note .markdown-alert-title {
+  color: var(--color-note);
+}
+
+.markdown-alert.markdown-alert-important {
+  border-left-color: var(--color-important);
+}
+
+.markdown-alert.markdown-alert-important .markdown-alert-title {
+  color: var(--color-important);
+}
+
+.markdown-alert.markdown-alert-warning {
+  border-left-color: var(--color-warning);
+}
+
+.markdown-alert.markdown-alert-warning .markdown-alert-title {
+  color: var(--color-warning);
+}
+
+.markdown-alert.markdown-alert-tip {
+  border-left-color: var(--color-tip);
+}
+
+.markdown-alert.markdown-alert-tip .markdown-alert-title {
+  color: var(--color-tip);
+}
+
+.markdown-alert.markdown-alert-caution {
+  border-left-color: var(--color-caution);
+}
+
+.markdown-alert.markdown-alert-caution .markdown-alert-title {
+  color: var(--color-caution);
+}
+
+</style>
+        
+        </head>
+        <body class="vscode-body vscode-dark">
+            <span id="markdown-mermaid" aria-hidden="true" data-config="{&quot;darkModeTheme&quot;:&quot;vscode&quot;,&quot;lightModeTheme&quot;:&quot;vscode&quot;,&quot;maxTextSize&quot;:50000,&quot;clickDrag&quot;:&quot;alt&quot;,&quot;showControls&quot;:&quot;onHoverOrFocus&quot;,&quot;resizable&quot;:true,&quot;maxHeight&quot;:&quot;&quot;}"></span>
+				<h1 id="agent-workflow-feature-determinism-and-security-assessment">agent-workflow feature determinism and security assessment</h1>
+<p><strong>Repository state analyzed:</strong> <code>agent-workflow</code> 0.2.2 reconstructed from baseline <code>77dc32bd93455994457aa099749be6e97e4edb05</code> plus the accepted 0.2.2 delta targeting <code>dbc530b496cb5f0d663181c6130cea71bce983c2</code><br>
+<strong>Assessment date:</strong> 2026-07-25<br>
+<strong>Scope:</strong> Python package, CLI, shell tooling, schemas, prompt packs, skills, MCP adapter, evaluation system, release tooling, tests, and current documentation.</p>
+<h2 id="1-classification-model">1. Classification model</h2>
+<p>This report distinguishes the mechanism that executes a feature from the source of the decision or result.</p>
+<table>
+<thead>
+<tr>
+<th>Label</th>
+<th>Meaning</th>
+<th>Typical examples</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>D-CODE</strong></td>
+<td>Deterministic application logic. The same normalized input and state should produce the same decision or artifact.</td>
+<td>schema validation, workflow replay, receipt verification</td>
+</tr>
+<tr>
+<td><strong>D-ENV</strong></td>
+<td>Deterministic code that invokes environment-dependent tools or observes mutable host state.</td>
+<td>Git, tmux, filesystem, installer, shell commands</td>
+</tr>
+<tr>
+<td><strong>HYBRID</strong></td>
+<td>Deterministic orchestration around a nondeterministic or externally controlled producer.</td>
+<td>launching Codex/Claude, collecting provider events, MCP called by an LLM client</td>
+</tr>
+<tr>
+<td><strong>N-GUIDANCE</strong></td>
+<td>Prompt, skill, prose, or procedural guidance whose semantic interpretation is not enforced by code.</td>
+<td>ticket instructions, review skills, stop conditions</td>
+</tr>
+<tr>
+<td><strong>N-HUMAN</strong></td>
+<td>Human judgment or identity-dependent decision.</td>
+<td>review, acceptance, policy authorization</td>
+</tr>
+</tbody>
+</table>
+<p>A feature implemented in Python is not automatically deterministic. Python can deterministically launch an agent, but the agent's semantic output remains nondeterministic. Conversely, a Markdown file can be part of a deterministic process when its bytes are schema-validated and content-addressed, even though the instructions inside it are interpreted nondeterministically.</p>
+<h2 id="2-executive-conclusions">2. Executive conclusions</h2>
+<ol>
+<li><strong>The control plane is mostly deterministic.</strong> Workflow replay, receipts, schemas, bindings, routing rules, provider normalization, cohort comparison, and pack validation are code-defined and fail closed in many important cases.</li>
+<li><strong>The actual coding work is intentionally nondeterministic.</strong> Prompts, external coding agents, human review, and model-generated MCP calls produce semantic outcomes that cannot be made deterministic by adding more orchestration code.</li>
+<li><strong>The strongest design choice is the separation of authority from observation.</strong> Append-only journals, normalized snapshots, final receipts, lifecycle receipts, and sealed evidence are stronger authorities than status projections, terminal capture, or agent prose.</li>
+<li><strong>Several stated policies are still guidance or post-hoc detection rather than enforcement.</strong> Writable-path policy, scope discipline, secret handling in messages, reviewer identity, and some prompt-pack safety rules rely partly on agent/human compliance.</li>
+<li><strong>The largest remaining security risks are local execution risks, not cryptography.</strong> Unbounded subprocess capture, arbitrary evaluation commands, inherited environments, prompt-pack symlink integrity, same-user state mutation, and sensitive content exposure through logs/messages deserve priority before a public preview.</li>
+<li><strong>The repository is moving toward a public release rather than merely accumulating prompts, but it is not ready for one yet.</strong> Documentation consolidation and acceptance-first testing are positive. License, monitored vulnerability reporting, supported-host compatibility, dependency/release signing, and the P0 controls below remain necessary.</li>
+</ol>
+<h2 id="3-deterministic-authority-map">3. Deterministic authority map</h2>
+<pre class="mermaid" style="all: unset;">flowchart LR
+    Human["Operator / reviewer\nN-HUMAN"]
+    Guidance["Skills, tickets, prompts\nN-GUIDANCE"]
+    CLI["CLI and shared services\nD-CODE"]
+    Host["Git / tmux / filesystem / processes\nD-ENV"]
+    Agent["External coding agent\nHYBRID / nondeterministic semantics"]
+    Evidence["Journals, contracts, receipts\nD-CODE"]
+    Eval["Collectors and scoring\nD-CODE + D-ENV"]
+    MCPClient["MCP client / model\nHYBRID"]
+    MCP["Bounded MCP adapter\nD-CODE"]
+
+    Human --&gt; CLI
+    Guidance --&gt; Agent
+    CLI --&gt; Host
+    CLI --&gt; Agent
+    Agent --&gt; Host
+    Agent --&gt; Evidence
+    Host --&gt; Evidence
+    Evidence --&gt; Eval
+    Eval --&gt; Human
+    MCPClient --&gt; MCP
+    MCP --&gt; CLI</pre>
+<p>The security objective should remain: <strong>nondeterministic producers may propose work and emit artifacts, but only deterministic code and explicitly authenticated human decisions may change authoritative state.</strong></p>
+<h2 id="4-feature-and-component-inventory">4. Feature and component inventory</h2>
+<h3 id="41-entry-points-configuration-host-integration-and-release-tooling">4.1 Entry points, configuration, host integration, and release tooling</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Feature / part</th>
+<th>Current implementation</th>
+<th>Class</th>
+<th>Suggested changes</th>
+<th>Security recommendations</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F01</td>
+<td>Main CLI and command routing</td>
+<td><code>src/agent_workflow/cli.py</code>; one <code>argparse</code> parser dispatches to shared modules</td>
+<td>D-CODE</td>
+<td>Split the 900+ line dispatch function into transport-neutral command services and thin rendering adapters. Generate command reference and man-page command lists from the live parser.</td>
+<td>Keep argument parsing separate from authorization. Redact sensitive argv values in errors and JSON output. Add a global output-size limit and consistent stable error codes.</td>
+</tr>
+<tr>
+<td>F02</td>
+<td>Machine-readable CLI output</td>
+<td><code>--json</code> with ad hoc dictionaries</td>
+<td>D-CODE</td>
+<td>Define versioned response envelopes and JSON Schemas for public command results and errors.</td>
+<td>Never include raw environment variables, unrestricted paths, terminal capture, or prompt contents by default.</td>
+</tr>
+<tr>
+<td>F03</td>
+<td>Configuration loading and defaults</td>
+<td><code>config.py</code>; TOML plus hard-coded defaults for executors, models, classes, roots, and tmux</td>
+<td>D-CODE</td>
+<td>Add a versioned config schema, reject unknown keys, and separate shipped examples from compatibility data. Move frequently changing executor/model matrices out of release code or version them explicitly.</td>
+<td>Treat config as executable policy. Warn or fail on group/world-writable config. Avoid secrets in config; support environment/file references for credentials. Record executable path, version, and optionally digest in provenance.</td>
+</tr>
+<tr>
+<td>F04</td>
+<td>Environment diagnostics</td>
+<td><code>doctor.py</code>; probes binaries, help, writable roots, and archive support</td>
+<td>D-ENV</td>
+<td>Add subprocess timeouts, output caps, and explicit compatibility assertions for supported versions. Return remediation guidance per failed check.</td>
+<td>Do not trust <code>PATH</code> silently in privileged or automated contexts. Report resolved binary paths and ownership/mode. Sanitize probe environments and redact output.</td>
+</tr>
+<tr>
+<td>F05</td>
+<td>Generic subprocess helper</td>
+<td><code>process.py</code>; <code>subprocess.run(... capture_output=True)</code></td>
+<td>D-ENV</td>
+<td>Replace with one bounded execution substrate supporting timeout, process groups, output caps/spooling, environment allowlists, cancellation, and structured results. Use it everywhere, including doctor and Git helpers.</td>
+<td>This is a P0 control. Current unbounded capture can exhaust memory; lack of timeout can hang the orchestrator. Error messages can expose secret argv.</td>
+</tr>
+<tr>
+<td>F06</td>
+<td>Git snapshot and cleanliness checks</td>
+<td><code>git.py</code></td>
+<td>D-ENV</td>
+<td>Capture submodule state, sparse-checkout state, worktree lock state, and Git version in source provenance.</td>
+<td>Run Git with a sanitized environment and disabled external diff/pager hooks where appropriate. Defend against malicious repository config, aliases, filters, and hooks in high-trust evaluation paths.</td>
+</tr>
+<tr>
+<td>F07</td>
+<td>Worktree create/list/remove</td>
+<td><code>worktrees.py</code>; invokes real Git worktrees</td>
+<td>D-ENV</td>
+<td>Add an optional configured repository allowlist and a dry-run/plan command for destructive removal. Make branch cleanup a separately authorized action.</td>
+<td>Custom destinations currently extend beyond the default root. Reject symlinked repository/destination components in bounded services. Do not expose <code>--force</code> or branch deletion through MCP without stronger authorization and idempotency.</td>
+</tr>
+<tr>
+<td>F08</td>
+<td>Installation and uninstall behavior</td>
+<td><code>install.sh</code>, package metadata, skill links, XDG starter config</td>
+<td>D-ENV</td>
+<td>Replace editable installation as the public default with wheel installation. Maintain an installer-owned file manifest and explicit uninstall command.</td>
+<td>Refuse root execution unless explicitly supported. Avoid modifying shell profiles. Verify source ownership, dependency source, and destination permissions. Never overwrite user-owned config or skill paths.</td>
+</tr>
+<tr>
+<td>F09</td>
+<td>Shell completion</td>
+<td>live parser plus <code>shtab</code></td>
+<td>D-CODE</td>
+<td>Generate completion artifacts during release and test them against the installed CLI.</td>
+<td>Completion must not execute repository code or inspect sensitive state merely to enumerate values.</td>
+</tr>
+<tr>
+<td>F10</td>
+<td>Man pages and command documentation</td>
+<td><code>docs/man/**</code>, <code>docs/COMMAND_REFERENCE.md</code>, release audit</td>
+<td>D-CODE for validation; N-GUIDANCE for prose</td>
+<td>Generate command names/options from the parser and keep only semantic explanation handwritten.</td>
+<td>Continue failing release checks when docs advertise nonexistent commands. Avoid examples that normalize unsafe flags such as force deletion or unrestricted commands.</td>
+</tr>
+<tr>
+<td>F11</td>
+<td>JSON Schema publication and validation</td>
+<td><code>contracts.py</code>, <code>schemas/*.json</code>, <code>jsonschema</code></td>
+<td>D-CODE</td>
+<td>Add explicit schema deprecation/migration policy and compatibility tests across supported stored versions.</td>
+<td>Resolve schemas from packaged immutable assets, not ambient site-packages search paths where an unexpected schema could shadow the intended one. Verify schema IDs are unique.</td>
+</tr>
+<tr>
+<td>F12</td>
+<td>State migrations</td>
+<td><code>migrations.py</code></td>
+<td>D-CODE</td>
+<td>Document every supported source/target version, make migrations idempotent, and add fixture-based upgrade journeys for real prior releases.</td>
+<td>Never rewrite sealed evidence. Migrations should create a new projection or derived index and record provenance. Back up mutable projections before replacement.</td>
+</tr>
+<tr>
+<td>F13</td>
+<td>Release asset audit and manifest</td>
+<td><code>scripts/audit-release-assets.py</code>, <code>MANIFEST.sha256</code>, <code>release-check.sh</code></td>
+<td>D-CODE / D-ENV</td>
+<td>Produce a complete source distribution manifest, SBOM, dependency lock, and provenance statement. Verify wheel and source archive reproducibility independently.</td>
+<td>Add signed release attestations, preferably Sigstore or equivalent. Checksums without an authenticated publication channel detect corruption but not malicious replacement.</td>
+</tr>
+<tr>
+<td>F14</td>
+<td>CI and default test gate</td>
+<td><code>.github/workflows/ci.yml</code>, acceptance-first suite</td>
+<td>D-ENV</td>
+<td>Add a clean-host matrix for supported Python/Linux/tmux versions and a separate opt-in live-provider lane. Measure flake rate and runtime.</td>
+<td>Pin actions by commit, minimize workflow token permissions, avoid executing untrusted fork code with secrets, and archive only scrubbed evidence.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="42-delegation-sessions-agents-and-durable-control">4.2 Delegation, sessions, agents, and durable control</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Feature / part</th>
+<th>Current implementation</th>
+<th>Class</th>
+<th>Suggested changes</th>
+<th>Security recommendations</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F15</td>
+<td>Executor selection and model policy</td>
+<td><code>config.py</code>, <code>executors.py</code>, <code>sessions._resolve_agent_identity</code></td>
+<td>D-CODE</td>
+<td>Version executor adapters separately from core orchestration. Discover capabilities through explicit adapter probes rather than hard-coded model lists alone.</td>
+<td>Keep no-go enforcement server-side and fail closed. Require recorded authorization for overrides. Do not let prompt text select an otherwise forbidden model.</td>
+</tr>
+<tr>
+<td>F16</td>
+<td>Advisory task routing</td>
+<td><code>routing.py</code>; metadata maps to agent class/executor/model</td>
+<td>D-CODE, input may be N-GUIDANCE</td>
+<td>Replace string synonym rules with versioned policy tables and structured task metadata. Preserve explanation codes.</td>
+<td>Keep routing advisory. Do not add online learning, vector memory, or model-written policy without review. Treat agent-generated metadata as untrusted.</td>
+</tr>
+<tr>
+<td>F17</td>
+<td>Prompt launch preparation</td>
+<td><code>sessions.launch</code>; copies prompt, creates command/provenance/runtime records</td>
+<td>HYBRID</td>
+<td>Create one immutable <code>launch-contract.json</code> containing every runner input and have the runner consume only that contract. Reduce duplicated fields across mutable status and other records.</td>
+<td>Current collectors still obtain some runtime locations and identifiers from mutable <code>status.json</code>. Move authority to the immutable launch contract before public release.</td>
+</tr>
+<tr>
+<td>F18</td>
+<td>Generated shell runner</td>
+<td>generated Bash wrapper in <code>sessions.py</code></td>
+<td>D-ENV</td>
+<td>Replace generated shell where possible with direct Python process execution, or reduce the script to a small fixed package asset with structured arguments.</td>
+<td>Shell quoting is currently deliberate, but generated scripts expand attack surface. Use a sanitized environment, fixed umask, no inherited shell functions, and no secrets in command text.</td>
+</tr>
+<tr>
+<td>F19</td>
+<td>Explicit command launch</td>
+<td>CLI <code>launch ... -- &lt;argv&gt;</code> and executor plan</td>
+<td>D-ENV / HYBRID</td>
+<td>Make unrestricted explicit commands opt-in policy, separate from named adapters, and label their evidence as unclassified.</td>
+<td>Arbitrary command execution is expected for a local tool but must never be exposed through MCP or remote transport without a strict allowlist. Record argv digest and executable identity; redact secrets.</td>
+</tr>
+<tr>
+<td>F20</td>
+<td>External Codex/Claude execution</td>
+<td><code>executors.py</code>, <code>runner.py</code></td>
+<td>HYBRID</td>
+<td>Maintain adapter fixtures from real versioned event streams. Define supported CLI version ranges and fail clearly outside them.</td>
+<td>Run with least privilege, bounded filesystem scope, controlled network, sanitized environment, and resource limits. The external agent must be treated as potentially malicious or compromised.</td>
+</tr>
+<tr>
+<td>F21</td>
+<td>Interactive versus detached execution</td>
+<td>policy and tmux strategy in <code>sessions.py</code></td>
+<td>HYBRID</td>
+<td>Make lifecycle semantics independent of terminal mode. Add an executor capability contract for steering, cancellation, structured events, and resumability.</td>
+<td>Do not infer completion or delivery from pane liveness or terminal text. Preserve the current evidence-based rule.</td>
+</tr>
+<tr>
+<td>F22</td>
+<td>tmux server/session/pane management</td>
+<td><code>tmux.py</code></td>
+<td>D-ENV</td>
+<td>Add version compatibility checks, deterministic pane naming, and a recovery command that reports stale/orphaned panes without mutating them.</td>
+<td>Session names and targets must remain validated. Use exact argv, not shell strings. Treat tmux capture as sensitive and non-authoritative. Prevent control-mode output from being interpreted as application data.</td>
+</tr>
+<tr>
+<td>F23</td>
+<td>Interactive pane capacity</td>
+<td>configured grid and <code>ensure_interactive_capacity</code></td>
+<td>D-ENV</td>
+<td>Move capacity calculation into a pure policy object and expose a dry-run plan.</td>
+<td>Never auto-close a pane solely because it appears idle without sealed completion and explicit operator policy.</td>
+</tr>
+<tr>
+<td>F24</td>
+<td>Run state directory and projections</td>
+<td><code>state.py</code>; XDG JSON files and <code>status.json</code></td>
+<td>D-CODE / D-ENV</td>
+<td>Document which files are authority versus projection in machine-readable metadata. Add a repair/rebuild command that regenerates projections from journals/receipts.</td>
+<td>Enforce state-root owner/mode checks. Use component-wise no-symlink opens for authority files. Do not use projection fields to authorize irreversible actions.</td>
+</tr>
+<tr>
+<td>F25</td>
+<td>Lifecycle event journal</td>
+<td><code>events.py</code></td>
+<td>D-CODE</td>
+<td>Add explicit file-size/event-count limits and a compaction design that creates a new derived checkpoint without deleting authority.</td>
+<td>Continue locking, contiguous sequence validation, and fsync. For any future multi-host mode, add authenticated writer identity and signatures or a trusted broker.</td>
+</tr>
+<tr>
+<td>F26</td>
+<td>Durable steer/progress/ack messages</td>
+<td><code>messages.py</code>; append-only JSONL plus best-effort tmux wakeup</td>
+<td>D-CODE around human/agent text</td>
+<td>Implement BKL-001 durable consumer cursors and BKL-002 executor-specific late steering. Add message disposition states beyond ack where adapters support them.</td>
+<td>Message content can contain secrets and is currently returned by MCP. Add content classification/redaction, maximum total log size, and configurable retention. Actor IDs are labels, not authenticated identities.</td>
+</tr>
+<tr>
+<td>F27</td>
+<td>Message watch/wakeup</td>
+<td>polling plus <code>tmux wait-for</code> hint</td>
+<td>D-ENV</td>
+<td>Add measurable wakeup latency and failure metrics before introducing another notifier.</td>
+<td>Preserve replay as authority. Never advance consumer state based only on a wakeup. Avoid busy loops and unbounded waiters.</td>
+</tr>
+<tr>
+<td>F28</td>
+<td>Status, list, tail, attach, observation</td>
+<td>CLI, <code>sessions.observe</code>, tmux capture, logs</td>
+<td>D-ENV</td>
+<td>Separate summary, evidence, and raw-output views. Add explicit pagination/byte limits to all list/tail operations.</td>
+<td>Raw logs and terminal capture may contain credentials, source, or model output. Default to minimal summaries and require explicit opt-in for raw content.</td>
+</tr>
+<tr>
+<td>F29</td>
+<td>Interrupt, terminate, kill</td>
+<td><code>sessions.py</code>, tmux/process signals</td>
+<td>D-ENV</td>
+<td>Make interrupt and graceful termination idempotent service operations. Keep force kill a local-only explicit action.</td>
+<td>Record actor, reason, process identity, and outcome durably. Verify PID/process-group ownership before signaling to prevent PID reuse errors.</td>
+</tr>
+<tr>
+<td>F30</td>
+<td>Restart/retry</td>
+<td><code>sessions.restart</code>, retry lineage, workflow attempts</td>
+<td>D-ENV / HYBRID</td>
+<td>Define exactly which inputs are reused versus refreshed and expose a restart plan before execution.</td>
+<td>Verify old run seal and immutable command/prompt digests before relaunch. Never silently inherit changed config, prompt, executable, or worktree revision.</td>
+</tr>
+<tr>
+<td>F31</td>
+<td>Agent identity and profiles</td>
+<td>preferred/generated names and profile policy</td>
+<td>D-CODE</td>
+<td>Separate display name from stable machine identity. Add an immutable agent-instance ID and adapter session ID.</td>
+<td>Names are not identities. Do not use a caller-provided actor/name alone to prove reviewer independence or authorization.</td>
+</tr>
+<tr>
+<td>F32</td>
+<td>Interactive agent task completion</td>
+<td><code>agent_context.complete_task</code></td>
+<td>HYBRID</td>
+<td>Require a structured completion contract tied to the current assignment and sealed checkpoint before marking reusable.</td>
+<td>Pane liveness plus a child assertion is insufficient for strong completion. Ensure the same session cannot forge completion for a different assignment.</td>
+</tr>
+<tr>
+<td>F33</td>
+<td>Agent reuse candidate scoring</td>
+<td><code>agent_context.candidates</code></td>
+<td>D-CODE using operator/agent metadata</td>
+<td>Replace magic scores with versioned policy and expose all eligibility facts. Keep auto-reuse conservative.</td>
+<td>Tags and summaries are untrusted self-reports. Do not use them for privilege expansion, secret access, or broader filesystem scope. Revalidate worktree and executor policy on reuse.</td>
+</tr>
+<tr>
+<td>F34</td>
+<td>Agent reuse request/ack/auto-reuse</td>
+<td><code>agent_context.py</code> and durable messages</td>
+<td>HYBRID</td>
+<td>Add explicit assignment lease, expiry, and conflict resolution. Require provider/session capability proof before automatic reuse.</td>
+<td>Correlated acknowledgement should bind assignment ID, prompt digest, and current provider session. Prevent replay of an old reuse acknowledgement.</td>
+</tr>
+<tr>
+<td>F35</td>
+<td>Completion handoff collection</td>
+<td><code>runner._collect_completion</code></td>
+<td>D-CODE consuming N/agent output</td>
+<td>Replace status-derived handoff location with the immutable launch contract. Use one descriptor-based copy-and-hash operation followed by schema validation.</td>
+<td>Maintain size, regular-file, and no-symlink checks. Fsync the stored copy and parent directory before creating evidence that references it.</td>
+</tr>
+<tr>
+<td>F36</td>
+<td>Structured task result collection</td>
+<td><code>runner._collect_task_result</code>, pack result contract</td>
+<td>D-CODE consuming N/agent output</td>
+<td>Bind the exact schema digest in launch provenance, not merely the schema path. Add consumer-specific schema version compatibility.</td>
+<td>Reject all symlink components for pack/schema/result reads. Prevent sensitive fields from being automatically propagated unless the binding contract marks them safe.</td>
+</tr>
+<tr>
+<td>F37</td>
+<td>Execution metrics and control events</td>
+<td><code>metrics.py</code></td>
+<td>D-CODE over external observations</td>
+<td>Publish precise null/zero semantics and derive metrics only from sealed inputs.</td>
+<td>Never treat missing usage as zero. Bound control-event count and content. Exclude secret-bearing message bodies from exported telemetry.</td>
+</tr>
+<tr>
+<td>F38</td>
+<td>Final run receipt and read-only transition</td>
+<td><code>receipts.py</code></td>
+<td>D-CODE</td>
+<td>Add a single public verification result object containing receipt digest and verified artifact handles/metadata. Consider a receipt format version that binds file mode and creation policy where relevant.</td>
+<td>Existing descriptor-based beneath-root reads are strong. Continue rejecting symlinks, writable receipts, substitutions, and duplicate entries. Same-user chmod/replacement remains a local trust limitation; document it explicitly.</td>
+</tr>
+<tr>
+<td>F39</td>
+<td>Review, acceptance, and rejection</td>
+<td><code>lifecycle.py</code>, <code>approval.py</code></td>
+<td>N-HUMAN decision with D-CODE evidence checks</td>
+<td>Define review policy as machine-readable rules and support authenticated reviewer principals when multi-user operation begins.</td>
+<td>Current actor strings do not prove identity or independence. Acceptance must continue to bind exact revision, final receipt, score set, and required independent review.</td>
+</tr>
+<tr>
+<td>F40</td>
+<td>Ledger rendering</td>
+<td><code>ledger.py</code></td>
+<td>D-CODE projection</td>
+<td>Make the ledger derive only from verified records and label unverifiable/missing evidence explicitly.</td>
+<td>Do not let rendered ledger state become authority. Escape untrusted Markdown/terminal content to prevent misleading output.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="43-prompt-packs-native-jobs-skills-and-guidance">4.3 Prompt packs, native jobs, skills, and guidance</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Feature / part</th>
+<th>Current implementation</th>
+<th>Class</th>
+<th>Suggested changes</th>
+<th>Security recommendations</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F41</td>
+<td>Prompt-pack scaffold</td>
+<td><code>pack.scaffold</code>, packaged assets</td>
+<td>D-CODE producing N-GUIDANCE</td>
+<td>Keep templates minimal and versioned. Generate machine-readable ticket contracts before prose.</td>
+<td>Sanitize pack names used in content and paths. Use atomic creation or refuse partially populated destinations after failure.</td>
+</tr>
+<tr>
+<td>F42</td>
+<td>Prompt-pack structural validation</td>
+<td><code>manifests.validate_pack</code>; phases, tickets, dependencies, contracts</td>
+<td>D-CODE</td>
+<td>Promote more policy into schemas: writable paths, stop conditions, expected evidence, result sensitivity, and reviewer requirements.</td>
+<td>Validation is structural, not semantic. A valid pack may still contain malicious instructions. Treat packs as untrusted input unless signed/approved.</td>
+</tr>
+<tr>
+<td>F43</td>
+<td>Prompt-pack dependency DAG</td>
+<td>task manifests and cycle detection</td>
+<td>D-CODE</td>
+<td>Reuse the workflow graph validator or a shared graph library to prevent two subtly different dependency semantics.</td>
+<td>Bound number of phases/tasks/dependencies to prevent resource exhaustion. Reject duplicate normalized IDs and ambiguous Unicode.</td>
+</tr>
+<tr>
+<td>F44</td>
+<td>Prompt-pack checksums</td>
+<td><code>MANIFEST.sha256</code></td>
+<td>D-CODE</td>
+<td>Ban symlinks entirely in prompt packs or include symlink entries and link targets in a canonical manifest format.</td>
+<td><strong>P0 finding:</strong> archive staging preserves symlinks, while <code>_checksum_files</code> excludes symlinks. Internal symlinks can therefore affect archive behavior without direct checksum coverage. The current “must not escape root” check is not sufficient for portable integrity.</td>
+</tr>
+<tr>
+<td>F45</td>
+<td>Deterministic pack archive</td>
+<td>GNU tar + zstd in <code>pack.archive</code></td>
+<td>D-ENV</td>
+<td>Add archive extraction verification against a canonical file-type manifest, not only <code>zstd -t</code>. Produce reproducibility evidence in CI.</td>
+<td>Reject special files, hard links, devices, FIFOs, and all symlinks unless explicitly supported. Prevent output from being created inside the source tree. Add subprocess timeout/cancellation.</td>
+</tr>
+<tr>
+<td>F46</td>
+<td>Native JSON jobs</td>
+<td><code>native_jobs.py</code>, <code>job-binding.json</code></td>
+<td>D-CODE contract plus HYBRID execution</td>
+<td>Turn native jobs into the preferred machine contract for bounded work. Bind job, prompt, commands, path policy, and review policy by digest.</td>
+<td>Current path policy is primarily validated and later compared; it is not an OS-level write barrier. Make that distinction explicit. Reject symlinked job/prompt/schema components.</td>
+</tr>
+<tr>
+<td>F47</td>
+<td>Writable/forbidden path policy</td>
+<td>native job and evaluation scope</td>
+<td>D-CODE post-hoc detection; N-GUIDANCE during execution</td>
+<td>Add preventative enforcement using sandbox mounts, Landlock, bubblewrap, containers, or executor-native policy. Keep post-run scope comparison as defense in depth.</td>
+<td><strong>P0 finding:</strong> “stay inside writable paths” is currently not guaranteed by Python. A malicious or confused agent can write elsewhere accessible to its process and only be detected afterward.</td>
+</tr>
+<tr>
+<td>F48</td>
+<td>Acceptance command declarations</td>
+<td>evaluation/native job command specs</td>
+<td>D-ENV</td>
+<td>Require structured executable plus argv, cwd, timeout, expected result format, network policy, and resource limits.</td>
+<td>Commands execute repository code under the user's account. Run in an isolated sandbox with no ambient secrets, limited network, CPU/memory/output caps, and controlled environment.</td>
+</tr>
+<tr>
+<td>F49</td>
+<td>Delegated implementation skill</td>
+<td><code>skills/delegated-implementation/SKILL.md</code></td>
+<td>N-GUIDANCE</td>
+<td>Convert critical requirements into launch contracts and executable gates; leave only judgment and task strategy in the skill.</td>
+<td>Instructions such as “stay in writable paths,” “do not expose secrets,” and “do not broaden scope” are not security controls. Do not rely on model obedience.</td>
+</tr>
+<tr>
+<td>F50</td>
+<td>Orchestrator skill</td>
+<td><code>skills/agent-workflow-orchestrator/SKILL.md</code></td>
+<td>N-GUIDANCE</td>
+<td>Generate command snippets from the live CLI and keep decision guidance concise. Add explicit escalation when evidence is incomplete.</td>
+<td>The skill must never authorize no-go models, destructive actions, or acceptance by prose alone. Guardrails must remain in code.</td>
+</tr>
+<tr>
+<td>F51</td>
+<td>Prompt-pack builder skill</td>
+<td><code>skills/prompt-pack-builder/SKILL.md</code></td>
+<td>N-GUIDANCE</td>
+<td>Make it produce schemas/manifests first, then prose. Add a linter for missing security boundaries and unverifiable criteria.</td>
+<td>Prompt-pack generation can reproduce prompt injection or local path leakage from source material. Require review before signing/checksumming.</td>
+</tr>
+<tr>
+<td>F52</td>
+<td>Phase-gate review skill</td>
+<td><code>skills/phase-gate-review/SKILL.md</code></td>
+<td>N-HUMAN / N-GUIDANCE</td>
+<td>Pair review prose with a deterministic evidence checklist and independent command reruns.</td>
+<td>A second LLM with a different name is not necessarily independent. Record principal, environment, model/executor, and evidence digests; keep final authorization human where required.</td>
+</tr>
+<tr>
+<td>F53</td>
+<td>MCP mutation prompt pack</td>
+<td><code>prompt-packs/mcp-server-next/**</code></td>
+<td>N-GUIDANCE specifying future functionality</td>
+<td>Keep it as the only active implementation pack and remove it once completed, preserving history in Git. Convert each proposed tool to a typed contract before implementation.</td>
+<td>Do not let the prompt pack itself expand authorization. Every mutation must map to one shared service, idempotency record, root policy, and durable result.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="44-workflow-orchestration">4.4 Workflow orchestration</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Feature / part</th>
+<th>Current implementation</th>
+<th>Class</th>
+<th>Suggested changes</th>
+<th>Security recommendations</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F54</td>
+<td>Workflow snapshot validation/normalization</td>
+<td><code>workflow.normalize_snapshot</code>, JSON Schema</td>
+<td>D-CODE</td>
+<td>Version node types and transition semantics. Add explicit graph-size, depth, and total-binding limits.</td>
+<td>Reject duplicate/Unicode-confusable IDs, path-bearing fields, unknown node attributes, and unbounded metadata. The normalized stored snapshot must remain immutable authority.</td>
+</tr>
+<tr>
+<td>F55</td>
+<td>Workflow journal append/replay</td>
+<td><code>workflow.py</code></td>
+<td>D-CODE</td>
+<td>Add replay benchmarks, checkpoint format, and corruption diagnostics before adding SQLite or a broker.</td>
+<td>Preserve contiguous sequence, lock, fsync, and no-symlink checks. Never repair a journal silently; create explicit recovery evidence.</td>
+</tr>
+<tr>
+<td>F56</td>
+<td>Workflow status projection</td>
+<td><code>workflow.write_workflow_projection</code></td>
+<td>D-CODE</td>
+<td>Add a <code>rebuild</code>/<code>explain</code> command showing which events caused each node state.</td>
+<td>Projection must never authorize approval, child existence, or terminal sealing. Make it safe to delete and regenerate.</td>
+</tr>
+<tr>
+<td>F57</td>
+<td>Scheduler eligibility and bounded parallelism</td>
+<td><code>scheduler.py</code>, <code>calculate_eligibility</code>, <code>plan_launches</code></td>
+<td>D-CODE</td>
+<td>Separate pure planning from side effects completely and persist a launch intent before performing external launch.</td>
+<td>Validate existing running children from sealed provenance, not status or event self-reference. Preserve capacity accounting across restart.</td>
+</tr>
+<tr>
+<td>F58</td>
+<td>Workflow child launch</td>
+<td>scheduler through canonical <code>sessions.launch</code></td>
+<td>HYBRID</td>
+<td>Add idempotency keys and durable launch-intent/result records shared with future MCP tools.</td>
+<td>Never introduce a second workflow-specific executor path. Verify child root, prompt, bindings, and policy before launch.</td>
+</tr>
+<tr>
+<td>F59</td>
+<td>Retry/recoverable workflow attempts</td>
+<td>workflow state machine and scheduler</td>
+<td>D-CODE around HYBRID child runs</td>
+<td>Define retry classes, maximum attempts, backoff, and whether prompt/config/model changes are permitted.</td>
+<td>Prevent retry storms and budget bypass. Bind every attempt to predecessor receipt and immutable input snapshot.</td>
+</tr>
+<tr>
+<td>F60</td>
+<td>Approval-gate nodes</td>
+<td><code>approval.py</code>, scheduler reconciliation</td>
+<td>N-HUMAN decision with D-CODE verification</td>
+<td>Add explicit approval policy objects and optional quorum/multi-reviewer rules.</td>
+<td>Reconstruct only canonical contiguous receipt chains. Authenticate actors before treating “independent” as meaningful. Do not expose approval mutation through read-only MCP.</td>
+</tr>
+<tr>
+<td>F61</td>
+<td>Result bindings</td>
+<td><code>bindings.py</code>; bounded JSON Pointer from sealed ancestor results</td>
+<td>D-CODE</td>
+<td>Add destination type/schema validation and sensitivity labels. Support explicit transformation functions only from a small deterministic registry.</td>
+<td>Keep ancestry checks, size limits, and copied snapshots. Never let children open predecessor directories. Deny binding secret-marked values into prompts/logs by default.</td>
+</tr>
+<tr>
+<td>F62</td>
+<td>Workflow input snapshot</td>
+<td>parent binding record plus child <code>workflow-inputs.json</code></td>
+<td>D-CODE</td>
+<td>Define one schema for origin, destination, type, digest, sensitivity, and optional/default behavior.</td>
+<td>Keep files read-only before launch and bind their digest in child provenance/final receipt. Use descriptor-safe writes/reads.</td>
+</tr>
+<tr>
+<td>F63</td>
+<td>Workflow templates</td>
+<td><code>workflow_templates.py</code>; three authorized shapes</td>
+<td>D-CODE</td>
+<td>Version each template and move definitions to validated declarative assets if expansion remains simple. Test execution semantics, not exact dictionary order.</td>
+<td>Do not allow templates to introduce arbitrary commands, paths, models, or approval bypass. Template expansion must terminate in the same workflow schema.</td>
+</tr>
+<tr>
+<td>F64</td>
+<td>Workflow aggregate receipt</td>
+<td><code>workflow_receipt.py</code></td>
+<td>D-CODE</td>
+<td>Include explicit software/schema versions and a verification summary for every child/approval/binding.</td>
+<td>Continue verifying exact snapshot, event journal, child receipts, retry lineage, approvals, and bindings under one lock. Reject partial or duplicate evidence.</td>
+</tr>
+<tr>
+<td>F65</td>
+<td>Workflow CLI/service facade</td>
+<td><code>workflow_service.py</code>, CLI workflow commands</td>
+<td>D-CODE / D-ENV</td>
+<td>Make this the single public service used by CLI and MCP. Add typed request/response contracts and idempotency where mutation occurs.</td>
+<td>Constrain workflow run directories to configured roots for MCP/automation. Current local CLI can remain flexible but should warn when authority is outside the state root.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="45-evidence-provider-accounting-and-evaluation">4.5 Evidence, provider accounting, and evaluation</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Feature / part</th>
+<th>Current implementation</th>
+<th>Class</th>
+<th>Suggested changes</th>
+<th>Security recommendations</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F66</td>
+<td>Raw executor event capture</td>
+<td><code>runner.py</code>, bounded <code>executor-events.jsonl</code></td>
+<td>HYBRID</td>
+<td>Store adapter version and a per-record digest/index. Add truncation reason and byte/event counts to evidence.</td>
+<td>Bound bytes, line length, event count, and parsing time. Treat all event text/JSON as hostile. Never execute or render raw HTML/terminal control sequences.</td>
+</tr>
+<tr>
+<td>F67</td>
+<td>Provider event parsing</td>
+<td><code>executors.parse_event</code> and provider helpers</td>
+<td>D-CODE over external payloads</td>
+<td>Create versioned adapters per provider/CLI version and preserve unknown fields only in raw evidence.</td>
+<td>Fail closed on ambiguous usage semantics. Fuzz parsers with malformed/nested/oversized values. Do not trust provider event IDs alone; bind ID plus payload digest.</td>
+</tr>
+<tr>
+<td>F68</td>
+<td>Provider usage normalization</td>
+<td><code>provider_evidence.py</code></td>
+<td>D-CODE</td>
+<td>Publish a compatibility matrix for cached/reasoning token field variants and terminal/delta/cumulative modes.</td>
+<td>Continue rejecting non-finite, conflicting, mixed-mode, incomplete-cost, duplicate-conflict, and truncated evidence. Never infer currency or billing cost from prose.</td>
+</tr>
+<tr>
+<td>F69</td>
+<td>Provider-billed versus estimated cost</td>
+<td>evidence schemas and metrics</td>
+<td>D-CODE if catalog is pinned</td>
+<td>Add a signed/versioned price catalog with effective dates, model IDs, region, and currency. Keep estimates nullable.</td>
+<td>Never merge provider-billed and local estimates into one authority field. Require matching currency/catalog for comparisons.</td>
+</tr>
+<tr>
+<td>F70</td>
+<td>Evaluation plan validation</td>
+<td><code>evaluation.py</code>, schema</td>
+<td>D-CODE</td>
+<td>Add plan versioning, environment contract, random seed policy, cache/network policy, and required repetitions.</td>
+<td>Treat evaluation files as code-adjacent untrusted input because they authorize commands and oracle references. Require pack checksum/signature and root containment.</td>
+</tr>
+<tr>
+<td>F71</td>
+<td>Baseline/post acceptance command collection</td>
+<td><code>eval.commands</code></td>
+<td>D-ENV</td>
+<td>Run commands through the bounded subprocess substrate and record environment, executable digest/version, duration, stdout/stderr digests, truncation, and timeout.</td>
+<td>Sandbox commands. Disable network by default. No ambient tokens, SSH agent, cloud credentials, or user home mounts.</td>
+</tr>
+<tr>
+<td>F72</td>
+<td>Scope baseline/post inventory</td>
+<td><code>eval.scope</code></td>
+<td>D-ENV</td>
+<td>Optimize large trees with explicit inclusion rules and Git-native diffs while retaining non-Git inventory for sensitive seams.</td>
+<td>Current control is detective. Prevent writes using sandboxing; then compare scope as evidence. Avoid hashing secrets or huge ignored trees into distributable evidence.</td>
+</tr>
+<tr>
+<td>F73</td>
+<td>Oracle resolution and canary scan</td>
+<td><code>eval.oracles</code></td>
+<td>D-CODE / D-ENV</td>
+<td>Define a signed oracle bundle format and read-only mounted oracle service for isolated evaluators.</td>
+<td>Keep oracle material outside delegated worktrees. Enforce owner/mode, no symlink components, digest verification, and no oracle content in logs or prompts. Canary scanning is useful but not a complete leak detector.</td>
+</tr>
+<tr>
+<td>F74</td>
+<td>Deterministic scoring</td>
+<td><code>eval.scoring</code>, score receipts</td>
+<td>D-CODE</td>
+<td>Version scorer algorithms and make every score traceable to sealed inputs, command receipts, scope, and oracle digest.</td>
+<td>Use descriptor-safe reads and content-addressed scorer receipts. Reject missing/duplicate scorer evidence and non-finite values.</td>
+</tr>
+<tr>
+<td>F75</td>
+<td>JUnit parsing/comparison</td>
+<td><code>eval.junit</code></td>
+<td>D-CODE</td>
+<td>Handle schema variants explicitly and cap XML size/depth. Preserve skipped/error semantics.</td>
+<td>Parse with a hardened XML library or disable external entities explicitly. Treat test names/output as untrusted text.</td>
+</tr>
+<tr>
+<td>F76</td>
+<td>Trial extraction and immutable trial evidence</td>
+<td><code>eval.trials</code></td>
+<td>D-CODE</td>
+<td>Add complete provenance for software versions, hardware/environment class, retry/re-steer/human assistance, and exclusion reasons.</td>
+<td>Verify final receipt and score-set receipts before extraction. Never accept mutable score summaries or missing provider evidence as complete.</td>
+</tr>
+<tr>
+<td>F77</td>
+<td>Baseline/candidate cohort comparison</td>
+<td><code>eval.compare</code></td>
+<td>D-CODE; experimental validity depends on human design</td>
+<td>Add preregistered policies, minimum sample size, confidence intervals/effect sizes, paired-run identity, and sensitivity analysis.</td>
+<td>Reject mismatched tasks, currencies, catalogs, models, environments, or intervention rules. Do not overclaim small samples; retain descriptive status.</td>
+</tr>
+<tr>
+<td>F78</td>
+<td>Evaluation reports</td>
+<td><code>eval.reporting</code></td>
+<td>D-CODE projection</td>
+<td>Generate reports solely from verified trial evidence and include an explicit limitations section.</td>
+<td>Escape untrusted text, avoid embedding raw logs, and label null/missing/incomplete values clearly. Reports are not authority.</td>
+</tr>
+<tr>
+<td>F79</td>
+<td>Inspect evaluation adapter</td>
+<td><code>inspect_adapter.py</code> and optional dependency</td>
+<td>HYBRID / highly nondeterministic</td>
+<td>Keep isolated from core scoring. Pin Inspect version, model, Docker image digest, fonts, browser assets, and evaluator prompt.</td>
+<td>Run in a locked container with no secrets and controlled network. Record all model/tool calls. Do not treat model-based judging as deterministic ground truth.</td>
+</tr>
+<tr>
+<td>F80</td>
+<td>SWE-bench prediction export</td>
+<td><code>integrations/swebench.py</code></td>
+<td>D-CODE</td>
+<td>Validate patch size/encoding and include source/final receipt digests in sidecar metadata.</td>
+<td>Export only verified sealed patches. Prevent path confusion and accidental inclusion of secrets or unrelated diffs.</td>
+</tr>
+<tr>
+<td>F81</td>
+<td>MLflow integration</td>
+<td><code>integrations/mlflow.py</code></td>
+<td>D-ENV / external service</td>
+<td>Make telemetry export opt-in with explicit field allowlists and offline buffering.</td>
+<td>Never upload prompts, source, message content, terminal logs, or secrets by default. Validate TLS endpoint and credentials source.</td>
+</tr>
+<tr>
+<td>F82</td>
+<td>OpenTelemetry integration</td>
+<td><code>integrations/otel.py</code></td>
+<td>D-ENV / external service</td>
+<td>Define stable span/event semantic conventions and sampling policy.</td>
+<td>Apply strict redaction and size limits. Do not place ticket text, prompts, argv, file paths, or user content in attributes without opt-in.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="46-mcp-adapter">4.6 MCP adapter</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Feature / part</th>
+<th>Current implementation</th>
+<th>Class</th>
+<th>Suggested changes</th>
+<th>Security recommendations</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F83</td>
+<td>MCP server transport</td>
+<td>optional <code>FastMCP</code>, local stdio only</td>
+<td>HYBRID: deterministic server called by potentially nondeterministic client</td>
+<td>Keep stdio only until authenticated authorization and deployment threat model exist. Add protocol/conformance tests against pinned SDK versions.</td>
+<td>Do not add HTTP by configuration accident. Stdio still inherits caller environment and filesystem permissions; launch it with a sanitized environment.</td>
+</tr>
+<tr>
+<td>F84</td>
+<td>MCP run listing/status</td>
+<td><code>WorkflowReadService.list_runs/get_status</code> with allowlisted fields</td>
+<td>D-CODE projection</td>
+<td>Add explicit schema/version and pagination arguments to tools/resources. Consider a verified-evidence summary separate from status projection.</td>
+<td>Current allowlist is good. Do not expose workdir, prompt, argv, capture, or arbitrary artifact paths. Validate state-root ownership/mode.</td>
+</tr>
+<tr>
+<td>F85</td>
+<td>MCP message listing</td>
+<td><code>list_messages</code> returns complete durable message records</td>
+<td>D-CODE exposing N/user content</td>
+<td>Default to metadata-only messages and add a separately authorized/redacted content resource.</td>
+<td><strong>P0 privacy finding:</strong> steer/progress/ack content can contain source, instructions, credentials, or sensitive operational context. Full content should not be exposed to every MCP client by default.</td>
+</tr>
+<tr>
+<td>F86</td>
+<td>MCP receipt listing</td>
+<td>scans receipt directory and hashes files</td>
+<td>D-ENV</td>
+<td>Use the same stable descriptor/no-symlink receipt reader as lifecycle verification and return typed receipt summaries.</td>
+<td>Avoid check-then-open races. Reject writable, irregular, duplicate, or noncontiguous receipt entries rather than silently skipping them when presenting authoritative summaries.</td>
+</tr>
+<tr>
+<td>F87</td>
+<td>MCP pack validation</td>
+<td><code>pack_validate</code> under configured repository root</td>
+<td>D-CODE</td>
+<td>Return bounded structured errors and manifest digest. Map all domain exceptions to stable non-secret errors.</td>
+<td><code>contained_path</code> resolves before the later <code>is_symlink()</code> check, making the final symlink test ineffective for a symlink that resolves inside the root. Use component-wise no-follow traversal or retain the unresolved path for validation.</td>
+</tr>
+<tr>
+<td>F88</td>
+<td>MCP error boundary</td>
+<td><code>_service_result</code> catches <code>ServiceError</code></td>
+<td>D-CODE</td>
+<td>Convert all expected <code>WorkflowError</code> cases to stable categories and catch unexpected failures at the transport boundary with an opaque correlation ID.</td>
+<td>Do not leak local paths, stack traces, or raw exception messages to clients. Log locally with redaction.</td>
+</tr>
+<tr>
+<td>F89</td>
+<td>Planned MCP mutations</td>
+<td>MCP-003 prompt pack; not implemented</td>
+<td>N-GUIDANCE future design</td>
+<td>Implement only through shared typed services with durable idempotency keys and parity tests. Start with validation/status before launch or steer.</td>
+<td>No raw shell, arbitrary paths, tmux controls, terminal capture, force kill, direct state mutation, or alternate scheduler. Add authorization before any lifecycle mutation.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="47-testing-documentation-and-governance">4.7 Testing, documentation, and governance</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Feature / part</th>
+<th>Current implementation</th>
+<th>Class</th>
+<th>Suggested changes</th>
+<th>Security recommendations</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F90</td>
+<td>Installed-product acceptance journeys</td>
+<td><code>tests/acceptance/**</code>; wheel, subprocess, Git/filesystem journeys</td>
+<td>D-ENV</td>
+<td>Keep these as the primary release authority. Add missing journeys for cursor recovery, preventive path enforcement, MCP privacy, and config trust.</td>
+<td>Acceptance fixtures must use synthetic secrets and assert redaction. Run in isolated HOME/XDG directories with no real credentials.</td>
+</tr>
+<tr>
+<td>F91</td>
+<td>Security/state invariant matrices</td>
+<td><code>tests/invariants/**</code></td>
+<td>D-CODE</td>
+<td>Add property/fuzz tests for IDs, paths, receipts, event streams, JSON Pointer, manifests, and provider usage.</td>
+<td>Retain low-level tests only for security/accounting invariants that cannot be exhaustively demonstrated through end-to-end journeys.</td>
+</tr>
+<tr>
+<td>F92</td>
+<td>Live adapter tests</td>
+<td><code>tests/live/**</code>, opt-in</td>
+<td>HYBRID / D-ENV</td>
+<td>Establish a supported compatibility matrix and run on clean disposable hosts before releases that change adapters.</td>
+<td>Use read-only smoke tasks, no proprietary repositories, no secrets, bounded spend, and explicit deletion/retention policy for provider logs.</td>
+</tr>
+<tr>
+<td>F93</td>
+<td>Strict future TDD tests</td>
+<td><code>tests/future/**</code>, expected failure</td>
+<td>D-CODE specification for future HYBRID behavior</td>
+<td>Require every future test to reference one backlog ID and promote it to acceptance when implemented. Remove obsolete future specs.</td>
+<td>Ensure expected failures cannot mask unexpected exceptions or security regressions. An xfail should match a narrow reason and failure mode.</td>
+</tr>
+<tr>
+<td>F94</td>
+<td>Architecture and chart pack</td>
+<td><code>docs/ARCHITECTURE.md</code>, <code>docs/diagrams/**</code></td>
+<td>N-GUIDANCE, partially release-validated</td>
+<td>Generate module/command/schema inventories automatically and keep diagrams focused on authority and data flow.</td>
+<td>Diagrams should mark trust boundaries, secret-bearing channels, arbitrary-code execution, and projection versus authority. Avoid exposing user-local paths.</td>
+</tr>
+<tr>
+<td>F95</td>
+<td>Backlog and release readiness</td>
+<td><code>BACKLOG.md</code>, <code>docs/PUBLIC_RELEASE_READINESS.md</code></td>
+<td>N-HUMAN governance</td>
+<td>Keep one backlog, stable IDs, and observable exit evidence. Add owners and target release gates once governance exists.</td>
+<td>License, vulnerability reporting, support matrix, and release ownership are security prerequisites, not paperwork. Do not publish a security contact that is not monitored.</td>
+</tr>
+<tr>
+<td>F96</td>
+<td>Security documentation</td>
+<td><code>SECURITY.md</code>, architecture/security sections</td>
+<td>N-GUIDANCE</td>
+<td>Add an explicit threat model for same-user malicious agents, untrusted repositories, untrusted packs, provider compromise, and future multi-user operation.</td>
+<td>State clearly what chmod/checksums can and cannot protect against. Define secret-handling, retention, disclosure, and supported-version policy before public release.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="5-guidance-that-should-become-deterministic-enforcement">5. Guidance that should become deterministic enforcement</h2>
+<p>The following requirements currently appear in skills, prompt packs, or prose and should not remain dependent on model obedience:</p>
+<table>
+<thead>
+<tr>
+<th>Guidance-only or partially enforced rule</th>
+<th>Current reality</th>
+<th>Recommended deterministic control</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>“Stay inside writable paths.”</td>
+<td>Validated and checked post-run; not a preventative write barrier.</td>
+<td>OS-level sandbox/mount/Landlock/bubblewrap/container policy plus post-run scope evidence.</td>
+</tr>
+<tr>
+<td>“Do not expose secrets in progress or acknowledgement.”</td>
+<td>Message length/type is validated, but content is not classified or redacted.</td>
+<td>Secret scanning/redaction, metadata-only MCP view, retention policy, and explicit sensitive-content opt-in.</td>
+</tr>
+<tr>
+<td>“Do not broaden scope.”</td>
+<td>Ticket text and reviewer judgment.</td>
+<td>Immutable job/snapshot paths, launch-time allowed-root policy, and post-run violation gate.</td>
+</tr>
+<tr>
+<td>“Run the required tests.”</td>
+<td>Agent instruction plus later acceptance-command collection when configured.</td>
+<td>Machine-readable command contract executed independently by the runner/evaluator.</td>
+</tr>
+<tr>
+<td>“Independent review.”</td>
+<td>Actor/model names and human procedure.</td>
+<td>Authenticated principal, separate run/environment policy, immutable evidence digest, and explicit reviewer independence rule.</td>
+</tr>
+<tr>
+<td>“Acknowledge steering after applying it.”</td>
+<td>Durable correlated ack exists, but detached late delivery is incomplete.</td>
+<td>Executor-specific delivery adapter, durable consumer cursor, applied/rejected disposition, and idempotent replay.</td>
+</tr>
+<tr>
+<td>“Do not use forbidden/no-go models.”</td>
+<td>Enforced in current session policy.</td>
+<td>Retain in code; add adapter/version evidence and prevent explicit-command bypass from being mislabeled as a governed executor.</td>
+</tr>
+<tr>
+<td>“Do not read predecessor state directly.”</td>
+<td>Workflow bindings copy sealed JSON Pointer values.</td>
+<td>Retain in code; optionally sandbox child visibility so predecessor run directories are inaccessible.</td>
+</tr>
+<tr>
+<td>“Do not claim evidence that does not exist.”</td>
+<td>Mostly enforced by schemas/receipts, but prose reports remain possible.</td>
+<td>Generate completion/review summaries from verified evidence and clearly separate commentary from authority.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="6-prioritized-change-plan">6. Prioritized change plan</h2>
+<h3 id="p0--before-any-public-preview">P0 — before any public preview</h3>
+<ol>
+<li><strong>Create a bounded subprocess substrate.</strong> Add timeout, output caps/spooling, process-group ownership, cancellation, sanitized environment, and argv redaction; migrate <code>process.py</code>, doctor, Git, pack archiving, evaluation commands, and probes.</li>
+<li><strong>Ban or canonically manifest prompt-pack symlinks and special files.</strong> The archive currently preserves symlinks that the checksum manifest excludes.</li>
+<li><strong>Enforce writable-path policy preventatively.</strong> Keep post-run scope comparison, but add an OS/executor sandbox boundary for native jobs and evaluation runs.</li>
+<li><strong>Replace runner dependence on mutable status with an immutable launch contract.</strong> Bind handoff paths, workdir, schema digests, runtime/evaluation policy, and session identity before launch.</li>
+<li><strong>Harden MCP privacy and path handling.</strong> Make message content metadata-only by default; fix resolve-before-symlink validation; use stable descriptor readers; normalize all errors.</li>
+<li><strong>Remove remaining projection-to-authority coupling.</strong> The CLI evaluation path obtains the expected final-receipt checksum from mutable <code>status.json</code> through <code>_recorded_receipt_hash</code>. Verification should return the digest of the exact receipt it verified, or obtain an expected digest from an immutable lifecycle/provenance authority.</li>
+<li><strong>Sandbox acceptance/evaluation commands.</strong> No ambient home, SSH agent, cloud credentials, or network by default; enforce CPU/memory/time/output limits.</li>
+<li><strong>Resolve public-release governance blockers.</strong> License, monitored vulnerability reporting, supported host/executor matrix, release owner, support policy, and security update policy.</li>
+</ol>
+<h3 id="p1--public-beta-hardening">P1 — public beta hardening</h3>
+<ol>
+<li>Add authenticated actor/principal model for review, acceptance, steering, and future MCP mutations.</li>
+<li>Version executor adapters and compatibility data independently; run live clean-host compatibility before release.</li>
+<li>Add config ownership/mode checks and explicit trust documentation for configured commands.</li>
+<li>Generate command/man/schema inventories from source; reduce handwritten duplication.</li>
+<li>Add property/fuzz testing for path, receipt, journal, provider event, manifest, and JSON Pointer boundaries.</li>
+<li>Produce SBOM, locked dependencies, signed release artifacts, and verifiable build provenance.</li>
+<li>Add content classification/redaction and retention controls for prompts, logs, messages, provider events, and telemetry.</li>
+</ol>
+<h3 id="p2--only-after-measured-need">P2 — only after measured need</h3>
+<ol>
+<li>Add reconstructable indexes/checkpoints only when replay cost is measured as a problem.</li>
+<li>Add multi-host transport only after authenticated identities, shared artifact policy, idempotency, and cross-host trust are designed.</li>
+<li>Add HTTP MCP only through a dedicated authorization/threat-model ADR.</li>
+<li>Add evidence-informed routing only from controlled cohorts; keep it advisory and offline.</li>
+</ol>
+<h2 id="7-security-posture-by-trust-boundary">7. Security posture by trust boundary</h2>
+<table>
+<thead>
+<tr>
+<th>Boundary</th>
+<th>Current posture</th>
+<th>Main residual risk</th>
+<th>Recommendation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Operator to CLI</td>
+<td>Local user, explicit commands</td>
+<td>Accidental destructive actions; secret argv</td>
+<td>Plans/dry-run, redaction, stronger confirmation for force operations</td>
+</tr>
+<tr>
+<td>CLI to host tools</td>
+<td>argv-based subprocesses</td>
+<td>Hangs, unbounded output, inherited environment, malicious repo config</td>
+<td>Unified bounded subprocess and sanitized environment</td>
+</tr>
+<tr>
+<td>Orchestrator to external agent</td>
+<td>Prompt plus filesystem/process access</td>
+<td>Prompt injection, malicious writes, data exfiltration</td>
+<td>Preventative sandbox, network policy, secret isolation</td>
+</tr>
+<tr>
+<td>Agent to durable evidence</td>
+<td>Structured handoff/events</td>
+<td>Forgery, symlink/path attacks, oversized data</td>
+<td>Existing descriptor/hash/schema controls plus immutable launch contract</td>
+</tr>
+<tr>
+<td>Prompt pack to execution</td>
+<td>Checksummed files and prose</td>
+<td>Semantic malicious instructions; unmanifested symlinks</td>
+<td>Ban symlinks, sign approved packs, machine contracts, human review</td>
+</tr>
+<tr>
+<td>Human reviewer to acceptance</td>
+<td>Actor string plus reason</td>
+<td>Identity spoofing, non-independent review</td>
+<td>Authenticated principal and policy-backed independence</td>
+</tr>
+<tr>
+<td>Evaluation command to host</td>
+<td>Arbitrary repo command</td>
+<td>Code execution with user privileges/secrets</td>
+<td>Locked sandbox and resource/network restrictions</td>
+</tr>
+<tr>
+<td>MCP client to local state</td>
+<td>Read-only stdio and path roots</td>
+<td>Message-content leakage; path/symlink error gaps</td>
+<td>Metadata-only defaults, no-follow traversal, stable errors</td>
+</tr>
+<tr>
+<td>Release publisher to user</td>
+<td>SHA-256 manifest</td>
+<td>Malicious replacement at publication point</td>
+<td>Signed attestations, SBOM, reproducible builds, secure channel</td>
+</tr>
+</tbody>
+</table>
+<h2 id="8-public-release-direction">8. Public-release direction</h2>
+<p>The repository is <strong>not compounding documentation slop at the same rate as earlier versions</strong>. Version 0.2.2 removed completed prompt packs, one-off execution receipts, duplicated plans, and a large implementation-detail test suite. The remaining docs have clearer roles:</p>
+<ul>
+<li><code>README.md</code>: product entry point and support status;</li>
+<li><code>docs/ARCHITECTURE.md</code>: authority and component design;</li>
+<li><code>docs/COMMAND_REFERENCE.md</code>: public commands;</li>
+<li><code>docs/OPERATIONS.md</code>: operational procedures;</li>
+<li><code>docs/EVIDENCE_AND_EVALUATION.md</code>: evidence semantics;</li>
+<li><code>docs/TESTING.md</code>: test authority and lanes;</li>
+<li><code>docs/MCP_SERVER.md</code>: current and planned MCP boundary;</li>
+<li><code>docs/PUBLIC_RELEASE_READINESS.md</code>: release blockers;</li>
+<li><code>BACKLOG.md</code>: the only active task register.</li>
+</ul>
+<p>That is a credible public-release documentation structure. The remaining risk is <strong>implementation-policy drift</strong>, where a strong statement in docs or skills is only partially enforced. The most valuable next work is therefore not more planning prose. It is converting the P0 guidance-only rules into deterministic controls, then generating more of the reference documentation directly from the parser, schemas, and registered services.</p>
+<h2 id="9-recommended-decision">9. Recommended decision</h2>
+<p>Continue toward a public release, but use a staged label:</p>
+<ol>
+<li><strong>Current:</strong> internal/pre-public engineering release.</li>
+<li><strong>Next:</strong> security hardening preview only after all P0 controls and governance blockers are closed.</li>
+<li><strong>Public beta:</strong> after clean-host compatibility, live-adapter evidence, signed artifacts, and a monitored security channel.</li>
+<li><strong>Stable release:</strong> after at least one external adopter exercises install, delegation, workflow, evidence verification, and upgrade/uninstall paths without maintainer intervention.</li>
+</ol>
+<p>The architecture does not need a larger agent taxonomy, memory framework, alternate scheduler, or additional prompt packs. It needs tighter deterministic enforcement at the local-process, filesystem, identity, and information-disclosure boundaries.</p>
+<h2 id="10-source-observations-supporting-the-highest-priority-findings">10. Source observations supporting the highest-priority findings</h2>
+<p>These are direct implementation observations from the analyzed tree, not conclusions inferred only from documentation.</p>
+<table>
+<thead>
+<tr>
+<th>Finding</th>
+<th>Source observation</th>
+<th>Why it matters</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Subprocesses are not uniformly bounded</td>
+<td><code>process.run</code> and <code>run_bytes</code> use <code>subprocess.run(..., capture_output=True)</code> without timeout or output limit; <code>doctor.py</code> performs similar probes.</td>
+<td>A hung or noisy child can block the orchestrator or exhaust memory. One secure process substrate would close a cross-cutting gap.</td>
+</tr>
+<tr>
+<td>Prompt-pack symlinks are not covered as manifest entries</td>
+<td><code>pack.archive</code> stages with <code>shutil.copytree(..., symlinks=True)</code>, while <code>manifests._checksum_files</code> excludes symlinks.</td>
+<td>The archive can contain behavior-relevant filesystem entries that do not have their own canonical manifest record.</td>
+</tr>
+<tr>
+<td>Writable-path policy is post-hoc</td>
+<td><code>eval.scope.collect_scope</code> records baseline/post inventories and <code>compare_scope</code> reports violations after execution.</td>
+<td>It detects unauthorized writes but does not prevent the agent or acceptance command from making them.</td>
+</tr>
+<tr>
+<td>Runner inputs still partly come from a projection</td>
+<td><code>_collect_completion</code> and <code>_collect_task_result</code> read <code>status.json</code> for session, handoff, pack, and contract locations.</td>
+<td>A launch contract is a cleaner immutable authority and reduces same-user replacement and cross-file inconsistency risk.</td>
+</tr>
+<tr>
+<td>CLI evaluation receipt expectation comes from status</td>
+<td><code>cli._recorded_receipt_hash</code> reads <code>status.json[&quot;final_receipt_sha256&quot;]</code> and supplies it to score/report/export verification.</td>
+<td>A projection should not select the authority it is expected to verify. Verification should produce or consume an immutable expected digest.</td>
+</tr>
+<tr>
+<td>MCP symlink validation loses the original path</td>
+<td><code>contained_path</code> returns <code>candidate.resolve()</code>; <code>validate_pack</code> then checks <code>selected.is_symlink()</code>.</td>
+<td>After resolution, a final symlink normally appears as its target, so that check cannot enforce a no-symlink policy.</td>
+</tr>
+<tr>
+<td>MCP exposes message bodies</td>
+<td><code>WorkflowReadService.list_messages</code> returns <code>replay_messages(root)</code> records without content filtering.</td>
+<td>Durable steer/progress/ack bodies may contain sensitive source or operational text.</td>
+</tr>
+<tr>
+<td>Actor independence is label-based</td>
+<td>lifecycle and message APIs validate actor strings as IDs but do not authenticate a principal.</td>
+<td>A local caller can choose another actor label; strong independent review needs an authenticated identity boundary.</td>
+</tr>
+<tr>
+<td>Native-job prompt and job paths follow resolution</td>
+<td><code>native_jobs.validate_native_job</code> resolves pack/job/prompt paths and does not reject every symlink component.</td>
+<td>Content can remain inside the root yet still be redirected or replaced through symlinked components; immutable digest binding should be explicit.</td>
+</tr>
+<tr>
+<td>Schema lookup can be influenced by multiple roots</td>
+<td><code>contracts._schema_roots</code> searches source, user-base share, and interpreter-prefix share; the first matching <code>$id</code> wins.</td>
+<td>Installation layout ambiguity can select a different schema than expected. Packaged schemas should have one authoritative resolution order with duplicate-ID failure.</td>
+</tr>
+</tbody>
+</table>
+
+            <script async src="https://cdn.jsdelivr.net/npm/katex-copytex@latest/dist/katex-copytex.min.js"></script>
+            
+        </body>
+        </html>

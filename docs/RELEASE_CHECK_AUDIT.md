@@ -72,17 +72,42 @@ description: Audit of release-check.sh coverage against P0 blockers and evidence
 
 ---
 
+## Jenkins Verification
+
+The local `agent-workflow-local` Jenkins job was verified independently of the default shell gate:
+
+- Build #16 checked out `origin/master` at `8b937a0`.
+- The pipeline created its isolated Python environment and installed `pytest`, `jsonschema`, `build`, and `setuptools`.
+- The installed-product suite completed with `35 passed, 2 skipped, 1 xfailed`.
+- Release checks passed, `agent_workflow-0.2.2-py3-none-any.whl` was built, and the local install stage completed.
+- The job configuration currently has no SCM trigger (`<triggers/>`); commit-trigger behavior remains REL-006 and has not been verified.
+
+This closes the local pipeline execution failure, not the public release gates. Jenkins success does not prove clean-host compatibility, provider compatibility, or release provenance.
+
 ## Gap Analysis
 
 ### P0 Blockers from BACKLOG.md
 
 | ID | Priority | State | Blocker | Coverage | Gap |
 |---|---|---|---|---|---|
-| **BKL-001** | P0 | ready | Durable per-consumer message cursors, restart recovery, duplicate safety, cursor advancement | Covered by acceptance journeys (steer/watch/ack replay, restart) | None—acceptance tests exercise this end-to-end |
-| **BKL-002** | P0 | ready | Post-launch steering for detached runs (delivered/applied/rejected evidence) | Covered by future spec (xfail) | **No runtime evidence production yet** (test is xfail; production code does not emit these signals) |
+| **BKL-001** | P0 | ready | Durable per-consumer message cursors, restart recovery, duplicate safety, cursor advancement | Partial: existing journeys cover replay/steer/ack behavior, but the canonical per-consumer cursor contract is not implemented | **Implement the cursor service and promote its strict acceptance evidence** |
+| **BKL-002** | P0 | ready | Post-launch steering for detached runs (delivered/applied/rejected evidence) | Covered only by a strict future specification (xfail) | **No runtime delivery/application evidence yet** |
 | **REL-001** | P0 | needs-decision | Select and add license, matching package metadata | **NOT CHECKED** | **No check for LICENSE file presence, license classifier in pyproject.toml, or license header matching** |
 | **REL-002** | P0 | blocked | Establish vulnerability-reporting channel and update SECURITY.md | **NOT CHECKED** | **No check that SECURITY.md contains a monitored contact or private mechanism** (currently reads "pre-public-release" and says this is a blocker) |
 | **REL-003** | P0 | ready | Define supported Linux/Python/tmux/executor matrix; run live compatibility journeys | **NOT CHECKED BY release-check.sh** | **Live compatibility tests are opt-in only** (separate `pytest -m live` with environment flags; not run by default gate) |
+| **REL-004** | P0 | needs-decision | Release ownership, signing, support, and security-update policy | **NOT CHECKED** | **No governance or signed-provenance gate exists** |
+| **SEC-001** | P0 | ready | Bounded subprocess execution | **NOT CHECKED** | **Current release checks do not enforce timeout, output, process-group, or environment limits** |
+| **SEC-002** | P0 | ready | Preventative execution scope and prompt-pack file integrity | **NOT CHECKED** | **Scope checks are post-run and manifest/archive handling needs an explicit symlink/special-file policy** |
+| **SEC-003** | P0 | ready | MCP privacy/path/receipt hardening | **NOT CHECKED** | **Read-only MCP behavior is not a public-release security gate** |
+| **SEC-004** | P0 | ready | Immutable launch authority | **NOT CHECKED** | **Runner/evaluation paths still have projection-to-authority coupling** |
+
+### P1 release-evidence gaps
+
+| ID | Gap | Required exit evidence |
+|---|---|---|
+| **REL-005** | Release-check coverage and durable evidence | Automated license/security/matrix checks, structured test results, SBOM, dependency lock, and verifiable build provenance |
+| **REL-006** | Jenkins SCM trigger | A local repository commit causes a build of the matching master revision; the current successful build was manually triggered |
+| **REL-007** | Clean-machine install/uninstall and provider cohort | Scrubbed install/uninstall records and sealed controlled provider/workflow evidence |
 
 ### Recommended Gap Fixes (Priority Order)
 
@@ -203,24 +228,24 @@ description: Audit of release-check.sh coverage against P0 blockers and evidence
 
 ### High Priority
 
-1. **Add license checks to release-check.sh** (blocks REL-001)
+1. **Add license checks to release-check.sh** (blocks REL-001; part of REL-005)
    - [ ] Check LICENSE file exists
    - [ ] Check license classifier in pyproject.toml
    - [ ] Integrate into audit-release-assets.py
 
-2. **Add vulnerability-channel check to release-check.sh** (blocks REL-002)
+2. **Add vulnerability-channel check to release-check.sh** (blocks REL-002; part of REL-005)
    - [ ] Verify SECURITY.md contains monitored contact mechanism
    - [ ] Reject "pre-public-release" placeholder language
    - [ ] Integrate into audit-release-assets.py
 
-3. **Add compatibility matrix check** (blocks REL-003)
+3. **Add compatibility matrix check** (blocks REL-003; part of REL-005)
    - [ ] Verify documented supported versions in docs
    - [ ] List required live test runs as part of gate
    - [ ] Document which hosts/executors must pass live tests
 
 ### Medium Priority
 
-4. **Make pytest results durable**
+4. **Make pytest results durable** (REL-005)
    - [ ] Add --json-report flag to release-check.sh or separate gate
    - [ ] Archive test results in release artifacts
 
@@ -234,15 +259,22 @@ description: Audit of release-check.sh coverage against P0 blockers and evidence
    - [ ] Consider capturing compileall and shell-syntax results as structured output (optional; exit code suffices)
    - [ ] Add timestamp and version metadata to test evidence
 
+7. **Configure Jenkins commit triggering** (REL-006)
+   - [ ] Add the local SCM polling/trigger policy to the job configuration
+   - [ ] Commit a harmless documentation change and verify the resulting build checks out that revision
+   - [ ] Keep the local-only boundary and clean temporary environments
+
 ---
 
 ## Summary
 
 **Current release-check.sh coverage:**
-- ✅ Covers BKL-001 (durable messages) and BKL-002 (late steering future spec)
+- ⚠️ Exercises portions of BKL-001 through acceptance journeys, but does not prove the canonical cursor implementation
+- ⚠️ Includes the BKL-002 strict future specification as an expected failure; it does not prove runtime late-steering delivery
 - ✅ Validates distribution asset integrity, JSON/YAML/TOML syntax, link resolution
 - ✅ Runs acceptance and invariant test suites
 - ❌ **Missing checks for three P0 blockers: license selection (REL-001), vulnerability channel (REL-002), compatibility matrix documentation (REL-003)**
+- ❌ Missing automated gates for REL-004, SEC-001 through SEC-004, and the structured evidence/provenance portion of REL-005
 - ⚠️ Live compatibility tests (REL-003) are opt-in, not part of default gate
 
 **Evidence quality:**
