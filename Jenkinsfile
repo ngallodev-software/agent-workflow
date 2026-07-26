@@ -26,6 +26,7 @@ pipeline {
                     python3 -m venv "$VENV"
                     "$VENV/bin/python" -m pip install \
                         --disable-pip-version-check \
+                        'setuptools>=61' \
                         'pytest>=8,<10' \
                         'jsonschema>=4.18,<5' \
                         'build'
