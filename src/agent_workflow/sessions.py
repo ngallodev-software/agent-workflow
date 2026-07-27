@@ -18,7 +18,7 @@ from .agent_context import acknowledge_reuse, idle_interactive_sessions
 from .agent_context import initialize as initialize_agent_context
 from .assets import asset_path
 from .config import Settings
-from .contracts import read_contract
+from .contracts import read_contract, schema_descriptor
 from .errors import InteractiveCapacityError, WorkflowError
 from .eval.commands import collect_commands, specs_from_data
 from .eval.scope import ScopePolicy, collect_scope
@@ -125,16 +125,15 @@ def _write_runner(
         shutil.copy2(prompt, launch_prompt)
     prompt_source = prompt_source or prompt
     runner = state_dir / "run.sh"
+    source_root = Path(__file__).resolve().parents[1]
     command_blob = base64.b64encode(
         json.dumps(command, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     ).decode("ascii")
-    source_root = Path(__file__).resolve().parents[1]
     runner_invocation = (
         f"{shlex.quote(python_executable)} -m agent_workflow.runner "
         f"--run-dir {shlex.quote(str(state_dir))} "
-        f"--workdir {shlex.quote(str(workdir))} "
-        f"--stream-format {shlex.quote(stream_format)} "
-        f"{'--interactive ' if interactive else ''}--command-b64 {shlex.quote(command_blob)}"
+        f"--command-b64 {shlex.quote(command_blob)} "
+        f"{'--interactive ' if interactive else ''}"
     )
     if interactive and not close_tmux_on_exit:
         runner_command = (
@@ -312,6 +311,11 @@ def _write_launch_prompt(
     state_dir: Path,
     *,
     session_id: str,
+    agent_name: str | None,
+    agent_class: str | None,
+    tier: str | None,
+    retry_of: str | None,
+    created_at: str,
     prompt_source: Path,
     prompt_pack_root: Path | None,
     handoff_dir: Path,
@@ -376,6 +380,137 @@ def _write_launch_prompt(
         encoding="utf-8",
     )
     return launch_prompt
+
+
+def _write_launch_contract(
+    state_dir: Path,
+    *,
+    session_id: str,
+    agent_name: str | None,
+    agent_class: str | None,
+    tier: str | None,
+    retry_of: str | None,
+    created_at: str,
+    ticket_id: str | None,
+    pack_id: str | None,
+    pack_root: Path | None,
+    workdir: Path,
+    source_revision: str | None,
+    branch: str | None,
+    dirty_at_launch: bool | None,
+    prompt_source: Path,
+    prompt_sha256: str,
+    launch_prompt_sha256: str,
+    command: list[str],
+    redacted_command: list[str],
+    executor: str | None,
+    model: str | None,
+    stream_format: str,
+    interactive: bool,
+    executor_interactive: bool,
+    environment_allowlist: list[str],
+    handoff_dir: Path,
+    result_contract: dict[str, Any] | None,
+    runtime_policy: dict[str, Any],
+    evaluation_policy: dict[str, Any],
+    source_baseline_sha256: str,
+    pack_manifest_sha256: str | None,
+) -> Path:
+    """Write the one immutable authority consumed by the runner and collectors."""
+    task_result_schema = None
+    if result_contract is not None and pack_root is not None:
+        schema_rel = result_contract.get("schema")
+        if isinstance(schema_rel, str) and schema_rel:
+            schema_path = absolute_path(pack_root / schema_rel)
+            try:
+                schema_read = read_regular_file(schema_path)
+            except WorkflowError as exc:
+                raise WorkflowError("task result schema is not a safe regular file") from exc
+            try:
+                schema_value = json.loads(schema_read.data.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise WorkflowError("task result schema is not valid JSON") from exc
+            schema_id = schema_value.get("$id") if isinstance(schema_value, dict) else None
+            if not isinstance(schema_id, str) or not schema_id:
+                # A task schema may be deliberately anonymous.  Its safe,
+                # immutable identity is the pack-relative path plus digest.
+                schema_id = str(schema_rel)
+            task_result_schema = {"id": schema_id, "sha256": schema_read.sha256}
+    contract = {
+        "schema": "agent-workflow/launch-contract/v1",
+        "version": 1,
+        "session": {
+            "id": session_id,
+            "agent_name": agent_name,
+            "agent_class": agent_class,
+            "tier": tier,
+            "retry_of": retry_of,
+            "created_at": created_at,
+        },
+        "ticket": ticket_id,
+        "pack": {
+            "id": pack_id,
+            "root": str(pack_root) if pack_root is not None else None,
+            "manifest_sha256": pack_manifest_sha256,
+        },
+        "worktree": {
+            "path": str(workdir),
+            "source_revision": source_revision,
+            "branch": branch,
+            "dirty_at_launch": dirty_at_launch,
+        },
+        "prompt": {
+            "source": str(prompt_source),
+            "stored": "prompt.md",
+            "sha256": prompt_sha256,
+            "launch_stored": "launch-prompt.md",
+            "launch_sha256": launch_prompt_sha256,
+        },
+        "command_plan": {
+            "argv": list(redacted_command),
+            "command_sha256": hashlib.sha256(
+                json.dumps(command, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+            ).hexdigest(),
+            "stream_format": stream_format,
+            "interactive": interactive,
+            "executor_interactive": executor_interactive,
+            "environment_allowlist": list(environment_allowlist),
+            "executor": executor,
+            "model": model,
+        },
+        "paths": {
+            "run_dir": ".",
+            "workdir": str(workdir),
+            "handoff_dir": str(handoff_dir),
+            "completion": "completion.json",
+            "result": "result.json",
+            "result_contract": result_contract,
+            "runtime": "evaluation-runtime.json",
+            "source_baseline": "source-baseline.json",
+        },
+        "schemas": {
+            "launch": schema_descriptor("agent-workflow/launch-contract/v1"),
+            "completion": schema_descriptor("agent-workflow/completion/v1"),
+            "provenance": schema_descriptor("agent-workflow/run-provenance/v1"),
+            "status": schema_descriptor("agent-workflow/session-status/v2"),
+            "source_baseline": schema_descriptor("agent-workflow/source-baseline/v1"),
+            "completion_collection": schema_descriptor("agent-workflow/completion-collection/v1"),
+            "task_result": task_result_schema,
+        },
+        "runtime_policy": runtime_policy,
+        "evaluation_policy": evaluation_policy,
+        "source_baseline": {"path": "source-baseline.json", "sha256": source_baseline_sha256},
+        "expected_outputs": {
+            "output_log": "output.log",
+            "executor_events": "executor-events.jsonl",
+            "executor_stderr": "executor-stderr.log",
+            "final_status": "final-status.json",
+            "final_receipt": "final-receipt.json",
+        },
+    }
+    path = state_dir / "launch-contract.json"
+    atomic_write_json(path, contract, mode=0o444)
+    return path
 
 
 def _status_agent_active(item: dict[str, Any]) -> bool:
@@ -676,6 +811,8 @@ def launch(
     redacted_command = redact_argv(command, secret_values=secret_values)
     executor_policy = settings.executor_policies.get(executor_plan.name)
     environment_allowlist = list(executor_policy.environment_allowlist) if executor_policy else []
+    runtime_policy: dict[str, Any] = {}
+    evaluation_policy: dict[str, Any] = {}
 
     prompt_copy = state_dir / "prompt.md"
     atomic_write_bytes(
@@ -716,9 +853,15 @@ def launch(
         if prompt_pack_root is not None
         else None
     )
+    created_at = utc_now()
     launch_prompt = _write_launch_prompt(
         state_dir,
         session_id=session_id,
+        agent_name=agent_name,
+        agent_class=agent_class,
+        tier=tier,
+        retry_of=retry_of,
+        created_at=created_at,
         prompt_source=prompt_source,
         prompt_pack_root=prompt_pack_root,
         handoff_dir=handoff_dir,
@@ -931,6 +1074,23 @@ def launch(
                 evaluation_sha256=evaluation.sha256,
             )
         atomic_write_json(state_dir / "evaluation-runtime.json", runtime)
+        runtime_policy = {
+            "timeout_seconds": runtime.get("timeout_seconds"),
+            "budgets": evaluation_data.get("budgets", {}),
+            "environment_allowlist": environment_allowlist,
+        }
+        evaluation_policy = {
+            "path": str(evaluation.path) if evaluation is not None else None,
+            "sha256": evaluation.sha256 if evaluation is not None else None,
+            "ticket_id": ticket_id,
+            "acceptance_commands": commands,
+            "scope": scope_data,
+            "scorers": evaluation_data.get("scorers", []),
+            "oracle_refs": evaluation_data.get("oracle_refs", {}),
+            "statistics_policy": evaluation_data.get(
+                "statistics_policy", "agent-workflow/statistics/v1"
+            ),
+        }
         # Native jobs require receipts even for an empty declared command list:
         # the empty set is itself evidence that the binding was enforced.
         if commands or native_job is not None:
@@ -953,7 +1113,45 @@ def launch(
             receipt_dir=state_dir / "scope",
         )
 
-    now = utc_now()
+    launch_contract = _write_launch_contract(
+        state_dir,
+        session_id=session_id,
+        agent_name=agent_name,
+        agent_class=agent_class,
+        tier=tier,
+        retry_of=retry_of,
+        created_at=created_at,
+        ticket_id=ticket_id,
+        pack_id=pack_id,
+        pack_root=prompt_pack_root,
+        workdir=workdir,
+        source_revision=git_info["source_revision"],
+        branch=git_info["branch"],
+        dirty_at_launch=git_info["dirty_at_launch"],
+        prompt_source=prompt_source,
+        prompt_sha256=sha256_file(prompt_copy),
+        launch_prompt_sha256=sha256_file(launch_prompt),
+        command=command,
+        redacted_command=redacted_command,
+        executor=executor_plan.name,
+        model=executor_plan.model,
+        stream_format=executor_plan.stream_format,
+        interactive=bool(interactive),
+        executor_interactive=executor_interactive,
+        environment_allowlist=environment_allowlist,
+        handoff_dir=handoff_dir,
+        result_contract=result_contract,
+        runtime_policy=runtime_policy,
+        evaluation_policy=evaluation_policy,
+        source_baseline_sha256=sha256_file(baseline_path),
+        pack_manifest_sha256=(
+            sha256_file(pack_manifest)
+            if pack_manifest is not None and pack_manifest.is_file()
+            else None
+        ),
+    )
+
+    now = created_at
     status: dict[str, Any] = {
         "schema": "agent-workflow/session-status/v2",
         "session_id": session_id,
@@ -995,6 +1193,7 @@ def launch(
             str(expand_path(evaluation_path)) if evaluation_path else None
         ),
         "source_baseline_path": str(baseline_path),
+        "launch_contract_path": str(launch_contract),
         "job_binding_path": str(state_dir / "job-binding.json") if job_binding else None,
         "job_binding_sha256": sha256_file(state_dir / "job-binding.json") if job_binding else None,
         "job_id": native_job.job_id if native_job else None,

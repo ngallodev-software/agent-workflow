@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, BinaryIO
 
 from .errors import WorkflowError
+from .contracts import read_launch_contract
 from .events import append_lifecycle_event
 from .diagnostics import classify_failure
 from .eval.commands import collect_commands, specs_from_data
@@ -32,6 +33,7 @@ from .process import (
     spawn,
 )
 from .util import atomic_write_json, sha256_file, utc_now
+from .path import read_regular_file
 
 
 MAX_COMPLETION_HANDOFF_BYTES = 1024 * 1024
@@ -113,13 +115,15 @@ def _collect_completion(
     run_dir: Path, workdir: Path, *, secret_values: tuple[str, ...] = ()
 ) -> dict[str, Any]:
     """Collect native executor evidence before downstream collectors and sealing."""
-    status = _read_status(run_dir / "status.json")
-    handoff_value = status.get("handoff_dir")
+    launch = read_launch_contract(run_dir / "launch-contract.json")
+    session_id = str(launch["session"]["id"])
+    contract_workdir = Path(str(launch["worktree"]["path"]))
+    handoff_value = launch["paths"].get("handoff_dir")
     handoff = Path(handoff_value) if isinstance(handoff_value, str) else None
     source = handoff / "completion.json" if handoff is not None else None
     receipt: dict[str, Any] = {
         "schema": "agent-workflow/completion-collection/v1",
-        "session_id": str(status["session_id"]),
+        "session_id": session_id,
         "adapter": "native",
         "adapter_version": "1",
         "source_path": str(source) if source is not None else None,
@@ -134,7 +138,7 @@ def _collect_completion(
     try:
         if handoff is None:
             raise FileNotFoundError("launch has no completion handoff")
-        _require_real_handoff_dir(handoff, workdir)
+        _require_real_handoff_dir(handoff, contract_workdir)
         assert source is not None
         data = redact_bytes(_read_handoff_completion(source), secret_values)
     except FileNotFoundError as exc:
@@ -148,7 +152,7 @@ def _collect_completion(
             value = json.loads(data.decode("utf-8"))
             if not isinstance(value, dict):
                 raise WorkflowError("completion handoff must be a JSON object")
-            if value.get("session_id") != status["session_id"]:
+            if value.get("session_id") != session_id:
                 raise WorkflowError("completion handoff session_id does not match run")
             from .contracts import validate_instance
             validate_instance(value, "agent-workflow/completion/v1", artifact=str(source))
@@ -177,19 +181,21 @@ def _collect_task_result(
     run_dir: Path, workdir: Path, *, secret_values: tuple[str, ...] = ()
 ) -> dict[str, Any] | None:
     """Collect and validate an optional ticket-specific structured result."""
-    status = _read_status(run_dir / "status.json")
-    contract = status.get("result_contract")
+    launch = read_launch_contract(run_dir / "launch-contract.json")
+    session_id = str(launch["session"]["id"])
+    contract_workdir = Path(str(launch["worktree"]["path"]))
+    contract = launch["paths"].get("result_contract")
     if not isinstance(contract, dict):
         return None
     required = bool(contract.get("required", True))
     schema_rel = contract.get("schema")
-    pack_root_value = status.get("prompt_pack_root")
-    handoff_value = status.get("handoff_dir")
+    pack_root_value = launch["pack"].get("root")
+    handoff_value = launch["paths"].get("handoff_dir")
     handoff = Path(handoff_value) if isinstance(handoff_value, str) else None
     source = handoff / "result.json" if handoff is not None else None
     receipt: dict[str, Any] = {
         "schema": "agent-workflow/task-result-collection/v1",
-        "session_id": str(status["session_id"]),
+        "session_id": session_id,
         "required": required,
         "schema_path": str(schema_rel) if isinstance(schema_rel, str) else None,
         "source_path": str(source) if source is not None else None,
@@ -203,23 +209,25 @@ def _collect_task_result(
     try:
         if handoff is None:
             raise FileNotFoundError("launch has no completion handoff")
-        _require_real_handoff_dir(handoff, workdir)
+        _require_real_handoff_dir(handoff, contract_workdir)
         if not isinstance(schema_rel, str) or not schema_rel:
             raise WorkflowError("result contract schema path is missing")
         if not isinstance(pack_root_value, str):
             raise WorkflowError("result contract has no prompt pack root")
-        pack_root = Path(pack_root_value).resolve()
-        schema_path = (pack_root / schema_rel).resolve()
+        pack_root = Path(pack_root_value)
+        schema_path = pack_root / schema_rel
         try:
             schema_path.relative_to(pack_root)
         except ValueError as exc:
             raise WorkflowError("result contract schema escapes prompt pack root") from exc
-        if schema_path.is_symlink() or not schema_path.is_file():
-            raise WorkflowError("result contract schema must be a regular non-symlink file")
+        schema_read = read_regular_file(schema_path)
+        expected_schema = launch["schemas"].get("task_result")
+        if not isinstance(expected_schema, dict) or schema_read.sha256 != expected_schema.get("sha256"):
+            raise WorkflowError("result contract schema changed after launch")
         assert source is not None
         data = redact_bytes(_read_handoff_completion(source), secret_values)
         value = json.loads(data.decode("utf-8"))
-        schema_value = json.loads(schema_path.read_text(encoding="utf-8"))
+        schema_value = json.loads(schema_read.data.decode("utf-8"))
         if not isinstance(value, dict):
             raise WorkflowError("task result must be a JSON object")
         if not isinstance(schema_value, dict):
@@ -259,6 +267,74 @@ def _collect_task_result(
         task_result_validation_status=receipt["validation_status"],
     )
     return receipt
+
+
+def _authoritative_projection(
+    launch: dict[str, Any], run_dir: Path, current: dict[str, Any]
+) -> dict[str, Any]:
+    """Overlay only launch-bound identity and paths onto the status projection."""
+    session = launch["session"]
+    worktree = launch["worktree"]
+    command = launch["command_plan"]
+    pack = launch["pack"]
+    paths = launch["paths"]
+    evaluation = launch["evaluation_policy"]
+    # Preserve execution observations collected by the runner, but never carry
+    # mutable review/receipt selectors into the sealed final-status authority.
+    projected = {
+        key: value
+        for key, value in current.items()
+        if key
+        not in {
+            "disposition",
+            "disposition_at",
+            "disposition_actor",
+            "accepted_revision",
+            "lifecycle_receipt_path",
+            "final_receipt_path",
+            "final_receipt_sha256",
+            "sealed_artifact_count",
+        }
+    }
+    projected.update(
+        {
+            "schema": "agent-workflow/session-status/v2",
+            "session_id": session["id"],
+            "ticket_id": launch.get("ticket"),
+            "agent_name": session.get("agent_name"),
+            "agent_class": session.get("agent_class"),
+            "tier": session.get("tier"),
+            "retry_of": session.get("retry_of"),
+            "created_at": session["created_at"],
+            "workdir": worktree["path"],
+            "source_revision": worktree.get("source_revision"),
+            "branch": worktree.get("branch"),
+            "dirty_at_launch": worktree.get("dirty_at_launch"),
+            "prompt_path": str(run_dir / launch["prompt"]["stored"]),
+            "prompt_source": launch["prompt"]["source"],
+            "prompt_sha256": launch["prompt"]["sha256"],
+            "prompt_pack_root": pack.get("root"),
+            "pack_id": pack.get("id"),
+            "result_contract": paths.get("result_contract"),
+            "launch_prompt_path": str(run_dir / launch["prompt"]["launch_stored"]),
+            "launch_prompt_sha256": launch["prompt"]["launch_sha256"],
+            "log_path": str(run_dir / launch["expected_outputs"]["output_log"]),
+            "command_path": str(run_dir / "command.json"),
+            "handoff_dir": paths["handoff_dir"],
+            "provenance_path": str(run_dir / "run-provenance.json"),
+            "events_path": str(run_dir / "executor-events.jsonl"),
+            "stderr_path": str(run_dir / "executor-stderr.log"),
+            "source_baseline_path": str(run_dir / launch["source_baseline"]["path"]),
+            "launch_contract_path": str(run_dir / "launch-contract.json"),
+            "executor": command.get("executor"),
+            "model": command.get("model"),
+            "interactive": command["interactive"],
+            "executor_interactive": command["executor_interactive"],
+            "evaluation_path": evaluation.get("path"),
+            "disposition": None,
+        }
+    )
+    return projected
 
 
 def _read_status(path: Path) -> dict[str, Any]:
@@ -355,12 +431,8 @@ def _capture_patch(workdir: Path, run_dir: Path, path: Path) -> None:
     path.write_bytes(patch)
 
 
-def _child_environment(run_dir: Path) -> EnvironmentPolicy:
-    try:
-        contract = json.loads((run_dir / "command.json").read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        contract = {}
-    configured = contract.get("environment_allowlist", []) if isinstance(contract, dict) else []
+def _child_environment(environment_allowlist: object) -> EnvironmentPolicy:
+    configured = environment_allowlist
     names = set(_RUNTIME_ENVIRONMENT)
     if isinstance(configured, list):
         names.update(value for value in configured if isinstance(value, str) and value)
@@ -377,9 +449,28 @@ def execute(
     heartbeat_seconds: float = 5.0,
 ) -> int:
     run_dir = run_dir.resolve()
-    workdir = workdir.resolve()
+    launch = read_launch_contract(run_dir / "launch-contract.json")
+    contract_workdir = Path(str(launch["worktree"]["path"]))
+    workdir = contract_workdir
+    command_plan = launch["command_plan"]
+    contract_command = [str(value) for value in command_plan["argv"]]
+    if command:
+        encoded = json.dumps(command, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        actual_digest = hashlib.sha256(encoded).hexdigest()
+        expected_digest = command_plan.get("command_sha256")
+        if not isinstance(expected_digest, str) or actual_digest != expected_digest:
+            raise WorkflowError("runtime command does not match immutable launch contract")
+    else:
+        # Direct callers and legacy wrappers can still execute a redacted
+        # contract command; generated runners always provide the bound argv.
+        command = contract_command
+    stream_format = str(command_plan["stream_format"])
+    interactive = bool(command_plan["executor_interactive"])
     status_path = run_dir / "status.json"
-    prompt = (run_dir / "launch-prompt.md").read_bytes()
+    prompt_read = read_regular_file(run_dir / launch["prompt"]["launch_stored"])
+    if prompt_read.sha256 != launch["prompt"]["launch_sha256"]:
+        raise WorkflowError("launch prompt changed after contract creation")
+    prompt = prompt_read.data
     output_path = run_dir / "output.log"
     events_path = run_dir / "executor-events.jsonl"
     stderr_path = run_dir / "executor-stderr.log"
@@ -392,16 +483,11 @@ def execute(
     last_normalized_text: str | None = None
     pump_errors: list[str] = []
     wall_started = time.monotonic()
-    runtime_path = run_dir / "evaluation-runtime.json"
-    runtime = (
-        json.loads(runtime_path.read_text(encoding="utf-8"))
-        if runtime_path.is_file()
-        else None
-    )
+    runtime = launch.get("runtime_policy")
     provenance_initial = json.loads(
         (run_dir / "run-provenance.json").read_text(encoding="utf-8")
     )
-    initial_budgets = provenance_initial.get("budgets", {})
+    initial_budgets = runtime.get("budgets", {}) if isinstance(runtime, dict) else {}
     plan_timeout = (
         float(runtime.get("timeout_seconds"))
         if isinstance(runtime, dict) and runtime.get("timeout_seconds")
@@ -431,7 +517,9 @@ def execute(
             create_process_group=not interactive,
             max_stdout_bytes=MAX_EXECUTOR_STDOUT_BYTES,
             max_stderr_bytes=MAX_EXECUTOR_STDERR_BYTES,
-            environment=_child_environment(run_dir),
+            environment=_child_environment(
+                launch["command_plan"].get("environment_allowlist", [])
+            ),
             secret_values=secret_values,
             interactive=interactive,
             )
@@ -448,7 +536,7 @@ def execute(
         _collect_task_result(run_dir, workdir, secret_values=secret_values)
         current = _read_status(status_path)
         final_status = {
-            **current,
+            **_authoritative_projection(launch, run_dir, current),
             "status": "failed",
             "finished_at": finished_at,
             "exit_code": 127,
@@ -472,7 +560,7 @@ def execute(
             usage=provider["aggregate"],
         )
         write_execution_evidence(run_dir, elapsed_seconds=time.monotonic() - wall_started)
-        receipt = seal_run(run_dir, session_id=str(current["session_id"]))
+        receipt = seal_run(run_dir, session_id=str(launch["session"]["id"]))
         receipt_hash = final_receipt_sha256(run_dir)
         _update_status(
             status_path,
@@ -713,7 +801,7 @@ def execute(
     )
     current = _read_status(status_path)
     final_status = {
-        **current,
+        **_authoritative_projection(launch, run_dir, current),
         "status": terminal_status,
         "finished_at": finished_at,
         "exit_code": return_code,
@@ -737,7 +825,7 @@ def execute(
     atomic_write_json(run_dir / "final-status.json", final_status)
     write_execution_evidence(run_dir, elapsed_seconds=wall_seconds)
     try:
-        receipt = seal_run(run_dir, session_id=str(current["session_id"]))
+        receipt = seal_run(run_dir, session_id=str(launch["session"]["id"]))
         receipt_hash = final_receipt_sha256(run_dir)
         _update_status(
             status_path,
@@ -765,33 +853,29 @@ def execute(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--run-dir", type=Path, required=True)
-    parser.add_argument("--workdir", type=Path, required=True)
-    parser.add_argument("--stream-format", default="text")
+    # These legacy options are accepted only so an old shell wrapper fails at
+    # the immutable-contract boundary rather than selecting new authority.
+    parser.add_argument("--workdir", type=Path)
+    parser.add_argument("--stream-format")
     parser.add_argument("--interactive", action="store_true")
     parser.add_argument("--command-b64")
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
-    command = list(args.command)
+    command: list[str] = []
     if args.command_b64:
-        if command:
-            parser.error("cannot combine --command-b64 with command arguments")
         try:
             decoded = base64.b64decode(args.command_b64, validate=True)
             value = json.loads(decoded.decode("utf-8"))
         except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-            parser.error(f"invalid --command-b64: {exc}")
+            raise WorkflowError(f"invalid encoded launch command: {exc}") from exc
         if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
-            parser.error("--command-b64 must contain a JSON string list")
+            raise WorkflowError("encoded launch command must be a string array")
         command = value
-    elif command and command[0] == "--":
-        command = command[1:]
-    if not command:
-        parser.error("missing command after --")
     return execute(
         args.run_dir,
-        args.workdir,
+        args.workdir or args.run_dir,
         command,
-        stream_format=args.stream_format,
+        stream_format=args.stream_format or "text",
         interactive=args.interactive,
     )
 

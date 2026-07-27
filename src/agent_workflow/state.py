@@ -5,6 +5,7 @@ from .errors import WorkflowError
 from .events import append_lifecycle_event
 from .migrations import migrate_contract
 from .util import atomic_write_json, read_json, validate_id
+from .contracts import read_launch_contract
 
 TERMINAL_STATUSES = {
     "completed",
@@ -104,3 +105,69 @@ def list_statuses(settings: Settings):
                 }
             )
     return items
+
+
+def repair_status(settings: Settings, session_id: str) -> dict[str, Any]:
+    """Rebuild the mutable status projection from immutable run authority."""
+    run = run_dir(settings, session_id)
+    contract_path = run / "launch-contract.json"
+    if not contract_path.is_file():
+        raise WorkflowError(
+            "pre-contract run has no launch authority; sealed evidence remains verifiable "
+            "but an unsealed projection cannot be repaired without its original provenance"
+        )
+    contract = read_launch_contract(contract_path)
+    now = read_json(run / "run-provenance.json").get("started_at") or ""
+    status: dict[str, Any] = {
+        "schema": STATUS_SCHEMA,
+        "session_id": session_id,
+        "ticket_id": contract.get("ticket"),
+        "pack_id": contract["pack"].get("id"),
+        "status": "prepared",
+        "disposition": None,
+        "created_at": now,
+        "updated_at": now,
+        "workdir": contract["worktree"]["path"],
+        "prompt_path": str(run / "prompt.md"),
+        "prompt_source": contract["prompt"]["source"],
+        "executor": contract["command_plan"].get("executor"),
+        "model": contract["command_plan"].get("model"),
+        "interactive": contract["command_plan"]["interactive"],
+        "executor_interactive": contract["command_plan"]["executor_interactive"],
+        "prompt_sha256": contract["prompt"]["sha256"],
+        "prompt_pack_root": contract["pack"].get("root"),
+        "result_contract": contract["paths"].get("result_contract"),
+        "launch_prompt_path": str(run / "launch-prompt.md"),
+        "launch_prompt_sha256": contract["prompt"]["launch_sha256"],
+        "log_path": str(run / "output.log"),
+        "command_path": str(run / "command.json"),
+        "completion_path": str(run / "completion.md"),
+        "completion_json_path": str(run / "completion.json"),
+        "handoff_dir": contract["paths"]["handoff_dir"],
+        "provenance_path": str(run / "run-provenance.json"),
+        "events_path": str(run / "executor-events.jsonl"),
+        "stderr_path": str(run / "executor-stderr.log"),
+        "final_receipt_path": None,
+        "source_baseline_path": str(run / "source-baseline.json"),
+        "launch_contract_path": str(contract_path),
+        "tmux_session": session_id,
+        "tmux_target": session_id,
+        "tmux_mode": "dedicated_session",
+    }
+    from .receipts import read_sealed_contract, verify_seal_details
+
+    receipt_path = run / "final-receipt.json"
+    if receipt_path.is_file():
+        receipt, digest = verify_seal_details(run)
+        final, _ = read_sealed_contract(run, receipt, "final-status.json", STATUS_SCHEMA)
+        status.update(final)
+        status["final_receipt_path"] = str(receipt_path)
+        status["final_receipt_sha256"] = digest
+        status["sealed_artifact_count"] = len(receipt.get("artifacts", []))
+    else:
+        from .events import reconstruct_lifecycle
+        lifecycle = reconstruct_lifecycle(run / "events.jsonl") if (run / "events.jsonl").is_file() else {"state": {}}
+        status["status"] = lifecycle.get("state", {}).get("execution", "prepared")
+        status["disposition"] = lifecycle.get("state", {}).get("review")
+    atomic_write_json(status_path(settings, session_id), status)
+    return status

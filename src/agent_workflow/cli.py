@@ -31,7 +31,7 @@ from .manifests import validate_pack, write_checksum_manifest
 from .path import absolute_path
 from .pack import archive as archive_pack
 from .pack import scaffold as scaffold_pack
-from .receipts import verify_seal
+from .receipts import verify_seal_details
 from .sessions import interrupt as interrupt_session
 from .sessions import kill as kill_session
 from .sessions import launch as launch_session
@@ -42,7 +42,7 @@ from .sessions import restart as restart_session
 from .sessions import steer as steer_session
 from .sessions import terminate as terminate_session
 from .sessions import wait_for_message
-from .state import list_statuses, read_status, runs_root
+from .state import list_statuses, read_status, repair_status, runs_root
 from .tmux import attach as attach_tmux
 from .util import atomic_write_json, expand_path, read_json
 from .scheduler import SchedulerService
@@ -58,15 +58,10 @@ def _print_json(data: Any) -> None:
     print(json.dumps(data, indent=2, sort_keys=True))
 
 
-def _recorded_receipt_hash(run: Path) -> str:
-    try:
-        status = json.loads((run / "status.json").read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise WorkflowError(f"cannot read run status for receipt verification: {exc}") from exc
-    expected = status.get("final_receipt_sha256") if isinstance(status, dict) else None
-    if not isinstance(expected, str):
-        raise WorkflowError("run status has no recorded final receipt checksum")
-    return expected
+def _verified_receipt_hash(run: Path) -> str:
+    """Return the digest of the exact receipt verified from stable bytes."""
+    _, digest = verify_seal_details(run)
+    return digest
 
 
 def _print_table(
@@ -209,6 +204,11 @@ def build_parser() -> argparse.ArgumentParser:
     status = commands.add_parser("status", help="inspect a delegation")
     status.add_argument("session_id")
     status.add_argument("--capture", type=int, nargs="?", const=-1, default=0)
+
+    repair = commands.add_parser(
+        "repair", help="rebuild a mutable status projection from run authority"
+    )
+    repair.add_argument("session_id")
 
     attach = commands.add_parser("attach", help="foreground a delegation")
     attach.add_argument("session_id")
@@ -645,6 +645,8 @@ def main(argv: list[str] | None = None) -> int:
                 settings.capture_lines if args.capture == -1 else args.capture
             )
             data = observe(settings, args.session_id, capture_lines)
+        elif args.command == "repair":
+            data = repair_status(settings, args.session_id)
         elif args.command == "attach":
             read_status(settings, args.session_id)
             attach_tmux(args.session_id)
@@ -758,16 +760,14 @@ def main(argv: list[str] | None = None) -> int:
                         if args.output_dir
                         else evaluation_run / "scores"
                     )
-                    runtime_path = evaluation_run / "evaluation-runtime.json"
-                    runtime = (
-                        json.loads(runtime_path.read_text(encoding="utf-8"))
-                        if runtime_path.is_file()
-                        else {}
-                    )
                     oracle = None
                     canary = None
-                    refs = runtime.get("oracle_refs", {})
-                    ticket = runtime.get("ticket_id")
+                    final_receipt, receipt_digest = verify_seal_details(evaluation_run)
+                    from .eval.scoring import evaluation_policy_for_run
+
+                    policy = evaluation_policy_for_run(evaluation_run, final_receipt)
+                    refs = policy.get("oracle_refs", {})
+                    ticket = policy.get("ticket_id")
                     reference = refs.get(ticket) if isinstance(refs, dict) else None
                     if isinstance(reference, dict):
                         configured_root = args.oracle_root or os.environ.get(
@@ -794,17 +794,14 @@ def main(argv: list[str] | None = None) -> int:
                         output_dir=output_dir,
                         oracle=oracle,
                         oracle_canary=canary,
-                        expected_final_receipt_sha256=_recorded_receipt_hash(
-                            evaluation_run
-                        ),
+                        expected_final_receipt_sha256=receipt_digest,
                     )
                     atomic_write_json(output_dir / "score-set.json", data)
                 else:
+                    _receipt, receipt_digest = verify_seal_details(evaluation_run)
                     report = build_report(
                         evaluation_run,
-                        expected_final_receipt_sha256=_recorded_receipt_hash(
-                            evaluation_run
-                        ),
+                        expected_final_receipt_sha256=receipt_digest,
                     )
                     rendered = (
                         json.dumps(report, indent=2, sort_keys=True) + "\n"
@@ -843,15 +840,15 @@ def main(argv: list[str] | None = None) -> int:
                     if candidate.is_dir()
                     else runs_root(settings) / args.run
                 )
-                verify_seal(
+                _receipt, receipt_digest = verify_seal_details(
                     evaluation_run,
-                    expected_sha256=_recorded_receipt_hash(evaluation_run),
                 )
                 output = write_prediction(
                     instance_id=args.instance_id,
                     model_name_or_path=args.model,
                     patch_path=evaluation_run / "patch.diff",
                     output=expand_path(args.output),
+                    final_receipt_sha256=receipt_digest,
                 )
                 data = {"output": str(output)}
             elif args.eval_command == "collect":

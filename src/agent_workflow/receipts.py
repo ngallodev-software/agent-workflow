@@ -350,6 +350,9 @@ def _seal_run_unlocked(run_dir: Path, *, session_id: str) -> dict[str, Any]:
         for name in SEALED_ARTIFACTS
         if (path := run_dir / name).is_file()
     ]
+    launch_contract = run_dir / "launch-contract.json"
+    if launch_contract.is_file():
+        artifacts.append(_artifact_receipt(launch_contract, run_dir))
     artifacts.extend(
         _artifact_receipt(path, run_dir)
         for name in SEALED_OPTIONAL_ARTIFACTS
@@ -390,11 +393,14 @@ def _seal_run_unlocked(run_dir: Path, *, session_id: str) -> dict[str, Any]:
         unique_artifacts[path] = artifact
     artifacts = list(unique_artifacts.values())
     required = set(SEALED_ARTIFACTS)
+    if launch_contract.is_file():
+        required.add("launch-contract.json")
     present = {item["path"] for item in artifacts}
     missing = sorted(required - present)
     if missing:
         raise WorkflowError(f"cannot seal run; missing artifacts: {missing}")
     for name, schema in {
+        "launch-contract.json": "agent-workflow/launch-contract/v1",
         "command.json": "agent-workflow/command/v1",
         "source-baseline.json": "agent-workflow/source-baseline/v1",
         "completion.json": "agent-workflow/completion/v1",
@@ -402,6 +408,8 @@ def _seal_run_unlocked(run_dir: Path, *, session_id: str) -> dict[str, Any]:
         "final-status.json": "agent-workflow/session-status/v2",
         "collections/completion.json": "agent-workflow/completion-collection/v1",
     }.items():
+        if name == "launch-contract.json" and not (run_dir / name).is_file():
+            continue
         read_contract(run_dir / name, schema)
     binding = run_dir / "job-binding.json"
     if binding.is_file():
@@ -461,7 +469,13 @@ def _verify_seal_unlocked(
         for item in receipt["artifacts"]
         if isinstance(item, dict)
     }
-    missing = sorted(set(SEALED_ARTIFACTS) - listed)
+    # The launch contract was introduced after v1 runs existed. Legacy sealed
+    # receipts remain verifiable; launched runs carry the contract as an artifact.
+    required = set(SEALED_ARTIFACTS)
+    if "launch-contract.json" not in listed and path.exists():
+        # A receipt without the contract is a pre-contract authority version.
+        required.discard("launch-contract.json")
+    missing = sorted(required - listed)
     if missing:
         raise WorkflowError(f"final receipt omits required artifacts: {missing}")
     for item in receipt["artifacts"]:

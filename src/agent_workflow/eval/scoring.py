@@ -7,10 +7,10 @@ import stat
 from pathlib import Path
 from typing import Any, Mapping
 
-from ..contracts import read_contract, validate_instance
+from ..contracts import validate_instance
 from ..errors import WorkflowError
-from ..receipts import verify_seal_details
-from ..util import atomic_write_json, sha256_file
+from ..receipts import read_sealed_contract, read_sealed_json, verify_seal_details
+from ..util import atomic_write_json
 from .junit import compare_junit
 from .oracles import scan_for_leak
 from .scope import ScopePolicy, compare_scope
@@ -48,6 +48,15 @@ def _load(path: Path, *, require_read_only: bool = False) -> dict[str, Any]:
         raise WorkflowError(f"cannot read evaluation receipt {path}: {exc}") from exc
     if not isinstance(value, dict):
         raise WorkflowError(f"evaluation receipt must be an object: {path}")
+    return value
+
+
+def _sealed_load(
+    run_dir: Path, final_receipt: Mapping[str, Any], relative_path: str
+) -> dict[str, Any]:
+    value, _ = read_sealed_json(run_dir, dict(final_receipt), relative_path)
+    if not isinstance(value, dict):
+        raise WorkflowError(f"sealed evaluation artifact must be an object: {relative_path}")
     return value
 
 
@@ -115,14 +124,11 @@ def validate_score_set(
         for item in final_receipt.get("artifacts", [])
         if isinstance(item, dict)
     }
-    runtime_path = run_dir / "evaluation-runtime.json"
     required = {"schema_validity"}
-    if runtime_path.is_file():
-        if sealed.get("evaluation-runtime.json") != sha256_file(runtime_path):
-            raise WorkflowError("evaluation runtime is not sealed")
-        runtime = _load(runtime_path)
-        required.update(str(item) for item in runtime.get("scorers", []))
-        if runtime.get("oracle_refs"):
+    policy = evaluation_policy_for_run(run_dir, final_receipt)
+    if policy:
+        required.update(str(item) for item in policy.get("scorers", []))
+        if policy.get("oracle_refs"):
             required.add("oracle_leak")
     expected = set(required)
     if "collections/commands-post.json" in sealed:
@@ -199,11 +205,10 @@ def score_trial(
         run_dir, expected_sha256=expected_final_receipt_sha256
     )
     scores: list[dict[str, Any]] = []
-    runtime_path = run_dir / "evaluation-runtime.json"
-    runtime = _load(runtime_path) if runtime_path.is_file() else None
+    policy = evaluation_policy_for_run(run_dir, final)
     required_scorers = (
-        set(runtime.get("scorers", []))
-        if isinstance(runtime, dict)
+        set(policy.get("scorers", []))
+        if policy
         else {
             "schema_validity",
             "acceptance_commands",
@@ -215,11 +220,17 @@ def score_trial(
     required_scorers.add("schema_validity")
 
     try:
-        completion = read_contract(
-            run_dir / "completion.json", "agent-workflow/completion/v1"
+        completion, _ = read_sealed_contract(
+            run_dir,
+            dict(final),
+            "completion.json",
+            "agent-workflow/completion/v1",
         )
-        read_contract(
-            run_dir / "run-provenance.json", "agent-workflow/run-provenance/v1"
+        read_sealed_contract(
+            run_dir,
+            dict(final),
+            "run-provenance.json",
+            "agent-workflow/run-provenance/v1",
         )
         schema_verdict = "pass"
         schema_facts: dict[str, Any] = {"contracts": ["completion", "provenance"]}
@@ -239,7 +250,7 @@ def score_trial(
 
     post_commands_path = run_dir / "collections" / "commands-post.json"
     if post_commands_path.is_file():
-        post = _load(post_commands_path)
+        post = _sealed_load(run_dir, final, "collections/commands-post.json")
         commands = post.get("commands", [])
         failed = sorted(
             str(item.get("id"))
@@ -290,8 +301,8 @@ def score_trial(
 
     baseline_commands_path = run_dir / "collections" / "commands-baseline.json"
     if baseline_commands_path.is_file() and post_commands_path.is_file():
-        baseline = _load(baseline_commands_path)
-        post = _load(post_commands_path)
+        baseline = _sealed_load(run_dir, final, "collections/commands-baseline.json")
+        post = _sealed_load(run_dir, final, "collections/commands-post.json")
         regressions: list[str] = []
         fixes: list[str] = []
         baseline_by_id = {item["id"]: item for item in baseline.get("commands", [])}
@@ -323,8 +334,8 @@ def score_trial(
     baseline_scope_path = run_dir / "scope" / "scope-baseline.json"
     post_scope_path = run_dir / "scope" / "scope-post.json"
     if baseline_scope_path.is_file() and post_scope_path.is_file():
-        baseline_scope = _load(baseline_scope_path)
-        post_scope = _load(post_scope_path)
+        baseline_scope = _sealed_load(run_dir, final, "scope/scope-baseline.json")
+        post_scope = _sealed_load(run_dir, final, "scope/scope-post.json")
         source = oracle or baseline_scope.get("policy", {})
         policy = ScopePolicy(
             authorized_root=Path(str(source.get("authorized_root", run_dir))),
@@ -388,3 +399,32 @@ def score_trial(
         "verdict": overall,
         "scores": scores,
     }
+
+
+def evaluation_policy_for_run(
+    run_dir: Path, final_receipt: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Read evaluation authority from the launch contract, with a sealed legacy fallback."""
+    sealed = {
+        item.get("path")
+        for item in final_receipt.get("artifacts", [])
+        if isinstance(item, dict)
+    }
+    if "launch-contract.json" in sealed:
+        contract, _ = read_sealed_contract(
+            run_dir,
+            dict(final_receipt),
+            "launch-contract.json",
+            "agent-workflow/launch-contract/v1",
+        )
+        value = contract.get("evaluation_policy", {})
+        return value if isinstance(value, dict) else {}
+    if "evaluation-runtime.json" in sealed:
+        runtime, _ = read_sealed_contract(
+            run_dir,
+            dict(final_receipt),
+            "evaluation-runtime.json",
+            "agent-workflow/evaluation-runtime/v1",
+        )
+        return runtime
+    return {}

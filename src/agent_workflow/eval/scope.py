@@ -205,7 +205,11 @@ def compare_scope(
             continue
         kind = "introduced" if path not in before else "removed" if path not in after else "modified"
         changes.append({"path": path, "change": kind})
-        allowed = path in policy.writable_paths or _under_tree(path, policy.writable_trees)
+        allowed = (
+            path in policy.writable_paths
+            or _under_tree(path, policy.writable_trees)
+            or _under_tree(path, policy.disposable_trees)
+        )
         if not allowed:
             violations.append(path)
     before_repos = {item["root"] for item in baseline.get("repositories", [])}

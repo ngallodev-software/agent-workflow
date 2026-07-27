@@ -64,6 +64,14 @@ def load_schema(schema_id: str) -> dict[str, Any]:
     return value
 
 
+def schema_descriptor(schema_id: str) -> dict[str, str]:
+    """Return the packaged schema identity bound into an immutable contract."""
+    indexed = _schema_index().get(schema_id)
+    if indexed is None:
+        raise WorkflowError(f"unknown contract schema: {schema_id}")
+    return {"id": schema_id, "sha256": indexed[1]}
+
+
 def validate_instance(
     value: Any,
     schema_id: str,
@@ -106,4 +114,55 @@ def read_contract(path: Path, expected_schema: str | None = None) -> dict[str, A
             f"expected {expected_schema}"
         )
     validate_instance(value, schema_id, artifact=str(path))
+    return value
+
+
+def read_launch_contract(path: Path) -> dict[str, Any]:
+    """Read the launch authority through the bounded contract reader."""
+    value = read_contract(path, "agent-workflow/launch-contract/v1")
+    for name, descriptor in value["schemas"].items():
+        if descriptor is None:
+            continue
+        if not isinstance(descriptor, dict):
+            raise WorkflowError("launch contract contains an invalid schema descriptor")
+        schema_id = descriptor.get("id")
+        if not isinstance(schema_id, str):
+            raise WorkflowError("launch contract schema descriptor has no ID")
+        if name != "task_result":
+            expected = schema_descriptor(schema_id)
+            if descriptor.get("sha256") != expected["sha256"]:
+                raise WorkflowError(f"launch contract schema digest changed: {schema_id}")
+    worktree = require_directory(Path(value["worktree"]["path"]), label="launch worktree")
+    handoff = Path(value["paths"]["handoff_dir"])
+    try:
+        handoff.relative_to(worktree)
+    except ValueError as exc:
+        raise WorkflowError("launch handoff escapes launch worktree") from exc
+    require_directory(handoff, label="launch handoff")
+    if value["paths"]["workdir"] != value["worktree"]["path"]:
+        raise WorkflowError("launch contract has conflicting worktree paths")
+    pack_root = value["pack"].get("root")
+    if pack_root is not None:
+        require_directory(Path(pack_root), label="launch pack root")
+        result_contract = value["paths"].get("result_contract")
+        if isinstance(result_contract, dict):
+            schema_path = result_contract.get("schema")
+            if not isinstance(schema_path, str) or not schema_path:
+                raise WorkflowError("launch result contract has no schema path")
+            relative = Path(schema_path)
+            if (
+                relative.is_absolute()
+                or any(part in {"", ".", ".."} for part in relative.parts)
+                or relative.as_posix() != schema_path
+            ):
+                raise WorkflowError("launch result schema path is not pack-contained")
+            actual = read_regular_file(Path(pack_root) / relative)
+            expected = value["schemas"].get("task_result")
+            if not isinstance(expected, dict) or actual.sha256 != expected.get("sha256"):
+                raise WorkflowError("launch result schema changed after contract creation")
+        manifest_digest = value["pack"].get("manifest_sha256")
+        if manifest_digest is not None:
+            manifest = read_regular_file(Path(pack_root) / "MANIFEST.sha256")
+            if manifest.sha256 != manifest_digest:
+                raise WorkflowError("launch pack manifest changed after contract creation")
     return value

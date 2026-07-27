@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from ..errors import WorkflowError
-from ..receipts import verify_seal
+from ..receipts import read_sealed_contract, read_sealed_json, verify_seal_details
 from .scoring import validate_score_set
 
 
@@ -13,7 +13,7 @@ def build_report(
     run_dir: Path, *, expected_final_receipt_sha256: str
 ) -> dict[str, Any]:
     run_dir = run_dir.resolve()
-    final = verify_seal(
+    final, verified_digest = verify_seal_details(
         run_dir, expected_sha256=expected_final_receipt_sha256
     )
     score_set_path = run_dir / "scores" / "score-set.json"
@@ -27,14 +27,21 @@ def build_report(
             run_dir,
             score_set,
             final_receipt=final,
-            expected_final_receipt_sha256=expected_final_receipt_sha256,
+            expected_final_receipt_sha256=verified_digest,
         )
-    status = json.loads((run_dir / "final-status.json").read_text(encoding="utf-8"))
-    provenance = json.loads(
-        (run_dir / "run-provenance.json").read_text(encoding="utf-8")
+    status, _ = read_sealed_contract(
+        run_dir, final, "final-status.json", "agent-workflow/session-status/v2"
     )
-    metrics_path = run_dir / "execution-metrics.json"
-    metrics = json.loads(metrics_path.read_text(encoding="utf-8")) if metrics_path.is_file() else None
+    provenance, _ = read_sealed_contract(
+        run_dir, final, "run-provenance.json", "agent-workflow/run-provenance/v1"
+    )
+    metrics = None
+    if any(
+        item.get("path") == "execution-metrics.json"
+        for item in final.get("artifacts", [])
+        if isinstance(item, dict)
+    ):
+        metrics, _ = read_sealed_json(run_dir, final, "execution-metrics.json")
     return {
         "schema": "agent-workflow/evaluation-report/v1",
         "session_id": final.get("session_id"),
