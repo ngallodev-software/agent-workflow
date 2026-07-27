@@ -417,7 +417,7 @@ It owns:
 
 It does **not** own or duplicate:
 
-- `DEC-001`, which remains a maintainer decision prerequisite;
+- `DEC-001`, recorded in [the durable-control decision](DECISIONS/DEC-001-DURABLE-CONTROL.md), which fixes the local storage, replay, idempotency, and latency objectives;
 - any `HARD-*` security item;
 - `MCP-003`, which remains owned by `mcp-server-next`;
 - remote or multi-host architecture items.

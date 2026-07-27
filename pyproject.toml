@@ -19,7 +19,12 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8,<10"]
+dev = [
+  "pytest>=8,<10",
+  "build>=1.2,<2",
+  "setuptools>=61",
+  "mcp==1.28.1",
+]
 eval = [
   "inspect-ai==0.3.247",
   "inspect-swe==0.2.66",

@@ -1,14 +1,10 @@
 phase: "3"
 name: "acknowledgement-and-scheduling"
-mandatory_order:
-  - "MSG-004"
+mandatory_order: ["MSG-004"]
 tasks:
   - id: "MSG-004"
     tier: A
     session: "messaging-event-actions"
     prompt: "tickets/MSG-004-acknowledgement-action-semantics.md"
     backlog_id: "MSG-004"
-    dependencies:
-      - "MSG-002"
-      - "MSG-003"
-      - "MSG-005"
+    dependencies: ["MSG-002", "MSG-003", "MSG-005"]

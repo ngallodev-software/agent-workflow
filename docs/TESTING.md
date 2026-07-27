@@ -71,25 +71,27 @@ When a defect is discovered, first extend the nearest end-to-end journey. Add a 
 ## Commands
 
 ```bash
-# Default release-development gate
-pytest
+# Default release-development environment and gate
+./scripts/bootstrap-dev.sh
+.venv/bin/python -m pytest -q
+./scripts/release-check.sh
 
 # Behavioral acceptance only
-pytest tests/acceptance
+.venv/bin/python -m pytest tests/acceptance
 
 # Security/state/accounting matrices
-pytest tests/invariants
+.venv/bin/python -m pytest tests/invariants
 
 # Static distribution checks
-pytest tests/release
+.venv/bin/python -m pytest tests/release
 
 # Approved future specifications
-pytest tests/future
+.venv/bin/python -m pytest tests/future
 
 # Real host/provider compatibility
-AGENT_WORKFLOW_LIVE_TMUX=1 pytest -m live
-AGENT_WORKFLOW_LIVE_EXECUTOR=codex pytest -m live
-AGENT_WORKFLOW_LIVE_EXECUTOR=claude pytest -m live
+AGENT_WORKFLOW_LIVE_TMUX=1 .venv/bin/python -m pytest -m live
+AGENT_WORKFLOW_LIVE_EXECUTOR=codex .venv/bin/python -m pytest -m live
+AGENT_WORKFLOW_LIVE_EXECUTOR=claude .venv/bin/python -m pytest -m live
 ```
 
 `./scripts/release-check.sh` runs the default suite plus compile, shell, schema, release-asset, prompt-pack ownership, and documentation-drift checks. Apply the `release-drift-auditor` skill after parallel integration because deterministic checks cannot judge every semantic security overclaim.

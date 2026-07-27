@@ -147,8 +147,8 @@ Worktree `.delegations/` entries are discoverability links, not evidence authori
 ## Development and testing
 
 ```bash
-python -m pip install -e '.[dev]'
-pytest
+./scripts/bootstrap-dev.sh
+.venv/bin/python -m pytest -q
 ./scripts/release-check.sh
 ```
 

@@ -10,7 +10,7 @@ The target architecture is documented in [`docs/ORCHESTRATOR_TWO_WAY_MESSAGING_D
 
 - `BKL-001` and `BKL-002` existed in the backlog but were not owned by another active pack. This pack becomes their sole implementation owner.
 - `MSG-*` is a new namespace reserved for this messaging implementation.
-- `DEC-001` is a prerequisite decision and is not owned by this pack.
+- `DEC-001` is recorded in [`docs/DECISIONS/DEC-001-DURABLE-CONTROL.md`](../../docs/DECISIONS/DEC-001-DURABLE-CONTROL.md) and is not owned by this pack.
 - `HARD-*` controls remain owned by the existing hardening packs.
 - `MCP-003` remains owned by `mcp-server-next`; this pack exposes shared services that a later authorized MCP tool may call, but implements no MCP mutation surface.
 
@@ -18,9 +18,9 @@ See [`references/collision-and-ownership.md`](references/collision-and-ownership
 
 ## External prerequisites
 
-Do not start phase 0 until:
+Phase 0 may start only after verifying:
 
-- `DEC-001` has an explicit accepted decision;
+- the accepted `DEC-001` decision record;
 - `HARD-002` and `HARD-004` are accepted.
 
 Later tickets additionally require the exact `HARD-*` prerequisites named in their prompts. The complete pack should not pass its final gate until `HARD-001`, `HARD-006`, `HARD-007`, and `HARD-008` are accepted.

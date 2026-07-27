@@ -25,7 +25,7 @@ The determinism and security work below is derived from the [feature determinism
 | [`execution-isolation-and-secrets`](../prompt-packs/execution-isolation-and-secrets/) | HARD-008, HARD-003, HARD-006 | Blocked until the foundations gate is accepted. |
 | [`public-beta-trust-and-release`](../prompt-packs/public-beta-trust-and-release/) | HARD-007, HARD-009, HARD-010, REL-003, REL-004 | Blocked until the first two packs are accepted. |
 | [`mcp-server-next`](../prompt-packs/mcp-server-next/) | MCP-003 | Blocked on HARD-004, HARD-005, and HARD-007. |
-| [`orchestrator-two-way-messaging`](../prompt-packs/orchestrator-two-way-messaging/) | BKL-001, BKL-002, MSG-001 through MSG-007 | Planning complete; phase 0 is blocked on DEC-001, HARD-002, and HARD-004. |
+| [`orchestrator-two-way-messaging`](../prompt-packs/orchestrator-two-way-messaging/) | BKL-001, BKL-002, MSG-001 through MSG-007 | Planning complete; phase 0 is blocked on accepted HARD-002 and HARD-004 authority work. |
 | [`chatgpt-sealed-run-assessment`](../prompt-packs/chatgpt-sealed-run-assessment/) | CHATGPT-EVAL-001, CHATGPT-TDD-001 | Assessment and future-TDD artifacts completed; future journeys remain strict expected failures and do not unblock planned runtime work. |
 
 ## Ready now
@@ -91,7 +91,7 @@ These items remain tracked separately from the hardening ownership above; they a
 
 | ID | Priority | State | Decision |
 |---|---|---|---|
-| DEC-001 | P0 | needs-decision | Set the durable-control service objective: storage/failure model, ordering scope, producer model, external-effect idempotency, and maximum no-wakeup latency. |
+| DEC-001 | P0 | decided | Local JSONL authority, per-consumer FIFO, at-least-once append, digest-bound idempotency, rebuildable cursors, and a 2-second normal replay objective. | [Decision](DECISIONS/DEC-001-DURABLE-CONTROL.md) |
 | DEC-002 | P1 | needs-decision | Set benchmark policy: first executors, billing meaning, cache role, replicate count/effect threshold, and treatment of interrupted or human-assisted trials. |
 | DEC-003 | P2 | deferred | Authorize multi-host orchestration only after a measured single-host failure. Preserve replayable durable records as authority; prefer JetStream unless an existing Redis dependency is mandated. |
 | DEC-MCP-HTTP | P2 | deferred | Authorize any non-stdio MCP transport only through a separate security ADR after local adoption evidence. |

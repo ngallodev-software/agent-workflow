@@ -1,13 +1,10 @@
 phase: "5"
 name: "independent-messaging-gate"
-mandatory_order:
-  - "MSG-GATE-01"
+mandatory_order: ["MSG-GATE-01"]
 tasks:
   - id: "MSG-GATE-01"
     task_type: gate
     tier: A
     session: "messaging-independent-gate"
     prompt: "tickets/MSG-GATE-01-independent-review.md"
-    dependencies:
-      - "MSG-006"
-      - "MSG-007"
+    dependencies: ["MSG-006", "MSG-007"]

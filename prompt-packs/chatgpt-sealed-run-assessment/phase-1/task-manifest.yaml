@@ -1,7 +1,6 @@
 phase: "1"
 name: "future-tdd-journeys"
-mandatory_order:
-  - "CHATGPT-TDD-001"
+mandatory_order: ["CHATGPT-TDD-001"]
 tasks:
   - id: "CHATGPT-TDD-001"
     tier: B

@@ -5,8 +5,8 @@ This repository is pre-public-release. Contributions should stay within the curr
 ## Development setup
 
 ```bash
-python -m pip install -e '.[dev]'
-pytest
+./scripts/bootstrap-dev.sh
+.venv/bin/python -m pytest -q
 ```
 
 Run the complete release gate before submitting changes:

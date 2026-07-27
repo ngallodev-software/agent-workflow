@@ -102,6 +102,13 @@ def installed_product(tmp_path_factory: pytest.TempPathFactory) -> InstalledProd
         check=True,
         timeout=120,
     )
+    subprocess.run(
+        [str(python), "-m", "pip", "install", "--ignore-installed", "mcp==1.28.1"],
+        text=True,
+        capture_output=True,
+        check=True,
+        timeout=120,
+    )
     return InstalledProduct(
         root=root,
         python=python,

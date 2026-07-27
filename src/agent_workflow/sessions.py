@@ -110,6 +110,7 @@ def _write_runner(
     workdir: Path,
     command: list[str],
     *,
+    python_executable: str,
     session_id: str = "unknown-session",
     prompt_source: Path | None = None,
     prompt_pack_root: Path | None = None,
@@ -129,7 +130,7 @@ def _write_runner(
     ).decode("ascii")
     source_root = Path(__file__).resolve().parents[1]
     runner_invocation = (
-        "python3 -m agent_workflow.runner "
+        f"{shlex.quote(python_executable)} -m agent_workflow.runner "
         f"--run-dir {shlex.quote(str(state_dir))} "
         f"--workdir {shlex.quote(str(workdir))} "
         f"--stream-format {shlex.quote(stream_format)} "
@@ -591,11 +592,13 @@ def launch(
         interactive=interactive,
         allow_active_name=allow_active_agent_name,
     )
-    # `interactive` describes user-visible/reusable assignment semantics.  A
-    # non-interactive assignment still gets a real interactive executor when
-    # it is placed in tmux, so it can complete and report without leaving a
-    # blank resumable session behind.
-    executor_interactive = not structured
+    # `interactive` describes user-visible/reusable assignment semantics.
+    # Explicit commands and structured runs must receive the prompt through
+    # stdin and close deterministically. Named Codex/Claude runs may retain a
+    # detached interactive executor so a later delivery adapter can steer it.
+    executor_interactive = not structured and (
+        bool(interactive) or executor in {"codex", "claude"}
+    )
     interactive_parent_target = tmux.current_window_target() if interactive else None
     parent_target = (
         interactive_parent_target
@@ -1014,6 +1017,7 @@ def launch(
         state_dir,
         workdir,
         command,
+        python_executable=sys.executable,
         session_id=session_id,
         prompt_source=prompt_source,
         prompt_pack_root=prompt_pack_root,
