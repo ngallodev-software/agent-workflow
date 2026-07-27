@@ -1,0 +1,10 @@
+phase: "2"
+name: "independent-communication-reliability-gate"
+mandatory_order: []
+tasks:
+  - id: "PROC-GATE-001"
+    tier: A
+    session: "delegation-communication-reliability-gate"
+    prompt: "tickets/PROC-GATE-001-independent-review.md"
+    task_type: "gate"
+    dependencies: ["PROC-005"]

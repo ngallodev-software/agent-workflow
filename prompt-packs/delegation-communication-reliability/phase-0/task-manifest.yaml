@@ -1,0 +1,24 @@
+phase: "0"
+name: "control-plane-foundations"
+mandatory_order: []
+tasks:
+  - id: "PROC-001"
+    tier: A
+    session: "delegation-authoritative-preflight"
+    prompt: "tickets/PROC-001-authoritative-preflight.md"
+    backlog_id: "PROC-001"
+  - id: "PROC-002"
+    tier: A
+    session: "delegation-control-handshake"
+    prompt: "tickets/PROC-002-control-handshake.md"
+    backlog_id: "PROC-002"
+  - id: "PROC-003"
+    tier: B
+    session: "delegation-run-observability"
+    prompt: "tickets/PROC-003-run-observability.md"
+    backlog_id: "PROC-003"
+  - id: "PROC-004"
+    tier: A
+    session: "delegation-completion-validation"
+    prompt: "tickets/PROC-004-completion-validation.md"
+    backlog_id: "PROC-004"

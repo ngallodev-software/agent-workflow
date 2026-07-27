@@ -1,0 +1,20 @@
+schema: agent-workflow/pack/v1
+pack_id: "delegation-communication-reliability"
+backlog_items:
+  - "PROC-001"
+  - "PROC-002"
+  - "PROC-003"
+  - "PROC-004"
+  - "PROC-005"
+workflow:
+  name: agent-workflow
+  minimum_version: "0.2.4"
+  terminal_backend: tmux
+  requires:
+    - isolated_worktree
+    - foregroundable_session
+    - persistent_log
+    - source_baseline
+    - completion_report
+    - independent_phase_gate
+    - release_drift_audit

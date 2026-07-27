@@ -1,6 +1,15 @@
 
 # Changelog
 
+## 0.2.5 — 2026-07-27
+
+- Add the delegation-communication-reliability prompt pack with parallel
+  process-hardening tasks for authoritative preflight, durable control
+  handshakes, silent-run recovery, substantive completion validation, and
+  operator enforcement.
+- Register the new process tasks in the canonical backlog and add a bounded
+  release-drift audit and transfer archive.
+
 ## Unreleased
 
 - Complete the evaluation/benchmark templating task by maintainer direction while preserving its environment limitations as release-wide follow-up.
