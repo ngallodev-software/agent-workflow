@@ -18,6 +18,7 @@ Use current source first, then current tests/schemas, then verified references, 
 4. Enforce dependencies and writable paths.
 5. Inspect stalled sessions in the foreground before interruption.
 6. Do not merge implementation and independent phase review into the same unchecked delegation.
+7. Start implementation tickets interactively. Exploration/review tickets are non-interactive by default; at pane capacity, require an explicit close-idle, structured non-interactive, or cancel decision.
 
 ## Test policy
 

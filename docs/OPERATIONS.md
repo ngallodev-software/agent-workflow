@@ -38,6 +38,18 @@ The default classes are:
 
 The concrete allowlists live in configuration, not documentation. Use `agent-workflow config show` to inspect effective policy.
 
+Implementation work starts interactive. Exploration, research, and review work
+starts non-interactive. When an implementation launch is inside a tmux window
+that has reached its configured capacity, the CLI reports the count and
+explicitly identified idle panes. The operator may close enough idle panes and
+retry, choose a structured non-interactive fallback, or cancel. The fallback
+sets both assignment and executor mode to non-interactive; it is never an
+implicit downgrade. A structured provider stream is required when the run will
+be evaluated after completion.
+
+When no shared tmux window is available, a dedicated named session remains an
+interactive executor context; it is not a silent non-interactive downgrade.
+
 ## Observe and control
 
 ```bash

@@ -1,6 +1,6 @@
 # agent-workflow repository chart pack
 
-**Release:** 0.2.3
+**Release:** 0.2.4
 **Purpose:** current-state architecture, data/evidence model, execution flows, security boundaries, and planned MCP evolution.
 
 Mermaid sources for the highest-value diagrams are also stored as individual `.mmd` files in this directory.
@@ -646,7 +646,7 @@ sequenceDiagram
     O->>I: read, acknowledge, action
 ```
 
-Source: [`orchestrator-two-way-messaging-sequence.mmd`](orchestrator-two-way-messaging-sequence.mmd).
+Source: [`orchestrator-two-way-messaging-sequence.md`](orchestrator-two-way-messaging-sequence.md).
 
 ### Authority flow
 

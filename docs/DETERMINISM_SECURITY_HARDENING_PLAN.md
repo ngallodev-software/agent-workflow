@@ -191,4 +191,4 @@ The [`orchestrator-two-way-messaging`](../prompt-packs/orchestrator-two-way-mess
 
 Phase 0 has the `DEC-001` service-objective decision recorded, but remains blocked on accepted `HARD-002`/`HARD-004` authority foundations. Later phases additionally depend on bounded process execution, sensitive-content policy, authenticated principals, and configuration/executable trust. This sequencing prevents the messaging supervisor from embedding weak path, identity, process, or disclosure assumptions that would later require a second implementation.
 
-See [Durable two-way messaging](ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md) and its [dependency diagram](diagrams/orchestrator-two-way-messaging-dependencies.mmd).
+See [Durable two-way messaging](ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md) and its [dependency diagram](diagrams/orchestrator-two-way-messaging-dependencies.md).

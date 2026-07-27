@@ -8,7 +8,7 @@ import subprocess
 import tomllib
 from pathlib import Path
 
-from tests.conftest import InstalledProduct, REPO_ROOT, git_repo
+from tests.conftest import InstalledProduct, REPO_ROOT, fake_agent_path, git_repo, wait_for_status
 
 
 def test_installed_cli_exposes_operable_public_surface(
@@ -21,6 +21,10 @@ def test_installed_cli_exposes_operable_public_surface(
     help_result = installed_product.run("--help", env=product_env, check=True)
     for command in ("doctor", "launch", "workflow", "eval", "pack", "worktree"):
         assert command in help_result.stdout
+    launch_help = installed_product.run("launch", "--help", env=product_env, check=True)
+    launch_help_text = " ".join(launch_help.stdout.split())
+    assert "explicitly opt into a non-interactive structured evidence run" in launch_help_text
+    assert "pane-limit-action" in launch_help.stdout
 
     doctor = installed_product.json("doctor", env=product_env)
     assert doctor["version"] == expected_version
@@ -30,6 +34,70 @@ def test_installed_cli_exposes_operable_public_surface(
     config = installed_product.json("config", "show", env=product_env)
     assert config["terminal"]["backend"] == "tmux"
     assert Path(config["paths"]["state_root"]).is_absolute()
+
+
+def test_pane_capacity_fallback_is_structured_and_non_interactive(
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+    fake_agent_path: Path,
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    git_repo(repo)
+    prompt = tmp_path / "prompt.md"
+    prompt.write_text("Inspect the repository.\n", encoding="utf-8")
+    config = tmp_path / "config.toml"
+    config.write_text(
+        "\n".join(
+            [
+                "[executors.codex]",
+                f'command = ["{fake_agent_path}"]',
+                'models = ["gpt-5.4-mini"]',
+                'default_model = "gpt-5.4-mini"',
+                'model_arg = ["--model"]',
+                "",
+                "[git]",
+                "require_clean_source = false",
+                "",
+                "[agents]",
+                'default_executor = "codex"',
+                'default_class = "implementation"',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    env = dict(product_env)
+    env.update(
+        {
+            "TMUX": "fake-server",
+            "TMUX_PANE": "%0",
+            "FAKE_TMUX_AGENT_COUNT": "6",
+            "FAKE_AGENT_MODE": "structured",
+        }
+    )
+    installed_product.json(
+        "launch",
+        "capacity-fallback",
+        repo,
+        prompt,
+        "--config",
+        config,
+        "--executor",
+        "codex",
+        "--agent-class",
+        "implementation",
+        "--pane-limit-action",
+        "non-interactive",
+        env=env,
+    )
+    status = wait_for_status(env, "capacity-fallback")
+    assert status["status"] == "completed"
+    run = Path(env["XDG_STATE_HOME"]) / "agent-workflow" / "runs" / "capacity-fallback"
+    contract = json.loads((run / "launch-contract.json").read_text(encoding="utf-8"))
+    assert contract["command_plan"]["interactive"] is False
+    assert contract["command_plan"]["executor_interactive"] is False
+    assert contract["command_plan"]["stream_format"] == "codex-jsonl"
 
 
 def test_prompt_pack_scaffold_validate_and_archive_round_trip_is_deterministic(

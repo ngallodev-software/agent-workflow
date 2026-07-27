@@ -1,3 +1,10 @@
+# Orchestrator
+
+##
+
+### Two-Way messaging dependencies
+
+``` mermaid
 flowchart TD
     DEC[DEC-001 durable-control SLO] --> BKL1[BKL-001 durable consumer cursors]
     HARD2[HARD-002 path and artifact integrity] --> BKL1
@@ -47,3 +54,4 @@ flowchart TD
 
     MSG6 --> GATE[MSG-GATE-01 independent review]
     MSG7 --> GATE
+```

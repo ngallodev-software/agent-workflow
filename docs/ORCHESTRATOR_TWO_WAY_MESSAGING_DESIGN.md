@@ -65,7 +65,7 @@ The key rule is:
 
 `tmux wait-for` can block a client until another command signals the same channel, which makes it suitable as a low-cost local wake mechanism. It is not a persistent queue, so the durable journal must remain authoritative. See the tmux `wait-for` command in the [tmux manual](https://man.openbsd.org/tmux#wait-for).
 
-The source version of this diagram is [`orchestrator-two-way-messaging-sequence.mmd`](diagrams/orchestrator-two-way-messaging-sequence.mmd).
+The source version of this diagram is [`orchestrator-two-way-messaging-sequence.md`](diagrams/orchestrator-two-way-messaging-sequence.md).
 
 ## Add one shared orchestrator inbox
 
@@ -377,7 +377,7 @@ Do not add:
 11. Add installed-product and opt-in live compatibility journeys (`MSG-007`).
 12. Run an independent phase gate (`MSG-GATE-01`).
 
-The exact dependency graph is in [`orchestrator-two-way-messaging-dependencies.mmd`](diagrams/orchestrator-two-way-messaging-dependencies.mmd).
+The exact dependency graph is in [`orchestrator-two-way-messaging-dependencies.md`](diagrams/orchestrator-two-way-messaging-dependencies.md).
 
 ## Acceptance strategy
 

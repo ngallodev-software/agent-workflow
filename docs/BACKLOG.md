@@ -20,7 +20,7 @@ The determinism and security work below is derived from the [feature determinism
 ## Active prompt-pack ownership
 
 | Prompt pack | Canonical backlog ownership | Execution status |
-|---|---|---|
+| --- | --- | --- |
 | [`deterministic-enforcement-foundations`](../prompt-packs/deterministic-enforcement-foundations/) | HARD-001, HARD-002, HARD-004, HARD-005 | Implementations integrated for HARD-001, HARD-002, HARD-004, and HARD-005; FOUND-GATE-01 remains rejected pending shared acceptance. |
 | [`execution-isolation-and-secrets`](../prompt-packs/execution-isolation-and-secrets/) | HARD-008, HARD-003, HARD-006 | Blocked until the foundations gate is accepted. |
 | [`public-beta-trust-and-release`](../prompt-packs/public-beta-trust-and-release/) | HARD-007, HARD-009, HARD-010, REL-003, REL-004 | Blocked until the first two packs are accepted. |

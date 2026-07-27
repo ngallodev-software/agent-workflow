@@ -49,6 +49,7 @@ class EnvironmentPolicy:
         "TMUX",
         "TMUX_PANE",
         "FAKE_TMUX_STATE",
+        "FAKE_TMUX_AGENT_COUNT",
         "FAKE_AGENT_MODE",
         "FAKE_AGENT_DELAY",
         "FAKE_AGENT_RESULT_JSON",

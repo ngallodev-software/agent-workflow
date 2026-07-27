@@ -39,7 +39,7 @@ agent-workflow kill SESSION
 agent-workflow restart SESSION [--new-session NAME]
 ```
 
-Configured launches enforce class/executor/model allowlists and permission arguments. A no-go model requires `--allow-no-go-model`, which is recorded. `--structured` and native interactive TUI mode are mutually exclusive. Git worktrees must be clean unless `--allow-dirty` is explicit; retries preserve prior evidence and lineage.
+Configured launches enforce class/executor/model allowlists and permission arguments. Implementation launches are interactive by default; exploration/review classes are non-interactive by default. At a full tmux pane limit, the CLI reports idle candidates and requires an explicit close-idle, structured non-interactive, or cancel choice. A no-go model requires `--allow-no-go-model`, which is recorded. `--structured` and native interactive TUI mode are mutually exclusive. Git worktrees must be clean unless `--allow-dirty` is explicit; retries preserve prior evidence and lineage.
 
 ## Durable messages
 

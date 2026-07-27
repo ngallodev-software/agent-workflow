@@ -1,3 +1,6 @@
+# Provider Evidence
+
+``` mermaid
 flowchart LR
   Raw[Stable regular non-symlink raw JSONL] --> Capture[Bounded parse + complete hash]
   Capture --> Identity[Provider event identity / duplicate ambiguity]
@@ -7,3 +10,4 @@ flowchart LR
   Evidence --> Seal[final receipt]
   Seal --> Scores[Validate content-addressed score receipts]
   Scores --> Trial[trial evidence]
+  ```

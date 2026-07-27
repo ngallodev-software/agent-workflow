@@ -1,3 +1,8 @@
+# Orchestrator
+
+## Two-Way messaging sequence
+
+``` mermaid
 sequenceDiagram
     participant C as Child agent
     participant CL as Child message log
@@ -18,3 +23,4 @@ sequenceDiagram
     O->>OI: append orchestrator_ack
     O->>CL: append new steer or assignment
     O-->>T: signal child channel
+```

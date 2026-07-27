@@ -83,7 +83,7 @@ def _print_table(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="agent-workflow")
-    parser.add_argument("--version", action="version", version="%(prog)s 0.2.3")
+    parser.add_argument("--version", action="version", version="%(prog)s 0.2.4")
     parser.add_argument("--config", type=Path, help="override config.toml path")
     parser.add_argument(
         "--json",
@@ -170,13 +170,13 @@ def build_parser() -> argparse.ArgumentParser:
     launch.add_argument(
         "--structured",
         action="store_true",
-        help="request structured JSON events from known executors",
+        help="explicitly opt into a non-interactive structured evidence run",
     )
     launch.add_argument(
         "--interactive",
         action=argparse.BooleanOptionalAction,
         default=None,
-        help="run a known executor TUI attached to a tmux PTY",
+        help="run implementation work in a visible or dedicated interactive executor",
     )
     launch.add_argument(
         "--allow-dirty",
@@ -495,6 +495,7 @@ def main(argv: list[str] | None = None) -> int:
                 data = list_worktrees(args.repo)
         elif args.command == "launch":
             interactive_override = args.interactive
+            structured_override = args.structured
             while True:
                 try:
                     data = launch_session(
@@ -513,7 +514,7 @@ def main(argv: list[str] | None = None) -> int:
                         pack_id=args.pack,
                         job_path=args.job,
                         allow_dirty=args.allow_dirty,
-                        structured=args.structured,
+                        structured=structured_override,
                         interactive=interactive_override,
                         evaluation_path=args.evaluation,
                     )
@@ -557,6 +558,9 @@ def main(argv: list[str] | None = None) -> int:
                                 "cannot convert an explicit command into a non-interactive executor task"
                             )
                         interactive_override = False
+                        # Capacity fallback is an evidence-safe structured run,
+                        # not merely a detached interactive executor.
+                        structured_override = True
                         continue
                     raise WorkflowError("interactive launch cancelled at pane limit")
         elif args.command == "list":

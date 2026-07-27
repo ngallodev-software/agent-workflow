@@ -51,6 +51,15 @@ Every delegation runs in a fresh named `tmux` session. The session name includes
 
 A delegation is only **potentially** stalled when its terminal is alive and the live log has not changed for the configured interval. Foreground and inspect before interrupting it. Never automatically kill a session merely because a timer elapsed.
 
+### Launch-mode rule
+
+Implementation work starts interactive unless the operator explicitly chooses a
+structured non-interactive fallback. Exploration, research, and review work is
+non-interactive by default. At the configured pane limit, report the capacity
+and idle candidates, then offer close-idle, structured non-interactive, or
+cancel. Do not silently change the launch mode. A structured provider stream is
+required for post-run evaluation; native TUI output is operational context only.
+
 ## 5. Implementation discipline
 
 - Read before editing.

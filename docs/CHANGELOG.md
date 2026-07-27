@@ -13,6 +13,13 @@
 - Add the `release-drift-auditor` skill and deterministic release-audit checks for duplicate task IDs, unknown backlog ownership, cross-pack collisions, undocumented active packs, and stale future-test IDs.
 - Align the execution protocol with acceptance-first testing and separate-worktree parallel delegation.
 
+## 0.2.4 — 2026-07-27
+
+- Enforce interactive-first implementation launches with explicit pane-capacity
+  fallback to structured non-interactive evidence runs.
+- Add the ChatGPT evaluation and benchmark templating handoff.
+- Keep generated execution-protocol assets and renamed diagram links in sync.
+
 ## 0.2.3 — 2026-07-26
 
 - Integrate the bounded process substrate, artifact/path/schema integrity controls, and MCP read-boundary hardening from the sealed foundation runs.

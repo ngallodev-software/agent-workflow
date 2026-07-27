@@ -178,6 +178,8 @@ if command == "list-panes":
         print("%1\torchestrator\t0\t0\t0\t")
     elif "pane_id" in fmt:
         print("%1\torchestrator\t0")
+        for index in range(int(os.environ.get("FAKE_TMUX_AGENT_COUNT", "0"))):
+            print(f"%{index + 1}\tagent\t0")
     raise SystemExit(0)
 if command == "kill-session":
     session = value("-t", "")

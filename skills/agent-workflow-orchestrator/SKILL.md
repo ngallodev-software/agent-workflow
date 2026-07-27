@@ -17,10 +17,18 @@ Use this skill when deciding whether work needs a durable delegation or when ope
 | User-visible child panes are required while the orchestrator is inside tmux | Invoke `agent-workflow launch`; never hand-create the tmux session or pane. |
 
 Select an agent class explicitly when the task differs from the configured
-default. `exploratory` and `review` are normally non-interactive detached runs;
-`implementation` is normally an interactive pane. The application validates
-the class against configured executor/model pairs and rejects no-go models
-unless the caller supplies the explicit authorization flag.
+default. `exploratory` and `review` are non-interactive detached runs by
+default. `implementation` starts interactive by default and must not be silently
+downgraded. If the current tmux window is at capacity, let the application
+report the count and explicitly offer closing idle panes, a structured
+non-interactive fallback, or cancellation. Use the fallback only when the
+operator chooses it; it becomes a structured evidence run. The application
+validates the class against configured executor/model pairs and rejects no-go
+models unless the caller supplies the explicit authorization flag.
+
+Before every implementation launch, verify: current tmux window or dedicated
+session context, configured pane capacity, idle reusable candidates, ticket and
+pack identity, worktree, and whether the run needs structured post-run evidence.
 | A running agent needs new guidance | Append `steer`; treat it as pending until a correlated executor acknowledgement exists. |
 
 A host-native subagent is not automatically durable, visible, resumable, or evidenced by this project. It becomes an `agent-workflow` run only when an explicit bridge invokes the CLI and records the required lifecycle evidence.
