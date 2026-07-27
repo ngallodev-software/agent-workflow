@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-workflow.local/schemas/build-provenance.schema.json",
+  "title": "agent-workflow build provenance",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "project", "version", "generated_at", "source", "builder", "materials", "artifacts"],
+  "properties": {
+    "schema": {"const": "agent-workflow/build-provenance/v1"},
+    "project": {"type": "string", "minLength": 1},
+    "version": {"type": "string", "minLength": 1},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tree_sha256", "git_revision", "git_dirty"],
+      "properties": {
+        "tree_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "git_revision": {"type": ["string", "null"], "pattern": "^[0-9a-f]{7,64}$"},
+        "git_dirty": {"type": ["boolean", "null"]}
+      }
+    },
+    "builder": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["python", "implementation", "platform"],
+      "properties": {
+        "python": {"type": "string", "minLength": 1},
+        "implementation": {"type": "string", "minLength": 1},
+        "platform": {"type": "string", "minLength": 1}
+      }
+    },
+    "materials": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/fileEvidence"}
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/fileEvidence"}
+    }
+  },
+  "$defs": {
+    "fileEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "size_bytes"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "size_bytes": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}
+

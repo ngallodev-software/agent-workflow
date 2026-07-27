@@ -50,21 +50,27 @@ The state-mutating MCP phase, remote transport, multi-host orchestration, host r
 
 ## Release gate
 
-REL-004 runs only after all prerequisites are accepted. At minimum:
+REL-004 runs only after all prerequisites are accepted. The technical lane writes structured evidence on both success and failure:
 
 ```bash
-python3 scripts/audit-release-assets.py
-pytest
-./scripts/release-check.sh
+AGENT_WORKFLOW_RELEASE_EVIDENCE_DIR=build/release-evidence \
+  ./scripts/release-check.sh
 python -m build
 ```
 
-The Jenkins local job must also complete its build, test, wheel, and local-install stages. In addition, run the opt-in live compatibility lane on each declared supported host/executor combination and review the resulting sealed evidence. CI success alone is not sufficient for provider compatibility.
+Pass the wheel and source distribution into provenance, then enforce every declared blocker:
 
-The release-check audit currently identifies missing automated gates for license metadata, a real vulnerability channel, the declared compatibility matrix, structured test evidence, and authenticated release provenance. Track those as REL-005 rather than treating the default script as a complete public-release gate.
+```bash
+AGENT_WORKFLOW_RELEASE_ARTIFACTS='dist/agent_workflow.whl:dist/agent_workflow.tar.gz' \
+AGENT_WORKFLOW_ENFORCE_RELEASE_BLOCKERS=1 \
+  ./scripts/release-check.sh
+```
 
-Before a public preview, also complete the P0 controls in [RELEASE_BLOCKERS_AUDIT.md](RELEASE_BLOCKERS_AUDIT.md#determinismsecurity-p0-controls) and the detailed [determinism/security assessment](FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#6-prioritized-change-plan).
-It also verifies locked dependencies, SBOM/provenance/signatures, clean source/wheel install and uninstall, declared live host/executor combinations, sandbox/redaction/principal behavior, and a real monitored vulnerability channel. CI success alone is not provider compatibility or release authorization.
+REL-005 is implemented: the gate emits JUnit XML, a CycloneDX 1.5 SBOM, source/build provenance, direct-lock and policy digests, and a machine-readable `release-evidence.json`. The current policy intentionally reports REL-001, REL-002, and REL-003 as blocked. See [Release evidence](RELEASE_EVIDENCE.md).
+
+The Jenkins local job must also complete its build, test, wheel, and local-install stages. Run the opt-in live compatibility lane on every combination that will be marked supported and bind those results into the release policy. CI success alone is not provider compatibility or release authorization.
+
+Before a public preview, also complete the P0 controls in [RELEASE_BLOCKERS_AUDIT.md](RELEASE_BLOCKERS_AUDIT.md#determinismsecurity-p0-controls) and the detailed [determinism/security assessment](FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#6-prioritized-change-plan). Full transitive locking with hashes, independent reproducibility, and authenticated signing/attestation remain HARD-010 rather than REL-005.
 
 ## Documentation policy
 

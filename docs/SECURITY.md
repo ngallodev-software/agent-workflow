@@ -35,7 +35,7 @@ These are active release blockers, not theoretical future hardening:
 - default sensitive-content classification, redaction, and retention controls are incomplete (`HARD-006`);
 - actor strings are not authenticated principals, so reviewer independence is procedural rather than cryptographically or OS-authenticated (`HARD-007`);
 - config/executable ownership and compatibility evidence are incomplete (`HARD-008`);
-- release artifacts are checksummed but not yet backed by the full lock/SBOM/provenance/signing path (`HARD-010`).
+- release checks now emit a synchronized direct-dependency lock, CycloneDX SBOM, structured test evidence, and source/build provenance (`REL-005`), but full transitive hashes, independent reproducibility, and authenticated signing/attestation remain open (`HARD-010`).
 
 Do not describe these controls as complete until their backlog exit evidence exists.
 

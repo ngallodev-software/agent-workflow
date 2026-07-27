@@ -161,7 +161,7 @@ Worktree `.delegations/` entries are discoverability links, not evidence authori
 ./scripts/release-check.sh
 ```
 
-The default suite is acceptance-first: it builds and installs a wheel, invokes public executables as subprocesses, and exercises real Git/filesystem/process journeys. A compact invariant layer protects security, replay, and accounting boundaries. Strict expected-failure future journeys keep approved TDD work visible, and live tmux/provider checks remain opt-in. See [Testing](docs/TESTING.md).
+The default suite is acceptance-first: it builds and installs a wheel, invokes public executables as subprocesses, and exercises real Git/filesystem/process journeys. The release check also writes JUnit results, a CycloneDX SBOM, source/build provenance, and a machine-readable blocker report. A compact invariant layer protects security, replay, accounting, and release-evidence boundaries. Strict expected-failure future journeys keep approved TDD work visible, and live tmux/provider checks remain opt-in. See [Testing](docs/TESTING.md) and [Release evidence](docs/RELEASE_EVIDENCE.md).
 
 ## Documentation
 
@@ -177,6 +177,7 @@ The default suite is acceptance-first: it builds and installs a wheel, invokes p
 - [Feature determinism and security assessment](docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md)
 - [Determinism and security hardening plan](docs/DETERMINISM_SECURITY_HARDENING_PLAN.md)
 - [Public release readiness](docs/PUBLIC_RELEASE_READINESS.md)
+- [Release evidence](docs/RELEASE_EVIDENCE.md)
 - [Backlog](docs/BACKLOG.md)
 - [Contributing](docs/CONTRIBUTING.md)
 - [Support](docs/SUPPORT.md)

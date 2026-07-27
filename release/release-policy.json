@@ -1,0 +1,68 @@
+{
+  "schema": "agent-workflow/release-policy/v1",
+  "project": "agent-workflow",
+  "version": "0.2.4",
+  "license": {
+    "status": "blocked",
+    "backlog_id": "REL-001",
+    "spdx_expression": null,
+    "file": null,
+    "distribution_policy": null
+  },
+  "security_channel": {
+    "status": "blocked",
+    "backlog_id": "REL-002",
+    "contact": null,
+    "response_policy": null
+  },
+  "compatibility": {
+    "status": "candidate",
+    "backlog_id": "REL-003",
+    "matrix_id": "public-preview-candidate-1",
+    "evidence_required": true,
+    "combinations": [
+      {
+        "id": "linux-py311-fixture",
+        "status": "candidate",
+        "host": "Linux distribution and kernel to be pinned by REL-003",
+        "python": "3.11",
+        "tmux": "version to be pinned by HARD-008/REL-003",
+        "executor": "deterministic fixture",
+        "executor_version": "repository fixture",
+        "notes": "Default installed-product lane; not public-support evidence."
+      },
+      {
+        "id": "linux-py312-codex",
+        "status": "candidate",
+        "host": "Linux distribution and kernel to be pinned by REL-003",
+        "python": "3.12",
+        "tmux": "version to be pinned by HARD-008/REL-003",
+        "executor": "Codex CLI",
+        "executor_version": null,
+        "notes": "Requires clean-host live evidence and an executor compatibility decision."
+      },
+      {
+        "id": "linux-py312-claude",
+        "status": "candidate",
+        "host": "Linux distribution and kernel to be pinned by REL-003",
+        "python": "3.12",
+        "tmux": "version to be pinned by HARD-008/REL-003",
+        "executor": "Claude Code",
+        "executor_version": null,
+        "notes": "Requires clean-host live evidence and an executor compatibility decision."
+      },
+      {
+        "id": "linux-py313-fixture",
+        "status": "candidate",
+        "host": "Linux distribution and kernel to be pinned by REL-003",
+        "python": "3.13",
+        "tmux": "version to be pinned by HARD-008/REL-003",
+        "executor": "deterministic fixture",
+        "executor_version": "repository fixture",
+        "notes": "CI candidate only; not public-support evidence."
+      }
+    ],
+    "evidence": []
+  }
+}
+

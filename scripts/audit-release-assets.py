@@ -10,6 +10,10 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from agent_workflow.release_evidence import validate_dependency_lock
+
 EXPECTED_VERSION = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
 PLACEHOLDER_RE = re.compile(r"\{\{[A-Z0-9_]+\}\}")
 LINK_RE = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
@@ -111,7 +115,7 @@ def _backlog_rows() -> dict[str, dict[str, str]]:
             continue
         state = ""
         for candidate in cells[1:5]:
-            if candidate in {"ready", "blocked", "needs-decision", "deferred", "done", "in-progress"}:
+            if candidate in {"ready", "blocked", "needs-decision", "deferred", "done", "completed", "in-progress", "in-review"}:
                 state = candidate
                 break
         rows[item_id] = {"section": section, "state": state}
@@ -304,6 +308,39 @@ def main(argv: list[str] | None = None) -> int:
                 pass
             except Exception as exc:
                 fail(f"{path.relative_to(ROOT)}: invalid JSON Schema: {exc}")
+
+    # Release policy and direct dependency lock must be schema-valid and synchronized.
+    policy_path = ROOT / "release" / "release-policy.json"
+    lock_path = ROOT / "release" / "dependency-lock.json"
+    for required in (policy_path, lock_path):
+        if not required.is_file() or required.is_symlink():
+            fail(f"{required.relative_to(ROOT)}: required regular release metadata file is missing")
+    if policy_path.is_file() and lock_path.is_file():
+        try:
+            policy = json.loads(policy_path.read_text(encoding="utf-8"))
+            lock = json.loads(lock_path.read_text(encoding="utf-8"))
+            import jsonschema
+
+            policy_schema = json.loads((ROOT / "schemas" / "release-policy.schema.json").read_text(encoding="utf-8"))
+            lock_schema = json.loads((ROOT / "schemas" / "dependency-lock.schema.json").read_text(encoding="utf-8"))
+            jsonschema.Draft202012Validator(policy_schema).validate(policy)
+            jsonschema.Draft202012Validator(lock_schema).validate(lock)
+            for label, value in (("release policy", policy), ("dependency lock", lock)):
+                if value.get("project") != "agent-workflow" or value.get("version") != EXPECTED_VERSION:
+                    fail(f"release/{label}: project/version must match VERSION")
+            for message in validate_dependency_lock(ROOT, lock):
+                fail(f"release/dependency-lock.json: {message}")
+            pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+            release_data = set(
+                pyproject.get("tool", {})
+                .get("setuptools", {})
+                .get("data-files", {})
+                .get("share/agent-workflow/release", [])
+            )
+            if "release/*.json" not in release_data:
+                fail("pyproject.toml: release policy and dependency lock are not included in built artifacts")
+        except Exception as exc:
+            fail(f"release metadata validation failed: {exc}")
 
     # TOML files and documented TOML examples must parse.
     for path in (path for path in release_files_list if path.suffix == ".toml"):

@@ -3,6 +3,8 @@
 
 ## Unreleased
 
+- Complete the evaluation/benchmark templating task by maintainer direction while preserving its environment limitations as release-wide follow-up.
+- Implement REL-005 with schema-validated release policy metadata, a synchronized direct-dependency lock, JUnit test evidence, CycloneDX SBOM generation, source/build provenance, optional artifact digests, and enforceable release-blocker status.
 - Add the complete durable two-way orchestrator messaging design, authority/failure model, security requirements, acceptance strategy, and four supporting Mermaid diagrams.
 - Add collision-free backlog items `MSG-001` through `MSG-007`, assign the previously unowned `BKL-001` and `BKL-002` work, and preserve `HARD-*`, `DEC-001`, and `MCP-003` ownership boundaries.
 - Add a six-phase multi-agent `orchestrator-two-way-messaging` prompt pack with parallel foundation, delivery, recovery, and security/acceptance lanes plus an independent gate.
@@ -18,15 +20,9 @@
 - Enforce interactive-first implementation launches with explicit pane-capacity
   fallback to structured non-interactive evidence runs.
 - Add the ChatGPT evaluation and benchmark templating handoff.
-- Implement installed deterministic templates for evaluation plans, benchmark
-  manifests, sealed assessments, benchmark reports, evidence-ledger rows, and
-  lifecycle archives.
-- Add benchmark manifest/report contracts, explicit unavailable-data handling,
-  cohort and case-digest identity checks, unmatched-trial accounting,
-  deterministic renderer commands, and checksum-free archive planning.
-- Bind exported trial collections to their sealed run receipt, provider
-  evidence, raw stream, and verified score before declaring assessment
-  completeness.
+- Implement installed deterministic templates for evaluation plans, benchmark manifests, sealed assessments, benchmark reports, evidence-ledger rows, and lifecycle archives.
+- Add benchmark manifest/report contracts, explicit unavailable-data handling, cohort and case-digest identity checks, unmatched-trial accounting, deterministic renderer commands, and checksum-free archive planning.
+- Bind exported trial collections to their sealed run receipt, provider evidence, raw stream, and verified score before declaring assessment completeness.
 - Keep generated execution-protocol assets and renamed diagram links in sync.
 
 ## 0.2.3 — 2026-07-26

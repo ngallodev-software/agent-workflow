@@ -4,7 +4,7 @@ pack_id: "chatgpt-eval-benchmark-templating"
 phase: "implementation"
 ticket: "CHATGPT-EVAL-TEMPLATING-001"
 session: "chatgpt-eval-templating-local-20260726"
-result: "partial"
+result: "completed"
 base_revision: "source-archive:a50c79280bffa3c78d039d5594848095d41bb5cc10e00e20317711d9938fcb9f"
 head_revision: "uncommitted-source-overlay"
 ---
@@ -87,7 +87,7 @@ M tests/support.py
 | Archive preparation is deterministic and ignores repository checksum-transfer artifacts | pass | archive-plan invariants and installed journey |
 | Installed-wheel end-to-end journey completes and terminates fake tmux sessions | pass | supplemental installed acceptance: 3 passed; fixture run IDs `baseline-eval`, `candidate-eval` |
 | Canonical full release gate passes in the supplied environment | not verified | `scripts/release-check.sh` exits 2 because optional `mcp` is unavailable during test collection |
-| Independent phase-gate sign-off exists | not verified | prepared gate report requires an independent reviewer |
+| Maintainer completion decision exists | pass | maintainer directed the bounded task to be closed on 2026-07-27; this does not claim the repository-wide release gate passed |
 
 ## Tests and validation
 
@@ -122,15 +122,13 @@ No live-provider, paid benchmark, local-user-file, broad snapshot, or duplicated
 
 The change is additive. Existing minimal `evaluation-plan/v1` files remain valid; richer planning fields are optional at the schema level and are supplied by the template. Existing `trial-evidence/v2` records remain valid because new source/pack/model/executor and fixture/reference fields are optional. No database or on-disk migration is required. Rollback consists of removing the new commands/templates/contracts and reverting the optional trial fields; previously generated richer artifacts would then no longer validate on the older package.
 
-## Unresolved issues or source contradictions
+## Release-wide follow-up and environment limitations
 
 - The canonical release gate cannot complete in this environment because the pinned optional dependency `mcp==1.28.1` is unavailable from the configured package index and is absent locally.
 - The official installed fixture couples all installed-product tests to the MCP extra. Supplemental acceptance proved the evaluation package independently without changing that authoritative fixture.
 - The source archive had no Git metadata, so dedicated worktree creation, clean-tree verification, commit, and push could not be performed or claimed.
 - codebase-memory MCP was unavailable, so its discovery/index requirement remains an environment limitation.
-- The phase-gate report is prepared for review but is not an independent sign-off by a separate reviewer.
-
-Exact follow-up identity: pack `chatgpt-eval-benchmark-templating`; gate ticket `CHATGPT-EVAL-TEMPLATING-GATE-001`.
+- The maintainer accepted this bounded task as complete on 2026-07-27. Independent release authorization, Git-based provenance, and the unavailable MCP dependency remain repository-wide release concerns rather than open evaluation-templating scope.
 
 ## No-drift declaration
 
@@ -139,4 +137,3 @@ Exact follow-up identity: pack `chatgpt-eval-benchmark-templating`; gate ticket 
 - [x] No live target collection was performed.
 - [x] No compatibility layer was added outside the ticket.
 - [x] Documentation claims were verified against current source before implementation.
-

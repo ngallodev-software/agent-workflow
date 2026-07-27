@@ -55,6 +55,7 @@ agent_workflow = ["assets/**/*"]
 
 [tool.setuptools.data-files]
 "share/agent-workflow/schemas" = ["schemas/*.json"]
+"share/agent-workflow/release" = ["release/*.json"]
 "share/agent-workflow/templates/evaluation" = ["templates/evaluation/*.json"]
 
 [tool.pytest.ini_options]

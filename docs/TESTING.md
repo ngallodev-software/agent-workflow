@@ -39,7 +39,7 @@ Prefer one parameterized matrix to many nearly identical tests.
 
 ### Release checks
 
-`tests/release/` validates distribution properties: repository release assets, JSON Schemas, shell syntax, agreement between documented primary commands and installed help, and the deterministic backlog/prompt-pack ownership audit. Static documentation and metadata checks belong here, not in behavioral unit tests.
+`tests/release/` validates distribution properties: repository release assets, JSON Schemas, shell syntax, agreement between documented primary commands and installed help, deterministic backlog/prompt-pack ownership, release-policy/lock synchronization, and the durable release-evidence path. Static documentation and metadata checks belong here, not in behavioral unit tests.
 
 ### Future acceptance specifications
 
@@ -75,6 +75,8 @@ When a defect is discovered, first extend the nearest end-to-end journey. Add a 
 ./scripts/bootstrap-dev.sh
 .venv/bin/python -m pytest -q
 ./scripts/release-check.sh
+# Public-release enforcement: exits 3 while governance/compatibility blockers remain
+AGENT_WORKFLOW_ENFORCE_RELEASE_BLOCKERS=1 ./scripts/release-check.sh
 
 # Behavioral acceptance only
 .venv/bin/python -m pytest tests/acceptance
@@ -94,7 +96,7 @@ AGENT_WORKFLOW_LIVE_EXECUTOR=codex .venv/bin/python -m pytest -m live
 AGENT_WORKFLOW_LIVE_EXECUTOR=claude .venv/bin/python -m pytest -m live
 ```
 
-`./scripts/release-check.sh` runs the default suite plus compile, shell, schema, release-asset, prompt-pack ownership, and documentation-drift checks. Apply the `release-drift-auditor` skill after parallel integration because deterministic checks cannot judge every semantic security overclaim.
+`./scripts/release-check.sh` runs the default suite plus compile, shell, schema, release-asset, prompt-pack ownership, and documentation-drift checks. It writes `pytest-junit.xml`, `sbom.cdx.json`, `build-provenance.json`, and `release-evidence.json` under `build/release-evidence` unless `AGENT_WORKFLOW_RELEASE_EVIDENCE_DIR` overrides the destination. Open release-policy blockers are recorded by default and enforced when `AGENT_WORKFLOW_ENFORCE_RELEASE_BLOCKERS=1`. Apply the `release-drift-auditor` skill after parallel integration because deterministic checks cannot judge every semantic security overclaim.
 
 ## Current shape
 

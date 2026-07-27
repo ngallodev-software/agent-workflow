@@ -43,7 +43,7 @@ These items remain tracked separately from the hardening ownership above; they a
 
 | ID | Priority | State | Work and exit evidence | Reference |
 |---|---|---|---|---|
-| REL-005 | P1 | ready | Add automated release-blocker checks and durable release evidence: license/security-channel metadata, declared compatibility matrix, structured test results, SBOM, dependency lock, and build provenance. | [Release check audit](RELEASE_CHECK_AUDIT.md#gap-analysis) |
+| REL-005 | P1 | completed | Added schema-validated release policy and direct dependency lock, JUnit evidence, CycloneDX SBOM, source/build provenance, artifact digests, and an enforceable blocker summary. | [Release evidence](RELEASE_EVIDENCE.md) |
 | REL-006 | P1 | ready | Configure the local Jenkins job to trigger from commits to the local repository and verify that the trigger builds the matching master revision; the pipeline itself is already green. | [Release check audit](RELEASE_CHECK_AUDIT.md#jenkins-verification) |
 | REL-007 | P1 | ready | Run and record clean-machine install/uninstall evidence and a controlled real workflow/provider cohort before describing the project as publicly supported. | [Public release readiness](PUBLIC_RELEASE_READINESS.md#governance-and-compatibility-blockers) |
 | CHATGPT-EVAL-001 | P1 | High | completed | Added evidence-first exported-run assessment, truthful ledger evaluation state, and focused invariant coverage. | [Sealed foundation evidence](EVIDENCE_SEALED_FOUNDATION_RUNS_20260726.md) |
@@ -117,3 +117,4 @@ These existing items already own the assessment's P2 recommendations. The harden
 | 0.2.1 | Authority, replay, locking, symlink, scorer-receipt, provider-accounting, and immutable-input hardening. |
 | 0.2.2 | Acceptance-first installed-product tests, compact invariant matrices, strict future TDD journeys, CI, and public-documentation consolidation. |
 | 0.2.2 maintenance | Jenkins local pipeline now provisions an isolated Python environment, installs build/test dependencies, avoids stale workspace virtualenvs, builds and locally installs the wheel, and passed build #16 with `35 passed, 2 skipped, 1 xfailed`. |
+| 0.2.4 maintenance | Completed evaluation/benchmark templating and REL-005 release evidence: policy/lock validation, structured tests, CycloneDX SBOM, provenance, and blocker enforcement without closing REL-001/002/003 or HARD-010. |

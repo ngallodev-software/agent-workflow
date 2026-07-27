@@ -1,0 +1,88 @@
+{
+  "schema": "agent-workflow/dependency-lock/v1",
+  "project": "agent-workflow",
+  "version": "0.2.4",
+  "scope": "direct-dependencies",
+  "follow_up": "HARD-010",
+  "packages": [
+    {
+      "name": "setuptools",
+      "version": "82.0.1",
+      "groups": ["build", "dev"],
+      "source_requirements": ["setuptools>=61"]
+    },
+    {
+      "name": "jsonschema",
+      "version": "4.26.0",
+      "groups": ["runtime"],
+      "source_requirements": ["jsonschema>=4.18,<5"]
+    },
+    {
+      "name": "pytest",
+      "version": "9.0.2",
+      "groups": ["dev"],
+      "source_requirements": ["pytest>=8,<10"]
+    },
+    {
+      "name": "build",
+      "version": "1.2.2",
+      "groups": ["dev"],
+      "source_requirements": ["build>=1.2,<2"]
+    },
+    {
+      "name": "mcp",
+      "version": "1.28.1",
+      "groups": ["dev", "mcp"],
+      "source_requirements": ["mcp==1.28.1"]
+    },
+    {
+      "name": "inspect-ai",
+      "version": "0.3.247",
+      "groups": ["eval"],
+      "source_requirements": ["inspect-ai==0.3.247"]
+    },
+    {
+      "name": "inspect-swe",
+      "version": "0.2.66",
+      "groups": ["eval"],
+      "source_requirements": ["inspect-swe==0.2.66"]
+    },
+    {
+      "name": "scipy",
+      "version": "1.17.0",
+      "groups": ["stats"],
+      "source_requirements": ["scipy>=1.11,<2"]
+    },
+    {
+      "name": "opentelemetry-api",
+      "version": "1.42.1",
+      "groups": ["otel"],
+      "source_requirements": ["opentelemetry-api>=1.30,<2"]
+    },
+    {
+      "name": "opentelemetry-sdk",
+      "version": "1.42.1",
+      "groups": ["otel"],
+      "source_requirements": ["opentelemetry-sdk>=1.30,<2"]
+    },
+    {
+      "name": "opentelemetry-exporter-otlp-proto-http",
+      "version": "1.42.1",
+      "groups": ["otel"],
+      "source_requirements": ["opentelemetry-exporter-otlp-proto-http>=1.30,<2"]
+    },
+    {
+      "name": "mlflow",
+      "version": "3.0.0",
+      "groups": ["mlflow"],
+      "source_requirements": ["mlflow>=3,<4"]
+    },
+    {
+      "name": "shtab",
+      "version": "1.7.2",
+      "groups": ["completion"],
+      "source_requirements": ["shtab>=1.7,<2"]
+    }
+  ]
+}
+
