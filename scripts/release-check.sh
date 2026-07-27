@@ -37,7 +37,10 @@ done < <(find templates src/agent_workflow/assets -type f -name '*.sh' -print0)
 for path in scripts/hooks/agent-workflow-session-reminder scripts/hooks/codebase-memory-session-reminder scripts/hooks/rtk-session-reminder; do
   bash -n "$path"
 done
-"$PYTHON_BIN" -m pytest -q
+# Dedicated acceptance fixtures must not inherit the coordinator's tmux pane;
+# otherwise a nested tmux server can outlive the test and leave a completed
+# fake executor projected as `running`.
+env -u TMUX -u TMUX_PANE "$PYTHON_BIN" -m pytest -q
 "$PYTHON_BIN" -m agent_workflow pack validate examples/three-phase-pack
 for pack in prompt-packs/*; do
   [[ -d "$pack" ]] || continue
