@@ -1,0 +1,13 @@
+{
+  "schema": "agent-workflow/lifecycle-archive/v1",
+  "run_id": "run-id",
+  "retention_class": "standard",
+  "export_contents": [],
+  "transfer_checksum": {
+    "required_in_repository": false,
+    "instruction": "Generate <archive>.sha256 beside the completed transfer archive and verify it at the destination; do not add it to the repository."
+  },
+  "archive_status": "not_started",
+  "cleanup_status": "not_started"
+}
+

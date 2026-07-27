@@ -34,6 +34,7 @@ Provider-billed cost and local catalog estimates are distinct fields. A local es
 A trial binds:
 
 - task and repetition identity;
+- source, optional prompt-pack checksum, model, executor, and executor-version identity;
 - base revision and fixture revision;
 - prompt, oracle, acceptance-command, scope-policy, budget, and scorer-version digests;
 - final receipt, raw provider stream, normalized provider evidence, and score receipts;
@@ -41,6 +42,34 @@ A trial binds:
 - explicit exclusions or missing evidence.
 
 Score-set verdicts are accepted only after their content-addressed scorer receipts and the sealed final receipt are validated.
+
+
+## Evaluation and benchmark templates
+
+The installed template catalog is sourced from `templates/evaluation/`:
+
+| Template | Purpose |
+|---|---|
+| `evaluation-plan` | Objective, hypothesis, ticket/pack identity, provider/model, cohort controls, task set, metrics, stopping rules, budgets, privacy, and reproducibility inputs. |
+| `benchmark-manifest` | Stable case IDs, prompt/input digests, expected evidence class, oracle/reference identity, fixture provenance, writable scope, cohort identity, and explicit unavailable-data markers. |
+| `sealed-run-assessment` | Receipt and completion verification, structured-stream state, score/report/collection paths, scope audit, ledger evidence, contradictions, and lifecycle disposition. |
+| `benchmark-report` | Baseline/candidate definitions, per-case outcomes, aggregates, missingness, regressions, usage/cost fields, and reproducible commands. |
+| `ledger-row` | One evidence-first run/ticket/case row with source and pack identity, receipt digest, evaluation result, disposition, and durable evidence paths. |
+| `lifecycle-archive` | Retention class, export inventory, transfer-checksum instructions, archive state, and cleanup state. |
+
+Use `agent-workflow eval template KIND --output PATH`. Template output is canonical JSON and repeated rendering is byte-stable. Evaluation plans remain backward-compatible with the original required fields while the template supplies the richer planning surface.
+
+## Benchmark manifests and reports
+
+`agent-workflow eval validate-benchmark` validates the manifest schema, rejects duplicate case IDs and path traversal, and requires an explanatory reason for every unavailable case. An available case cannot carry an unavailable reason.
+
+`agent-workflow eval benchmark-report` combines two immutable trial collections only after their declared source revision, optional pack checksum, model, executor, and executor version agree with the corresponding cohort definition. Case-level prompt, input, fixture, oracle, and reference digests are verified when declared. Trials outside the manifest are counted and named rather than silently discarded. The report preserves unavailable cases and missing metrics rather than filling them with zero or a fabricated verdict. Regressions are explicit per-case transitions from baseline `pass` to a non-pass candidate verdict. The aggregate comparison remains non-decisive when the configured evidence threshold is not met.
+
+## Ledger and archive inputs
+
+`agent-workflow eval ledger-row` verifies the final receipt and score-set chain before exposing an evaluation result. An unreadable, absent, tampered, or unverified score remains `null` with `evaluation_state: not_verified`. Lifecycle disposition is derived from the immutable receipt chain, not mutable `status.json` fields. Exported-run assessment additionally binds a one-trial collection back to the run ID, final-receipt digest, sealed provider-evidence digest, raw-stream digest, and verified score verdict before marking the collection complete.
+
+`agent-workflow eval archive-plan` inventories regular non-symlink run files in stable path order, excluding `*.sha256`, `MANIFEST.sha256`, and transient lock files. The resulting plan says how to generate and verify a transfer checksum beside the archive. Such checksum files remain ignored repository-transfer artifacts and are never contract prerequisites.
 
 ## Cohort comparison
 

@@ -1,0 +1,400 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/sealed-run-assessment/v1",
+  "type": "object",
+  "required": [
+    "schema",
+    "run_id",
+    "completion",
+    "lifecycle_seal",
+    "evaluation",
+    "phase_acceptance",
+    "comparable",
+    "limitations",
+    "evidence_paths",
+    "structured_stream",
+    "scope_audit",
+    "ledger",
+    "failures",
+    "unresolved_contradictions",
+    "disposition"
+  ],
+  "properties": {
+    "schema": {
+      "const": "agent-workflow/sealed-run-assessment/v1"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "completion": {
+      "type": "object",
+      "required": [
+        "present",
+        "valid",
+        "result",
+        "error",
+        "sha256",
+        "matches_final_receipt"
+      ],
+      "properties": {
+        "present": {
+          "type": "boolean"
+        },
+        "valid": {
+          "type": "boolean"
+        },
+        "result": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "completed",
+            "partial",
+            "failed",
+            "blocked",
+            null
+          ]
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "matches_final_receipt": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "lifecycle_seal": {
+      "type": "object",
+      "required": [
+        "final_receipt_present",
+        "receipt_structurally_valid",
+        "portable_verification",
+        "missing_artifacts",
+        "error"
+      ],
+      "properties": {
+        "final_receipt_present": {
+          "type": "boolean"
+        },
+        "receipt_structurally_valid": {
+          "type": "boolean"
+        },
+        "portable_verification": {
+          "enum": [
+            "verified",
+            "not_verified",
+            "unavailable"
+          ]
+        },
+        "missing_artifacts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "evaluation": {
+      "type": "object",
+      "required": [
+        "plan_present",
+        "plan_verified",
+        "score_set_present",
+        "score_set_verified",
+        "report_present",
+        "report_verified",
+        "collection_present",
+        "collection_verified",
+        "state"
+      ],
+      "properties": {
+        "plan_present": {
+          "type": "boolean"
+        },
+        "score_set_present": {
+          "type": "boolean"
+        },
+        "score_set_verified": {
+          "type": "boolean"
+        },
+        "report_present": {
+          "type": "boolean"
+        },
+        "report_verified": {
+          "type": "boolean"
+        },
+        "collection_present": {
+          "type": "boolean"
+        },
+        "collection_verified": {
+          "type": "boolean"
+        },
+        "state": {
+          "enum": [
+            "missing-plan",
+            "invalid-plan",
+            "missing-score-set",
+            "invalid-score-set",
+            "incomplete-report",
+            "incomplete-collection",
+            "complete"
+          ]
+        },
+        "plan_verified": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "phase_acceptance": {
+      "enum": [
+        "accepted",
+        "rejected",
+        "not-exported"
+      ]
+    },
+    "comparable": {
+      "type": "boolean"
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "evidence_paths": {
+      "type": "object",
+      "required": [
+        "completion",
+        "final_receipt",
+        "provider_evidence",
+        "raw_events",
+        "score_set",
+        "evaluation_report",
+        "trial_collection",
+        "scope_baseline",
+        "scope_audit",
+        "ledger_row"
+      ],
+      "properties": {
+        "completion": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "final_receipt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "provider_evidence": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "raw_events": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "score_set": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "evaluation_report": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "trial_collection": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scope_baseline": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scope_audit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ledger_row": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "structured_stream": {
+      "type": "object",
+      "required": [
+        "provider_evidence_present",
+        "raw_events_present",
+        "state"
+      ],
+      "properties": {
+        "provider_evidence_present": {
+          "type": "boolean"
+        },
+        "raw_events_present": {
+          "type": "boolean"
+        },
+        "state": {
+          "enum": [
+            "verified",
+            "not_verified",
+            "unavailable"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "scope_audit": {
+      "type": "object",
+      "required": [
+        "present",
+        "state",
+        "violations"
+      ],
+      "properties": {
+        "present": {
+          "type": "boolean"
+        },
+        "state": {
+          "enum": [
+            "verified",
+            "not_verified",
+            "unavailable"
+          ]
+        },
+        "violations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "ledger": {
+      "type": "object",
+      "required": [
+        "row_present",
+        "path",
+        "state"
+      ],
+      "properties": {
+        "row_present": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "enum": [
+            "verified",
+            "not_verified",
+            "unavailable"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "failures": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "unresolved_contradictions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "disposition": {
+      "type": "object",
+      "required": [
+        "value",
+        "evidence_path",
+        "state"
+      ],
+      "properties": {
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "reviewed",
+            "accepted",
+            "rejected",
+            null
+          ]
+        },
+        "evidence_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "enum": [
+            "verified",
+            "not_verified",
+            "unavailable"
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
+

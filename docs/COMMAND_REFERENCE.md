@@ -95,17 +95,22 @@ Review/accept/reject append immutable lifecycle receipts. Acceptance requires a 
 ## Evaluation
 
 ```text
+agent-workflow eval template evaluation-plan|benchmark-manifest|sealed-run-assessment|benchmark-report|ledger-row|lifecycle-archive --output PATH
 agent-workflow eval validate PLAN [--pack PACK]
+agent-workflow eval validate-benchmark MANIFEST [--pack PACK]
 agent-workflow eval score RUN [--output-dir PATH] [--oracle-root PATH]
 agent-workflow eval report RUN [--format json|markdown] [--output PATH]
 agent-workflow eval collect RUN... --output TRIALS.json
 agent-workflow eval compare BASELINE.json CANDIDATE.json --output PATH
+agent-workflow eval benchmark-report MANIFEST BASELINE.json CANDIDATE.json --output PATH [--markdown PATH]
+agent-workflow eval ledger-row RUN --output PATH
+agent-workflow eval archive-plan RUN --output PATH [--retention-class transient|standard|release|legal-hold]
 agent-workflow eval inspect PROMPT --executor codex|claude --model MODEL --dockerfile FILE --log-dir DIR
 agent-workflow eval swebench-prediction RUN --instance-id ID --model MODEL --output FILE.jsonl
 agent-workflow ledger PACK [--runs-root PATH] [--output PATH]
 ```
 
-`eval collect` accepts only sealed runs with complete provider evidence. Provider-billed and locally estimated cost remain separate. Cost comparisons are omitted when currency or local price-catalog identity differs.
+`eval collect` accepts only sealed runs with complete provider evidence. `validate-benchmark` enforces stable case IDs, unique task/repetition identities, normalized writable scopes, and explicit unavailable-data reasons. `benchmark-report` verifies declared source, optional pack-checksum, model, executor, executor-version, prompt/input, fixture, oracle, and reference identity before combining cohorts; unmatched trials are reported rather than ignored. Provider-billed and locally estimated cost remain separate, and cost comparisons are omitted when currency or local price-catalog identity differs. `archive-plan` excludes transient lock and checksum-transfer files; transfer checksums are generated beside archives, not tracked in the repository.
 
 ## Prompt packs
 

@@ -21,6 +21,15 @@ from .eval.scoring import score_trial
 from .eval.compare import compare_trials
 from .eval.trials import collect_trials, load_trials
 from .eval.assessment import assess_exported_runs
+from .eval.templating import (
+    TEMPLATE_KINDS,
+    build_benchmark_report,
+    build_ledger_row,
+    build_lifecycle_archive,
+    render_benchmark_markdown,
+    validate_benchmark_manifest,
+    write_template,
+)
 from .errors import InteractiveCapacityError, WorkflowError
 from .ledger import build_ledger, render_ledger
 from .lifecycle import record as record_lifecycle
@@ -44,7 +53,7 @@ from .sessions import terminate as terminate_session
 from .sessions import wait_for_message
 from .state import list_statuses, read_status, repair_status, runs_root
 from .tmux import attach as attach_tmux
-from .util import atomic_write_json, expand_path, read_json
+from .util import atomic_write_bytes, atomic_write_json, expand_path, read_json
 from .scheduler import SchedulerService
 from .workflow import snapshot_sha256
 from .workflow_service import WorkflowService
@@ -326,6 +335,39 @@ def build_parser() -> argparse.ArgumentParser:
     )
     eval_validate.add_argument("source", type=Path)
     eval_validate.add_argument("--pack", type=Path)
+    eval_template = evaluation_commands.add_parser(
+        "template", help="write a deterministic evaluation or benchmark template"
+    )
+    eval_template.add_argument("kind", choices=TEMPLATE_KINDS)
+    eval_template.add_argument("--output", type=Path, required=True)
+    eval_validate_benchmark = evaluation_commands.add_parser(
+        "validate-benchmark", help="validate a benchmark/cohort manifest"
+    )
+    eval_validate_benchmark.add_argument("source", type=Path)
+    eval_validate_benchmark.add_argument("--pack", type=Path)
+    eval_benchmark_report = evaluation_commands.add_parser(
+        "benchmark-report", help="render a deterministic matched-cohort benchmark report"
+    )
+    eval_benchmark_report.add_argument("manifest", type=Path)
+    eval_benchmark_report.add_argument("baseline", type=Path)
+    eval_benchmark_report.add_argument("candidate", type=Path)
+    eval_benchmark_report.add_argument("--output", type=Path, required=True)
+    eval_benchmark_report.add_argument("--markdown", type=Path)
+    eval_ledger_row = evaluation_commands.add_parser(
+        "ledger-row", help="render one evidence-first evaluation ledger row"
+    )
+    eval_ledger_row.add_argument("run", type=Path)
+    eval_ledger_row.add_argument("--output", type=Path, required=True)
+    eval_archive_plan = evaluation_commands.add_parser(
+        "archive-plan", help="render deterministic sealed-run archive and retention inputs"
+    )
+    eval_archive_plan.add_argument("run", type=Path)
+    eval_archive_plan.add_argument("--output", type=Path, required=True)
+    eval_archive_plan.add_argument(
+        "--retention-class",
+        choices=("transient", "standard", "release", "legal-hold"),
+        default="standard",
+    )
     eval_score = evaluation_commands.add_parser(
         "score", help="score an already sealed run without model calls"
     )
@@ -748,6 +790,76 @@ def main(argv: list[str] | None = None) -> int:
                     "schema": plan.data["schema"],
                     "sha256": plan.sha256,
                     "task_ids": list(plan.task_ids),
+                }
+            elif args.eval_command == "template":
+                data = write_template(args.kind, expand_path(args.output))
+            elif args.eval_command == "validate-benchmark":
+                source = expand_path(args.source)
+                pack_root = expand_path(args.pack) if args.pack else None
+                manifest = validate_benchmark_manifest(
+                    source, pack_root=pack_root
+                )
+                if pack_root is not None:
+                    report = validate_pack(pack_root, verify_checksums=False)
+                    if not report.ok:
+                        raise WorkflowError(
+                            "benchmark pack validation failed: "
+                            + "; ".join(report.errors)
+                        )
+                data = {
+                    "path": str(source),
+                    "schema": manifest["schema"],
+                    "benchmark_id": manifest["benchmark_id"],
+                    "case_ids": [case["case_id"] for case in manifest["cases"]],
+                }
+            elif args.eval_command == "benchmark-report":
+                output = expand_path(args.output)
+                markdown_output = expand_path(args.markdown) if args.markdown else None
+                inputs = {
+                    expand_path(args.manifest),
+                    expand_path(args.baseline),
+                    expand_path(args.candidate),
+                }
+                if output in inputs or markdown_output in inputs:
+                    raise WorkflowError("benchmark report output must not overwrite an input")
+                if markdown_output is not None and markdown_output == output:
+                    raise WorkflowError("benchmark JSON and Markdown outputs must be different paths")
+                report = build_benchmark_report(
+                    expand_path(args.manifest),
+                    expand_path(args.baseline),
+                    expand_path(args.candidate),
+                )
+                atomic_write_json(output, report)
+                if markdown_output is not None:
+                    atomic_write_bytes(
+                        markdown_output,
+                        render_benchmark_markdown(report).encode("utf-8"),
+                    )
+                data = {
+                    "output": str(output),
+                    "markdown": str(markdown_output) if markdown_output else None,
+                    "benchmark_id": report["benchmark_id"],
+                    "paired_n": report["aggregate_metrics"]["paired_n"],
+                    "regressions": len(report["regressions"]),
+                }
+            elif args.eval_command == "ledger-row":
+                output = expand_path(args.output)
+                row = build_ledger_row(expand_path(args.run))
+                atomic_write_json(output, row)
+                data = {"output": str(output), **row}
+            elif args.eval_command == "archive-plan":
+                output = expand_path(args.output)
+                plan = build_lifecycle_archive(
+                    expand_path(args.run),
+                    retention_class=args.retention_class,
+                    exclude_paths=(output,),
+                )
+                atomic_write_json(output, plan)
+                data = {
+                    "output": str(output),
+                    "run_id": plan["run_id"],
+                    "retention_class": plan["retention_class"],
+                    "artifact_count": len(plan["export_contents"]),
                 }
             elif args.eval_command in {"score", "report"}:
                 candidate = expand_path(Path(args.run))

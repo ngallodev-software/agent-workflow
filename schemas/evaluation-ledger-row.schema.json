@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/evaluation-ledger-row/v1",
+  "type": "object",
+  "required": [
+    "schema",
+    "run_id",
+    "ticket_id",
+    "case_id",
+    "source_revision",
+    "pack_id",
+    "pack_checksum_reference",
+    "run_receipt_sha256",
+    "receipt_verification",
+    "evaluation_state",
+    "evaluation_result",
+    "disposition",
+    "evidence_paths",
+    "failures"
+  ],
+  "properties": {
+    "schema": {"const": "agent-workflow/evaluation-ledger-row/v1"},
+    "run_id": {"type": "string", "minLength": 1},
+    "ticket_id": {"type": ["string", "null"]},
+    "case_id": {"type": ["string", "null"]},
+    "source_revision": {"type": ["string", "null"]},
+    "pack_id": {"type": ["string", "null"]},
+    "pack_checksum_reference": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "run_receipt_sha256": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "receipt_verification": {
+      "enum": ["verified", "not_verified", "unavailable"]
+    },
+    "evaluation_state": {
+      "enum": ["not_planned", "verified", "not_verified", "unavailable"]
+    },
+    "evaluation_result": {
+      "type": ["string", "null"],
+      "enum": ["pass", "fail", "invalid", null]
+    },
+    "disposition": {
+      "type": ["string", "null"],
+      "enum": ["reviewed", "accepted", "rejected", null]
+    },
+    "evidence_paths": {
+      "type": "object",
+      "required": [
+        "status",
+        "completion",
+        "run_provenance",
+        "final_receipt",
+        "evaluation_runtime",
+        "score_set",
+        "evaluation_report",
+        "trial_collection",
+        "lifecycle_disposition"
+      ],
+      "properties": {
+        "status": {"type": ["string", "null"]},
+        "completion": {"type": ["string", "null"]},
+        "run_provenance": {"type": ["string", "null"]},
+        "final_receipt": {"type": ["string", "null"]},
+        "evaluation_runtime": {"type": ["string", "null"]},
+        "score_set": {"type": ["string", "null"]},
+        "evaluation_report": {"type": ["string", "null"]},
+        "trial_collection": {"type": ["string", "null"]},
+        "lifecycle_disposition": {"type": ["string", "null"]}
+      },
+      "additionalProperties": false
+    },
+    "failures": {
+      "type": "array",
+      "items": {"type": "string"},
+      "uniqueItems": true
+    }
+  },
+  "additionalProperties": false
+}
+

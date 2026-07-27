@@ -1,0 +1,70 @@
+{
+  "schema": "agent-workflow/sealed-run-assessment/v1",
+  "run_id": "run-id",
+  "completion": {
+    "present": false,
+    "valid": false,
+    "result": null,
+    "error": null,
+    "sha256": null,
+    "matches_final_receipt": null
+  },
+  "lifecycle_seal": {
+    "final_receipt_present": false,
+    "receipt_structurally_valid": false,
+    "portable_verification": "unavailable",
+    "missing_artifacts": [],
+    "error": null
+  },
+  "evaluation": {
+    "plan_present": false,
+    "score_set_present": false,
+    "report_present": false,
+    "collection_present": false,
+    "state": "missing-plan",
+    "score_set_verified": false,
+    "collection_verified": false,
+    "report_verified": false,
+    "plan_verified": false
+  },
+  "phase_acceptance": "not-exported",
+  "comparable": false,
+  "limitations": [
+    "No sealed run evidence has been supplied."
+  ],
+  "evidence_paths": {
+    "completion": "completion.json",
+    "final_receipt": "final-receipt.json",
+    "provider_evidence": "provider-evidence.json",
+    "raw_events": "executor-events.jsonl",
+    "score_set": "scores/score-set.json",
+    "evaluation_report": "reports/evaluation.md",
+    "trial_collection": "trials.json",
+    "scope_audit": "scope/scope-post.json",
+    "ledger_row": "ledger-row.json",
+    "scope_baseline": "scope/scope-baseline.json"
+  },
+  "structured_stream": {
+    "provider_evidence_present": false,
+    "raw_events_present": false,
+    "state": "unavailable"
+  },
+  "scope_audit": {
+    "present": false,
+    "state": "unavailable",
+    "violations": []
+  },
+  "ledger": {
+    "row_present": false,
+    "path": null,
+    "state": "unavailable"
+  },
+  "failures": [],
+  "unresolved_contradictions": [],
+  "disposition": {
+    "value": null,
+    "evidence_path": null,
+    "state": "unavailable"
+  }
+}
+

@@ -328,16 +328,21 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-  Run[Sealed run] --> Extract[extract_trial]
-  Extract --> Checks[Verify final seal + complete provider evidence + content-addressed score receipts]
+  Plan[Evaluation-plan template] --> Run[Sealed structured run]
+  Manifest[Benchmark manifest] --> Validate[validate stable cases + cohort identity]
+  Run --> Extract[extract_trial]
+  Extract --> Checks[Verify final seal + provider evidence + score receipts]
   Checks --> Trial[Immutable trial record]
-  Trial --> Baseline[Baseline cohort]
-  Trial --> Candidate[Candidate cohort]
-  Baseline --> Compare[eval compare]
-  Candidate --> Compare
-  Compare --> Validity{Same fixture/policy/currency/catalog?}
-  Validity -->|yes| Stats[paired metrics, deltas, confidence/effect output]
-  Validity -->|no| Exclusions[explicit excluded comparisons/reasons]
+  Trial --> Baseline[Baseline collection]
+  Trial --> Candidate[Candidate collection]
+  Baseline --> Report[benchmark-report]
+  Candidate --> Report
+  Validate --> Report
+  Report --> Identity{Source/pack/model/executor identity matches?}
+  Identity -->|yes| Results[per-case results + missingness + regressions + aggregate metrics]
+  Identity -->|no| Reject[reject cohort drift]
+  Run --> Ledger[evidence ledger-row]
+  Run --> Archive[lifecycle archive-plan]
 ```
 
 ## 16. Prompt-pack execution model

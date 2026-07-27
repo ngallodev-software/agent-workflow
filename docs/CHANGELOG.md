@@ -18,6 +18,15 @@
 - Enforce interactive-first implementation launches with explicit pane-capacity
   fallback to structured non-interactive evidence runs.
 - Add the ChatGPT evaluation and benchmark templating handoff.
+- Implement installed deterministic templates for evaluation plans, benchmark
+  manifests, sealed assessments, benchmark reports, evidence-ledger rows, and
+  lifecycle archives.
+- Add benchmark manifest/report contracts, explicit unavailable-data handling,
+  cohort and case-digest identity checks, unmatched-trial accounting,
+  deterministic renderer commands, and checksum-free archive planning.
+- Bind exported trial collections to their sealed run receipt, provider
+  evidence, raw stream, and verified score before declaring assessment
+  completeness.
 - Keep generated execution-protocol assets and renamed diagram links in sync.
 
 ## 0.2.3 — 2026-07-26

@@ -19,7 +19,7 @@ The acceptance layer covers:
 - structured provider-event collection into sealed normalized evidence;
 - workflow validation, scheduling, restart/resume, approval, idempotency, sealing, and verification;
 - authorized template expansion through the installed CLI;
-- evaluation-plan validation and matched baseline/candidate comparison.
+- deterministic evaluation/benchmark template rendering, plan and manifest validation, sealed scoring/collection, benchmark reports, evidence-ledger rows, archive plans, and matched baseline/candidate comparison.
 
 The deterministic fake executor and tmux shim are external executables, not mocked Python functions. They make process boundaries reproducible without requiring paid provider calls in the default suite.
 
@@ -32,7 +32,7 @@ The deterministic fake executor and tmux shim are external executables, not mock
 - scheduler dependency and parallelism rules;
 - deterministic advisory routing that cannot override enforced policy;
 - provider delta/cumulative/terminal accounting and duplicate identity rules;
-- evaluation cohort identity and low-sample claims;
+- evaluation template/schema semantics, unavailable-data handling, cohort identity drift, deterministic archive inputs, and low-sample claims;
 - the bounded JSON Pointer subset used for result binding.
 
 Prefer one parameterized matrix to many nearly identical tests.

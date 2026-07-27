@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/lifecycle-archive/v1",
+  "type": "object",
+  "required": [
+    "schema",
+    "run_id",
+    "retention_class",
+    "export_contents",
+    "transfer_checksum",
+    "archive_status",
+    "cleanup_status"
+  ],
+  "properties": {
+    "schema": {
+      "const": "agent-workflow/lifecycle-archive/v1"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "retention_class": {
+      "enum": [
+        "transient",
+        "standard",
+        "release",
+        "legal-hold"
+      ]
+    },
+    "export_contents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "sha256",
+          "size"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "transfer_checksum": {
+      "type": "object",
+      "required": [
+        "required_in_repository",
+        "instruction"
+      ],
+      "properties": {
+        "required_in_repository": {
+          "const": false
+        },
+        "instruction": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "archive_status": {
+      "enum": [
+        "not_started",
+        "prepared",
+        "archived",
+        "verified",
+        "failed"
+      ]
+    },
+    "cleanup_status": {
+      "enum": [
+        "not_started",
+        "retained",
+        "cleaned",
+        "blocked"
+      ]
+    }
+  },
+  "additionalProperties": false
+}
+

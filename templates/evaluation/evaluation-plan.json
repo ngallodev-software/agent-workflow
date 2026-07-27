@@ -1,0 +1,115 @@
+{
+  "schema": "agent-workflow/evaluation-plan/v1",
+  "objective": "Measure deterministic completion quality and resource use for one bounded ticket.",
+  "hypothesis": "The candidate preserves pass rate while reducing median elapsed time.",
+  "identity": {
+    "ticket_id": "EVAL-TEMPLATE-001",
+    "pack_id": "chatgpt-eval-benchmark-templating",
+    "source_revision": null
+  },
+  "execution": {
+    "provider": "codex",
+    "model": "fixture-model",
+    "executor": "codex",
+    "executor_version": null
+  },
+  "cohort": {
+    "cohort_id": "candidate-fixture",
+    "role": "candidate",
+    "controls": [
+      "same prompt",
+      "same fixture",
+      "same tool policy"
+    ]
+  },
+  "dataset_split": "development",
+  "task_ids": [
+    "EVAL-CASE-001"
+  ],
+  "repetitions": 1,
+  "timeout_seconds": 300,
+  "max_retries": 0,
+  "scorers": [
+    "schema_validity",
+    "writable_scope"
+  ],
+  "acceptance_commands": [
+    {
+      "id": "tests",
+      "argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q"
+      ],
+      "cwd": ".",
+      "timeout_seconds": 300,
+      "result_format": "exit-code",
+      "junit_path": null
+    }
+  ],
+  "scope": {
+    "writable_paths": [],
+    "writable_trees": [
+      "src/",
+      "tests/",
+      "docs/",
+      "templates/",
+      "schemas/"
+    ],
+    "disposable_trees": [
+      ".agent-workflow-handoff/",
+      ".delegations/"
+    ]
+  },
+  "metrics": [
+    {
+      "id": "pass_rate",
+      "kind": "binary",
+      "direction": "higher_is_better",
+      "missing_policy": "fail"
+    },
+    {
+      "id": "elapsed_seconds",
+      "kind": "duration",
+      "direction": "lower_is_better",
+      "missing_policy": "preserve-null"
+    },
+    {
+      "id": "provider_billed_cost",
+      "kind": "cost",
+      "direction": "lower_is_better",
+      "missing_policy": "preserve-null"
+    }
+  ],
+  "stopping_rules": {
+    "rule": "fixed_n",
+    "minimum_cases": 1,
+    "maximum_cases": 1,
+    "confidence": 0.95,
+    "effect_threshold": 0.0
+  },
+  "budgets": {
+    "max_wall_seconds": 300,
+    "max_input_tokens": 100000,
+    "max_output_tokens": 20000,
+    "max_cost": 0.0,
+    "currency": "USD"
+  },
+  "privacy": {
+    "data_class": "synthetic",
+    "live_target_collection": false,
+    "secret_policy": "prohibit"
+  },
+  "reproducibility": {
+    "fixture_revision": "fixture-v1",
+    "prompt_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "environment_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "tool_policy_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "pack_manifest_sha256": null
+  },
+  "sandbox": "docker",
+  "oracle_refs": {},
+  "statistics_policy": "agent-workflow/statistics/v1"
+}
+

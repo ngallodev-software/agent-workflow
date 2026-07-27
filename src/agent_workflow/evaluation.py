@@ -58,4 +58,33 @@ def validate_evaluation(
             "evaluation oracle_refs must reference declared task_ids: "
             f"{sorted(set(oracle_refs) - declared)}"
         )
+    command_ids = [
+        str(item["id"])
+        for item in data.get("acceptance_commands", [])
+        if isinstance(item, dict)
+    ]
+    if len(command_ids) != len(set(command_ids)):
+        raise WorkflowError("evaluation plan contains duplicate acceptance command IDs")
+    metric_ids = [
+        str(item["id"])
+        for item in data.get("metrics", [])
+        if isinstance(item, dict)
+    ]
+    if len(metric_ids) != len(set(metric_ids)):
+        raise WorkflowError("evaluation plan contains duplicate metric IDs")
+    stopping = data.get("stopping_rules")
+    if isinstance(stopping, dict):
+        minimum = int(stopping["minimum_cases"])
+        maximum = int(stopping["maximum_cases"])
+        if minimum > maximum:
+            raise WorkflowError(
+                "evaluation stopping_rules minimum_cases exceeds maximum_cases"
+            )
+    budgets = data.get("budgets")
+    if isinstance(budgets, dict) and "max_cost" in budgets:
+        currency = budgets.get("currency")
+        if not isinstance(currency, str) or not currency.isalpha() or not currency.isupper():
+            raise WorkflowError(
+                "evaluation max_cost requires a three-letter uppercase currency"
+            )
     return EvaluationPlan(path=path, data=data, sha256=canonical_json_sha256(data))

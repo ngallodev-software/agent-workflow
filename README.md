@@ -116,14 +116,23 @@ Prompt-pack dependencies form a validated cross-phase DAG. Tickets may declare J
 ## Evaluation
 
 ```bash
+agent-workflow eval template evaluation-plan --output ./evaluation.json
+agent-workflow eval template benchmark-manifest --output ./benchmark.json
 agent-workflow eval validate ./evaluation.json --pack ./prompt-pack
+agent-workflow eval validate-benchmark ./benchmark.json --pack ./prompt-pack
 agent-workflow eval score SESSION
 agent-workflow eval report SESSION --format markdown
-agent-workflow eval compare ./baseline.json ./candidate.json --output ./comparison.json
+agent-workflow eval collect SESSION --output ./candidate-trials.json
+agent-workflow eval benchmark-report ./benchmark.json ./baseline-trials.json ./candidate-trials.json \
+  --output ./benchmark-report.json --markdown ./benchmark-report.md
+agent-workflow eval ledger-row SESSION --output ./ledger-row.json
+agent-workflow eval archive-plan SESSION --retention-class release --output ./archive-plan.json
 agent-workflow assess-sealed-runs ./exported-runs --output ./assessment.json
 ```
 
-Raw provider streams are bounded and sealed before normalization. Usage evidence distinguishes delta, cumulative, and terminal totals and never mixes provider-billed cost with local estimates. Exported-run assessment keeps completion, lifecycle sealing, evaluation artifacts, phase acceptance, and comparability separate; missing plans or scores remain explicit absence. Cohort comparison requires matched task identities and remains descriptive when samples are too small. See [Evidence and evaluation](docs/EVIDENCE_AND_EVALUATION.md).
+The canonical JSON templates live in `templates/evaluation/` and are installed with the package. They cover rich evaluation plans, benchmark/cohort identity, sealed-run assessment, benchmark reporting, evidence-first ledger rows, and lifecycle/archive inputs. Rendering is deterministic, unavailable values remain `null` or `unavailable`, and repository validation never requires `MANIFEST.sha256` or another tracked `*.sha256` file.
+
+Raw provider streams are bounded and sealed before normalization. Usage evidence distinguishes delta, cumulative, and terminal totals and never mixes provider-billed cost with local estimates. Exported-run assessment keeps completion, lifecycle sealing, structured streams, scope evidence, lifecycle disposition, evaluation artifacts, and comparability separate. Benchmark reports reject declared source, pack-checksum, model, executor, case digest, or reference identity drift; count unmatched trials explicitly; and remain descriptive when evidence or sample size is insufficient. See [Evidence and evaluation](docs/EVIDENCE_AND_EVALUATION.md).
 
 ## Optional MCP server
 

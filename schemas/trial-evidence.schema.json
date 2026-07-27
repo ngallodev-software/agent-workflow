@@ -2,54 +2,257 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "agent-workflow/trial-evidence/v2",
   "oneOf": [
-    {"$ref": "#/$defs/trial"},
-    {"$ref": "#/$defs/collection"}
+    {
+      "$ref": "#/$defs/trial"
+    },
+    {
+      "$ref": "#/$defs/collection"
+    }
   ],
   "$defs": {
-    "nullableNumber": {"type": ["integer", "number", "null"], "minimum": 0},
+    "nullableNumber": {
+      "type": [
+        "integer",
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
     "trial": {
       "type": "object",
-      "required": ["schema", "trial_id", "run_path", "final_receipt_sha256", "provider_evidence_sha256", "raw_events_sha256", "verdict", "fixture_revision", "task_id", "base_revision", "prompt_sha256", "oracle_sha256", "acceptance_commands_sha256", "scope_policy_sha256", "scorer_versions_sha256", "sandbox", "budget_sha256", "repetition", "duration_seconds", "input_tokens", "cached_input_tokens", "cache_write_input_tokens", "output_tokens", "reasoning_output_tokens", "provider_total_tokens", "tokens", "provider_billed_cost", "local_estimated_cost", "currency", "price_catalog_id", "retry_of_run_id", "retry_count", "errors", "steer_count", "steer_acknowledged_count", "source_artifacts"],
+      "required": [
+        "schema",
+        "trial_id",
+        "run_path",
+        "final_receipt_sha256",
+        "provider_evidence_sha256",
+        "raw_events_sha256",
+        "verdict",
+        "fixture_revision",
+        "task_id",
+        "base_revision",
+        "prompt_sha256",
+        "oracle_sha256",
+        "acceptance_commands_sha256",
+        "scope_policy_sha256",
+        "scorer_versions_sha256",
+        "sandbox",
+        "budget_sha256",
+        "repetition",
+        "duration_seconds",
+        "input_tokens",
+        "cached_input_tokens",
+        "cache_write_input_tokens",
+        "output_tokens",
+        "reasoning_output_tokens",
+        "provider_total_tokens",
+        "tokens",
+        "provider_billed_cost",
+        "local_estimated_cost",
+        "currency",
+        "price_catalog_id",
+        "retry_of_run_id",
+        "retry_count",
+        "errors",
+        "steer_count",
+        "steer_acknowledged_count",
+        "source_artifacts"
+      ],
       "properties": {
-        "schema": {"const": "agent-workflow/trial-evidence/v2"},
-        "trial_id": {"type": "string", "minLength": 1},
-        "run_path": {"type": "string", "minLength": 1},
-        "final_receipt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-        "provider_evidence_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-        "raw_events_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-        "verdict": {"enum": ["pass", "fail", "invalid"]},
-        "fixture_revision": {}, "task_id": {}, "base_revision": {},
-        "prompt_sha256": {}, "oracle_sha256": {}, "acceptance_commands_sha256": {},
-        "scope_policy_sha256": {}, "scorer_versions_sha256": {}, "sandbox": {},
-        "budget_sha256": {}, "repetition": {},
-        "duration_seconds": {"$ref": "#/$defs/nullableNumber"},
-        "input_tokens": {"$ref": "#/$defs/nullableNumber"},
-        "cached_input_tokens": {"$ref": "#/$defs/nullableNumber"},
-        "cache_write_input_tokens": {"$ref": "#/$defs/nullableNumber"},
-        "output_tokens": {"$ref": "#/$defs/nullableNumber"},
-        "reasoning_output_tokens": {"$ref": "#/$defs/nullableNumber"},
-        "provider_total_tokens": {"$ref": "#/$defs/nullableNumber"},
-        "tokens": {"$ref": "#/$defs/nullableNumber"},
-        "provider_billed_cost": {"$ref": "#/$defs/nullableNumber"},
-        "local_estimated_cost": {"$ref": "#/$defs/nullableNumber"},
-        "currency": {"type": ["string", "null"]},
-        "price_catalog_id": {"type": ["string", "null"]},
-        "retry_of_run_id": {"type": ["string", "null"]},
-        "retry_count": {"type": ["integer", "null"], "minimum": 0},
-        "errors": {"type": "array"},
-        "steer_count": {"type": ["integer", "null"], "minimum": 0},
-        "steer_acknowledged_count": {"type": ["integer", "null"], "minimum": 0},
-        "source_artifacts": {"type": "object", "additionalProperties": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}
+        "schema": {
+          "const": "agent-workflow/trial-evidence/v2"
+        },
+        "trial_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "run_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "final_receipt_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "provider_evidence_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "raw_events_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "verdict": {
+          "enum": [
+            "pass",
+            "fail",
+            "invalid"
+          ]
+        },
+        "provider": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fixture_revision": {},
+        "task_id": {},
+        "base_revision": {},
+        "prompt_sha256": {},
+        "oracle_sha256": {},
+        "acceptance_commands_sha256": {},
+        "scope_policy_sha256": {},
+        "scorer_versions_sha256": {},
+        "sandbox": {},
+        "budget_sha256": {},
+        "repetition": {},
+        "duration_seconds": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "input_tokens": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "cached_input_tokens": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "cache_write_input_tokens": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "output_tokens": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "reasoning_output_tokens": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "provider_total_tokens": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "tokens": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "provider_billed_cost": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "local_estimated_cost": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "currency": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "price_catalog_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "retry_of_run_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "retry_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "errors": {
+          "type": "array"
+        },
+        "steer_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "steer_acknowledged_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "source_artifacts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "source_revision": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pack_manifest_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "executor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "executor_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fixture_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "reference_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        }
       },
       "additionalProperties": false
     },
     "collection": {
       "type": "object",
-      "required": ["schema", "collected_at", "trials"],
+      "required": [
+        "schema",
+        "collected_at",
+        "trials"
+      ],
       "properties": {
-        "schema": {"const": "agent-workflow/trial-evidence/v2"},
-        "collected_at": {"type": "string"},
-        "trials": {"type": "array", "items": {"$ref": "#/$defs/trial"}}
+        "schema": {
+          "const": "agent-workflow/trial-evidence/v2"
+        },
+        "collected_at": {
+          "type": "string"
+        },
+        "trials": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/trial"
+          }
+        }
       },
       "additionalProperties": false
     }
