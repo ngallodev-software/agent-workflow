@@ -13,8 +13,8 @@ This report records the authoritative agent-workflow lifecycle evidence used for
 
 ## Results used for integration
 
-- HARD-001: implementation criteria passed; remaining limitation is the deliberate interactive-only `tmux.attach` boundary and parent progress emission in the read-only host state.
-- HARD-002: path/schema criteria passed; filesystem-socket coverage was unavailable on this host.
+- HARD-001: implementation criteria passed and the individual lifecycle receipt was accepted; remaining limitation is the deliberate interactive-only `tmux.attach` boundary and parent progress emission in the read-only host state.
+- HARD-002: path/schema criteria passed and the individual lifecycle receipt was accepted; filesystem-socket coverage was unavailable on this host.
 - HARD-005: metadata-only MCP, no-follow, bounded-error, and receipt-summary criteria passed; installed stdio MCP coverage was not verified.
 - HARD-004: correctly stopped without changes because HARD-001/HARD-002 had no accepted phase disposition at launch.
 - FOUND-GATE-01: rejected the foundation phase because shared installed-product acceptance, immutable authority, and accepted prerequisite evidence were not complete.
@@ -28,4 +28,4 @@ The retained zero-row ledger does **not** prove that evaluation plans were absen
 
 The exported pairs validate each completion digest against the final-receipt entry, but omit most receipt-listed artifacts and lifecycle dispositions. Full portable seal verification and phase acceptance therefore remain unavailable from this export alone.
 
-The independent phase gate remains rejected; the backlog uses `in-review` for integrated HARD-001/HARD-002/HARD-005 and keeps HARD-004 blocked pending a subsequent accepted shared gate.
+The independent aggregate phase gate remains rejected. Individual HARD-001 and HARD-002 lifecycle receipts are accepted, so HARD-004 may proceed; HARD-005 remains in review and the aggregate gate is still not accepted.

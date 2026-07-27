@@ -52,8 +52,8 @@ These items remain tracked separately from the hardening ownership above; they a
 
 | ID | Priority | Risk | State | Integrated implementation and remaining exit evidence | Reference |
 |---|---|---:|---|---|---|
-| HARD-001 | P0 | Critical | in-review | Integrated in `91f5ff3`; sealed implementation run passed its focused process/acceptance criteria. Re-run the shared installed-product gate and obtain an accepted foundation phase gate. | [Sealed evidence](EVIDENCE_SEALED_FOUNDATION_RUNS_20260726.md) |
-| HARD-002 | P0 | Critical | in-review | Integrated in `5d689b6`; sealed path/schema criteria passed, with filesystem-socket coverage unavailable on this host. Re-run shared journeys and obtain an accepted foundation phase gate. | [Sealed evidence](EVIDENCE_SEALED_FOUNDATION_RUNS_20260726.md) |
+| HARD-001 | P0 | Critical | completed | Integrated in `91f5ff3`; sealed implementation run passed its focused process/acceptance criteria and was independently accepted in lifecycle receipt `deterministic-foundations-hard-001-rerun-20260726`. The aggregate foundation gate remains separate and rejected. | [Sealed evidence](EVIDENCE_SEALED_FOUNDATION_RUNS_20260726.md) |
+| HARD-002 | P0 | Critical | completed | Integrated in `5d689b6`; sealed path/schema criteria passed, with filesystem-socket coverage unavailable on this host, and was independently accepted in lifecycle receipt `deterministic-foundations-hard-002-rerun-20260726`. The aggregate foundation gate remains separate and rejected. | [Sealed evidence](EVIDENCE_SEALED_FOUNDATION_RUNS_20260726.md) |
 | HARD-005 | P0 | Critical | in-review | Integrated in `8fde4c3`; sealed MCP metadata/no-follow criteria passed, but installed stdio coverage remains unverified. Re-run the shared gate and obtain acceptance. | [Sealed evidence](EVIDENCE_SEALED_FOUNDATION_RUNS_20260726.md) |
 
 ## Planned TDD follow-up
