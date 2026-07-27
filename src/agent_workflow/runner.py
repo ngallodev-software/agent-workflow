@@ -476,7 +476,11 @@ def execute(
         receipt_hash = final_receipt_sha256(run_dir)
         _update_status(
             status_path,
-            **final_status,
+            **{
+                key: value
+                for key, value in final_status.items()
+                if key not in {"final_receipt_path", "final_receipt_sha256"}
+            },
             final_receipt_path=str(run_dir / "final-receipt.json"),
             final_receipt_sha256=receipt_hash,
             sealed_artifact_count=len(receipt["artifacts"]),

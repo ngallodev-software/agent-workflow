@@ -666,7 +666,11 @@ def launch(
             executor_plan.no_go_authorized,
         )
     command = list(executor_plan.argv)
-    require_command(command[0])
+    # Persist the resolved executable path in the runner command.  Dedicated
+    # tmux sessions may inherit an older server PATH than the launching shell;
+    # resolving here keeps the sealed run tied to the exact executable that was
+    # preflighted and prevents a false not-found/orphan result.
+    command[0] = require_command(command[0])
 
     secret_values = secret_values_from_argv(command)
     redacted_command = redact_argv(command, secret_values=secret_values)
