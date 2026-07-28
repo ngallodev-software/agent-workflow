@@ -4,7 +4,7 @@ import pytest
 
 
 @pytest.mark.future
-@pytest.mark.xfail(strict=True, reason="HARD-004: immutable launch contract is not yet the sole runtime authority")
+@pytest.mark.xfail(strict=True, reason="HARD-004: broader future phase-gate journey remains a planning placeholder")
 def test_hard_004_status_projection_cannot_change_launch_or_receipt_authority() -> None:
     # Installed-product journey contract: after launch, mutating status.json must neither alter
     # collector inputs nor the digest returned for the exact verified final receipt.

@@ -3,9 +3,11 @@
 ## Decision
 
 The blocker-clearance prompt was executed against the `0.2.5` source snapshot
-uploaded on 2026-07-28. The repository is **not yet authorized to start
-`MSG-001`**. `HARD-004` and `HARD-005` remain `in-review`; neither has the
-complete, independently accepted, sealed evidence required by the prompt.
+uploaded on 2026-07-28. At that time the repository was **not authorized to
+start `MSG-001`** and `HARD-004`/`HARD-005` were both `in-review`. The
+superseding coordinator review in [HARD-004-REVIEW-20260728.md](HARD-004-REVIEW-20260728.md)
+now closes HARD-004 individually. `HARD-005` and `FOUND-GATE-01` remain open,
+so `MSG-001` is still not authorized.
 
 This result preserves the canonical dependency model rather than advancing a
 messaging ticket from implementation prose, mutable status, or incomplete
@@ -105,6 +107,18 @@ The expected failures include HARD-004, MSG-005, BKL-002, BKL-004, and
 MCP-003/HARD-007. Because the installed-product fixture installs MCP for all
 acceptance modules, the missing package prevents unrelated installed-product
 journeys from running on this host as well.
+
+## Superseding current graph
+
+```text
+HARD-004 (completed individually) ──┐
+                                    ├─> shared FOUND-GATE-01 still open
+HARD-005 (in-review) ───────────────┘              └─> MSG-001 blocked
+```
+
+The historical evidence review and graph below describe the state of the
+uploaded archive before the current Git-checkout review; they are retained as
+the provenance for that earlier blocker decision.
 
 ## Blocker graph after
 
