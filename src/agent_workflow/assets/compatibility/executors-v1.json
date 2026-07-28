@@ -1,0 +1,18 @@
+{
+  "schema": "agent-workflow/executor-compatibility/v1",
+  "version": "2026-07-28",
+  "executors": {
+    "codex": {
+      "adapter_version": "codex-jsonl-v1",
+      "help_argv": ["exec", "--help"],
+      "capabilities": ["structured_output"],
+      "capability_markers": {"structured_output": "--json"}
+    },
+    "claude": {
+      "adapter_version": "claude-stream-json-v1",
+      "help_argv": ["--help"],
+      "capabilities": ["structured_output"],
+      "capability_markers": {"structured_output": "--output-format"}
+    }
+  }
+}

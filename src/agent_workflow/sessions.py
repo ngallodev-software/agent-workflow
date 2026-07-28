@@ -18,6 +18,8 @@ from .agent_context import acknowledge_reuse, idle_interactive_sessions
 from .agent_context import initialize as initialize_agent_context
 from .assets import asset_path
 from .config import Settings
+from .config import enforce_trust
+from .compatibility import probe_executor
 from .command_catalog import role_for_agent_class, write_launch_command_artifacts
 from .contracts import read_contract, schema_descriptor
 from .errors import InteractiveCapacityError, WorkflowError
@@ -708,6 +710,7 @@ def launch(
     if pack_id:
         validate_id(pack_id, "pack ID")
     workdir = require_directory(absolute_path(workdir), label="workdir")
+    enforce_trust(settings, workdir=workdir)
     prompt_path = absolute_path(prompt_path)
     prompt_source = absolute_path(prompt_source_override or prompt_path)
     try:
@@ -821,6 +824,28 @@ def launch(
     # resolving here keeps the sealed run tied to the exact executable that was
     # preflighted and prevents a false not-found/orphan result.
     command[0] = require_command(command[0])
+    executor_plan = ExecutorPlan(
+        executor_plan.name,
+        tuple(command),
+        executor_plan.stream_format,
+        executor_plan.model,
+        executor_plan.no_go_authorized,
+    )
+    compatibility = probe_executor(
+        executor_plan.name,
+        command,
+        digest=settings.security.executable_digest,
+    )
+    if (
+        executor_plan.name is not None
+        and settings.security.mode in {"governed", "release"}
+        and compatibility.get("decision") != "supported"
+    ):
+        raise WorkflowError(
+            "executor compatibility rejected: "
+            f"{compatibility.get('explanation_code', 'COMPAT-UNKNOWN')}; "
+            "governed launches do not silently downgrade to unclassified execution"
+        )
 
     secret_values = secret_values_from_argv(command)
     redacted_command = redact_argv(command, secret_values=secret_values)
@@ -970,6 +995,7 @@ def launch(
                 if executor_plan.name is not None
                 else None
             ),
+            compatibility=compatibility,
             model=executor_plan.model,
             agent_name=agent_name,
             agent_class=agent_class,

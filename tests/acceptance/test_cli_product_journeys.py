@@ -36,6 +36,97 @@ def test_installed_cli_exposes_operable_public_surface(
     assert Path(config["paths"]["state_root"]).is_absolute()
 
 
+def test_installed_config_doctor_and_provenance_trust_journey(
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+    fake_agent_path: Path,
+    tmp_path: Path,
+) -> None:
+    config = tmp_path / "config.toml"
+    config.write_text(
+        "\n".join(
+            [
+                "schema_version = 1",
+                "[security]",
+                'mode = "local"',
+                "executable_digest = true",
+                "",
+                "[executors.fixture]",
+                f'command = ["{fake_agent_path}"]',
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    doctor = installed_product.json("doctor", "--config", config, env=product_env)
+    fixture = doctor["executors"]["fixture"]
+    assert fixture["compatibility"]["decision"] == "unclassified"
+    assert fixture["compatibility"]["explanation_code"] == "COMPAT-CUSTOM-EXECUTOR"
+    assert fixture["binary"] == str(fake_agent_path.resolve())
+    assert len(fixture["sha256"]) == 64
+
+    unknown = tmp_path / "unknown.toml"
+    unknown.write_text("schema_version = 1\n[security]\nunknown = true\n", encoding="utf-8")
+    rejected = installed_product.run("config", "show", "--config", unknown, env=product_env)
+    assert rejected.returncode == 2
+    assert "unknown config key(s) in [security]" in rejected.stderr
+
+    repo = tmp_path / "repo"
+    git_repo(repo)
+    prompt = tmp_path / "prompt.md"
+    prompt.write_text("Read the fixture.\n", encoding="utf-8")
+    launch_config = tmp_path / "launch.toml"
+    launch_config.write_text(
+        "\n".join(
+            [
+                "schema_version = 1",
+                "[git]",
+                "require_clean_source = false",
+                "[executors.codex]",
+                f'command = ["{fake_agent_path}"]',
+                'models = ["gpt-5.4-mini"]',
+                'default_model = "gpt-5.4-mini"',
+                'model_arg = ["--model"]',
+                "[agents]",
+                'default_executor = "codex"',
+                'default_class = "review"',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    env = dict(product_env)
+    env["FAKE_AGENT_MODE"] = "structured"
+    installed_product.json(
+        "launch",
+        "config-trust-provenance",
+        repo,
+        prompt,
+        "--config",
+        launch_config,
+        "--executor",
+        "codex",
+        "--agent-class",
+        "review",
+        "--structured",
+        env=env,
+    )
+    wait_for_status(env, "config-trust-provenance")
+    provenance = json.loads(
+        (
+            Path(env["XDG_STATE_HOME"])
+            / "agent-workflow"
+            / "runs"
+            / "config-trust-provenance"
+            / "run-provenance.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert provenance["executable"]["resolved_path"] == str(fake_agent_path.resolve())
+    assert len(provenance["executable"]["sha256"]) == 64
+    assert provenance["compatibility"]["decision"] == "unclassified"
+    assert len(provenance["compatibility"]["policy_sha256"]) == 64
+
+
 def test_pane_capacity_fallback_is_structured_and_non_interactive(
     installed_product: InstalledProduct,
     product_env: dict[str, str],

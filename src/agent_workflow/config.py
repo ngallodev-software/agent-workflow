@@ -5,7 +5,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from .errors import WorkflowError
-from .util import expand_path
+from .path import absolute_path, read_regular_file
+from .process import redact_argv, secret_values_from_argv
+from .trust import inspect_path, require_trusted
+
+CONFIG_SCHEMA_VERSION = 1
 
 
 @dataclass(frozen=True)
@@ -37,8 +41,17 @@ class AgentClassPolicy:
     allowed_models: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class SecurityPolicy:
+    mode: str = "local"
+    executable_digest: bool = True
+    policy_files: tuple[Path, ...] = ()
+
+
 def _xdg(name: str, fallback: str) -> Path:
-    return expand_path(os.environ.get(name, fallback))
+    return absolute_path(
+        Path(os.path.expandvars(os.path.expanduser(os.environ.get(name, fallback))))
+    )
 
 
 @dataclass(frozen=True)
@@ -68,6 +81,9 @@ class Settings:
     default_agent_class: str = "implementation"
     agent_classes: dict[str, AgentClassPolicy] = field(default_factory=dict)
     reuse_stale_minutes: int = 120
+    config_schema_version: int = CONFIG_SCHEMA_VERSION
+    security: SecurityPolicy = field(default_factory=SecurityPolicy)
+    repository_allowlist: tuple[Path, ...] = ()
 
     @property
     def max_interactive_agent_panes(self) -> int:
@@ -75,7 +91,8 @@ class Settings:
 
 
 def default_config_path() -> Path:
-    return _xdg("XDG_CONFIG_HOME", "~/.config") / "agent-workflow" / "config.toml"
+    root = Path(os.path.expandvars(os.path.expanduser(os.environ.get("XDG_CONFIG_HOME", "~/.config"))))
+    return absolute_path(root / "agent-workflow" / "config.toml")
 
 
 def defaults(path: Path | None = None) -> Settings:
@@ -142,6 +159,55 @@ def defaults(path: Path | None = None) -> Settings:
     )
 
 
+def _reject_unknown(table: object, allowed: set[str], label: str) -> None:
+    if not isinstance(table, dict):
+        raise WorkflowError(f"config section [{label}] must be a table")
+    unknown = sorted(set(table) - allowed)
+    if unknown:
+        raise WorkflowError(
+            f"unknown config key(s) in [{label}]: {', '.join(unknown)}; "
+            "remove them or use a supported schema version"
+        )
+
+
+def _validate_shape(data: dict[str, Any]) -> None:
+    _reject_unknown(
+        data,
+        {"schema_version", "paths", "terminal", "git", "pack", "agents", "agent_classes", "executors", "security"},
+        "root",
+    )
+    sections = {
+        "paths": {"worktree_root", "state_root"},
+        "terminal": {"backend", "stall_minutes", "capture_lines", "mouse", "orchestrator_side", "max_interactive_agent_width", "max_interactive_agent_vertical"},
+        "git": {"branch_prefix", "require_clean_source", "repository_allowlist"},
+        "pack": {"archive_level", "write_sha256", "validate_before_archive"},
+        "agents": {"preferred_names", "generated_prefix", "default_executor", "profiles", "non_interactive_tmux", "default_class", "reuse_stale_minutes"},
+        "security": {"mode", "executable_digest", "policy_files"},
+    }
+    for name, allowed in sections.items():
+        if name in data:
+            _reject_unknown(data[name], allowed, name)
+    executors = data.get("executors", {})
+    if not isinstance(executors, dict):
+        raise WorkflowError("[executors] must contain executor tables")
+    executor_keys = {"command", "interactive_command", "models", "default_model", "no_go_models", "model_arg", "permission_args", "interactive_permission_args", "non_interactive_permission_args", "environment_allowlist"}
+    for name, entry in executors.items():
+        _reject_unknown(entry, executor_keys, f"executors.{name}")
+    classes = data.get("agent_classes", {})
+    if not isinstance(classes, dict):
+        raise WorkflowError("[agent_classes] must contain class tables")
+    for name, entry in classes.items():
+        _reject_unknown(entry, {"interactive", "default_executor", "default_model", "models"}, f"agent_classes.{name}")
+    agents = data.get("agents", {})
+    if not isinstance(agents, dict):
+        raise WorkflowError("[agents] must be a table")
+    profiles = agents.get("profiles", {})
+    if not isinstance(profiles, dict):
+        raise WorkflowError("[agents.profiles] must contain profile tables")
+    for name, entry in profiles.items():
+        _reject_unknown(entry, {"executor", "model", "allow_no_go_model", "interactive", "class"}, f"agents.profiles.{name}")
+
+
 def _nested(data: dict[str, Any], section: str, key: str, default: Any) -> Any:
     table = data.get(section, {})
     if not isinstance(table, dict):
@@ -173,14 +239,27 @@ def _choice(data: dict[str, Any], section: str, key: str, default: str, choices:
 
 
 def load_settings(path: Path | None = None) -> Settings:
-    path = expand_path(path or default_config_path())
+    # Preserve lexical components until read_regular_file performs its
+    # descriptor-safe, no-follow traversal.
+    path = absolute_path(Path(path or default_config_path()))
     base = defaults(path)
+    if path.is_symlink():
+        raise WorkflowError(f"cannot read config {path}: symlink config is not trusted")
     if not path.exists():
         return base
     try:
-        data = tomllib.loads(path.read_text(encoding="utf-8"))
-    except (OSError, tomllib.TOMLDecodeError) as exc:
+        data = tomllib.loads(read_regular_file(path).data.decode("utf-8"))
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
         raise WorkflowError(f"cannot read config {path}: {exc}") from exc
+    if not isinstance(data, dict):
+        raise WorkflowError("config must be a TOML table")
+    _validate_shape(data)
+    schema_version = data.get("schema_version", CONFIG_SCHEMA_VERSION)
+    if isinstance(schema_version, bool) or not isinstance(schema_version, int) or schema_version != CONFIG_SCHEMA_VERSION:
+        raise WorkflowError(
+            f"unsupported config schema_version {schema_version!r}; "
+            f"supported version is {CONFIG_SCHEMA_VERSION}"
+        )
     executors = dict(base.executors)
     policies = dict(base.executor_policies)
     raw = data.get("executors", {})
@@ -340,12 +419,32 @@ def load_settings(path: Path | None = None) -> Settings:
         or not 1 <= level <= 22
     ):
         raise WorkflowError("invalid stall_minutes, capture_lines, or archive_level")
-    return Settings(
+    git = data.get("git", {})
+    repository_allowlist = git.get("repository_allowlist", [])
+    if not isinstance(repository_allowlist, list) or not all(
+        isinstance(value, str) and value for value in repository_allowlist
+    ):
+        raise WorkflowError("[git].repository_allowlist must be a string list")
+    security = data.get("security", {})
+    if not isinstance(security, dict):
+        raise WorkflowError("[security] must be a table")
+    security_mode = security.get("mode", base.security.mode)
+    if not isinstance(security_mode, str) or security_mode not in {"local", "governed", "release"}:
+        raise WorkflowError("config value [security].mode must be one of: governed, local, release")
+    executable_digest = security.get("executable_digest", base.security.executable_digest)
+    if not isinstance(executable_digest, bool):
+        raise WorkflowError("config value [security].executable_digest must be a boolean")
+    policy_files = security.get("policy_files", [])
+    if not isinstance(policy_files, list) or not all(isinstance(value, str) and value for value in policy_files):
+        raise WorkflowError("config value [security].policy_files must be a string list")
+    settings = Settings(
         config_path=path,
-        worktree_root=expand_path(
-            _nested(data, "paths", "worktree_root", base.worktree_root)
+        worktree_root=absolute_path(
+            Path(os.path.expandvars(os.path.expanduser(str(_nested(data, "paths", "worktree_root", base.worktree_root)))))
         ),
-        state_root=expand_path(_nested(data, "paths", "state_root", base.state_root)),
+        state_root=absolute_path(
+            Path(os.path.expandvars(os.path.expanduser(str(_nested(data, "paths", "state_root", base.state_root)))))
+        ),
         terminal_backend=str(
             _nested(data, "terminal", "backend", base.terminal_backend)
         ),
@@ -382,11 +481,34 @@ def load_settings(path: Path | None = None) -> Settings:
         default_agent_class=default_agent_class,
         agent_classes=classes,
         reuse_stale_minutes=reuse_stale,
+        config_schema_version=schema_version,
+        security=SecurityPolicy(
+            mode=security_mode,
+            executable_digest=executable_digest,
+            policy_files=tuple(absolute_path(Path(os.path.expandvars(value))) for value in policy_files),
+        ),
+        repository_allowlist=tuple(absolute_path(Path(os.path.expandvars(value))) for value in repository_allowlist),
     )
+    require_trusted(
+        inspect_path(path, label="configuration file", allow_missing=False),
+        mode=settings.security.mode,
+    )
+    # Validate every configured policy input while the schema/mode decision is
+    # still bound to this config. Doctor renders the same report, while launch
+    # rechecks it immediately before creating run state.
+    report = trust_report(settings)
+    if report["errors"]:
+        first = report["errors"][0]
+        raise WorkflowError(
+            f"untrusted {first['label']}: {first['path']}; remediation: "
+            "make the path user-owned, remove group/world write bits, and avoid symlinks"
+        )
+    return settings
 
 
 def as_dict(s: Settings) -> dict[str, Any]:
     return {
+        "schema_version": s.config_schema_version,
         "config_path": str(s.config_path),
         "paths": {
             "worktree_root": str(s.worktree_root),
@@ -405,6 +527,12 @@ def as_dict(s: Settings) -> dict[str, Any]:
         "git": {
             "branch_prefix": s.branch_prefix,
             "require_clean_source": s.require_clean_source,
+            "repository_allowlist": [str(path) for path in s.repository_allowlist],
+        },
+        "security": {
+            "mode": s.security.mode,
+            "executable_digest": s.security.executable_digest,
+            "policy_files": [str(path) for path in s.security.policy_files],
         },
         "pack": {
             "archive_level": s.archive_level,
@@ -413,8 +541,11 @@ def as_dict(s: Settings) -> dict[str, Any]:
         },
         "executors": {
             name: {
-                "command": command,
-                "interactive_command": s.executor_policies.get(name, ExecutorPolicy()).interactive_command,
+                "command": list(redact_argv(command, secret_values=secret_values_from_argv(command))),
+                "interactive_command": list(redact_argv(
+                    s.executor_policies.get(name, ExecutorPolicy()).interactive_command,
+                    secret_values=secret_values_from_argv(s.executor_policies.get(name, ExecutorPolicy()).interactive_command),
+                )),
                 "models": list(s.executor_policies.get(name, ExecutorPolicy()).models),
                 "default_model": s.executor_policies.get(name, ExecutorPolicy()).default_model,
                 "no_go_models": list(s.executor_policies.get(name, ExecutorPolicy()).no_go_models),
@@ -459,3 +590,66 @@ def as_dict(s: Settings) -> dict[str, Any]:
             for name, policy in sorted(s.agent_classes.items())
         },
     }
+
+
+def trust_report(s: Settings) -> dict[str, Any]:
+    """Return redaction-free filesystem policy diagnostics for doctor output."""
+    reports = [inspect_path(s.config_path, label="configuration file", allow_missing=False)]
+    reports.append(inspect_path(s.state_root, label="state root"))
+    reports.extend(
+        inspect_path(path, label="repository allowlist entry", allow_missing=False)
+        for path in s.repository_allowlist
+    )
+    reports.extend(
+        inspect_path(path, label="policy file", allow_missing=False)
+        for path in s.security.policy_files
+    )
+    values = [item.as_dict() for item in reports]
+    failures = [
+        item
+        for item in values
+        if not item["ok"]
+        and (item["exists"] or item["label"] not in {"configuration file", "state root"})
+    ]
+    # A missing optional policy input is a local warning, not a no-follow
+    # violation. Existing symlinks/special files remain hard failures in every
+    # mode because they would make the policy boundary ambiguous.
+    hard_failures = [
+        item for item in failures
+        if item["exists"] and not item["no_follow"]
+    ]
+    soft_failures = [item for item in failures if item not in hard_failures]
+    warnings = soft_failures if s.security.mode == "local" else []
+    errors = hard_failures + (
+        soft_failures if s.security.mode in {"governed", "release"} else []
+    )
+    return {
+        "mode": s.security.mode,
+        "paths": values,
+        "warnings": warnings,
+        "errors": errors,
+        "ok": not errors,
+        "remediation": (
+            "make policy inputs user-owned, remove group/world write bits, and avoid symlinks"
+            if failures
+            else None
+        ),
+    }
+
+
+def enforce_trust(s: Settings, *, workdir: Path | None = None) -> None:
+    report = trust_report(s)
+    if report["errors"]:
+        first = report["errors"][0]
+        raise WorkflowError(
+            f"untrusted {first['label']}: {first['path']}; remediation: "
+            "make the path user-owned, remove group/world write bits, and avoid symlinks"
+        )
+    if workdir is not None and s.repository_allowlist:
+        candidate = absolute_path(workdir)
+        allowed = [absolute_path(path) for path in s.repository_allowlist]
+        if not any(candidate == path or path in candidate.parents for path in allowed):
+            raise WorkflowError(
+                f"repository is not allowed by configured [git].repository_allowlist: {candidate}; "
+                "remediation: add the repository root to the trusted allowlist"
+            )

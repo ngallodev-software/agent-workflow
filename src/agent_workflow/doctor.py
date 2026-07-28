@@ -7,13 +7,17 @@ from pathlib import Path
 from typing import Any
 
 from .config import Settings
-from .process import run
+from .compatibility import probe_executor
+from .process import redact_argv, run, secret_values_from_argv
+from .config import trust_report
 
 
 def _executor_capability(name: str, command: list[str]) -> dict[str, Any]:
     binary = shutil.which(command[0]) if command else None
     value: dict[str, Any] = {
-        "configured_argv": command,
+        "configured_argv": list(
+            redact_argv(command, secret_values=secret_values_from_argv(command))
+        ),
         "binary": binary,
         "installed": bool(binary),
         "version": None,
@@ -22,16 +26,20 @@ def _executor_capability(name: str, command: list[str]) -> dict[str, Any]:
     }
     if not binary:
         return value
-    version = run([binary, "--version"], check=False, timeout_seconds=10, max_stdout_bytes=16 * 1024, max_stderr_bytes=16 * 1024)
-    if version.returncode == 0:
-        value["version"] = (version.stdout or version.stderr).strip()
-    else:
-        value["probe_error"] = (version.stderr or version.stdout).strip()
-    help_argv = [binary, "exec", "--help"] if name == "codex" else [binary, "--help"]
-    help_result = run(help_argv, check=False, timeout_seconds=10, max_stdout_bytes=256 * 1024, max_stderr_bytes=256 * 1024)
-    help_text = help_result.stdout + help_result.stderr
-    expected = "--json" if name == "codex" else "--output-format"
-    value["structured_output"] = help_result.returncode == 0 and expected in help_text
+    compatibility = probe_executor(
+        name,
+        [binary, *command[1:]],
+        digest=True,
+    )
+    identity = compatibility.get("executable") or {}
+    value["binary"] = identity.get("resolved_path", binary)
+    value["version"] = identity.get("version")
+    value["sha256"] = identity.get("sha256")
+    value["structured_output"] = "structured_output" in compatibility.get("capabilities", [])
+    value["adapter_version"] = compatibility.get("adapter_version")
+    value["compatibility"] = compatibility
+    if compatibility.get("decision") != "supported":
+        value["probe_error"] = compatibility.get("explanation_code")
     return value
 
 
@@ -69,6 +77,16 @@ def run_doctor(settings: Settings) -> dict[str, Any]:
         name: shutil.which(name)
         for name in ("git", "tmux", "bash", "tar", "zstd", "python3")
     }
+    security = trust_report(settings)
+    executors = {
+        name: _executor_capability(name, command)
+        for name, command in sorted(settings.executors.items())
+    }
+    compatibility_ok = settings.security.mode == "local" or all(
+        item.get("installed") is True
+        and item.get("compatibility", {}).get("decision") == "supported"
+        for item in executors.values()
+    )
     checks = {
         "python_3_11_or_newer": sys.version_info >= (3, 11),
         "terminal_backend_supported": settings.terminal_backend == "tmux",
@@ -77,17 +95,17 @@ def run_doctor(settings: Settings) -> dict[str, Any]:
         "required_commands_present": all(
             commands[name] for name in ("git", "tmux", "bash", "python3")
         ),
+        "trusted_policy_inputs": security["ok"],
+        "executor_compatibility": compatibility_ok,
     }
     return {
         "ok": all(checks.values()),
         "version": "0.2.5",
         "config_path": str(settings.config_path),
         "commands": commands,
-        "executors": {
-            name: _executor_capability(name, command)
-            for name, command in sorted(settings.executors.items())
-        },
+        "executors": executors,
         "checks": checks,
+        "security": security,
         "archive_ready": _archive_commands_supported(commands),
         "state_root": str(settings.state_root),
         "worktree_root": str(settings.worktree_root),

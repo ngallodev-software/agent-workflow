@@ -38,6 +38,21 @@ The default classes are:
 
 The concrete allowlists live in configuration, not documentation. Use `agent-workflow config show` to inspect effective policy.
 
+`agent-workflow --json doctor` reports the exact trusted policy inputs, resolved
+executor path, probed version, adapter version, capabilities, compatibility
+decision, and explanation code. Local mode reports unsafe ownership/modes and
+custom executors as warnings. Governed and release modes fail closed with a
+remediation message; an unsupported named adapter is never silently treated as
+unclassified.
+
+The executor compatibility policy is shipped as the versioned
+`executor-compatibility/v1` data asset. It is intentionally separate from user
+settings so changing provider support requires a release-backed asset update.
+Launch provenance records the actual absolute executable path, version, optional
+digest, compatibility policy digest, adapter version, and decision. This makes a
+PATH substitution between doctor and launch observable even when the host PATH
+changes.
+
 Implementation work starts interactive. Exploration, research, and review work
 starts non-interactive. When an implementation launch is inside a tmux window
 that has reached its configured capacity, the CLI reports the count and

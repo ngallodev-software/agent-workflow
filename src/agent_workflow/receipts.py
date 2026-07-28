@@ -264,6 +264,7 @@ def initial_provenance(
     stream_format: str,
     executor_version: str | None,
     executable: dict[str, Any] | None = None,
+    compatibility: dict[str, Any] | None = None,
     agent_name: str | None = None,
     agent_class: str | None = None,
     model: str | None = None,
@@ -289,6 +290,8 @@ def initial_provenance(
         "stream_format": stream_format,
         "executor_version": executor_version,
         "executable": executable,
+        "compatibility": compatibility,
+        "adapter_version": compatibility.get("adapter_version") if compatibility else None,
         "model": model,
         "model_policy": model_policy or {
             "no_go_authorized": False,

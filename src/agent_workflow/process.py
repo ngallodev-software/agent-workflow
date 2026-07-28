@@ -265,6 +265,26 @@ def build_environment(
         if not isinstance(name, str) or not name or "=" in name or "\x00" in name:
             raise WorkflowError(f"invalid environment variable name: {name!r}")
         environment[name] = str(value)
+    # Git is a policy input boundary.  Do not allow host pagers, external diff
+    # helpers, editors, credential prompts, or system/global config to alter a
+    # governed snapshot. Repository-local hooks and filters remain visible to
+    # operators and are documented as repository trust decisions.
+    if Path(command[0]).name == "git":
+        environment.update(
+            {
+                "GIT_CONFIG_NOSYSTEM": "1",
+                "GIT_CONFIG_SYSTEM": os.devnull,
+                "GIT_CONFIG_GLOBAL": os.devnull,
+                "GIT_PAGER": "cat",
+                "PAGER": "cat",
+                "GIT_EXTERNAL_DIFF": "",
+                "GIT_TERMINAL_PROMPT": "0",
+                "GIT_EDITOR": "true",
+                "GIT_SEQUENCE_EDITOR": "true",
+                "GIT_ASKPASS": "true",
+                "SSH_ASKPASS": "true",
+            }
+        )
     return environment, ("unsafe-inherit" if policy.unsafe_inherit else "controlled"), (
         tuple(str(value) for value in policy.values.values())
     )

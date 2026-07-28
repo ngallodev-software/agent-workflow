@@ -69,6 +69,12 @@ files or symlinks rather than creating ambiguous divergent copies. See
 
 XDG environment variables override config, state, and data roots.
 
+Configuration is schema-versioned (`schema_version = 1`) and unknown policy keys
+are rejected. The example config includes `[security].mode = "local"`; use
+`governed` or `release` for fail-closed ownership and compatibility checks.
+Configuration is read without following symlinks. Keep config, state, allowlist,
+and policy files user-owned and free of group/world write bits.
+
 ## Jenkins host deployment
 
 Jenkins runs builds and tests in an isolated venv. The final pipeline stage

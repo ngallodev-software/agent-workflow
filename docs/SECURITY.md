@@ -19,6 +19,8 @@ The project is pre-public-release and does not yet have a monitored public vulne
 - Provider usage fails closed on mixed modes, conflicting identities, malformed totals, or incomplete cost metadata.
 - MCP is optional, local stdio, read-only, metadata-minimal, bounded to configured roots with component-wise no-follow reads, stable bounded errors, parser-derived command discovery, and verified launch-contract command context. Command catalogs are not authorization, absolute executable paths are redacted, and command-artifact drift fails closed.
 - Repository-owned subprocesses use one argv-only substrate with process-group timeout/cancellation, per-stream caps, controlled environments, executable identity, and configured-value/secret-argument redaction.
+- Configuration is executable policy: schema version 1 rejects unknown keys and reads config without following links. Governed/release mode requires user ownership and no group/world write bits for config, state, repository allowlists, and policy files; local mode exposes the same findings as doctor warnings.
+- Named executors are resolved to the actual launched path and probed through the bounded process substrate. Versioned compatibility data supplies adapter versions and explanation codes; unsupported governed adapters fail closed. Doctor and provenance omit credentials.
 - Prompt packs, native jobs, prompts, and MCP repository/state roots use component-wise no-follow traversal; irregular entries and content changes during validation are rejected. Pack archives are built from the validated inventory and include a typed canonical manifest.
 - Runtime schemas come only from the executing source checkout or installed package asset set; duplicate IDs, malformed assets, and missing packaged assets fail closed.
 - The project does not automatically merge, delete failed worktrees, terminate suspected stalls, expose remote execution, or authorize network MCP transport.
@@ -34,7 +36,7 @@ These are active release blockers, not theoretical future hardening:
 - some runner/evaluation decisions still depend on mutable status projections rather than one immutable launch authority (`HARD-004`);
 - default sensitive-content classification, redaction, and retention controls are incomplete (`HARD-006`);
 - actor strings are not authenticated principals, so reviewer independence is procedural rather than cryptographically or OS-authenticated (`HARD-007`);
-- config/executable ownership and compatibility evidence are incomplete (`HARD-008`);
+- config/executable ownership and compatibility evidence are enforced by explicit local/governed/release policy; repository-local hooks and filters remain an operator-visible trust decision rather than being silently disabled;
 - release checks now emit a synchronized direct-dependency lock, CycloneDX SBOM, structured test evidence, and source/build provenance (`REL-005`), but full transitive hashes, independent reproducibility, and authenticated signing/attestation remain open (`HARD-010`).
 
 Do not describe these controls as complete until their backlog exit evidence exists.

@@ -74,6 +74,26 @@
       },
       "additionalProperties": false
     },
+    "compatibility": {
+      "type": ["object", "null"],
+      "properties": {
+        "schema": {"const": "agent-workflow/executor-compatibility/v1"},
+        "policy_version": {"type": ["string", "null"]},
+        "policy_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "executor": {"type": ["string", "null"]},
+        "adapter_version": {"type": ["string", "null"]},
+        "decision": {"enum": ["supported", "unsupported", "unclassified"]},
+        "explanation_code": {"type": "string"},
+        "executable": {"type": "object"},
+        "capabilities": {"type": "array", "items": {"type": "string"}},
+        "expected_capabilities": {"type": "array", "items": {"type": "string"}}
+      },
+      "required": ["schema", "decision", "explanation_code"],
+      "additionalProperties": true
+    },
+    "adapter_version": {
+      "type": ["string", "null"]
+    },
     "model": {
       "type": [
         "string",

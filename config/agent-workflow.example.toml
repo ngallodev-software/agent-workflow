@@ -1,3 +1,5 @@
+schema_version = 1
+
 [paths]
 worktree_root = "~/.local/share/agent-workflow/worktrees"
 state_root = "~/.local/state/agent-workflow"
@@ -14,6 +16,13 @@ max_interactive_agent_vertical = 3
 [git]
 branch_prefix = "impl/"
 require_clean_source = true
+repository_allowlist = []
+
+[security]
+# local warns in `doctor`; governed/release fail closed on untrusted policy inputs.
+mode = "local"
+executable_digest = true
+policy_files = []
 
 [pack]
 archive_level = 19

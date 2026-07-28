@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/config/v1",
+  "title": "agent-workflow user policy",
+  "type": "object",
+  "properties": {
+    "schema_version": {"const": 1},
+    "paths": {"$ref": "#/$defs/paths"},
+    "terminal": {"$ref": "#/$defs/terminal"},
+    "git": {"$ref": "#/$defs/git"},
+    "pack": {"$ref": "#/$defs/pack"},
+    "agents": {"$ref": "#/$defs/agents"},
+    "agent_classes": {"type": "object", "additionalProperties": {"$ref": "#/$defs/agent_class"}},
+    "executors": {"type": "object", "additionalProperties": {"$ref": "#/$defs/executor"}},
+    "security": {"$ref": "#/$defs/security"}
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "strings": {"type": "array", "items": {"type": "string"}},
+    "paths": {"type": "object", "properties": {"worktree_root": {"type": "string"}, "state_root": {"type": "string"}}, "additionalProperties": false},
+    "terminal": {"type": "object", "properties": {"backend": {"type": "string"}, "stall_minutes": {"type": "integer", "minimum": 1}, "capture_lines": {"type": "integer", "minimum": 1}, "mouse": {"type": "boolean"}, "orchestrator_side": {"type": "string"}, "max_interactive_agent_width": {"type": "integer", "minimum": 1}, "max_interactive_agent_vertical": {"type": "integer", "minimum": 1}}, "additionalProperties": false},
+    "git": {"type": "object", "properties": {"branch_prefix": {"type": "string"}, "require_clean_source": {"type": "boolean"}, "repository_allowlist": {"$ref": "#/$defs/strings"}}, "additionalProperties": false},
+    "pack": {"type": "object", "properties": {"archive_level": {"type": "integer"}, "write_sha256": {"type": "boolean"}, "validate_before_archive": {"type": "boolean"}}, "additionalProperties": false},
+    "security": {"type": "object", "properties": {"mode": {"enum": ["local", "governed", "release"]}, "executable_digest": {"type": "boolean"}, "policy_files": {"$ref": "#/$defs/strings"}}, "additionalProperties": false},
+    "agent_class": {"type": "object", "required": ["interactive", "default_executor", "default_model"], "properties": {"interactive": {"type": "boolean"}, "default_executor": {"type": "string"}, "default_model": {"type": "string"}, "models": {"type": "object", "additionalProperties": {"$ref": "#/$defs/strings"}}}, "additionalProperties": false},
+    "profile": {"type": "object", "required": ["executor", "model"], "properties": {"executor": {"type": "string"}, "model": {"type": "string"}, "allow_no_go_model": {"type": "boolean"}, "interactive": {"type": "boolean"}, "class": {"type": "string"}}, "additionalProperties": false},
+    "agents": {"type": "object", "properties": {"preferred_names": {"$ref": "#/$defs/strings"}, "generated_prefix": {"type": "string"}, "default_executor": {"type": "string"}, "profiles": {"type": "object", "additionalProperties": {"$ref": "#/$defs/profile"}}, "non_interactive_tmux": {"type": "string"}, "default_class": {"type": "string"}, "reuse_stale_minutes": {"type": "integer", "minimum": 1}}, "additionalProperties": false},
+    "executor": {"type": "object", "required": ["command"], "properties": {"command": {"$ref": "#/$defs/strings"}, "interactive_command": {"$ref": "#/$defs/strings"}, "models": {"$ref": "#/$defs/strings"}, "default_model": {"type": "string"}, "no_go_models": {"$ref": "#/$defs/strings"}, "model_arg": {"$ref": "#/$defs/strings"}, "permission_args": {"$ref": "#/$defs/strings"}, "interactive_permission_args": {"$ref": "#/$defs/strings"}, "non_interactive_permission_args": {"$ref": "#/$defs/strings"}, "environment_allowlist": {"$ref": "#/$defs/strings"}}, "additionalProperties": false}
+  }
+}

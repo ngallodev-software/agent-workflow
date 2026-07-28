@@ -11,6 +11,7 @@ The test suite is organized around behavior that an operator can observe. Test c
 The acceptance layer covers:
 
 - installed CLI discovery, configuration, doctor, and actionable failures;
+- schema-versioned configuration, unknown-key rejection, trusted-path warnings/failures, and executor compatibility identity through the installed doctor journey;
 - prompt-pack scaffold, validation, and deterministic archive output;
 - real Git worktree creation, listing, and removal;
 - external executor launch, completion, failure, restart, review, acceptance, and interactive-agent reuse;
@@ -97,6 +98,10 @@ AGENT_WORKFLOW_LIVE_EXECUTOR=claude .venv/bin/python -m pytest -m live
 ```
 
 `./scripts/release-check.sh` runs the default suite plus compile, shell, schema, release-asset, prompt-pack ownership, and documentation-drift checks. It writes `pytest-junit.xml`, `sbom.cdx.json`, `build-provenance.json`, and `release-evidence.json` under `build/release-evidence` unless `AGENT_WORKFLOW_RELEASE_EVIDENCE_DIR` overrides the destination. Open release-policy blockers are recorded by default and enforced when `AGENT_WORKFLOW_ENFORCE_RELEASE_BLOCKERS=1`. Apply the `release-drift-auditor` skill after parallel integration because deterministic checks cannot judge every semantic security overclaim.
+
+The default suite uses synthetic custom executors in local mode. Live compatibility
+checks should run `doctor` and a read-only launch on the supported provider
+executors; no paid provider task is part of the default suite.
 
 ## Current shape
 

@@ -1,11 +1,13 @@
 from __future__ import annotations
 from typing import Any
 from .config import Settings
+from .config import enforce_trust
 from .errors import WorkflowError
 from .events import append_lifecycle_event
 from .migrations import migrate_contract
 from .util import atomic_write_json, read_json, validate_id
 from .contracts import read_launch_contract
+from .path import require_directory
 
 TERMINAL_STATUSES = {
     "completed",
@@ -24,8 +26,18 @@ def _current(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def runs_root(settings: Settings):
+    enforce_trust(settings)
+    creator = settings.state_root
+    while not creator.exists() and creator.parent != creator:
+        creator = creator.parent
+    # Validate the existing prefix before mkdir can follow a hostile parent.
+    require_directory(creator, label="state root parent")
+    settings.state_root.mkdir(parents=True, mode=0o700, exist_ok=True)
+    require_directory(settings.state_root, label="state root")
+    enforce_trust(settings)
     root = settings.state_root / "runs"
-    root.mkdir(parents=True, exist_ok=True)
+    root.mkdir(mode=0o700, exist_ok=True)
+    require_directory(root, label="state runs root")
     return root
 
 
