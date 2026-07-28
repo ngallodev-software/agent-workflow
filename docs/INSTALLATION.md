@@ -72,7 +72,7 @@ XDG environment variables override config, state, and data roots.
 ## Jenkins host deployment
 
 Jenkins runs builds and tests in an isolated venv. The final pipeline stage
-calls this installer against the host account named by
+builds a wheel, then calls this installer in wheel mode against the host account named by
 `AGENT_WORKFLOW_HOST_INSTALL_USER`, using `AGENT_WORKFLOW_HOST_PYTHON` (default
 `/usr/bin/python3`) rather than the build venv. If Jenkins runs as a different
 account, configure narrowly scoped passwordless sudo for this deployment or

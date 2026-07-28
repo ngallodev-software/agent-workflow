@@ -3,10 +3,10 @@ set -euo pipefail
 usage() {
   cat <<'USAGE'
 Usage: ./install.sh [--no-skills] [--no-hooks] [--no-deps] [--python PATH]
-                    [--extras NAME[,NAME...]]
+                    [--wheel PATH] [--extras NAME[,NAME...]]
 
-Installs this checkout into the current user's Python environment in editable
-mode, including its declared core dependencies, then creates launcher, skill
+Installs this checkout, or a supplied wheel, into the current user's Python
+environment, including its declared core dependencies, then creates launcher, skill
 symlinks, and client hook reminders. Requesting the mcp extra also registers the
 local stdio server with Codex and Claude Code. Missing dependencies may require
 network access.
@@ -16,6 +16,7 @@ Options:
   --no-hooks             Skip Codex and Claude Code hook reminders.
   --no-deps              Skip Python package/dependency installation.
   --python PATH          Python interpreter used for the host installation.
+  --wheel PATH           Install this built wheel instead of an editable checkout.
   --extras NAME[,NAME...] Install optional dependency groups (for example
                           eval,stats or all). Core dependencies are always
                           included unless --no-deps is set.
@@ -25,6 +26,7 @@ INSTALL_SKILLS=1
 INSTALL_HOOKS=1
 INSTALL_DEPS=1
 EXTRAS=""
+WHEEL_PATH="${AGENT_WORKFLOW_INSTALL_WHEEL:-}"
 PYTHON_BIN="${AGENT_WORKFLOW_INSTALL_PYTHON:-python3}"
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -35,6 +37,11 @@ while [[ $# -gt 0 ]]; do
       shift
       [[ $# -gt 0 ]] || { echo "--python requires a value" >&2; exit 2; }
       PYTHON_BIN="$1"
+      ;;
+    --wheel)
+      shift
+      [[ $# -gt 0 ]] || { echo "--wheel requires a value" >&2; exit 2; }
+      WHEEL_PATH="$1"
       ;;
     --extras)
       shift
@@ -89,14 +96,25 @@ EOF3
     exit 1
   fi
   install_target="$ROOT"
-  if [[ -n "$EXTRAS" ]]; then
+  if [[ -n "$WHEEL_PATH" ]]; then
+    [[ -f "$WHEEL_PATH" ]] || { echo "wheel not found: $WHEEL_PATH" >&2; exit 2; }
+    install_target="$WHEEL_PATH"
+  elif [[ -n "$EXTRAS" ]]; then
     if [[ "$EXTRAS" == "all" ]]; then
       EXTRAS="eval,stats,otel,mlflow,completion,mcp"
     fi
     install_target="$ROOT[$EXTRAS]"
   fi
   echo "installing Python package and dependencies: $install_target"
-  "$PYTHON_BIN" -m pip install  --upgrade --editable "$install_target"
+  if [[ -n "$WHEEL_PATH" ]]; then
+    pip_args=(--upgrade "$install_target")
+    if [[ "$EXTRAS" == "all" || ",$EXTRAS," == *,mcp,* ]]; then
+      pip_args+=("mcp==1.28.1")
+    fi
+    "$PYTHON_BIN" -m pip install "${pip_args[@]}"
+  else
+    "$PYTHON_BIN" -m pip install --upgrade --editable "$install_target"
+  fi
 elif ! "$PYTHON_BIN" -c 'import jsonschema' >/dev/null 2>&1; then
   echo "jsonschema>=4.18,<5 is required; rerun without --no-deps or install it with $PYTHON_BIN -m pip" >&2
   exit 1

@@ -5,7 +5,7 @@
   <definition class="org.jenkinsci.plugins.workflow.cps.CpsScmFlowDefinition">
     <scm class="hudson.plugins.git.GitSCM">
       <userRemoteConfigs><hudson.plugins.git.UserRemoteConfig><url>__REPO__</url></hudson.plugins.git.UserRemoteConfig></userRemoteConfigs>
-      <branches><hudson.plugins.git.BranchSpec><name>*/__BRANCH__</name></hudson.plugins.git.BranchSpec></branches>
+      <branches><hudson.plugins.git.BranchSpec><name>refs/heads/__BRANCH__</name></hudson.plugins.git.BranchSpec></branches>
       <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations><submoduleCfg class="empty-list"/><extensions/>
     </scm>
     <scriptPath>Jenkinsfile</scriptPath><lightweight>true</lightweight>

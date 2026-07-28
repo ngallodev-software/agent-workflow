@@ -56,14 +56,19 @@ pipeline {
                         echo "host Python interpreter is not executable: $host_python" >&2
                         exit 2
                     }
+                    wheel="$(find "$WORKSPACE/dist" -maxdepth 1 -type f -name 'agent_workflow-*.whl' -print -quit)"
+                    test -n "$wheel" || {
+                        echo 'built agent-workflow wheel is missing' >&2
+                        exit 2
+                    }
                     if [ "$(id -un)" = "$target_user" ]; then
-                        AGENT_WORKFLOW_INSTALL_PYTHON="$host_python" "$WORKSPACE/install.sh" --extras mcp
+                        AGENT_WORKFLOW_INSTALL_PYTHON="$host_python" "$WORKSPACE/install.sh" --wheel "$wheel" --extras mcp
                     else
                         command -v sudo >/dev/null || {
                             echo 'sudo is required when Jenkins deploys to another host account' >&2
                             exit 2
                         }
-                        sudo -n -u "$target_user" -H env AGENT_WORKFLOW_INSTALL_PYTHON="$host_python" "$WORKSPACE/install.sh" --extras mcp
+                        sudo -n -u "$target_user" -H env AGENT_WORKFLOW_INSTALL_PYTHON="$host_python" "$WORKSPACE/install.sh" --wheel "$wheel" --extras mcp
                     fi
                 '''
             }
