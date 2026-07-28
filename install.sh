@@ -107,7 +107,7 @@ EOF3
   fi
   echo "installing Python package and dependencies: $install_target"
   if [[ -n "$WHEEL_PATH" ]]; then
-    pip_args=(--upgrade "$install_target")
+    pip_args=(--upgrade --force-reinstall "$install_target")
     if [[ "$EXTRAS" == "all" || ",$EXTRAS," == *,mcp,* ]]; then
       pip_args+=("mcp==1.28.1")
     fi
