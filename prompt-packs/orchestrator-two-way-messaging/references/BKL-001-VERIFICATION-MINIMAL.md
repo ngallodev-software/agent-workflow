@@ -12,7 +12,10 @@ python3 -m compileall -q src/agent_workflow
 ```
 
 Write a valid `agent-workflow/completion/v1` JSON handoff atomically to
-`AGENT_WORKFLOW_HANDOFF_DIR/completion.json`. Include the exact commands,
-exit codes, seven BKL-001 criteria from the focused tests, changed paths, and
-any unresolved environment issue. Mark `result` `completed` only if both
-commands pass. Exit immediately after writing the handoff.
+`AGENT_WORKFLOW_HANDOFF_DIR/completion.json`. Set `base_revision` and
+`head_revision` to the exact `git rev-parse HEAD` value. Include the exact
+commands, exit codes, seven BKL-001 criteria from the focused tests, changed
+paths, and any unresolved environment issue. In every command claim use
+`cwd` equal to `.` (the sealed command collector's canonical form). Mark
+`result` `completed` only if both commands pass. Exit immediately after
+writing the handoff.
