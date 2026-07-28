@@ -16,6 +16,9 @@ The target architecture is documented in [`docs/ORCHESTRATOR_TWO_WAY_MESSAGING_D
 
 See [`references/collision-and-ownership.md`](references/collision-and-ownership.md).
 
+For a maintainer handoff that clears the hardening prerequisites before this
+pack becomes executable, use [`CHATGPT_BLOCKER_CLEARANCE_PROMPT.md`](CHATGPT_BLOCKER_CLEARANCE_PROMPT.md).
+
 ## External prerequisites
 
 Phase 0 may start only after verifying:
