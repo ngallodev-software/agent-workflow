@@ -60,7 +60,7 @@ The detailed gap analysis below is the pre-REL-005 audit baseline. Its open lice
   - **Future specifications** (`tests/future/`): approved backlog behavior marked as `xfail(strict=True)` (currently: `BKL-002` late steering journey)
 - **Evidence:** pytest output; exit code 0 means all tests passed
 - **BACKLOG mapping:**
-  - **BKL-001** (durable message cursors): covered by `tests/acceptance/test_delegation_journeys.py` (steer/watch/ack replay, restart recovery)
+  - **BKL-001** (durable message cursors): covered by `tests/acceptance/test_consumer_cursor_journey.py` and `tests/invariants/test_consumer_cursors.py` (installed-wheel replay, crash windows, reconstruction, independent consumers, and digest/path integrity)
   - **BKL-002** (post-launch steering): covered by `tests/future/test_late_steering_journey.py` (future specification, currently xfail)
   - **REL-003** (compatibility matrix): NOT covered by release-check.sh (opt-in live tests only)
 
@@ -96,7 +96,7 @@ This closes the local pipeline execution failure, not the public release gates. 
 
 | ID | Priority | State | Blocker | Coverage | Gap |
 |---|---|---|---|---|---|
-| **BKL-001** | P0 | ready | Durable per-consumer message cursors, restart recovery, duplicate safety, cursor advancement | Partial: existing journeys cover replay/steer/ack behavior, but the canonical per-consumer cursor contract is not implemented | **Implement the cursor service and promote its strict acceptance evidence** |
+| **BKL-001** | P0 | ready | Durable per-consumer message cursors, restart recovery, duplicate safety, cursor advancement | Implemented in `src/agent_workflow/consumer_cursors.py`; focused acceptance and invariant evidence cover the cursor contract | **Promote the strict acceptance evidence through the phase gate** |
 | **BKL-002** | P0 | ready | Post-launch steering for detached runs (delivered/applied/rejected evidence) | Covered only by a strict future specification (xfail) | **No runtime delivery/application evidence yet** |
 | **REL-001** | P0 | needs-decision | Select and add license, matching package metadata | **NOT CHECKED** | **No check for LICENSE file presence, license classifier in pyproject.toml, or license header matching** |
 | **REL-002** | P0 | blocked | Establish vulnerability-reporting channel and update SECURITY.md | **NOT CHECKED** | **No check that SECURITY.md contains a monitored contact or private mechanism** (currently reads "pre-public-release" and says this is a blocker) |
@@ -275,7 +275,7 @@ This closes the local pipeline execution failure, not the public release gates. 
 ## Summary
 
 **Current release-check.sh coverage:**
-- ⚠️ Exercises portions of BKL-001 through acceptance journeys, but does not prove the canonical cursor implementation
+- ⚠️ Exercises the canonical BKL-001 cursor implementation; phase-gate review and shared post-integration journeys remain separate
 - ⚠️ Includes the BKL-002 strict future specification as an expected failure; it does not prove runtime late-steering delivery
 - ✅ Validates distribution asset integrity, JSON/YAML/TOML syntax, link resolution
 - ✅ Runs acceptance and invariant test suites

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/consumer-cursor/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "schema_version", "consumer_id", "consumer_identity_digest", "source_journal_id", "last_committed_source_sequence", "last_committed_source_message_id", "last_committed_source_digest", "disposition", "updated_at"],
+  "properties": {
+    "schema": {"const": "agent-workflow/consumer-cursor/v1"},
+    "schema_version": {"const": 1},
+    "consumer_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"},
+    "consumer_identity_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "source_journal_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "last_committed_source_sequence": {"type": "integer", "minimum": 0},
+    "last_committed_source_message_id": {"type": ["string", "null"]},
+    "last_committed_source_digest": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"},
+    "disposition": {"enum": ["applied", "rejected", "ignored", "deferred", "security_error"]},
+    "updated_at": {"type": "string", "minLength": 1}
+  }
+}

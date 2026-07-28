@@ -74,6 +74,15 @@ A potential stall is a diagnostic state, not authorization to terminate. Inspect
 
 The fsynced message journal is the authority. tmux `wait-for` is a local wakeup accelerator only. Producers append immutable records; consumers replay by sequence and acknowledge work explicitly.
 
+Per-consumer cursor files are rebuildable performance projections below the
+configured state root. They are keyed by hashed trusted consumer and source
+journal identities, use lock-scoped compare/update, and advance only after a
+committed target-effect receipt. Missing, stale, truncated, or corrupt cursor
+files are reconstructed from the source journal and target evidence. A source
+message ID is idempotent only when its canonical digest matches; conflicting
+reuse fails closed. Handling states are the fixed dispositions `applied`,
+`rejected`, `ignored`, `deferred`, and `security_error`.
+
 ```bash
 agent-workflow steer SESSION "Run the focused tests." --actor orchestrator
 agent-workflow watch SESSION --after 0 --timeout 300

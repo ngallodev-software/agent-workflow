@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import fcntl
+import hashlib
 import json
 import os
 import stat
@@ -41,6 +42,19 @@ _KIND_DIRECTIONS = {
     "error": "child_to_parent",
     "task_complete": "child_to_parent",
 }
+
+
+def canonical_message_bytes(message: dict[str, Any]) -> bytes:
+    """Return the bytes used to identify an immutable source message."""
+    validate_message(message)
+    return json.dumps(
+        message, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+
+
+def message_digest(message: dict[str, Any]) -> str:
+    """Return a digest bound to the complete canonical source record."""
+    return "sha256:" + hashlib.sha256(canonical_message_bytes(message)).hexdigest()
 
 
 def message_log_path(run_dir: Path) -> Path:
