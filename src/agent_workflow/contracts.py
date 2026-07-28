@@ -21,7 +21,7 @@ def _schema_roots() -> tuple[Path, ...]:
     )
     # A source checkout and an installed package are separate runtime modes.
     # Never merge ambient user/site-package roots into the authority path.
-    for root in (source_root, installed_root, user_data_root):
+    for root in (source_root, user_data_root, installed_root):
         if root.is_dir():
             return (root,)
     return ()
