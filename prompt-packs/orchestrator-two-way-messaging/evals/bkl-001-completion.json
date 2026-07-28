@@ -1,0 +1,31 @@
+{
+  "schema": "agent-workflow/evaluation-plan/v1",
+  "objective": "Complete BKL-001 acceptance evidence for durable cursor restart, reconstruction, integrity, and redaction boundaries.",
+  "hypothesis": "The BKL-001 cursor implementation and installed-product journey satisfy the ticket when restart and recovery evidence are explicit and test caches are disposable.",
+  "identity": {"ticket_id": "BKL-001", "pack_id": "orchestrator-two-way-messaging", "source_revision": "63e953b1260db5698c3c59a94f01b4d421542404"},
+  "execution": {"provider": "codex", "model": "gpt-5.6-luna", "executor": "codex", "executor_version": null},
+  "cohort": {"cohort_id": "bkl-001-completion", "role": "candidate", "controls": ["dedicated BKL-001 worktree", "structured verification after interactive implementation", "pytest cache disabled for acceptance", "no backlog mutation by implementer"]},
+  "dataset_split": "development",
+  "task_ids": ["BKL-001"],
+  "repetitions": 1,
+  "timeout_seconds": 600,
+  "max_retries": 0,
+  "scorers": ["schema_validity", "writable_scope"],
+  "acceptance_commands": [
+    {"id": "bkl-001-completion-tests", "argv": ["python3", "-m", "pytest", "-p", "no:cacheprovider", "-q", "tests/invariants/test_consumer_cursors.py", "tests/acceptance/test_consumer_cursor_journey.py"], "cwd": ".", "timeout_seconds": 300, "result_format": "exit-code", "junit_path": null},
+    {"id": "bkl-001-completion-compile", "argv": ["python3", "-m", "compileall", "-q", "src/agent_workflow"], "cwd": ".", "timeout_seconds": 120, "result_format": "exit-code", "junit_path": null}
+  ],
+  "scope": {"writable_paths": [".venv/bin/python", ".venv/bin/python3", ".venv/bin/python3.13"], "writable_trees": ["src/", "tests/", "docs/", "schemas/"], "disposable_trees": [".agent-workflow-handoff/", ".codebase-memory/", ".delegations/", ".pytest_cache/", "__pycache__/", ".venv/"]},
+  "metrics": [
+    {"id": "pass_rate", "kind": "binary", "direction": "higher_is_better", "missing_policy": "fail"},
+    {"id": "elapsed_seconds", "kind": "duration", "direction": "lower_is_better", "missing_policy": "preserve-null"},
+    {"id": "provider_billed_cost", "kind": "cost", "direction": "lower_is_better", "missing_policy": "preserve-null"}
+  ],
+  "stopping_rules": {"rule": "fixed_n", "minimum_cases": 1, "maximum_cases": 1, "confidence": 0.95, "effect_threshold": 0.0},
+  "budgets": {"max_wall_seconds": 600, "max_input_tokens": 500000, "max_output_tokens": 20000, "max_cost": 1.0, "currency": "USD"},
+  "privacy": {"data_class": "synthetic", "live_target_collection": false, "secret_policy": "prohibit"},
+  "reproducibility": {"fixture_revision": "bkl-001-completion-v2", "prompt_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "environment_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "tool_policy_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "pack_manifest_sha256": null},
+  "sandbox": "docker",
+  "oracle_refs": {},
+  "statistics_policy": "agent-workflow/statistics/v1"
+}

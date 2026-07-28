@@ -484,6 +484,24 @@ def execute(
     pump_errors: list[str] = []
     wall_started = time.monotonic()
     runtime = launch.get("runtime_policy")
+    # The immutable launch contract carries executor budgets, while the
+    # sealed evaluation-runtime artifact carries the full evaluation policy
+    # (including writable/disposable scope). Merge them before post-run
+    # collectors so scope evidence is collected under the same policy used at
+    # launch. Older contracts may omit the persisted policy entirely.
+    persisted_runtime_path = run_dir / "evaluation-runtime.json"
+    if persisted_runtime_path.is_file():
+        try:
+            persisted_runtime = json.loads(
+                persisted_runtime_path.read_text(encoding="utf-8")
+            )
+        except (OSError, json.JSONDecodeError):
+            persisted_runtime = None
+        if isinstance(persisted_runtime, dict):
+            merged_runtime = dict(persisted_runtime)
+            if isinstance(runtime, dict):
+                merged_runtime.update(runtime)
+            runtime = merged_runtime
     provenance_initial = json.loads(
         (run_dir / "run-provenance.json").read_text(encoding="utf-8")
     )
