@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from functools import lru_cache
 from pathlib import Path
@@ -13,12 +14,16 @@ from .path import absolute_path, inventory_tree, read_regular_file, require_dire
 def _schema_roots() -> tuple[Path, ...]:
     source_root = absolute_path(Path(__file__).parent.parent.parent / "schemas")
     installed_root = Path(sys.prefix) / "share" / "agent-workflow" / "schemas"
+    user_data_root = (
+        Path(os.environ.get("XDG_DATA_HOME", "~/.local/share")).expanduser()
+        / "agent-workflow"
+        / "schemas"
+    )
     # A source checkout and an installed package are separate runtime modes.
     # Never merge ambient user/site-package roots into the authority path.
-    if source_root.is_dir():
-        return (source_root,)
-    if installed_root.is_dir():
-        return (installed_root,)
+    for root in (source_root, installed_root, user_data_root):
+        if root.is_dir():
+            return (root,)
     return ()
 
 
