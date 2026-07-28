@@ -12,6 +12,7 @@
 
 ## Unreleased
 
+- Add the proposed plugin-first decomposition and sibling `agent-workflow-spec` design: canonical collaborative specs compile into prompt packs and end-to-end evaluation artifacts, while the existing distribution remains the execution host and LangGraph stays an optional authoring adapter.
 - Add a parser-derived, schema-validated command catalog and role-scoped launch cards so orchestrators and child agents can execute known CLI signatures without routine `--help` probing; bind new artifacts through backward-compatible launch-contract v2.
 - Expose the same catalog through bounded read-only MCP capability and role resources, plus verified per-run command context/cards; retain explicit MCP exclusions and update future mutation work to preserve launch-contract v2 rather than dynamically wrapping CLI commands.
 - Complete the evaluation/benchmark templating task by maintainer direction while preserving its environment limitations as release-wide follow-up.

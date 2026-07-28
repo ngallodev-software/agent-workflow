@@ -89,7 +89,7 @@ These items remain tracked separately from the hardening ownership above; they a
 | REL-003 | P0 | High | blocked | After HARD-008, define the supported Linux/Python/tmux/executor matrix and run opt-in live compatibility journeys on representative clean hosts. | [Testing](TESTING.md#live-compatibility) |
 | BKL-004 | P1 | High | blocked | After HARD-003, HARD-006, and REL-003, run a controlled real-executor baseline/candidate cohort with pinned model, executor, environment, tools, cache policy, repetitions, exclusions, and sealed evidence. | [Evidence and evaluation](EVIDENCE_AND_EVALUATION.md#cohort-comparison) |
 | BKL-007 | P1 | High | blocked | After HARD-001 and HARD-008, add opt-in installer-owned host routing enforcement only for narrowly defined direct delegation commands, with preserved hooks and an audited break-glass path. | [Operations](OPERATIONS.md#host-routing) |
-| MCP-003 | P1 | Critical | blocked | After HARD-004, HARD-005, and HARD-007, add idempotent pack validation, worktree creation, bounded launch, workflow validate/start/status/resume, progress, ack, and steer tools through existing services. | [MCP server](MCP_SERVER.md#planned-mutation-phase) and [`mcp-server-next`](../prompt-packs/mcp-server-next/) |
+| MCP-003 | P1 | Critical | blocked | After HARD-004, HARD-005, and HARD-007, add idempotent pack validation, worktree creation, bounded launch, workflow validate/start/status/resume, progress, ack, and steer tools through existing services. Preserve the current read-only capability/catalog resources; MCP launch must reuse the CLI launch service and retain launch-contract v2 command artifacts/digests rather than creating MCP-local command or launch authority. | [MCP server](MCP_SERVER.md#planned-mutation-phase) and [`mcp-server-next`](../prompt-packs/mcp-server-next/) |
 | REL-004 | P1 | Critical | blocked | After all P0 HARD items, HARD-010, REL-001, REL-002, and REL-003, execute the public-preview gate: clean-source build/install/uninstall, signed artifacts, drift audit, live compatibility, threat-model review, and explicit go/no-go record. | [Public release readiness](PUBLIC_RELEASE_READINESS.md#release-gate) |
 | BKL-010 | P1 | Medium | blocked | Supply a pinned browser-image digest, font manifest, and verified pre-seal browser/Inspect evidence bridge before implementing the visual priority-picker fixture. | [Evidence and evaluation](EVIDENCE_AND_EVALUATION.md) |
 
@@ -101,6 +101,21 @@ These items remain tracked separately from the hardening ownership above; they a
 | DEC-002 | P1 | needs-decision | Set benchmark policy: first executors, billing meaning, cache role, replicate count/effect threshold, and treatment of interrupted or human-assisted trials. |
 | DEC-003 | P2 | deferred | Authorize multi-host orchestration only after a measured single-host failure. Preserve replayable durable records as authority; prefer JetStream unless an existing Redis dependency is mandated. |
 | DEC-MCP-HTTP | P2 | deferred | Authorize any non-stdio MCP transport only through a separate security ADR after local adoption evidence. |
+| DEC-004 | P1 | decided | Retain `agent-workflow` as the execution host, add a versioned trusted plugin API, and build `agent-workflow-spec` as the first sibling plugin before extracting other subsystems. |
+
+## Proposed specification and plugin program
+
+These tasks are designed under decided `DEC-004` but remain planning-only until their individual implementation gates are authorized. No prompt pack owns them yet. The sibling repository remains independent; core must not import it.
+
+| ID | Priority | Risk | State | Work and exit evidence | Reference |
+|---|---|---:|---|---|---|
+| PLUG-001 | P1 | High | needs-decision | Add a minimal trusted first-party plugin host using package entry points, explicit enablement, API/version checks, atomic conflict-free registration, command-catalog provenance, schema/assets registration, recovery mode, and one installed-product fixture-plugin journey. | [Plugin mechanism](SPEC_AUTHORING_PLUGIN_ARCHITECTURE.md#plugin-mechanism) |
+| SPEC-001 | P1 | High | blocked | After `PLUG-001`, bootstrap the sibling `agent-workflow-spec` repository with canonical implementation-spec, event, approval, and compiler-receipt contracts plus standalone init/validate/render/approve commands. | [Sibling repository design](SPEC_AUTHORING_PLUGIN_ARCHITECTURE.md#sibling-repository-design-agent-workflow-spec) |
+| SPEC-002 | P1 | High | blocked | After `SPEC-001`, deterministically compile approved specs into the existing prompt-pack format, machine task contracts, result schemas, traceability, output manifests, and compiler receipts. | [Deterministic compiler](SPEC_AUTHORING_PLUGIN_ARCHITECTURE.md#deterministic-compiler) |
+| SPEC-003 | P1 | High | blocked | After `SPEC-002`, generate declarative installed-product acceptance/evaluation artifacts and assess sealed evidence at requirement granularity without generating a bespoke test file for every requirement. | [Acceptance and evaluation](SPEC_AUTHORING_PLUGIN_ARCHITECTURE.md#acceptance-and-evaluation-generation) |
+| SPEC-004 | P2 | Medium | blocked | After `SPEC-001`, add collaborative intent, research, questions, structured revisions, coverage review, and human approval pauses through a framework-neutral native authoring engine. | [Collaborative authoring](SPEC_AUTHORING_PLUGIN_ARCHITECTURE.md#collaborative-authoring-model) |
+| SPEC-005 | P2 | Medium | blocked | After `SPEC-004`, add an optional LangGraph adapter implementing the same authoring-engine interface while canonical events, approved JSON, and compiler receipts remain authoritative. | [LangGraph placement](SPEC_AUTHORING_PLUGIN_ARCHITECTURE.md#langgraph-placement) |
+| ARC-004 | P2 | High | blocked | After stable real-world evidence from `PLUG-001` and the spec plugin, evaluate extracting exactly one existing optional subsystem; do not perform a broad simultaneous repository split. | [Core decomposition roadmap](SPEC_AUTHORING_PLUGIN_ARCHITECTURE.md#core-decomposition-roadmap) |
 
 ## Deferred architecture
 
@@ -111,7 +126,7 @@ These existing items already own the assessment's P2 recommendations. The harden
 | ARC-001 | P2 | Add a transport-neutral notifier only after measured wakeup latency or operability requires it; replay remains mandatory. |
 | ARC-002 | P3 | Add a reconstructable SQLite index only after JSONL replay/scan cost is measured as a problem. |
 | ARC-003 | P3 | Add a multi-host broker, shared-artifact references, and cross-trust signing only after `DEC-003`. |
-| MCP-004 | P2 | Add policy-gated review/disposition and interrupt/terminate tools after `MCP-003`; force kill remains excluded. |
+| MCP-004 | P2 | Add policy-gated review/disposition and interrupt/terminate tools after `MCP-003`; preserve the capability/command-context resources and never infer authorization from catalog membership; force kill remains excluded. |
 | WF-006 | P2 | Consider evidence-derived routing recommendations only after comparable real-executor cohorts exist; no online learning or vector-memory dependency. |
 
 ## Completed history
@@ -124,6 +139,7 @@ These existing items already own the assessment's P2 recommendations. The harden
 | 0.2.2 | Acceptance-first installed-product tests, compact invariant matrices, strict future TDD journeys, CI, and public-documentation consolidation. |
 | 0.2.2 maintenance | Jenkins local pipeline now provisions an isolated Python environment, installs build/test dependencies, avoids stale workspace virtualenvs, builds and locally installs the wheel, and passed build #16 with `35 passed, 2 skipped, 1 xfailed`. |
 | 0.2.4 maintenance | Completed evaluation/benchmark templating and REL-005 release evidence: policy/lock validation, structured tests, CycloneDX SBOM, provenance, and blocker enforcement without closing REL-001/002/003 or HARD-010. |
+| 0.2.5 spec/plugin design | Added the trusted plugin boundary and sibling `agent-workflow-spec` architecture; DEC-004 is decided while implementation tasks remain separately gated and non-executable. |
 | 0.2.5 maintenance | Accepted BKL-001 durable consumer cursors and idempotent handling dispositions with restart, reconstruction, crash-window, isolation, redaction, scope, and sealed-evaluation evidence; see [final acceptance evidence](BKL-001_EVIDENCE_RECOVERY_20260728.md). |
 | 0.2.5 command catalog | Added the parser-derived command catalog, role-scoped launch cards, sealed launch-contract v2 bindings, and child environment exports that reduce routine `--help` probing; validated by installed-product acceptance and invariant tests. |
 | 0.2.5 MCP command context | Added bounded read-only MCP capability/catalog resources and verified per-run command context/card resources with schema validation, redacted CLI identity, no dynamic tools, and fail-closed digest checks. |

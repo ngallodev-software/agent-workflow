@@ -138,10 +138,7 @@ Raw provider streams are bounded and sealed before normalization. Usage evidence
 
 Install the `mcp` extra to configure `agent-workflow-mcp` as a local stdio
 server in the user-level Codex and Claude Code MCP settings. Existing entries
-are preserved. The current adapter is read-only and bounded to configured
-roots. It does not expose launch, workflow mutation, review, destructive
-lifecycle commands, raw shell, arbitrary paths, terminal capture, or HTTP. See
-[MCP server](docs/MCP_SERVER.md).
+are preserved. The current adapter is read-only and bounded to configured roots. It exposes the parser-derived command catalog, an explicit capability manifest, and verified per-run command context/cards without turning CLI commands into MCP tools. It does not expose launch, workflow mutation, review, destructive lifecycle commands, raw shell, arbitrary paths, terminal capture, or HTTP. See [MCP server](docs/MCP_SERVER.md).
 
 ## State and trust
 
@@ -167,6 +164,7 @@ The default suite is acceptance-first: it builds and installs a wheel, invokes p
 
 - [Command reference](docs/COMMAND_REFERENCE.md)
 - [Architecture](docs/ARCHITECTURE.md)
+- [Collaborative specification compiler and plugin-first decomposition](docs/SPEC_AUTHORING_PLUGIN_ARCHITECTURE.md)
 - [Repository diagrams](docs/diagrams/REPOSITORY_CHART_PACK.md)
 - [Operations](docs/OPERATIONS.md)
 - [Durable two-way orchestrator messaging design](docs/ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md)

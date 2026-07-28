@@ -27,6 +27,12 @@ target repository/worktree
   implementation source, project-native tests, legitimate generated artifacts
 ```
 
+## Planned plugin-first decomposition
+
+The current distribution remains the execution host while a narrow, versioned plugin API is designed and proven. The first external first-party plugin should be the sibling `agent-workflow-spec` repository, which owns collaborative specification authoring and deterministic compilation into existing prompt packs and evaluation artifacts. Core continues to own tmux/process/session execution, durable state, receipts, lifecycle authority, workflow safety, and prompt-pack validation required at launch.
+
+This is an additive migration, not an immediate rename or broad repository split. Installed plugins are trusted code, must be explicitly enabled and version-compatible, and may register only bounded command namespaces, schemas, assets, read services, and diagnostics. LangGraph may be an optional spec-authoring adapter, but its checkpoints never replace canonical JSON, append-only events, approval receipts, compiler receipts, or sealed execution evidence. See [Collaborative specification compiler and plugin-first decomposition](SPEC_AUTHORING_PLUGIN_ARCHITECTURE.md).
+
 ## Major components
 
 | Area | Modules | Responsibility |

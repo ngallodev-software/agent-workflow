@@ -106,6 +106,10 @@ The pack describes work; it does not override runtime policy. Agent class, execu
 
 Use `agent-workflow pack checksum` only when preparing a pack for transfer or unarchiving verification.
 
+## Planned specification compiler
+
+Prompt packs remain the execution bundle, but the proposed `agent-workflow-spec` sibling plugin will treat them as deterministic compiled artifacts of an approved machine-readable implementation specification. Existing hand-authored packs and the current validation/archive format remain supported. Generated packs will pair nuanced Markdown ticket prompts with machine task contracts, acceptance links, result schemas, and requirement traceability rather than replacing all prompts with JSON. See [Collaborative specification compiler and plugin-first decomposition](SPEC_AUTHORING_PLUGIN_ARCHITECTURE.md).
+
 ## Migration and maintenance
 
 For an existing set of prompts:
