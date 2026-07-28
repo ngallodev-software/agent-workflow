@@ -137,7 +137,7 @@ Raw executor events must be stable regular non-symlink files, are capped at 16 M
 
 The current MCP server is optional, local stdio, and read-only except for pack validation. It uses the public pinned `mcp` package and bounded shared read services. Configured repository/state roots and pack paths are checked component-by-component without following links; unsafe entries fail closed. It exposes no launch, workflow mutation, lifecycle mutation, raw shell, tmux, arbitrary paths, terminal capture, or HTTP transport.
 
-The current and planned boundary is in [MCP server](MCP_SERVER.md). Future tools must add durable idempotency and call existing services. Streamable HTTP requires a separate authorization ADR.
+The current and planned boundary is in [MCP server](MCP_SERVER.md). The read-only adapter reuses the parser-derived command catalog and verified launch-contract reader for capability discovery and per-run command context; it does not generate executable MCP tools from CLI commands. Future mutation tools must add durable idempotency, call existing services, and preserve launch-contract v2 command artifacts for MCP-launched children. Streamable HTTP requires a separate authorization ADR.
 
 ## Security posture
 

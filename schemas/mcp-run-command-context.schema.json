@@ -1,0 +1,73 @@
+{
+  "$id": "agent-workflow/mcp-run-command-context/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "card_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "catalog_schema": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "catalog_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "cli_invocation": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "launch_contract_schema": {
+      "enum": [
+        "agent-workflow/launch-contract/v1",
+        "agent-workflow/launch-contract/v2"
+      ]
+    },
+    "role": {
+      "enum": [
+        "orchestrator",
+        "implementation",
+        "review",
+        null
+      ]
+    },
+    "schema": {
+      "const": "agent-workflow/mcp-run-command-context/v1"
+    },
+    "session_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "verification": {
+      "enum": [
+        "verified",
+        "legacy-no-command-binding"
+      ]
+    }
+  },
+  "required": [
+    "schema",
+    "session_id",
+    "launch_contract_schema",
+    "verification",
+    "role",
+    "catalog_schema",
+    "catalog_sha256",
+    "card_sha256",
+    "cli_invocation"
+  ],
+  "type": "object"
+}

@@ -2,7 +2,7 @@
 
 ## Current boundary
 
-`agent-workflow-mcp` is an optional local stdio adapter built with the pinned official Python MCP SDK. It exposes bounded read-only views of configured repository, prompt-pack, worktree, state, run, message, and receipt data.
+`agent-workflow-mcp` is an optional local stdio adapter built with the pinned official Python MCP SDK. It exposes bounded read-only views of configured repository, prompt-pack, worktree, state, run, message, receipt, installed-command, and sealed run-command-context data.
 
 The adapter is intentionally not a second orchestration engine. CLI and MCP surfaces must call the same application services and produce the same durable evidence.
 
@@ -30,6 +30,20 @@ Receipt resources verify the same contiguous, regular, read-only lifecycle recei
 
 Errors use stable categories. Unexpected failures return only an opaque correlation ID; local logging records that ID without exception text, paths, or captured content.
 
+## Command capability resources
+
+The read-only server publishes parser-derived command knowledge without converting CLI commands into MCP tools:
+
+- `agent-workflow://capabilities` reports the installed version, stdio/read-only mode, live command-catalog digest and leaf count, supported launch-contract versions, registered resources/tools, and explicit exclusions.
+- `agent-workflow://commands` returns the complete schema-validated catalog generated from the installed CLI parser.
+- `agent-workflow://commands/{role}` returns the existing `orchestrator`, `implementation`, or `review` role scope.
+- `agent-workflow://runs/{session_id}/command-context` verifies the run launch contract and reports its catalog/card binding. Legacy launch-contract v1 runs return `legacy-no-command-binding`; launch-contract v2 runs return `verified`.
+- `agent-workflow://runs/{session_id}/command-card` returns the verified bounded role card for launch-contract v2 runs.
+
+The server calls the same `runtime_command_catalog()`, `filter_catalog()`, and `read_launch_contract()` boundaries used by the CLI and sealed-run verifier. It never maintains an MCP-specific command list. Public run context normalizes the executable name and does not expose an absolute installation path. Catalog/card replacement or digest drift fails closed.
+
+The catalog is discovery metadata, not authorization. The server must not dynamically register one MCP tool per CLI command.
+
 ## Planned mutation phase
 
 `MCP-003` is the next authorized implementation phase. It may add only validated tools that wrap existing services:
@@ -40,7 +54,7 @@ Errors use stable categories. Unexpected failures return only an opaque correlat
 - workflow validate/start/status/resume;
 - durable progress, acknowledgement, and steering records.
 
-Before any mutation tool lands, the shared service layer must provide durable idempotency keys, replay-safe result mapping, bounded request contracts, and evidence linking equivalent to the CLI. A returned tool response is not proof that a child consumed steering; correlated durable acknowledgement remains required.
+Before any mutation tool lands, the shared service layer must provide durable idempotency keys, replay-safe result mapping, bounded request contracts, and evidence linking equivalent to the CLI. Future `launch` and workflow-launch tools must call the same launch service as the CLI so every child run still emits launch-contract v2, `command-catalog.json`, the role-scoped `command-card.md`, child environment pointers, and immutable catalog/card digests. Mutation responses should return the session ID, launch-contract schema, command-catalog digest, role, idempotency identity, and durable result identity where available. A returned tool response is not proof that a child consumed steering; correlated durable acknowledgement remains required.
 
 Destructive lifecycle and review/disposition tools are a later policy-gated phase. Force kill remains excluded. Streamable HTTP requires a separate authorization ADR after local stdio adoption and security evidence.
 
@@ -61,4 +75,6 @@ A mutation release is not complete until black-box MCP client journeys prove:
 5. actor identity and request provenance are sealed;
 6. steering remains pending until correlated acknowledgement;
 7. no tool can bypass executor/model/class/no-go policy;
-8. no transport beyond local stdio is enabled.
+8. no transport beyond local stdio is enabled;
+9. command capability resources remain parser-derived and read-only rather than becoming dynamic executable tools;
+10. MCP-launched child runs preserve launch-contract v2 command-context parity with CLI launches.

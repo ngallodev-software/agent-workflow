@@ -10,7 +10,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Generic, TypeVar
 
+from .. import __version__
+from ..command_catalog import (
+    COMMAND_CATALOG_SCHEMA,
+    COMMAND_ROLES,
+    command_catalog_sha256,
+    filter_catalog,
+    runtime_command_catalog,
+)
 from ..config import Settings
+from ..contracts import read_launch_contract, validate_instance
 from ..errors import WorkflowError
 from ..lifecycle import lifecycle_receipts
 from ..manifests import validate_pack
@@ -27,6 +36,36 @@ MAX_PAGE_SIZE = 100
 MAX_CURSOR = 1_000_000
 MAX_TEXT_CHARS = 512
 MAX_STATUS_BYTES = 256 * 1024
+MAX_COMMAND_CARD_BYTES = 256 * 1024
+
+MCP_CAPABILITIES_URI = "agent-workflow://capabilities"
+MCP_COMMANDS_URI = "agent-workflow://commands"
+MCP_ROLE_COMMANDS_URI = "agent-workflow://commands/{role}"
+MCP_RUNS_URI = "agent-workflow://runs"
+MCP_STATUS_URI = "agent-workflow://runs/{session_id}/status"
+MCP_MESSAGES_URI = "agent-workflow://runs/{session_id}/messages"
+MCP_RECEIPTS_URI = "agent-workflow://runs/{session_id}/receipts"
+MCP_COMMAND_CONTEXT_URI = "agent-workflow://runs/{session_id}/command-context"
+MCP_COMMAND_CARD_URI = "agent-workflow://runs/{session_id}/command-card"
+MCP_RESOURCE_URIS = (
+    MCP_CAPABILITIES_URI,
+    MCP_COMMANDS_URI,
+    MCP_ROLE_COMMANDS_URI,
+    MCP_RUNS_URI,
+    MCP_STATUS_URI,
+    MCP_MESSAGES_URI,
+    MCP_RECEIPTS_URI,
+    MCP_COMMAND_CONTEXT_URI,
+    MCP_COMMAND_CARD_URI,
+)
+MCP_TOOL_NAMES = ("pack_validate",)
+MCP_EXCLUDED_OPERATIONS = (
+    "arbitrary-shell",
+    "direct-state-mutation",
+    "force-kill",
+    "network-transport",
+    "raw-terminal-capture",
+)
 
 _PUBLIC_STATUS_FIELDS = (
     "schema",
@@ -83,7 +122,11 @@ class ServiceError(WorkflowError):
 
 
 def _page(request: PageRequest, values: list[T]) -> Page[T]:
-    if isinstance(request.after, bool) or not isinstance(request.after, int) or request.after < 0:
+    if (
+        isinstance(request.after, bool)
+        or not isinstance(request.after, int)
+        or request.after < 0
+    ):
         raise ServiceError("invalid_cursor", "after must be a non-negative integer")
     if request.after > MAX_CURSOR:
         raise ServiceError("invalid_cursor", f"after must not exceed {MAX_CURSOR}")
@@ -167,6 +210,18 @@ def contained_path(root: Path, value: str, label: str) -> Path:
         if "escapes" in str(exc) or "unsafe" in str(exc) or "traversal" in str(exc):
             raise ServiceError("forbidden_root", f"{label} is outside the configured root") from exc
         raise ServiceError("not_found", f"{label} is unavailable") from exc
+
+
+def _public_cli_invocation(value: Any) -> list[str]:
+    if not isinstance(value, list) or not value or not all(
+        isinstance(item, str) and item for item in value
+    ):
+        raise ServiceError("invalid_evidence", "launch CLI invocation is invalid")
+    # Preserve the executable identity without disclosing an installation path.
+    executable = Path(value[0]).name
+    if not executable:
+        raise ServiceError("invalid_evidence", "launch CLI invocation is invalid")
+    return [executable, *value[1:]]
 
 
 class WorkflowReadService:
@@ -303,6 +358,156 @@ class WorkflowReadService:
                 }
             )
         return _page(request, values)
+
+    def get_command_catalog(self, role: str | None = None) -> dict[str, Any]:
+        if role is not None and role not in COMMAND_ROLES:
+            raise ServiceError("invalid_identifier", "unknown command-catalog role")
+        try:
+            catalog = filter_catalog(runtime_command_catalog(), role)
+            validate_instance(
+                catalog, COMMAND_CATALOG_SCHEMA, artifact="MCP command catalog"
+            )
+        except WorkflowError as exc:
+            raise ServiceError(
+                "invalid_evidence", "installed command catalog is invalid"
+            ) from exc
+        return catalog
+
+    def get_capabilities(self) -> dict[str, Any]:
+        catalog = self.get_command_catalog()
+        result = {
+            "schema": "agent-workflow/mcp-capabilities/v1",
+            "application_version": __version__,
+            "transport": "stdio",
+            "mode": "read-only",
+            "command_catalog": {
+                "schema": COMMAND_CATALOG_SCHEMA,
+                "sha256": command_catalog_sha256(catalog),
+                "leaf_command_count": len(catalog["commands"]),
+            },
+            "launch_contracts": [
+                "agent-workflow/launch-contract/v1",
+                "agent-workflow/launch-contract/v2",
+            ],
+            "resources": list(MCP_RESOURCE_URIS),
+            "tools": list(MCP_TOOL_NAMES),
+            "excluded_operations": list(MCP_EXCLUDED_OPERATIONS),
+        }
+        try:
+            validate_instance(
+                result,
+                "agent-workflow/mcp-capabilities/v1",
+                artifact="MCP capabilities",
+            )
+        except WorkflowError as exc:
+            raise ServiceError(
+                "invalid_evidence", "installed MCP capabilities are invalid"
+            ) from exc
+        return result
+
+    def _launch_contract(self, session_id: str) -> tuple[Path, dict[str, Any]]:
+        root = self._validated_run_root(session_id)
+        try:
+            descriptor = open_beneath(root, "launch-contract.json", flags=os.O_RDONLY)
+        except OSError as exc:
+            if exc.errno == errno.ENOENT:
+                raise ServiceError("not_found", "run launch contract not found") from exc
+            raise ServiceError(
+                "forbidden_root", "run launch contract path is unsafe"
+            ) from exc
+        except WorkflowError as exc:
+            raise ServiceError(
+                "forbidden_root", "run launch contract path is unsafe"
+            ) from exc
+        else:
+            os.close(descriptor)
+        try:
+            contract = read_launch_contract(root / "launch-contract.json")
+        except WorkflowError as exc:
+            raise ServiceError("invalid_evidence", "run launch contract is invalid") from exc
+        if contract.get("session", {}).get("id") != session_id:
+            raise ServiceError(
+                "invalid_evidence", "run launch contract identity is invalid"
+            )
+        return root, contract
+
+    def get_run_command_context(self, session_id: str) -> dict[str, Any]:
+        _, contract = self._launch_contract(session_id)
+        launch_schema = contract["schema"]
+        if launch_schema == "agent-workflow/launch-contract/v1":
+            result = {
+                "schema": "agent-workflow/mcp-run-command-context/v1",
+                "session_id": session_id,
+                "launch_contract_schema": launch_schema,
+                "verification": "legacy-no-command-binding",
+                "role": None,
+                "catalog_schema": None,
+                "catalog_sha256": None,
+                "card_sha256": None,
+                "cli_invocation": [],
+            }
+        else:
+            binding = contract.get("command_catalog")
+            if not isinstance(binding, dict):
+                raise ServiceError("invalid_evidence", "run command binding is invalid")
+            result = {
+                "schema": "agent-workflow/mcp-run-command-context/v1",
+                "session_id": session_id,
+                "launch_contract_schema": launch_schema,
+                "verification": "verified",
+                "role": binding.get("role"),
+                "catalog_schema": binding.get("catalog_schema"),
+                "catalog_sha256": binding.get("catalog_sha256"),
+                "card_sha256": binding.get("card_sha256"),
+                "cli_invocation": _public_cli_invocation(binding.get("cli_invocation")),
+            }
+        try:
+            validate_instance(
+                result,
+                "agent-workflow/mcp-run-command-context/v1",
+                artifact="MCP run command context",
+            )
+        except WorkflowError as exc:
+            raise ServiceError("invalid_evidence", "run command context is invalid") from exc
+        return result
+
+    def get_run_command_card(self, session_id: str) -> dict[str, Any]:
+        root, contract = self._launch_contract(session_id)
+        if contract["schema"] != "agent-workflow/launch-contract/v2":
+            raise ServiceError("not_available", "legacy run has no bound command card")
+        binding = contract["command_catalog"]
+        card_name = binding["card_path"]
+        try:
+            descriptor = open_beneath(root, card_name, flags=os.O_RDONLY)
+        except (OSError, WorkflowError) as exc:
+            raise ServiceError("invalid_evidence", "run command card is unavailable") from exc
+        try:
+            card = _read_fd(descriptor, maximum=MAX_COMMAND_CARD_BYTES)
+        finally:
+            os.close(descriptor)
+        digest = hashlib.sha256(card).hexdigest()
+        if digest != binding["card_sha256"]:
+            raise ServiceError("invalid_evidence", "run command card digest is invalid")
+        try:
+            markdown = card.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise ServiceError("invalid_evidence", "run command card is not UTF-8") from exc
+        result = {
+            "schema": "agent-workflow/mcp-run-command-card/v1",
+            "session_id": session_id,
+            "role": binding["role"],
+            "sha256": digest,
+            "markdown": markdown,
+        }
+        try:
+            validate_instance(
+                result,
+                "agent-workflow/mcp-run-command-card/v1",
+                artifact="MCP run command card",
+            )
+        except WorkflowError as exc:
+            raise ServiceError("invalid_evidence", "run command card is invalid") from exc
+        return result
 
     def validate_pack(self, request: PackValidationRequest) -> dict[str, Any]:
         selected = contained_path(self.repository_root, request.pack_root, "pack root")

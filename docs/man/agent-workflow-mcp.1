@@ -6,11 +6,11 @@ agent-workflow-mcp \- optional local stdio MCP adapter
 .RI [ --config " PATH" ]
 .RI [ --repo-root " PATH" ]
 .SH DESCRIPTION
-Starts the optional MCP server over stdio using the pinned public Python MCP SDK. The current server exposes bounded read-only run/status/message/receipt resources and pack validation through shared services. The optional --repo-root argument constrains the repository root used for pack validation.
+Starts the optional MCP server over stdio using the pinned public Python MCP SDK. The current server exposes bounded read-only capability, parser-derived command-catalog, run/status/message/receipt, verified run-command-context, and command-card resources plus pack validation through shared services. The optional --repo-root argument constrains the repository root used for pack validation.
 .SH EXCLUSIONS
-The current server does not expose launch, workflow mutation, steering, review/acceptance, interrupt/terminate/kill, raw shell, arbitrary paths, tmux APIs, raw terminal capture, or HTTP.
+The current server does not expose launch, workflow mutation, steering, review/acceptance, interrupt/terminate/kill, raw shell, arbitrary paths, tmux APIs, raw terminal capture, or HTTP. Command-catalog membership is discovery metadata and does not authorize or dynamically register an MCP tool.
 .SH SECURITY
-Access is restricted to configured roots with identifier, traversal, symlink, redaction, pagination, and response-size controls. Standard output is reserved for protocol traffic; diagnostics go to standard error.
+Access is restricted to configured roots with identifier, traversal, symlink, redaction, pagination, digest, and response-size controls. Run command context is read through the verified launch-contract v1/v2 boundary; command-artifact tampering fails closed and absolute executable paths are not exposed. Standard output is reserved for protocol traffic; diagnostics go to standard error.
 .SH DEPENDENCY
 Install the optional mcp extra. The SDK is not vendored; the selected dependency is mcp==1.28.1. The installer registers this server as agent-workflow in the user-level Codex config.toml and Claude Code .claude.json when invoked with --extras mcp or --extras all. Existing entries are preserved.
 .SH SEE ALSO

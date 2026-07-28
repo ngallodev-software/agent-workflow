@@ -22,11 +22,11 @@ The single phase covers:
 2. bounded idempotent mutation tools;
 3. independent security, identity, parity, and drift review.
 
-The allowed tool candidates are pack validation, worktree creation, one bounded run launch, workflow validate/start/status/resume, and durable progress/ack/steer. A candidate must be omitted when its shared service, authenticated-principal rule, idempotency contract, sandbox boundary, or durable evidence mapping is not ready.
+The allowed tool candidates are pack validation, worktree creation, one bounded run launch, workflow validate/start/status/resume, and durable progress/ack/steer. A candidate must be omitted when its shared service, authenticated-principal rule, idempotency contract, sandbox boundary, or durable evidence mapping is not ready. The current `capabilities`, parser-derived role catalog, verified run command-context, and command-card resources are an integrated read-only baseline and must remain available. Future launch tools must reuse the CLI launch service so launch-contract v2, command artifacts, child environment pointers, and their digests remain identical across transports.
 
 ## Non-targets
 
-No HTTP, MCP Tasks as lifecycle authority, arbitrary shell or paths, direct tmux controls, raw terminal capture, force kill, direct state-file mutation, alternate routing/scheduling, memory infrastructure, federation, or persona catalogs.
+No HTTP, MCP Tasks as lifecycle authority, arbitrary shell or paths, direct tmux controls, raw terminal capture, force kill, direct state-file mutation, alternate routing/scheduling, memory infrastructure, federation, persona catalogs, or dynamic MCP-tool generation from the CLI command catalog. Catalog membership is discovery metadata and never grants authorization.
 
 ## Execution
 

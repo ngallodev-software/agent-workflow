@@ -58,6 +58,8 @@ flowchart TB
   mcp_services --> state
   mcp_services --> messages
   mcp_services --> receipts
+  mcp_services --> command_catalog[command_catalog.py]
+  mcp_services --> contracts
   contracts[contracts.py + schemas/] --> cli
   contracts --> sessions
   contracts --> workflow
@@ -421,9 +423,13 @@ flowchart TB
   Host[MCP host]
   Host --> Stdio[Local stdio FastMCP]
   Stdio --> Current[Current: bounded read-only resources + pack_validate]
-  Current --> Shared[Existing shared read services]
+  Current --> Catalog[Parser-derived capabilities + role catalogs]
+  Current --> Context[Verified run command context + cards]
+  Catalog --> Shared[Existing shared read/catalog services]
+  Context --> Shared
   Future[MCP-003 planned safe mutations] --> Idem[Durable idempotency journal]
   Idem --> SharedMut[Existing worktree/session/workflow/message services]
+  SharedMut --> LaunchV2[Shared launch service preserves command artifacts + launch-contract v2]
   Destructive[MCP-004 review/control] -. separately gated .-> SharedMut
   HTTP[MCP-005 Streamable HTTP] -. ADR required .-> Auth[OAuth/audience/origin/rate-limit boundary]
   Auth -. after decision .-> SharedMut

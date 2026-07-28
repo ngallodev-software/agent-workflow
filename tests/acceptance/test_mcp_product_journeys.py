@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -9,34 +10,42 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 from agent_workflow.messages import append_message
-from tests.conftest import InstalledProduct
-from tests.support import atomic_write_json
+from tests.conftest import (
+    InstalledProduct,
+    fake_agent_path,
+    git_repo,
+    wait_for_status,
+)
 
 
 def test_installed_stdio_mcp_reads_bounded_metadata_only(
-    installed_product: InstalledProduct, product_env: dict[str, str], tmp_path: Path
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+    fake_agent_path: Path,
+    tmp_path: Path,
 ) -> None:
     if not installed_product.mcp.exists():
         pytest.skip("installed-product fixture did not install the optional MCP extra")
     repo = tmp_path / "repo"
-    repo.mkdir()
+    git_repo(repo)
+    prompt = tmp_path / "prompt.md"
+    prompt.write_text("Complete the bounded MCP launch journey.\n", encoding="utf-8")
+    installed_product.json(
+        "launch",
+        "mcp-run",
+        repo,
+        prompt,
+        "--tier",
+        "low",
+        "--no-interactive",
+        "--",
+        fake_agent_path,
+        env=product_env,
+    )
+    wait_for_status(product_env, "mcp-run")
+
     state_root = Path(product_env["XDG_STATE_HOME"]) / "agent-workflow"
     run = state_root / "runs" / "mcp-run"
-    run.mkdir(parents=True)
-    atomic_write_json(
-        run / "status.json",
-        {
-            "schema": "agent-workflow/session-status/v2",
-            "session_id": "mcp-run",
-            "status": "running",
-            "disposition": None,
-            "created_at": "2026-01-01T00:00:00Z",
-            "updated_at": "2026-01-01T00:00:00Z",
-            "workdir": "/private/workdir",
-            "prompt_path": "/private/prompt",
-            "log_path": "/private/log",
-        },
-    )
     secret = "synthetic-secret@example.test"
     append_message(
         run,
@@ -47,30 +56,63 @@ def test_installed_stdio_mcp_reads_bounded_metadata_only(
         content=secret,
     )
 
-    async def read_resources() -> list[dict[str, object]]:
-        server_env = dict(product_env)
+    async def read_resources(*uris: str) -> list[dict[str, object]]:
         params = StdioServerParameters(
             command=str(installed_product.mcp),
             args=["--repo-root", str(repo)],
-            env=server_env,
+            env=dict(product_env),
         )
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:
                 await asyncio.wait_for(session.initialize(), timeout=10)
                 responses = [
-                    await asyncio.wait_for(session.read_resource("agent-workflow://runs"), timeout=10),
-                    await asyncio.wait_for(session.read_resource("agent-workflow://runs/mcp-run/status"), timeout=10),
-                    await asyncio.wait_for(session.read_resource("agent-workflow://runs/mcp-run/messages"), timeout=10),
-                    await asyncio.wait_for(session.read_resource("agent-workflow://runs/mcp-run/receipts"), timeout=10),
+                    await asyncio.wait_for(session.read_resource(uri), timeout=10)
+                    for uri in uris
                 ]
                 return [json.loads(response.contents[0].text) for response in responses]
 
-    responses = asyncio.run(read_resources())
+    responses = asyncio.run(
+        read_resources(
+            "agent-workflow://capabilities",
+            "agent-workflow://commands/implementation",
+            "agent-workflow://runs",
+            "agent-workflow://runs/mcp-run/status",
+            "agent-workflow://runs/mcp-run/messages",
+            "agent-workflow://runs/mcp-run/receipts",
+            "agent-workflow://runs/mcp-run/command-context",
+            "agent-workflow://runs/mcp-run/command-card",
+        )
+    )
     encoded = json.dumps(responses)
     assert secret not in encoded
+    assert str(repo) not in encoded
     assert all(response.get("schema") for response in responses)
-    messages = responses[2]
+
+    capabilities, commands, runs, _, messages, _, context, card = responses
+    assert capabilities["mode"] == "read-only"
+    assert capabilities["command_catalog"]["leaf_command_count"] >= len(commands["commands"])
+    represented = {item["command"] for item in commands["commands"]}
+    assert {"progress", "ack", "agent task-complete"} <= represented
+    assert "worktree create" not in represented
+    assert context["verification"] == "verified"
+    assert context["role"] == "implementation"
+    assert context["catalog_sha256"] == capabilities["command_catalog"]["sha256"]
+    assert context["cli_invocation"] == ["agent-workflow"]
+    assert card["sha256"] == context["card_sha256"]
+    assert "Do not run `--help`" in card["markdown"]
+    assert "agent-workflow progress" in card["markdown"]
+    assert "agent-workflow worktree create" not in card["markdown"]
     item = messages["items"][0]
     assert item["redaction_state"] == "body_omitted"
     assert "content" not in item
-    assert responses[0]["items"][0]["session_id"] == "mcp-run"
+    assert runs["items"][0]["session_id"] == "mcp-run"
+
+    card_path = run / "command-card.md"
+    card_path.chmod(0o644)
+    card_path.write_text(card_path.read_text(encoding="utf-8") + "tampered\n", encoding="utf-8")
+    os.chmod(card_path, 0o444)
+    tampered = asyncio.run(
+        read_resources("agent-workflow://runs/mcp-run/command-context")
+    )[0]
+    assert tampered["schema"] == "agent-workflow/mcp-error/v1"
+    assert tampered["error"] == "invalid_evidence"

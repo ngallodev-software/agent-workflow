@@ -14,7 +14,21 @@ from typing import Any
 
 from ..config import Settings, load_settings
 from ..errors import WorkflowError
-from .services import PackValidationRequest, PageRequest, ServiceError, WorkflowReadService
+from .services import (
+    MCP_CAPABILITIES_URI,
+    MCP_COMMAND_CARD_URI,
+    MCP_COMMAND_CONTEXT_URI,
+    MCP_COMMANDS_URI,
+    MCP_MESSAGES_URI,
+    MCP_RECEIPTS_URI,
+    MCP_ROLE_COMMANDS_URI,
+    MCP_RUNS_URI,
+    MCP_STATUS_URI,
+    PackValidationRequest,
+    PageRequest,
+    ServiceError,
+    WorkflowReadService,
+)
 
 _LOGGER = logging.getLogger("agent_workflow.mcp")
 _SAFE_ENVIRONMENT = frozenset(
@@ -78,24 +92,44 @@ def build_server(settings: Settings, *, repo_root: Path | None = None) -> Any:
     instance_id = str(uuid.uuid4())
     server = FastMCP("agent-workflow", json_response=True)
 
-    @server.resource("agent-workflow://runs")
+    @server.resource(MCP_CAPABILITIES_URI)
+    def capabilities_resource() -> str:
+        return _json(_service_result(service.get_capabilities))
+
+    @server.resource(MCP_COMMANDS_URI)
+    def commands_resource() -> str:
+        return _json(_service_result(service.get_command_catalog))
+
+    @server.resource(MCP_ROLE_COMMANDS_URI)
+    def role_commands_resource(role: str) -> str:
+        return _json(_service_result(lambda: service.get_command_catalog(role)))
+
+    @server.resource(MCP_RUNS_URI)
     def runs_resource() -> str:
         result = _service_result(lambda: service.list_runs(PageRequest()).as_dict())
         return _json(result)
 
-    @server.resource("agent-workflow://runs/{session_id}/status")
+    @server.resource(MCP_STATUS_URI)
     def status_resource(session_id: str) -> str:
         return _json(_service_result(lambda: service.get_status(session_id)))
 
-    @server.resource("agent-workflow://runs/{session_id}/messages")
+    @server.resource(MCP_MESSAGES_URI)
     def messages_resource(session_id: str) -> str:
         result = _service_result(lambda: service.list_messages(session_id, PageRequest()).as_dict())
         return _json(result)
 
-    @server.resource("agent-workflow://runs/{session_id}/receipts")
+    @server.resource(MCP_RECEIPTS_URI)
     def receipts_resource(session_id: str) -> str:
         result = _service_result(lambda: service.list_receipts(session_id, PageRequest()).as_dict())
         return _json(result)
+
+    @server.resource(MCP_COMMAND_CONTEXT_URI)
+    def command_context_resource(session_id: str) -> str:
+        return _json(_service_result(lambda: service.get_run_command_context(session_id)))
+
+    @server.resource(MCP_COMMAND_CARD_URI)
+    def command_card_resource(session_id: str) -> str:
+        return _json(_service_result(lambda: service.get_run_command_card(session_id)))
 
     @server.tool()
     def pack_validate(pack_root: str) -> dict[str, Any]:

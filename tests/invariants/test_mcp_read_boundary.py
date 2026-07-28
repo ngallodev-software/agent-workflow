@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from dataclasses import replace
@@ -100,6 +101,28 @@ def test_receipt_summary_rejects_writable_or_irregular_entries_without_partial_o
         service.list_receipts("run-1")
     assert caught.value.category == "invalid_evidence"
 
+
+def test_capabilities_bind_the_parser_catalog_and_role_scope(tmp_path: Path) -> None:
+    service, _ = _service(tmp_path)
+    capabilities = service.get_capabilities()
+    catalog = service.get_command_catalog()
+    implementation = service.get_command_catalog("implementation")
+
+    encoded = (json.dumps(catalog, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    assert capabilities["command_catalog"] == {
+        "schema": "agent-workflow/command-catalog/v1",
+        "sha256": hashlib.sha256(encoded).hexdigest(),
+        "leaf_command_count": len(catalog["commands"]),
+    }
+    represented = {item["command"] for item in implementation["commands"]}
+    assert {"progress", "ack", "agent task-complete"} <= represented
+    assert "launch" not in represented
+    assert capabilities["mode"] == "read-only"
+    assert "arbitrary-shell" in capabilities["excluded_operations"]
+
+    with pytest.raises(ServiceError) as caught:
+        service.get_command_catalog("unknown")
+    assert caught.value.category == "invalid_identifier"
 
 def test_pagination_and_unexpected_errors_are_stable() -> None:
     with pytest.raises(ServiceError) as caught:

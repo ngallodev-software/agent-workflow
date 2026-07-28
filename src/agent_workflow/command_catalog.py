@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import shutil
 from pathlib import Path
@@ -10,7 +11,7 @@ from . import __version__
 from .contracts import validate_instance
 from .errors import WorkflowError
 from .path import read_regular_file
-from .util import atomic_write_bytes, atomic_write_json
+from .util import atomic_write_bytes
 
 COMMAND_CATALOG_SCHEMA = "agent-workflow/command-catalog/v1"
 COMMAND_CATALOG_FILENAME = "command-catalog.json"
@@ -292,6 +293,14 @@ def render_command_markdown(catalog: dict[str, Any], *, role: str | None = None)
     return "\n".join(lines).rstrip() + "\n"
 
 
+def encode_command_catalog(catalog: dict[str, Any]) -> bytes:
+    return (json.dumps(catalog, indent=2, sort_keys=True) + "\n").encode("utf-8")
+
+
+def command_catalog_sha256(catalog: dict[str, Any]) -> str:
+    return hashlib.sha256(encode_command_catalog(catalog)).hexdigest()
+
+
 def runtime_command_catalog() -> dict[str, Any]:
     # Imported lazily to avoid a module-import cycle: cli imports sessions and
     # sessions writes the catalog only after the CLI module is fully initialized.
@@ -308,7 +317,7 @@ def write_launch_command_artifacts(state_dir: Path, *, role: str) -> dict[str, A
     catalog = runtime_command_catalog()
     catalog_path = state_dir / COMMAND_CATALOG_FILENAME
     card_path = state_dir / COMMAND_CARD_FILENAME
-    atomic_write_json(catalog_path, catalog, mode=0o444)
+    atomic_write_bytes(catalog_path, encode_command_catalog(catalog), mode=0o444)
     card = render_command_markdown(catalog, role=role).encode("utf-8")
     atomic_write_bytes(card_path, card, mode=0o444)
     # Re-read through the safe regular-file boundary before binding digests.

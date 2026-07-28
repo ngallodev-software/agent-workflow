@@ -1,0 +1,90 @@
+{
+  "$id": "agent-workflow/mcp-capabilities/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "application_version": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "command_catalog": {
+      "additionalProperties": false,
+      "properties": {
+        "leaf_command_count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "schema": {
+          "const": "agent-workflow/command-catalog/v1"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema",
+        "sha256",
+        "leaf_command_count"
+      ],
+      "type": "object"
+    },
+    "excluded_operations": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "type": "array",
+      "uniqueItems": true
+    },
+    "launch_contracts": {
+      "items": {
+        "enum": [
+          "agent-workflow/launch-contract/v1",
+          "agent-workflow/launch-contract/v2"
+        ]
+      },
+      "minItems": 2,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "mode": {
+      "const": "read-only"
+    },
+    "resources": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "schema": {
+      "const": "agent-workflow/mcp-capabilities/v1"
+    },
+    "tools": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "type": "array",
+      "uniqueItems": true
+    },
+    "transport": {
+      "const": "stdio"
+    }
+  },
+  "required": [
+    "schema",
+    "application_version",
+    "transport",
+    "mode",
+    "command_catalog",
+    "launch_contracts",
+    "resources",
+    "tools",
+    "excluded_operations"
+  ],
+  "type": "object"
+}

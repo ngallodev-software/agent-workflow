@@ -1,0 +1,37 @@
+{
+  "$id": "agent-workflow/mcp-run-command-card/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "markdown": {
+      "maxLength": 262144,
+      "type": "string"
+    },
+    "role": {
+      "enum": [
+        "orchestrator",
+        "implementation",
+        "review"
+      ]
+    },
+    "schema": {
+      "const": "agent-workflow/mcp-run-command-card/v1"
+    },
+    "session_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema",
+    "session_id",
+    "role",
+    "sha256",
+    "markdown"
+  ],
+  "type": "object"
+}

@@ -13,6 +13,7 @@
 ## Unreleased
 
 - Add a parser-derived, schema-validated command catalog and role-scoped launch cards so orchestrators and child agents can execute known CLI signatures without routine `--help` probing; bind new artifacts through backward-compatible launch-contract v2.
+- Expose the same catalog through bounded read-only MCP capability and role resources, plus verified per-run command context/cards; retain explicit MCP exclusions and update future mutation work to preserve launch-contract v2 rather than dynamically wrapping CLI commands.
 - Complete the evaluation/benchmark templating task by maintainer direction while preserving its environment limitations as release-wide follow-up.
 - Implement REL-005 with schema-validated release policy metadata, a synchronized direct-dependency lock, JUnit test evidence, CycloneDX SBOM generation, source/build provenance, optional artifact digests, and enforceable release-blocker status.
 - Add the complete durable two-way orchestrator messaging design, authority/failure model, security requirements, acceptance strategy, and four supporting Mermaid diagrams.

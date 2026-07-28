@@ -17,7 +17,7 @@ The project is pre-public-release and does not yet have a monitored public vulne
 - Workflow state is reconstructed from an immutable snapshot and append-only journal.
 - Approval is explicit and binds an actor label, reason, revision, and sealed evidence.
 - Provider usage fails closed on mixed modes, conflicting identities, malformed totals, or incomplete cost metadata.
-- MCP is optional, local stdio, read-only, metadata-minimal, bounded to configured roots with component-wise no-follow reads, and stable bounded errors.
+- MCP is optional, local stdio, read-only, metadata-minimal, bounded to configured roots with component-wise no-follow reads, stable bounded errors, parser-derived command discovery, and verified launch-contract command context. Command catalogs are not authorization, absolute executable paths are redacted, and command-artifact drift fails closed.
 - Repository-owned subprocesses use one argv-only substrate with process-group timeout/cancellation, per-stream caps, controlled environments, executable identity, and configured-value/secret-argument redaction.
 - Prompt packs, native jobs, prompts, and MCP repository/state roots use component-wise no-follow traversal; irregular entries and content changes during validation are rejected. Pack archives are built from the validated inventory and include a typed canonical manifest.
 - Runtime schemas come only from the executing source checkout or installed package asset set; duplicate IDs, malformed assets, and missing packaged assets fail closed.

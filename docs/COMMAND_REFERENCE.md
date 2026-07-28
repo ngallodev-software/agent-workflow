@@ -130,4 +130,6 @@ Validation checks required files, manifests, cross-phase dependency DAGs, result
 agent-workflow-mcp [--config PATH] [--repo-root PATH]
 ```
 
-The optional current server is local stdio and bounded/read-only, with `pack_validate` and run/status/message/receipt resources. It is a separate executable, not a top-level `agent-workflow mcp` command. Install with the `mcp` optional extra. `--repo-root` constrains pack validation to an explicit repository root; the configured state root still governs run resources. Planned mutation tools are documented but not implemented.
+The optional current server is local stdio and bounded/read-only, with `pack_validate`; capability and parser-derived command-catalog resources; and run/status/message/receipt/verified-command-context resources. It is a separate executable, not a top-level `agent-workflow mcp` command. Install with the `mcp` optional extra. `--repo-root` constrains pack validation to an explicit repository root; the configured state root still governs run resources.
+
+Current command resources are `agent-workflow://capabilities`, `agent-workflow://commands`, `agent-workflow://commands/{orchestrator|implementation|review}`, `agent-workflow://runs/{session_id}/command-context`, and `agent-workflow://runs/{session_id}/command-card`. These are read-only discovery/audit resources. They do not authorize a CLI command or dynamically expose the CLI as MCP tools. Planned mutation tools are documented but not implemented.
