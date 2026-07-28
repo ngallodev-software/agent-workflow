@@ -25,7 +25,7 @@ The determinism and security work below is derived from the [feature determinism
 | [`execution-isolation-and-secrets`](../prompt-packs/execution-isolation-and-secrets/) | HARD-008, HARD-003, HARD-006 | Blocked until the foundations gate is accepted. |
 | [`public-beta-trust-and-release`](../prompt-packs/public-beta-trust-and-release/) | HARD-007, HARD-009, HARD-010, REL-003, REL-004 | Blocked until the first two packs are accepted. |
 | [`mcp-server-next`](../prompt-packs/mcp-server-next/) | MCP-003 | Blocked on HARD-004, HARD-005, and HARD-007. |
-| [`orchestrator-two-way-messaging`](../prompt-packs/orchestrator-two-way-messaging/) | BKL-001, BKL-002, MSG-001 through MSG-007 | Planning complete; phase 0 is blocked on accepted HARD-002 and HARD-004 authority work. |
+| [`orchestrator-two-way-messaging`](../prompt-packs/orchestrator-two-way-messaging/) | BKL-001, BKL-002, MSG-001 through MSG-007 | BKL-001 accepted with sealed evidence; remaining phase 0 work is blocked on accepted HARD-002 and HARD-004 authority work. |
 | [`delegation-communication-reliability`](../prompt-packs/delegation-communication-reliability/) | PROC-001 through PROC-005 | Planning complete; phase 0 tasks are ready for isolated implementation. |
 | [`chatgpt-sealed-run-assessment`](../prompt-packs/chatgpt-sealed-run-assessment/) | CHATGPT-EVAL-001, CHATGPT-TDD-001 | Assessment and future-TDD artifacts completed; future journeys remain strict expected failures and do not unblock planned runtime work. |
 
@@ -33,7 +33,6 @@ The determinism and security work below is derived from the [feature determinism
 
 | ID | Priority | Risk | State | Work and exit evidence | Reference |
 |---|---|---:|---|---|---|
-| BKL-001 | P0 | High | ready | Add durable per-consumer message cursors and idempotent handling dispositions. Prove restart recovery, duplicate safety, and cursor advancement only after successful handling. | [Operations](OPERATIONS.md#durable-messages) |
 | BKL-002 | P0 | High | ready | Add executor-specific post-launch steering for detached runs. A running executor must consume a steer without restart and emit correlated delivered/applied/rejected evidence; terminal text or process liveness is not proof. | Strict future journey in `tests/future/test_late_steering_journey.py` |
 | PROC-001 | P0 | High | ready | Resolve launch prerequisites from live lifecycle receipts and immutable evidence, not stale status projections; failed preflight must not create a misleading running session. | [`delegation-communication-reliability`](../prompt-packs/delegation-communication-reliability/phase-0/tickets/PROC-001-authoritative-preflight.md) |
 | PROC-002 | P0 | Critical | ready | Add a durable progress/ack control-plane handshake with correlated delivery, application, rejection, and unavailable outcomes; read-only parent projections must not be communication targets. | [`delegation-communication-reliability`](../prompt-packs/delegation-communication-reliability/phase-0/tickets/PROC-002-control-handshake.md) |
@@ -58,6 +57,7 @@ These items remain tracked separately from the hardening ownership above; they a
 
 | ID | Priority | Risk | State | Integrated implementation and remaining exit evidence | Reference |
 |---|---|---:|---|---|---|
+| BKL-001 | P0 | High | completed | Integrated in `63e953b`; sealed verification run `bkl-001-completion-verification-20260728-r7` passed focused tests, evidence fidelity, writable scope, report/collection/ledger checks, and lifecycle acceptance. | [Evidence recovery and final acceptance](BKL-001_EVIDENCE_RECOVERY_20260728.md) |
 | HARD-001 | P0 | Critical | completed | Integrated in `91f5ff3`; sealed implementation run passed its focused process/acceptance criteria and was independently accepted in lifecycle receipt `deterministic-foundations-hard-001-rerun-20260726`. The aggregate foundation gate remains separate and rejected. | [Sealed evidence](EVIDENCE_SEALED_FOUNDATION_RUNS_20260726.md) |
 | HARD-002 | P0 | Critical | completed | Integrated in `5d689b6`; sealed path/schema criteria passed, with filesystem-socket coverage unavailable on this host, and was independently accepted in lifecycle receipt `deterministic-foundations-hard-002-rerun-20260726`. The aggregate foundation gate remains separate and rejected. | [Sealed evidence](EVIDENCE_SEALED_FOUNDATION_RUNS_20260726.md) |
 | HARD-004 | P0 | Critical | in-review | Integrated in the current authority implementation; installed delegation, workflow, process-secret, evaluation, and full release journeys pass. The shared foundation gate and independent sealed disposition remain open. | [Implementation evidence](HARD-004-IMPLEMENTATION-20260727.md) |
@@ -124,3 +124,4 @@ These existing items already own the assessment's P2 recommendations. The harden
 | 0.2.2 | Acceptance-first installed-product tests, compact invariant matrices, strict future TDD journeys, CI, and public-documentation consolidation. |
 | 0.2.2 maintenance | Jenkins local pipeline now provisions an isolated Python environment, installs build/test dependencies, avoids stale workspace virtualenvs, builds and locally installs the wheel, and passed build #16 with `35 passed, 2 skipped, 1 xfailed`. |
 | 0.2.4 maintenance | Completed evaluation/benchmark templating and REL-005 release evidence: policy/lock validation, structured tests, CycloneDX SBOM, provenance, and blocker enforcement without closing REL-001/002/003 or HARD-010. |
+| 0.2.5 maintenance | Accepted BKL-001 durable consumer cursors and idempotent handling dispositions with restart, reconstruction, crash-window, isolation, redaction, scope, and sealed-evaluation evidence; see [final acceptance evidence](BKL-001_EVIDENCE_RECOVERY_20260728.md). |

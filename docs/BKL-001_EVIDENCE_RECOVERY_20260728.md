@@ -76,3 +76,15 @@ evidence. The recovery demonstrates that the controls now create durable
 artifacts, but it also exposes two follow-up fixes: bound provider inspection
 work to the evaluation budget, and declare test/cache output as disposable or
 prevent it from modifying the worktree.
+
+## Final acceptance
+
+The later bounded verification run `bkl-001-completion-verification-20260728-r7`
+closed those evidence gaps and was accepted. Its sealed receipt SHA256 is
+`347e37c7d292cfaf2f3a27409db7c59584554d9de80679ce7a799efe6a9311d8`.
+
+The run recorded a valid completed handoff, two passing acceptance commands
+(8 focused tests and compileall), zero evidence-fidelity contradictions, zero
+writable-scope violations, a verified report/trial collection/ledger, and an
+accepted lifecycle receipt. The runtime scope collector fix is in commit
+`28c2af7`; the BKL implementation remains in `63e953b`.
