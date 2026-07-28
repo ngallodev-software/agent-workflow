@@ -21,8 +21,9 @@ from .config import Settings
 from .config import enforce_trust
 from .compatibility import probe_executor
 from .command_catalog import role_for_agent_class, write_launch_command_artifacts
-from .contracts import read_contract, schema_descriptor
+from .contracts import read_contract, read_launch_contract, schema_descriptor
 from .errors import InteractiveCapacityError, WorkflowError
+from .events import reconstruct_lifecycle
 from .eval.commands import collect_commands, specs_from_data
 from .eval.scope import ScopePolicy, collect_scope
 from .evaluation import validate_evaluation
@@ -851,7 +852,9 @@ def launch(
     redacted_command = redact_argv(command, secret_values=secret_values)
     executor_policy = settings.executor_policies.get(executor_plan.name)
     environment_allowlist = list(executor_policy.environment_allowlist) if executor_policy else []
-    runtime_policy: dict[str, Any] = {}
+    runtime_policy: dict[str, Any] = {
+        "no_go_authorized": executor_plan.no_go_authorized,
+    }
     evaluation_policy: dict[str, Any] = {}
 
     prompt_copy = state_dir / "prompt.md"
@@ -883,6 +886,7 @@ def launch(
             "agent_class": agent_class,
             "environment_allowlist": environment_allowlist,
         },
+        mode=0o444,
     )
     (state_dir / "completion.md").write_bytes(
         asset_path("prompt-pack-root/templates/TICKET_COMPLETION.md").read_bytes()
@@ -1647,36 +1651,61 @@ def restart(
     session_id: str,
     new_session: str | None = None,
 ) -> dict[str, Any]:
-    old = read_status(settings, session_id)
-    restart_agent_name = (
-        old.get("agent_name")
-        if str(old.get("status")) in TERMINAL_STATUSES
-        else None
-    )
-    command_data = json.loads(
-        Path(str(old["command_path"])).read_text(encoding="utf-8")
-    )
+    state_dir = run_dir(settings, session_id)
+    contract = read_launch_contract(state_dir / "launch-contract.json")
+    lifecycle = reconstruct_lifecycle(state_dir / "events.jsonl")
+    execution_status = lifecycle.get("state", {}).get("execution")
+    command_data = read_contract(state_dir / "command.json", "agent-workflow/command/v1")
+    command_plan = contract["command_plan"]
+    command = command_data.get("argv")
+    if command != command_plan.get("argv"):
+        raise WorkflowError("cannot restart: saved command differs from launch contract")
+    for field in (
+        "executor",
+        "model",
+        "stream_format",
+        "interactive",
+        "executor_interactive",
+        "environment_allowlist",
+    ):
+        if command_data.get(field) != command_plan.get(field):
+            raise WorkflowError(f"cannot restart: command {field} differs from launch contract")
+    if not isinstance(command, list) or not command or not all(
+        isinstance(item, str) for item in command
+    ):
+        raise WorkflowError(f"invalid saved command for session {session_id}")
+    encoded = json.dumps(command, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    if hashlib.sha256(encoded).hexdigest() != command_plan.get("command_sha256"):
+        raise WorkflowError(
+            "cannot restart: the immutable contract cannot reconstruct the original command"
+        )
     if (
-        not bool(command_data.get("interactive", old.get("interactive", False)))
-        and str(old.get("status")) not in TERMINAL_STATUSES
+        not bool(command_plan.get("interactive", False))
+        and execution_status not in TERMINAL_STATUSES
     ):
         raise WorkflowError(
             "non-interactive tasks cannot be restarted while active; launch a new "
             "task or have the calling agent delegate the work again"
         )
-    command = command_data.get("argv")
-    if (
-        not isinstance(command, list)
-        or not command
-        or not all(isinstance(item, str) for item in command)
-    ):
-        raise WorkflowError(f"invalid saved command for session {session_id}")
     new_id = new_session or next_retry_id(settings, session_id)
-    interactive = bool(command_data.get("interactive", False))
-    no_go_authorized = bool(command_data.get("no_go_authorized", False))
+    session = contract["session"]
+    pack = contract["pack"]
+    worktree = contract["worktree"]
+    prompt = contract["prompt"]
+    # Agent-name reuse is a mutable lease/projection concern. Allocate a fresh
+    # identity for the retry so a tampered status cannot reserve or redirect it.
+    restart_agent_name = None
+    prompt_source = Path(str(prompt["source"]))
+    prompt_read = read_regular_file(prompt_source)
+    if prompt_read.sha256 != prompt["sha256"]:
+        raise WorkflowError("cannot restart: launch prompt source changed")
+    interactive = bool(command_plan.get("interactive", False))
+    no_go_authorized = bool(contract["runtime_policy"].get("no_go_authorized", False))
+    if bool(command_data.get("no_go_authorized", False)) != no_go_authorized:
+        raise WorkflowError("cannot restart: model authorization differs from launch contract")
     job_path = None
-    if old.get("job_binding_path"):
-        binding_path = Path(str(old["job_binding_path"]))
+    binding_path = state_dir / "job-binding.json"
+    if binding_path.is_file():
         binding = read_contract(binding_path, "agent-workflow/job-binding/v1")
         source = Path(str(binding["job_source_path"]))
         expected = str(binding["job_source_sha256"])
@@ -1688,32 +1717,32 @@ def restart(
     return launch(
         settings,
         session_id=new_id,
-        workdir=Path(str(old["workdir"])),
-        prompt_path=Path(str(old["prompt_path"])),
+        workdir=Path(str(worktree["path"])),
+        prompt_path=prompt_source,
         explicit_command=command,
         agent_name=restart_agent_name,
-        agent_class=old.get("agent_class"),
+        agent_class=session.get("agent_class"),
         model=command_data.get("model"),
         allow_no_go_model=no_go_authorized,
-        ticket_id=old.get("ticket_id"),
-        pack_id=old.get("pack_id"),
+        ticket_id=contract.get("ticket"),
+        pack_id=pack.get("id"),
         retry_of=session_id,
         allow_dirty=True,
         saved_stream_format=str(command_data.get("stream_format", "text")),
         saved_executor=command_data.get("executor"),
         interactive=interactive,
-        prompt_source_override=Path(str(old.get("prompt_source", old["prompt_path"]))),
+        prompt_source_override=prompt_source,
         prompt_pack_root_override=(
-            Path(str(old["prompt_pack_root"]))
-            if old.get("prompt_pack_root")
+            Path(str(pack["root"]))
+            if pack.get("root")
             else None
         ),
         evaluation_path=(
-            Path(str(old["evaluation_path"]))
-            if old.get("evaluation_path")
+            Path(str(contract["evaluation_policy"]["path"]))
+            if contract["evaluation_policy"].get("path")
             else None
         ),
-        tier=old.get("tier"),
+        tier=session.get("tier"),
         job_path=job_path,
         allow_active_agent_name=False,
     )

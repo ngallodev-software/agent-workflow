@@ -14,8 +14,8 @@
     "executor_interactive": {"type": "boolean"},
     "model": {"type": ["string", "null"]},
     "no_go_authorized": {"type": "boolean"},
-    "agent_name": {"type": "string"},
-    "agent_class": {"type": "string"},
+    "agent_name": {"type": ["string", "null"]},
+    "agent_class": {"type": ["string", "null"]},
     "environment_allowlist": {
       "type": "array",
       "items": {"type": "string"}

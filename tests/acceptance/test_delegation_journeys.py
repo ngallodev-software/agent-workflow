@@ -262,6 +262,60 @@ def test_executor_failure_is_terminal_sealed_and_restartable(
     assert retry["status"] == "failed"
 
 
+def test_restart_ignores_tampered_status_projection(
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+    fake_agent_path: Path,
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    git_repo(repo)
+    prompt = tmp_path / "prompt.md"
+    prompt.write_text("Retry from immutable launch authority.\n", encoding="utf-8")
+    env = dict(product_env)
+    env["FAKE_AGENT_MODE"] = "fail"
+
+    installed_product.json(
+        "launch", "tamper-run", repo, prompt, "--tier", "low", "--no-interactive", "--", fake_agent_path,
+        env=env,
+    )
+    wait_for_status(env, "tamper-run")
+    run = _run_dir(env, "tamper-run")
+    status_path = run / "status.json"
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    status.update(
+        {
+            "status": "running",
+            "command_path": str(tmp_path / "attacker-command.json"),
+            "workdir": str(tmp_path / "attacker-worktree"),
+            "prompt_path": str(tmp_path / "attacker-prompt.md"),
+            "prompt_source": str(tmp_path / "attacker-prompt.md"),
+            "prompt_pack_root": str(tmp_path / "attacker-pack"),
+            "ticket_id": "ATTACKER-TICKET",
+            "pack_id": "attacker-pack",
+            "tier": "attacker-tier",
+            "evaluation_path": str(tmp_path / "attacker-evaluation.json"),
+        }
+    )
+    status_path.write_text(json.dumps(status), encoding="utf-8")
+
+    env["FAKE_AGENT_MODE"] = "success"
+    restarted = installed_product.json(
+        "restart", "tamper-run", "--new-session", "tamper-run-retry", env=env
+    )
+    assert restarted["retry_of"] == "tamper-run"
+    retry = wait_for_status(env, "tamper-run-retry")
+    assert retry["status"] == "completed"
+    retry_contract = json.loads(
+        (_run_dir(env, "tamper-run-retry") / "launch-contract.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert retry_contract["worktree"]["path"] == str(repo)
+    assert retry_contract["prompt"]["source"] == str(prompt)
+    assert retry_contract["session"]["tier"] == "low"
+
+
 def test_structured_provider_events_reach_normalized_sealed_evidence(
     installed_product: InstalledProduct,
     product_env: dict[str, str],
