@@ -9,7 +9,12 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
-from .contracts import read_contract, validate_instance
+from .contracts import (
+    read_contract,
+    read_launch_contract,
+    validate_instance,
+    validate_launch_contract_value,
+)
 from .errors import WorkflowError
 from .util import atomic_write_json, fsync_directory, sha256_file, utc_now
 
@@ -40,6 +45,8 @@ SEALED_OPTIONAL_ARTIFACTS = (
     "workflow-inputs.json",
     "provider-evidence.json",
     "assignments.jsonl",
+    "command-catalog.json",
+    "command-card.md",
 )
 SEALED_OPTIONAL_TREES = ("assignments",)
 
@@ -399,8 +406,16 @@ def _seal_run_unlocked(run_dir: Path, *, session_id: str) -> dict[str, Any]:
     missing = sorted(required - present)
     if missing:
         raise WorkflowError(f"cannot seal run; missing artifacts: {missing}")
+    launch_value = read_launch_contract(launch_contract) if launch_contract.is_file() else None
+    if (
+        launch_value is not None
+        and launch_value.get("schema") == "agent-workflow/launch-contract/v2"
+    ):
+        required.update({"command-catalog.json", "command-card.md"})
+        missing = sorted(required - present)
+        if missing:
+            raise WorkflowError(f"cannot seal run; missing artifacts: {missing}")
     for name, schema in {
-        "launch-contract.json": "agent-workflow/launch-contract/v1",
         "command.json": "agent-workflow/command/v1",
         "source-baseline.json": "agent-workflow/source-baseline/v1",
         "completion.json": "agent-workflow/completion/v1",
@@ -408,8 +423,6 @@ def _seal_run_unlocked(run_dir: Path, *, session_id: str) -> dict[str, Any]:
         "final-status.json": "agent-workflow/session-status/v2",
         "collections/completion.json": "agent-workflow/completion-collection/v1",
     }.items():
-        if name == "launch-contract.json" and not (run_dir / name).is_file():
-            continue
         read_contract(run_dir / name, schema)
     binding = run_dir / "job-binding.json"
     if binding.is_file():
@@ -478,6 +491,36 @@ def _verify_seal_unlocked(
     missing = sorted(required - listed)
     if missing:
         raise WorkflowError(f"final receipt omits required artifacts: {missing}")
+    if "launch-contract.json" in listed:
+        launch_value, _ = read_sealed_json(run_dir, receipt, "launch-contract.json")
+        if not isinstance(launch_value, dict):
+            raise WorkflowError("sealed launch contract must be a JSON object")
+        launch_schema = validate_launch_contract_value(
+            launch_value, artifact=str(run_dir / "launch-contract.json")
+        )
+        if launch_schema == "agent-workflow/launch-contract/v2":
+            command_required = {"command-catalog.json", "command-card.md"}
+            command_missing = sorted(command_required - listed)
+            if command_missing:
+                raise WorkflowError(
+                    f"final receipt omits launch command artifacts: {command_missing}"
+                )
+            command_binding = launch_value["command_catalog"]
+            catalog_value, catalog_digest = read_sealed_json(
+                run_dir, receipt, command_binding["catalog_path"]
+            )
+            _, card_digest = read_sealed_artifact_bytes(
+                run_dir, receipt, command_binding["card_path"]
+            )
+            if catalog_digest != command_binding["catalog_sha256"]:
+                raise WorkflowError("sealed command catalog disagrees with launch binding")
+            if card_digest != command_binding["card_sha256"]:
+                raise WorkflowError("sealed command card disagrees with launch binding")
+            validate_instance(
+                catalog_value,
+                command_binding["catalog_schema"],
+                artifact=str(run_dir / command_binding["catalog_path"]),
+            )
     for item in receipt["artifacts"]:
         if not isinstance(item, dict) or not isinstance(item.get("path"), str):
             raise WorkflowError(f"invalid artifact entry in {path}")

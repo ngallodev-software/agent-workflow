@@ -219,6 +219,17 @@ prompt = sys.stdin.read()
 handoff = Path(os.environ["AGENT_WORKFLOW_HANDOFF_DIR"])
 handoff.mkdir(parents=True, exist_ok=True)
 (handoff / "prompt-seen.txt").write_text(prompt, encoding="utf-8")
+(handoff / "command-contract-env.json").write_text(
+    json.dumps(
+        {
+            "catalog": os.environ.get("AGENT_WORKFLOW_COMMAND_CATALOG"),
+            "card": os.environ.get("AGENT_WORKFLOW_COMMAND_CARD"),
+            "cli": os.environ.get("AGENT_WORKFLOW_CLI"),
+        },
+        sort_keys=True,
+    ),
+    encoding="utf-8",
+)
 if mode == "slow":
     time.sleep(float(os.environ.get("FAKE_AGENT_DELAY", "1.0")))
 if mode == "hang":

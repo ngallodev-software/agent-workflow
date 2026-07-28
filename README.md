@@ -161,7 +161,7 @@ Worktree `.delegations/` entries are discoverability links, not evidence authori
 ./scripts/release-check.sh
 ```
 
-The default suite is acceptance-first: it builds and installs a wheel, invokes public executables as subprocesses, and exercises real Git/filesystem/process journeys. The release check also writes JUnit results, a CycloneDX SBOM, source/build provenance, and a machine-readable blocker report. A compact invariant layer protects security, replay, accounting, and release-evidence boundaries. Strict expected-failure future journeys keep approved TDD work visible, and live tmux/provider checks remain opt-in. See [Testing](docs/TESTING.md) and [Release evidence](docs/RELEASE_EVIDENCE.md).
+The default suite is acceptance-first: it builds and installs a wheel, invokes public executables as subprocesses, and exercises real Git/filesystem/process journeys. `agent-workflow commands --json` exposes the parser-derived command contract; every launch seals that catalog plus a role-scoped command card so agents can invoke known signatures without routine help probing. The release check also writes JUnit results, a CycloneDX SBOM, source/build provenance, and a machine-readable blocker report. A compact invariant layer protects security, replay, accounting, and release-evidence boundaries. Strict expected-failure future journeys keep approved TDD work visible, and live tmux/provider checks remain opt-in. See [Testing](docs/TESTING.md) and [Release evidence](docs/RELEASE_EVIDENCE.md).
 
 ## Documentation
 

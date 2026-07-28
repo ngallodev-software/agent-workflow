@@ -1,0 +1,163 @@
+{
+  "$defs": {
+    "argument": {
+      "additionalProperties": false,
+      "properties": {
+        "choices": {
+          "type": "array"
+        },
+        "default": {},
+        "dest": {
+          "type": "string"
+        },
+        "flags": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "help": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "metavar": {},
+        "nargs": {
+          "type": [
+            "string",
+            "integer",
+            "null"
+          ]
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "dest",
+        "required",
+        "nargs",
+        "type",
+        "default",
+        "help"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "agent-workflow/command-catalog/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "application": {
+      "additionalProperties": false,
+      "properties": {
+        "cli_invocation": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "name": {
+          "const": "agent-workflow"
+        },
+        "version": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version",
+        "cli_invocation"
+      ],
+      "type": "object"
+    },
+    "commands": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "command": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/$defs/argument"
+            },
+            "type": "array"
+          },
+          "path": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "positionals": {
+            "items": {
+              "$ref": "#/$defs/argument"
+            },
+            "type": "array"
+          },
+          "summary": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "synopsis": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "command",
+          "summary",
+          "synopsis",
+          "positionals",
+          "options"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "global_options": {
+      "items": {
+        "$ref": "#/$defs/argument"
+      },
+      "type": "array"
+    },
+    "role": {
+      "enum": [
+        "orchestrator",
+        "implementation",
+        "review"
+      ]
+    },
+    "schema": {
+      "const": "agent-workflow/command-catalog/v1"
+    },
+    "version": {
+      "const": 1
+    }
+  },
+  "required": [
+    "schema",
+    "version",
+    "application",
+    "global_options",
+    "commands"
+  ],
+  "type": "object"
+}

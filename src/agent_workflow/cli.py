@@ -7,6 +7,12 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from .command_catalog import (
+    COMMAND_ROLES,
+    filter_catalog,
+    render_command_markdown,
+    runtime_command_catalog,
+)
 from .config import as_dict, load_settings
 from .agent_context import auto_reuse as auto_reuse_agent
 from .agent_context import candidates as reuse_candidates
@@ -102,6 +108,11 @@ def build_parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
 
     commands.add_parser("doctor", help="check environment and configuration")
+    catalog = commands.add_parser(
+        "commands", help="print the parser-derived command contract"
+    )
+    catalog.add_argument("--format", choices=("json", "markdown"), default=None)
+    catalog.add_argument("--role", choices=("all", *COMMAND_ROLES), default="all")
     workflow = commands.add_parser("workflow", help="workflow scheduler commands")
     workflow_commands = workflow.add_subparsers(dest="workflow_command", required=True)
     wf_validate = workflow_commands.add_parser("validate", help="validate a workflow snapshot")
@@ -499,6 +510,14 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = _parse_args(parser, argv)
     try:
+        if args.command == "commands":
+            catalog = runtime_command_catalog()
+            output_format = args.format or ("json" if args.json else "markdown")
+            if output_format == "json":
+                _print_json(filter_catalog(catalog, args.role))
+            else:
+                print(render_command_markdown(catalog, role=args.role), end="")
+            return 0
         settings = load_settings(args.config)
         data: Any
 

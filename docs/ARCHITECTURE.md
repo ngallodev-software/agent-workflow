@@ -53,6 +53,9 @@ The default XDG state root is:
         ├── source-baseline.json
         ├── prompt.md
         ├── launch-prompt.md
+        ├── command-catalog.json            # parser-derived full CLI contract
+        ├── command-card.md                  # role-scoped signatures
+        ├── launch-contract.json             # immutable v1/v2 launch authority
         ├── command.json
         ├── run-provenance.json
         ├── executor-events.jsonl          # bounded raw stream evidence

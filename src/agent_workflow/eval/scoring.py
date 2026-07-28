@@ -7,7 +7,7 @@ import stat
 from pathlib import Path
 from typing import Any, Mapping
 
-from ..contracts import validate_instance
+from ..contracts import validate_instance, validate_launch_contract_value
 from ..errors import WorkflowError
 from ..receipts import read_sealed_contract, read_sealed_json, verify_seal_details
 from ..util import atomic_write_json
@@ -411,11 +411,15 @@ def evaluation_policy_for_run(
         if isinstance(item, dict)
     }
     if "launch-contract.json" in sealed:
-        contract, _ = read_sealed_contract(
+        contract, _ = read_sealed_json(
             run_dir,
             dict(final_receipt),
             "launch-contract.json",
-            "agent-workflow/launch-contract/v1",
+        )
+        if not isinstance(contract, dict):
+            raise WorkflowError("sealed launch contract must be a JSON object")
+        validate_launch_contract_value(
+            contract, artifact=str(run_dir / "launch-contract.json")
         )
         value = contract.get("evaluation_policy", {})
         return value if isinstance(value, dict) else {}

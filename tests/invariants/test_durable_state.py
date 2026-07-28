@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
 import pytest
 
+from agent_workflow.cli import build_parser
+from agent_workflow.command_catalog import build_command_catalog, filter_catalog
 from agent_workflow.config import defaults
 from agent_workflow.errors import WorkflowError
 from agent_workflow.messages import append_message, replay_messages
@@ -62,3 +65,37 @@ def test_routing_is_deterministic_advisory_and_cannot_override_enforced_policy()
 def test_invalid_scheduler_parallelism_is_rejected() -> None:
     with pytest.raises(WorkflowError):
         plan_launches({"nodes": []}, {"nodes": []}, max_parallelism=0)
+
+
+def test_parser_command_catalog_is_complete_deterministic_and_role_scoped() -> None:
+    parser = build_parser()
+
+    def leaves(current: argparse.ArgumentParser, prefix: tuple[str, ...] = ()) -> set[str]:
+        subparsers = [
+            action
+            for action in current._actions
+            if isinstance(action, argparse._SubParsersAction)
+        ]
+        if not subparsers:
+            return {" ".join(prefix)}
+        result: set[str] = set()
+        for action in subparsers:
+            seen: set[int] = set()
+            for name, child in action.choices.items():
+                if id(child) in seen:
+                    continue
+                seen.add(id(child))
+                result.update(leaves(child, (*prefix, name)))
+        return result
+
+    first = build_command_catalog(parser)
+    second = build_command_catalog(build_parser())
+    assert first == second
+    represented = {item["command"] for item in first["commands"]}
+    assert represented == leaves(parser)
+    assert all("[-h]" not in item["synopsis"] for item in first["commands"])
+    implementation = {
+        item["command"] for item in filter_catalog(first, "implementation")["commands"]
+    }
+    assert {"progress", "ack", "agent task-complete"} <= implementation
+    assert "worktree remove" not in implementation

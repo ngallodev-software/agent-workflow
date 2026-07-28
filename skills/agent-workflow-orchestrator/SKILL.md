@@ -7,6 +7,10 @@ description: Choose, launch, observe, control, recover, review, and accept durab
 
 Use this skill when deciding whether work needs a durable delegation or when operating an existing `agent-workflow` run. Use the repository CLI for lifecycle actions; do not substitute raw tmux commands or a host-native subagent call.
 
+## Command contract
+
+Use `agent-workflow commands --role orchestrator --format markdown` or the full JSON catalog instead of running `--help` before routine commands. A launched child receives the exact catalog and a role-scoped card through `AGENT_WORKFLOW_COMMAND_CATALOG` and `AGENT_WORKFLOW_COMMAND_CARD`; use `AGENT_WORKFLOW_CLI` as its canonical executable. Only fall back to `--help` after a catalog/version mismatch, a command absence, or an argument error.
+
 ## Decision table
 
 | Situation | Action |

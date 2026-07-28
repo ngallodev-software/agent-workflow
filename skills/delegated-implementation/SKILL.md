@@ -7,6 +7,10 @@ description: Execute bounded implementation tickets already launched through age
 
 Use this skill inside a bounded ticket session that was launched through the `agent-workflow` CLI. For orchestration and lifecycle commands, use [`agent-workflow-orchestrator`](../agent-workflow-orchestrator/SKILL.md).
 
+## Installed command contract
+
+Read `AGENT_WORKFLOW_COMMAND_CARD` for the role-scoped signatures and `AGENT_WORKFLOW_COMMAND_CATALOG` for the complete machine-readable contract. Invoke them through `AGENT_WORKFLOW_CLI` without routine help probing. Use `--help` only when the catalog/version does not match, the command is missing, or an invocation returns an argument error.
+
 ## Required behavior
 
 1. Read the ticket, phase README, master prompt, execution protocol, and named references.

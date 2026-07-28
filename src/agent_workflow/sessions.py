@@ -18,6 +18,7 @@ from .agent_context import acknowledge_reuse, idle_interactive_sessions
 from .agent_context import initialize as initialize_agent_context
 from .assets import asset_path
 from .config import Settings
+from .command_catalog import role_for_agent_class, write_launch_command_artifacts
 from .contracts import read_contract, schema_descriptor
 from .errors import InteractiveCapacityError, WorkflowError
 from .eval.commands import collect_commands, specs_from_data
@@ -115,6 +116,7 @@ def _write_runner(
     prompt_source: Path | None = None,
     prompt_pack_root: Path | None = None,
     handoff_dir: Path | None = None,
+    command_artifacts: dict[str, Any] | None = None,
     stream_format: str = "text",
     interactive: bool = False,
     close_tmux_on_exit: bool = False,
@@ -168,6 +170,9 @@ def _write_runner(
         f"readonly AGENT_WORKFLOW_PROMPT_SOURCE={shlex.quote(str(prompt_source))}\n"
         f"readonly AGENT_WORKFLOW_HANDOFF_DIR={shlex.quote(str(handoff_dir or ''))}\n"
         f"readonly AGENT_WORKFLOW_PROMPT_PACK_ROOT={shlex.quote(str(prompt_pack_root or ''))}\n"
+        f"readonly AGENT_WORKFLOW_COMMAND_CATALOG={shlex.quote(str(state_dir / str((command_artifacts or {}).get('catalog_path', 'command-catalog.json'))))}\n"
+        f"readonly AGENT_WORKFLOW_COMMAND_CARD={shlex.quote(str(state_dir / str((command_artifacts or {}).get('card_path', 'command-card.md'))))}\n"
+        f"readonly AGENT_WORKFLOW_CLI={shlex.quote(str(((command_artifacts or {}).get('cli_invocation') or ['agent-workflow'])[0]))}\n"
     )
     if close_tmux_on_exit:
         runner_text += (
@@ -175,7 +180,8 @@ def _write_runner(
         )
     runner_text += (
         "export AGENT_WORKFLOW_SESSION_ID AGENT_WORKFLOW_PROMPT_SOURCE "
-        "AGENT_WORKFLOW_HANDOFF_DIR AGENT_WORKFLOW_PROMPT_PACK_ROOT"
+        "AGENT_WORKFLOW_HANDOFF_DIR AGENT_WORKFLOW_PROMPT_PACK_ROOT "
+        "AGENT_WORKFLOW_COMMAND_CATALOG AGENT_WORKFLOW_COMMAND_CARD AGENT_WORKFLOW_CLI"
         + (" AGENT_WORKFLOW_TMUX_SESSION\n" if close_tmux_on_exit else "\n")
         + f"export PYTHONPATH={shlex.quote(str(source_root))}${{PYTHONPATH:+:$PYTHONPATH}}\n"
         + runner_command
@@ -322,6 +328,7 @@ def _write_launch_prompt(
     result_contract: dict[str, Any] | None = None,
     interactive: bool = False,
     detached_interactive: bool = False,
+    command_artifacts: dict[str, Any],
 ) -> Path:
     context = [
         "# Agent-workflow launch context",
@@ -329,6 +336,11 @@ def _write_launch_prompt(
         "Use these durable paths only when the ticket references pack files or its completion report.",
         f"- session_id: `{session_id}`",
         f"- prompt_source: `{prompt_source}`",
+        f"- command_catalog_role: `{command_artifacts['role']}`",
+        "- The exact installed CLI contract is available at `AGENT_WORKFLOW_COMMAND_CATALOG`.",
+        "- A role-scoped command card is available at `AGENT_WORKFLOW_COMMAND_CARD`.",
+        "- Invoke commands through `AGENT_WORKFLOW_CLI` using the catalog signatures directly.",
+        "- Do not run `--help` for commands represented in the catalog. Use help only after a catalog/version mismatch, an argument error, or when a required command is absent.",
     ]
     if prompt_pack_root is not None:
         context.append(f"- prompt_pack_root: `{prompt_pack_root}`")
@@ -344,7 +356,7 @@ def _write_launch_prompt(
         context.extend(
             [
                 "- This interactive agent remains open after its assignment.",
-                '- Before becoming reusable, emit structured completion with `agent-workflow agent task-complete "$AGENT_WORKFLOW_SESSION_ID" --actor <agent-name> --summary <summary>`.',
+                '- Before becoming reusable, emit structured completion with `"$AGENT_WORKFLOW_CLI" agent task-complete "$AGENT_WORKFLOW_SESSION_ID" --actor <agent-name> --summary <summary>`.',
                 "- For a reused assignment, acknowledge its correlated steer message before starting work.",
             ]
         )
@@ -364,10 +376,10 @@ def _write_launch_prompt(
             "- Write it atomically; optional `completion.md` and `evidence.json` sidecars may use the same handoff directory.",
             "- Canonical runtime completion paths are collector-owned; do not write to them.",
             "- Matching environment variables use the `AGENT_WORKFLOW_` prefix.",
-            "- At meaningful checkpoints you may emit a concise durable progress update with `python3 -m agent_workflow progress "
+            "- At meaningful checkpoints you may emit a concise durable progress update with `\"$AGENT_WORKFLOW_CLI\" progress "
             + shlex.quote(session_id)
             + " 'message' --actor child`. Do not expose secrets in updates.",
-            "- A parent steer request is only applied after you explicitly acknowledge its message ID with `python3 -m agent_workflow ack`.",
+            "- A parent steer request is only applied after you explicitly acknowledge its message ID with `\"$AGENT_WORKFLOW_CLI\" ack`.",
             "",
             "---",
             "",
@@ -415,6 +427,7 @@ def _write_launch_contract(
     evaluation_policy: dict[str, Any],
     source_baseline_sha256: str,
     pack_manifest_sha256: str | None,
+    command_artifacts: dict[str, Any],
 ) -> Path:
     """Write the one immutable authority consumed by the runner and collectors."""
     task_result_schema = None
@@ -437,8 +450,8 @@ def _write_launch_contract(
                 schema_id = str(schema_rel)
             task_result_schema = {"id": schema_id, "sha256": schema_read.sha256}
     contract = {
-        "schema": "agent-workflow/launch-contract/v1",
-        "version": 1,
+        "schema": "agent-workflow/launch-contract/v2",
+        "version": 2,
         "session": {
             "id": session_id,
             "agent_name": agent_name,
@@ -489,7 +502,8 @@ def _write_launch_contract(
             "source_baseline": "source-baseline.json",
         },
         "schemas": {
-            "launch": schema_descriptor("agent-workflow/launch-contract/v1"),
+            "launch": schema_descriptor("agent-workflow/launch-contract/v2"),
+            "command_catalog": schema_descriptor("agent-workflow/command-catalog/v1"),
             "completion": schema_descriptor("agent-workflow/completion/v1"),
             "provenance": schema_descriptor("agent-workflow/run-provenance/v1"),
             "status": schema_descriptor("agent-workflow/session-status/v2"),
@@ -500,6 +514,7 @@ def _write_launch_contract(
         "runtime_policy": runtime_policy,
         "evaluation_policy": evaluation_policy,
         "source_baseline": {"path": "source-baseline.json", "sha256": source_baseline_sha256},
+        "command_catalog": command_artifacts,
         "expected_outputs": {
             "output_log": "output.log",
             "executor_events": "executor-events.jsonl",
@@ -854,6 +869,9 @@ def launch(
         else None
     )
     created_at = utc_now()
+    command_artifacts = write_launch_command_artifacts(
+        state_dir, role=role_for_agent_class(agent_class)
+    )
     launch_prompt = _write_launch_prompt(
         state_dir,
         session_id=session_id,
@@ -868,6 +886,7 @@ def launch(
         result_contract=result_contract,
         interactive=interactive,
         detached_interactive=not interactive and executor_interactive,
+        command_artifacts=command_artifacts,
     )
 
     git_info: dict[str, Any]
@@ -1149,6 +1168,7 @@ def launch(
             if pack_manifest is not None and pack_manifest.is_file()
             else None
         ),
+        command_artifacts=command_artifacts,
     )
 
     now = created_at
@@ -1225,6 +1245,7 @@ def launch(
         prompt_source=prompt_source,
         prompt_pack_root=prompt_pack_root,
         handoff_dir=handoff_dir,
+        command_artifacts=command_artifacts,
         stream_format=executor_plan.stream_format,
         interactive=executor_interactive,
         close_tmux_on_exit=(not interactive and executor_interactive and parent_target is None),

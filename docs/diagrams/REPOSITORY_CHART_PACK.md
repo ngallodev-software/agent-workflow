@@ -108,6 +108,8 @@ flowchart TB
 flowchart TB
   Run[run/&lt;session-id&gt;]
   Run --> Prompt[prompt.md / launch-prompt.md]
+  Run --> Catalog[command-catalog.json / command-card.md]
+  Run --> Launch[launch-contract.json]
   Run --> Command[command.json]
   Run --> Baseline[source-baseline.json]
   Run --> Provenance[run-provenance.json]

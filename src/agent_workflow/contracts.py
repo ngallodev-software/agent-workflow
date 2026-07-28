@@ -117,21 +117,39 @@ def read_contract(path: Path, expected_schema: str | None = None) -> dict[str, A
     return value
 
 
+LAUNCH_CONTRACT_SCHEMAS = {
+    "agent-workflow/launch-contract/v1",
+    "agent-workflow/launch-contract/v2",
+}
+
+
+def validate_launch_contract_value(value: dict[str, Any], *, artifact: str) -> str:
+    schema_id = value.get("schema")
+    if schema_id not in LAUNCH_CONTRACT_SCHEMAS:
+        raise WorkflowError(f"unexpected launch contract schema in {artifact}: {schema_id}")
+    assert isinstance(schema_id, str)
+    validate_instance(value, schema_id, artifact=artifact)
+    return schema_id
+
+
 def read_launch_contract(path: Path) -> dict[str, Any]:
-    """Read the launch authority through the bounded contract reader."""
-    value = read_contract(path, "agent-workflow/launch-contract/v1")
+    """Read launch authority while preserving v1 sealed-run compatibility."""
+    value = read_contract(path)
+    launch_schema_id = validate_launch_contract_value(value, artifact=str(path))
     for name, descriptor in value["schemas"].items():
         if descriptor is None:
             continue
         if not isinstance(descriptor, dict):
             raise WorkflowError("launch contract contains an invalid schema descriptor")
-        schema_id = descriptor.get("id")
-        if not isinstance(schema_id, str):
+        descriptor_schema_id = descriptor.get("id")
+        if not isinstance(descriptor_schema_id, str):
             raise WorkflowError("launch contract schema descriptor has no ID")
         if name != "task_result":
-            expected = schema_descriptor(schema_id)
+            expected = schema_descriptor(descriptor_schema_id)
             if descriptor.get("sha256") != expected["sha256"]:
-                raise WorkflowError(f"launch contract schema digest changed: {schema_id}")
+                raise WorkflowError(
+                    f"launch contract schema digest changed: {descriptor_schema_id}"
+                )
     worktree = require_directory(Path(value["worktree"]["path"]), label="launch worktree")
     handoff = Path(value["paths"]["handoff_dir"])
     try:
@@ -141,6 +159,30 @@ def read_launch_contract(path: Path) -> dict[str, Any]:
     require_directory(handoff, label="launch handoff")
     if value["paths"]["workdir"] != value["worktree"]["path"]:
         raise WorkflowError("launch contract has conflicting worktree paths")
+    if launch_schema_id == "agent-workflow/launch-contract/v2":
+        command_contract = value.get("command_catalog")
+        if not isinstance(command_contract, dict):
+            raise WorkflowError("launch contract has no command catalog binding")
+        run_dir = path.parent
+        catalog_name = command_contract.get("catalog_path")
+        card_name = command_contract.get("card_path")
+        if catalog_name != "command-catalog.json" or card_name != "command-card.md":
+            raise WorkflowError("launch command artifacts use unexpected paths")
+        catalog_read = read_regular_file(run_dir / catalog_name)
+        card_read = read_regular_file(run_dir / card_name)
+        if catalog_read.sha256 != command_contract.get("catalog_sha256"):
+            raise WorkflowError("launch command catalog changed after contract creation")
+        if card_read.sha256 != command_contract.get("card_sha256"):
+            raise WorkflowError("launch command card changed after contract creation")
+        try:
+            catalog_value = json.loads(catalog_read.data.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise WorkflowError("launch command catalog is not valid JSON") from exc
+        validate_instance(
+            catalog_value,
+            str(command_contract.get("catalog_schema")),
+            artifact=str(run_dir / catalog_name),
+        )
     pack_root = value["pack"].get("root")
     if pack_root is not None:
         require_directory(Path(pack_root), label="launch pack root")

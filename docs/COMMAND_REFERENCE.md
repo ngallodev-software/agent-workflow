@@ -1,6 +1,6 @@
 # Command reference
 
-The live parser is authoritative. Use `agent-workflow COMMAND --help` for exact installed options. Global `--json` and `--config PATH` may appear before or after the subcommand; tokens after launch `--` belong to the delegated command.
+The parser-derived command catalog is authoritative for agent execution. Run `agent-workflow commands --json` for the full machine-readable contract or `agent-workflow commands --role ROLE --format markdown` for a role-scoped command card. Agents should invoke represented commands directly and use `--help` only after a catalog/version mismatch, an argument error, or when a required command is absent. Global `--json` and `--config PATH` may appear before or after the subcommand; tokens after launch `--` belong to the delegated command.
 
 ## Top-level
 
@@ -8,11 +8,12 @@ The live parser is authoritative. Use `agent-workflow COMMAND --help` for exact 
 agent-workflow [--config PATH] [--json] COMMAND ...
 agent-workflow --version
 agent-workflow doctor
+agent-workflow commands [--format json|markdown] [--role all|orchestrator|implementation|review]
 agent-workflow config show
 agent-workflow completion bash|zsh|tcsh
 ```
 
-`doctor` is offline. It probes only local binaries and local `--version`/`--help` surfaces.
+`commands` is offline and generated from the exact installed parser. Every new launch stores the full catalog and a role-scoped command card in the sealed run, binds their digests into launch-contract v2, and exports their paths to the child process. `doctor` is offline. It probes only local binaries and local `--version`/`--help` surfaces.
 
 ## Worktrees and sessions
 
