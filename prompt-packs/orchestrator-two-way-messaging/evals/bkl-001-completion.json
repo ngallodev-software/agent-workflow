@@ -2,7 +2,7 @@
   "schema": "agent-workflow/evaluation-plan/v1",
   "objective": "Complete BKL-001 acceptance evidence for durable cursor restart, reconstruction, integrity, and redaction boundaries.",
   "hypothesis": "The BKL-001 cursor implementation and installed-product journey satisfy the ticket when restart and recovery evidence are explicit and test caches are disposable.",
-  "identity": {"ticket_id": "BKL-001", "pack_id": "orchestrator-two-way-messaging", "source_revision": "63e953b1260db5698c3c59a94f01b4d421542404"},
+  "identity": {"ticket_id": "BKL-001", "pack_id": "orchestrator-two-way-messaging", "source_revision": "28c2af7814a07c94f8c7c420f94bac1547efb716"},
   "execution": {"provider": "codex", "model": "gpt-5.6-luna", "executor": "codex", "executor_version": null},
   "cohort": {"cohort_id": "bkl-001-completion", "role": "candidate", "controls": ["dedicated BKL-001 worktree", "structured verification after interactive implementation", "pytest cache disabled for acceptance", "no backlog mutation by implementer"]},
   "dataset_split": "development",
