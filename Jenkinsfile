@@ -61,14 +61,19 @@ pipeline {
                         echo 'built agent-workflow wheel is missing' >&2
                         exit 2
                     }
+                    install_root="${AGENT_WORKFLOW_HOST_INSTALL_ROOT:-/lump/apps/agent-workflow}"
+                    test -x "$install_root/install.sh" || {
+                        echo "host install root is invalid: $install_root" >&2
+                        exit 2
+                    }
                     if [ "$(id -un)" = "$target_user" ]; then
-                        AGENT_WORKFLOW_INSTALL_PYTHON="$host_python" "$WORKSPACE/install.sh" --wheel "$wheel" --extras mcp
+                        AGENT_WORKFLOW_INSTALL_PYTHON="$host_python" "$install_root/install.sh" --wheel "$wheel" --extras mcp
                     else
                         command -v sudo >/dev/null || {
                             echo 'sudo is required when Jenkins deploys to another host account' >&2
                             exit 2
                         }
-                        sudo -n -u "$target_user" -H env AGENT_WORKFLOW_INSTALL_PYTHON="$host_python" "$WORKSPACE/install.sh" --wheel "$wheel" --extras mcp
+                        sudo -n -u "$target_user" -H env AGENT_WORKFLOW_INSTALL_PYTHON="$host_python" "$install_root/install.sh" --wheel "$wheel" --extras mcp
                     fi
                 '''
             }
