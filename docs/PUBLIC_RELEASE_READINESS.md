@@ -14,7 +14,7 @@ The detailed findings are in [Feature determinism and security assessment](FEATU
 - CI configuration exists for supported Python versions;
 - completed prompt packs, ticket ledgers, and one-off audit reports are removed from the public source surface.
 
-The local Jenkins pipeline is currently operational: build #16 on `master` passed the installed-product suite, release checks, wheel build, and local install. This is development-host CI evidence only; it does not establish public support or clean-host compatibility.
+The local Jenkins pipeline is currently operational: build #23 on `master` at `5de662c` passed the installed-product suite, release checks, wheel build, and global wheel install. This is development-host CI evidence only; it does not establish public support or clean-host compatibility.
 
 ## Technical blockers before a public preview
 

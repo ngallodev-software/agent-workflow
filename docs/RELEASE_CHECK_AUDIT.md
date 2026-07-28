@@ -82,11 +82,11 @@ The detailed gap analysis below is the pre-REL-005 audit baseline. Its open lice
 
 The local `agent-workflow-local` Jenkins job was verified independently of the default shell gate:
 
-- Build #16 checked out `origin/master` at `8b937a0`.
+- Build #23 checked out `origin/master` at `5de662c`.
 - The pipeline created its isolated Python environment and installed `pytest`, `jsonschema`, `build`, and `setuptools`.
-- The installed-product suite completed with `35 passed, 2 skipped, 1 xfailed`.
-- Release checks passed, `agent_workflow-0.2.2-py3-none-any.whl` was built, and the local install stage completed.
-- The job configuration currently has no SCM trigger (`<triggers/>`); commit-trigger behavior remains REL-006 and has not been verified.
+- The installed-product suite completed with `94 passed, 2 skipped, 5 xfailed`.
+- Release checks passed, `agent_workflow-0.2.5-py3-none-any.whl` was built, and the global wheel install stage completed with `mcp==1.28.1`.
+- The job is restricted to `refs/heads/master`; it has no SCM trigger (`<triggers/>`), so commit-trigger behavior remains REL-006 and has not been verified.
 
 This closes the local pipeline execution failure, not the public release gates. Jenkins success does not prove clean-host compatibility, provider compatibility, or release provenance.
 

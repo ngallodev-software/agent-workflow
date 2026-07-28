@@ -100,11 +100,11 @@ The governance blockers remain open: license selection, durable-control objectiv
 
 ### Jenkins local pipeline verification
 
-- [x] Jenkins job `agent-workflow-local` completed build #16 successfully on `origin/master` at `8b937a0`
+- [x] Jenkins job `agent-workflow-local` completed build #23 successfully on `origin/master` at `5de662c`
 - [x] Isolated Jenkins Python environment provisioned with `pytest`, `jsonschema`, `build`, and `setuptools`
-- [x] Release checks passed: `35 passed, 2 skipped, 1 xfailed`
-- [x] Wheel built: `agent_workflow-0.2.2-py3-none-any.whl`
-- [x] Local editable install completed successfully
+- [x] Release checks passed: `94 passed, 2 skipped, 5 xfailed`
+- [x] Wheel built: `agent_workflow-0.2.5-py3-none-any.whl`
+- [x] Global wheel install completed successfully for the `nate` host account, including `mcp==1.28.1`
 - [ ] Commit-trigger/polling behavior is configured and verified; current job configuration has no SCM trigger
 - [ ] Jenkins output is archived as structured, scrubbed release evidence
 
