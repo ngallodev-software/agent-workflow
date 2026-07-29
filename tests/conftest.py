@@ -154,7 +154,86 @@ def value(flag, default=None):
 def marker(session):
     return root / f"{session}.json"
 
-if command in {"set-option", "select-pane", "send-keys", "wait-for"}:
+def session_for_target(target):
+    if target.startswith("%"):
+        for path in root.glob("*.json"):
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if any(pane.get("id") == target for pane in data.get("panes", [])):
+                return path.stem
+        return None
+    return target.split(":", 1)[0]
+
+def load_session(session):
+    path = marker(session)
+    if not path.exists():
+        return None, path
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data.setdefault("panes", [])
+    return data, path
+
+def save_session(path, data):
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+def pane_for_target(target):
+    session = session_for_target(target)
+    data, _ = load_session(session) if session else (None, None)
+    if not data:
+        return None, data
+    panes = data.get("panes", [])
+    if target.startswith("%"):
+        return next((pane for pane in panes if pane.get("id") == target), None), data
+    if ":" in target and "." in target:
+        index = target.rsplit(".", 1)[1]
+        return next((pane for pane in panes if str(pane.get("index")) == index), None), data
+    return panes[0] if panes else None, data
+
+def pane_line(pane, session):
+    return "\t".join(
+        [
+            str(pane.get("id", "")),
+            str(pane.get("pid", 0)),
+            "1" if pane.get("dead") else "0",
+            "python3",
+            session,
+            "0",
+            str(pane.get("run_id", "")),
+            str(pane.get("assignment_id", "")),
+        ]
+    )
+
+if command in {"wait-for"}:
+    raise SystemExit(0)
+if command in {"set-option", "select-pane"}:
+    target = value("-t", "")
+    session = session_for_target(target)
+    data, path = load_session(session) if session else (None, None)
+    pane = None
+    if data is not None:
+        panes = data.get("panes", [])
+        if target.startswith("%"):
+            pane = next((item for item in panes if item.get("id") == target), None)
+        elif ":" in target and "." in target:
+            index = target.rsplit(".", 1)[1]
+            pane = next((item for item in panes if str(item.get("index")) == index), None)
+        elif panes:
+            pane = panes[0]
+    if data is not None and pane is not None and command == "set-option":
+        option = next((item for item in args if item.startswith("@")), "")
+        option_value = args[args.index(option) + 1] if option else ""
+        field = {
+            "@agent-workflow-session-id": "run_id",
+            "@agent-workflow-assignment-id": "assignment_id",
+            "@agent-workflow-role": "role",
+            "@agent-workflow-column": "column",
+        }.get(option)
+        if field:
+            pane[field] = option_value
+        save_session(path, data)
+    raise SystemExit(0)
+if command in {"send-keys"}:
     raise SystemExit(0)
 if command == "has-session":
     raise SystemExit(0 if marker(value("-t", "")).exists() else 1)
@@ -166,14 +245,34 @@ if command == "new-session":
         [runner], cwd=workdir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         start_new_session=True,
     )
-    marker(session).write_text(json.dumps({"pid": process.pid, "runner": runner}), encoding="utf-8")
+    marker(session).write_text(
+        json.dumps(
+            {
+                "pid": process.pid,
+                "runner": runner,
+                "panes": [
+                    {
+                        "id": "%1",
+                        "pid": process.pid,
+                        "index": 0,
+                        "role": "orchestrator",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
     raise SystemExit(0)
 if command == "list-panes":
     session = value("-t", "")
     data = json.loads(marker(session).read_text(encoding="utf-8")) if marker(session).exists() else {"pid": 0}
     fmt = value("-F", "")
-    if "pane_pid" in fmt:
-        print(f"{data['pid']}\t0\tpython3")
+    if "@agent-workflow-session-id" in fmt:
+        for pane in data.get("panes", []):
+            print(pane_line(pane, session))
+    elif "pane_pid" in fmt:
+        pane = data.get("panes", [{}])[0]
+        print(f"{pane.get('pid', data['pid'])}\t0\tpython3")
     elif "pane_left" in fmt:
         print("%1\torchestrator\t0\t0\t0\t")
     elif "pane_id" in fmt:
@@ -195,10 +294,50 @@ if command == "kill-session":
 if command == "capture-pane":
     raise SystemExit(0)
 if command == "display-message":
-    print("fake:0")
+    target = value("-t", "")
+    fmt = value("-F", "")
+    if "@agent-workflow-session-id" in fmt:
+        pane, _ = pane_for_target(target)
+        session = session_for_target(target)
+        if pane is None or session is None:
+            raise SystemExit(1)
+        print(pane_line(pane, session))
+    else:
+        print("fake:0")
     raise SystemExit(0)
 if command == "split-window":
-    print("fake:0.1")
+    target = value("-t", "fake:0")
+    session = session_for_target(target) or "fake"
+    data, path = load_session(session)
+    if data is None:
+        data = {"pid": 0, "panes": [{"id": "%1", "pid": 0, "index": 0, "role": "orchestrator"}]}
+        path = marker(session)
+    panes = data.setdefault("panes", [])
+    next_id = max([int(str(p.get("id", "%1")).lstrip("%")) for p in panes] or [1]) + 1
+    pane_id = f"%{next_id}"
+    workdir = value("-c", os.getcwd())
+    runner = args[-1]
+    process = subprocess.Popen(
+        [runner], cwd=workdir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    panes.append({"id": pane_id, "pid": process.pid, "index": len(panes), "role": "agent"})
+    save_session(path, data)
+    print(pane_id)
+    raise SystemExit(0)
+if command == "kill-pane":
+    target = value("-t", "")
+    pane, data = pane_for_target(target)
+    session = session_for_target(target)
+    if pane is not None and data is not None and session is not None:
+        try:
+            os.killpg(int(pane.get("pid", 0)), signal.SIGTERM)
+        except (ProcessLookupError, PermissionError, ValueError):
+            pass
+        data["panes"] = [item for item in data.get("panes", []) if item is not pane]
+        for index, item in enumerate(data["panes"]):
+            item["index"] = index
+        save_session(marker(session), data)
     raise SystemExit(0)
 raise SystemExit(0)
 ''',

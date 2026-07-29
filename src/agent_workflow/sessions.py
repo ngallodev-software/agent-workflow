@@ -534,11 +534,11 @@ def _write_launch_contract(
 def _status_agent_active(item: dict[str, Any]) -> bool:
     if str(item.get("status")) in TERMINAL_STATUSES:
         return False
-    target = item.get("tmux_target")
+    target = item.get("tmux_pane_id") or item.get("tmux_target")
     if not isinstance(target, str) or not target:
         return True
     try:
-        pane = tmux.pane_info(target)
+        pane = tmux.resolve_status_pane(item)
     except WorkflowError:
         return True
     return pane is not None and not pane.dead
@@ -1249,6 +1249,8 @@ def launch(
         "job_id": native_job.job_id if native_job else None,
         "tmux_session": session_id,
         "tmux_target": session_id,
+        "tmux_pane_id": None,
+        "tmux_window_target": None,
         "tmux_mode": "dedicated_session",
         **git_info,
     }
@@ -1259,7 +1261,7 @@ def launch(
         interactive=interactive,
     )
     write_status(settings, session_id, status)
-    initialize_agent_context(
+    agent_context = initialize_agent_context(
         state_dir,
         session_id=session_id,
         status=status,
@@ -1300,13 +1302,29 @@ def launch(
                 max_interactive_agent_width=settings.max_interactive_agent_width,
                 max_interactive_agent_vertical=settings.max_interactive_agent_vertical,
             )
-            tmux_session = tmux_target.split(":", 1)[0]
+            tmux.set_pane_binding(
+                tmux_target,
+                run_id=session_id,
+                assignment_id=(agent_context.get("current_assignment") or {}).get(
+                    "assignment_id"
+                ),
+            )
+            tmux_session = parent_target.split(":", 1)[0]
+            tmux_window_target = parent_target
             tmux_mode = "shared_window"
         else:
             tmux.configure_server(mouse=settings.mouse)
             tmux.create_session(session_id, str(workdir), str(runner), agent_name)
             tmux_target = session_id
             tmux_session = session_id
+            tmux.set_pane_binding(
+                tmux_target,
+                run_id=session_id,
+                assignment_id=(agent_context.get("current_assignment") or {}).get(
+                    "assignment_id"
+                ),
+            )
+            tmux_window_target = None
             tmux_mode = "dedicated_session"
     except Exception:
         update_status(
@@ -1333,6 +1351,8 @@ def launch(
         tmux_session=tmux_session,
         tmux_target=tmux_target,
         tmux_mode=tmux_mode,
+        tmux_pane_id=pane.pane_id if pane else tmux_target if tmux_target.startswith("%") else None,
+        tmux_window_target=tmux_window_target,
         pane_pid=pane.pid if pane else None,
         pane_command=pane.command if pane else None,
     )
@@ -1345,11 +1365,10 @@ def observe(
 ) -> dict[str, Any]:
     data = read_status(settings, session_id)
     terminal_error = None
-    target = str(data.get("tmux_target", session_id))
     host_session = str(data.get("tmux_session", session_id))
     try:
         alive: bool | None = tmux.session_exists(host_session)
-        pane = tmux.pane_info(target) if alive else None
+        pane = tmux.resolve_status_pane(data) if alive else None
         if pane is not None and pane.dead:
             alive = False
     except WorkflowError as exc:
@@ -1453,7 +1472,10 @@ def observe(
         "next_action": safe_actions[-1],
     }
     if capture_lines and alive:
-        result["capture"] = tmux.capture(target, capture_lines)
+        capture_target = pane.pane_id if pane and pane.pane_id else str(
+            data.get("tmux_target", session_id)
+        )
+        result["capture"] = tmux.capture(capture_target, capture_lines)
     return result
 
 
@@ -1566,11 +1588,13 @@ def wait_for_message(
 
 def interrupt(settings: Settings, session_id: str) -> dict[str, Any]:
     prior = read_status(settings, session_id)
-    target = str(prior.get("tmux_target", session_id))
     host_session = str(prior.get("tmux_session", session_id))
     if not tmux.session_exists(host_session):
         raise WorkflowError(f"session is not running: {session_id}")
-    tmux.interrupt(target)
+    pane = tmux.resolve_status_pane(prior)
+    if pane is None or pane.pane_id is None:
+        raise WorkflowError(f"agent pane is unavailable or not bound to session: {session_id}")
+    tmux.interrupt(pane.pane_id)
     return update_status(
         settings,
         session_id,
@@ -1586,16 +1610,19 @@ def terminate(
     grace_seconds: int,
 ) -> dict[str, Any]:
     prior = read_status(settings, session_id)
-    target = str(prior.get("tmux_target", session_id))
     host_session = str(prior.get("tmux_session", session_id))
     if tmux.session_exists(host_session):
-        tmux.interrupt(target)
+        pane = tmux.resolve_status_pane(prior)
+        if pane is not None and pane.pane_id is not None:
+            tmux.interrupt(pane.pane_id)
         deadline = time.time() + max(0, grace_seconds)
-        while time.time() < deadline and tmux.pane_info(target) is not None:
+        while time.time() < deadline and tmux.resolve_status_pane(prior) is not None:
             time.sleep(0.25)
-        if tmux.pane_info(target) is not None:
+        if tmux.resolve_status_pane(prior) is not None:
             if prior.get("tmux_mode") == "shared_window":
-                tmux.kill_pane(target)
+                pane = tmux.resolve_status_pane(prior)
+                if pane is not None and pane.pane_id is not None:
+                    tmux.kill_pane(pane.pane_id)
             else:
                 tmux.kill(session_id)
     current = read_status(settings, session_id)
@@ -1612,11 +1639,12 @@ def terminate(
 
 def kill(settings: Settings, session_id: str) -> dict[str, Any]:
     prior = read_status(settings, session_id)
-    target = str(prior.get("tmux_target", session_id))
     host_session = str(prior.get("tmux_session", session_id))
     if tmux.session_exists(host_session):
         if prior.get("tmux_mode") == "shared_window":
-            tmux.kill_pane(target)
+            pane = tmux.resolve_status_pane(prior)
+            if pane is not None and pane.pane_id is not None:
+                tmux.kill_pane(pane.pane_id)
         else:
             tmux.kill(session_id)
     current = read_status(settings, session_id)

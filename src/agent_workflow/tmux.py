@@ -2,6 +2,7 @@ from __future__ import annotations
 import os
 import hashlib
 from dataclasses import dataclass
+from pathlib import Path
 from .errors import WorkflowError
 from .process import require_command, run
 
@@ -11,6 +12,20 @@ class PaneInfo:
     pid: int | None
     dead: bool
     command: str | None
+    pane_id: str | None = None
+    session_name: str | None = None
+    window_index: str | None = None
+    run_id: str | None = None
+    assignment_id: str | None = None
+
+
+PANE_FORMAT = (
+    "#{pane_id}\t#{pane_pid}\t#{pane_dead}\t#{pane_current_command}\t"
+    "#{session_name}\t#{window_index}\t#{@agent-workflow-session-id}\t"
+    "#{@agent-workflow-assignment-id}"
+)
+RUN_METADATA = "@agent-workflow-session-id"
+ASSIGNMENT_METADATA = "@agent-workflow-assignment-id"
 
 
 def ensure_tmux():
@@ -35,6 +50,22 @@ def configure_server(*, mouse: bool) -> None:
 def set_pane_name(target: str, name: str) -> None:
     run(["tmux", "select-pane", "-t", target, "-T", name])
     run(["tmux", "set-option", "-p", "-t", target, "@agent-workflow-name", name])
+
+
+def set_pane_binding(
+    target: str,
+    *,
+    run_id: str,
+    assignment_id: str | None = None,
+) -> None:
+    """Bind one pane to an application run, clearing stale assignment data."""
+    run(["tmux", "set-option", "-p", "-t", target, RUN_METADATA, run_id])
+    run(
+        [
+            "tmux", "set-option", "-p", "-t", target,
+            ASSIGNMENT_METADATA, assignment_id or "",
+        ]
+    )
 
 
 def wakeup_channel(run_dir: Path) -> str:
@@ -221,7 +252,7 @@ def split_window(
     result = run(
         [
             "tmux", "split-window", split_flag, *before, "-d", "-P", "-F",
-            "#{session_name}:#{window_index}.#{pane_index}",
+            "#{pane_id}",
             "-t", split_target, "-c", workdir, runner,
         ],
         check=False,
@@ -249,30 +280,108 @@ def create_session(session_id: str, workdir: str, runner: str, pane_name: str = 
     set_pane_name(session_id, pane_name)
 
 
-def pane_info(session_id: str):
-    if not session_exists(session_id):
+def _parse_pane_info(line: str) -> PaneInfo | None:
+    parts = line.split("\t", 7)
+    if len(parts) != 8:
         return None
-    line = (
-        run(
-            [
-                "tmux",
-                "list-panes",
-                "-t",
-                session_id,
-                "-F",
-                "#{pane_pid}	#{pane_dead}	#{pane_current_command}",
-            ]
-        ).stdout.splitlines()
-        or [""]
-    )[0]
-    parts = line.split("	", 2)
-    if len(parts) != 3:
-        return PaneInfo(None, False, None)
     try:
-        pid = int(parts[0])
+        pid = int(parts[1])
     except ValueError:
         pid = None
-    return PaneInfo(pid, parts[1] == "1", parts[2] or None)
+    return PaneInfo(
+        pid=pid,
+        dead=parts[2] == "1",
+        command=parts[3] or None,
+        pane_id=parts[0] or None,
+        session_name=parts[4] or None,
+        window_index=parts[5] or None,
+        run_id=parts[6] or None,
+        assignment_id=parts[7] or None,
+    )
+
+
+def pane_info(target: str) -> PaneInfo | None:
+    """Read exactly *target*, including stable ID and run-binding metadata."""
+    result = run(
+        ["tmux", "display-message", "-p", "-t", target, "-F", PANE_FORMAT],
+        check=False,
+    )
+    if result.returncode:
+        return None
+    lines = result.stdout.splitlines()
+    return _parse_pane_info(lines[0]) if lines else None
+
+
+def list_panes(target: str) -> list[PaneInfo]:
+    """List pane identities in a session/window for legacy recovery."""
+    result = run(
+        ["tmux", "list-panes", "-t", target, "-F", PANE_FORMAT],
+        check=False,
+    )
+    if result.returncode:
+        return []
+    return [
+        parsed
+        for line in result.stdout.splitlines()
+        if (parsed := _parse_pane_info(line)) is not None
+    ]
+
+
+def resolve_pane(
+    target: str,
+    *,
+    host_session: str | None = None,
+    run_id: str | None = None,
+    require_binding: bool = False,
+) -> PaneInfo | None:
+    """Resolve a pane without trusting a mutable positional target.
+
+    New records use ``%pane_id``. Older shared-window records may use a
+    positional target; those are recovered only when exactly one pane in the
+    host session carries the expected run binding. A name, PID, or position
+    never authorizes recovery.
+    """
+    direct = pane_info(target)
+    if direct is not None:
+        if not run_id:
+            return direct
+        if direct.run_id == run_id or (not require_binding and target == run_id):
+            return direct
+        if target.startswith("%"):
+            return None
+    if not run_id or not host_session or not target or target.startswith("%"):
+        return None
+    scan_target = (
+        target.rsplit(".", 1)[0]
+        if ":" in target and "." in target
+        else host_session
+    )
+    matches = [pane for pane in list_panes(scan_target) if pane.run_id == run_id]
+    if len(matches) != 1:
+        return None
+    recovered = matches[0]
+    if require_binding and recovered.run_id != run_id:
+        return None
+    return recovered
+
+
+def resolve_status_pane(status: dict[str, object]) -> PaneInfo | None:
+    """Resolve a persisted run status using its run-bound pane identity."""
+    target_value = (
+        status.get("tmux_target")
+        if status.get("tmux_mode") != "shared_window"
+        else status.get("tmux_pane_id") or status.get("tmux_target")
+    )
+    target = str(target_value or "")
+    if not target:
+        return None
+    run_id = str(status.get("session_id") or "") or None
+    return resolve_pane(
+        target,
+        host_session=str(status.get("tmux_session") or "") or None,
+        run_id=run_id,
+        require_binding=status.get("tmux_mode") == "shared_window",
+    )
 
 
 def capture(session_id: str, lines: int) -> str:
