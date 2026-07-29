@@ -256,6 +256,25 @@ def initial_completion(
     }
 
 
+def completion_template(
+    *,
+    session_id: str,
+    ticket_id: str | None,
+    pack_id: str | None,
+    base_revision: str | None,
+) -> dict[str, Any]:
+    """Return a complete, editable starting point for a child handoff."""
+    value = initial_completion(
+        session_id=session_id,
+        ticket_id=ticket_id,
+        pack_id=pack_id,
+        base_revision=base_revision,
+    )
+    value["result"] = "completed"
+    value["unresolved"] = []
+    return value
+
+
 def initial_provenance(
     *,
     session_id: str,

@@ -61,8 +61,10 @@ environment or BKL-001 claims as active blockers.
 
 ## Operating rules
 
-1. Use codebase-memory-mcp first for structural discovery, then literal search
-   for docs/configuration. Record the final index status.
+1. Probe codebase-memory-mcp once for structural discovery and use it when
+   available, then use literal search for docs/configuration. If unavailable or
+   permission-gated, record `codebase_memory: unavailable` and continue with
+   bounded RTK discovery without retrying. Record final status honestly.
 2. Run `python3 scripts/audit-release-assets.py` and validate the existing
    packs before scheduling work.
 3. Implementation work starts interactively by default in a dedicated
@@ -206,4 +208,3 @@ Return:
 5. exact reasons for any remaining blocker;
 6. the next executable messaging phase, if and only if its prerequisites are
    accepted.
-

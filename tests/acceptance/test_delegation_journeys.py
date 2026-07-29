@@ -57,6 +57,8 @@ def test_external_executor_completes_with_sealed_user_visible_evidence(
     launch_prompt = (handoff / "prompt-seen.txt").read_text()
     assert "Inspect the repository" in launch_prompt
     assert "Do not run `--help` for commands represented in the catalog" in launch_prompt
+    assert (handoff / "completion-template.json").is_file()
+    assert "structured non-interactive run" in launch_prompt
 
     contract = json.loads((run / "launch-contract.json").read_text())
     assert contract["schema"] == "agent-workflow/launch-contract/v2"
@@ -93,6 +95,23 @@ def test_external_executor_completes_with_sealed_user_visible_evidence(
         env=product_env,
     )
     assert accepted["disposition"] == "accepted"
+
+    installed_product.json("kill", "success-run", env=product_env)
+
+    archived = installed_product.json(
+        "archive",
+        "success-run",
+        "--verified",
+        "--reason",
+        "acceptance journey cleanup",
+        env=product_env,
+    )
+    assert len(archived["archived"]) == 1
+    assert not run.exists()
+    archive_path = Path(archived["archived"][0]["archived"])
+    assert (archive_path / "archive-manifest.json").is_file()
+    listed = installed_product.json("list", env=product_env)
+    assert all(item.get("session_id") != "success-run" for item in listed)
 
 
 def test_durable_messages_survive_process_boundaries_and_are_acknowledged(

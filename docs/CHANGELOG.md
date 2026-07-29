@@ -12,6 +12,12 @@
 
 ## Unreleased
 
+- Add recoverable `agent-workflow archive`/`clear` cleanup for accepted runs,
+  with sealed-evidence, lifecycle, score-digest, revision, and tmux-closure
+  gates; add archive manifests and an installed acceptance journey.
+- Add read-only completion templates and explicit interactive-only versus
+  structured non-interactive closeout instructions to reduce malformed handoffs
+  and failed `task-complete` attempts.
 - Add the proposed plugin-first decomposition and sibling `agent-workflow-spec` design: canonical collaborative specs compile into prompt packs and end-to-end evaluation artifacts, while the existing distribution remains the execution host and LangGraph stays an optional authoring adapter.
 - Add a parser-derived, schema-validated command catalog and role-scoped launch cards so orchestrators and child agents can execute known CLI signatures without routine `--help` probing; bind new artifacts through backward-compatible launch-contract v2.
 - Expose the same catalog through bounded read-only MCP capability and role resources, plus verified per-run command context/cards; retain explicit MCP exclusions and update future mutation work to preserve launch-contract v2 rather than dynamically wrapping CLI commands.

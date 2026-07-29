@@ -14,9 +14,11 @@ Confirm the ticket's `backlog_id` is owned by exactly one active prompt pack and
 
 Immediately after worktree creation, follow
 [`docs/references/WORKTREE_PREFLIGHT.md`](../../docs/references/WORKTREE_PREFLIGHT.md):
-full-index and verify the exact worktree, record readiness/counts, and refresh
-before handoff. This operator check must not become an application dependency
-on MCP.
+probe the optional service once and, when available, full-index and verify the
+exact worktree, record readiness/counts, and refresh before handoff. If it is
+unavailable, record the limitation and use bounded RTK discovery without
+retrying or blocking the run. This operator check must not become an
+application dependency on MCP.
 
 ## Parallel launch
 

@@ -11,8 +11,8 @@ terminal output, and historical archives are not authority.
 - Use a dedicated worktree and stable `ticket`/`pack` identity.
 - Start implementation interactively unless the operator explicitly selects a
   structured non-interactive fallback.
-- In a new worktree, follow [`docs/references/WORKTREE_PREFLIGHT.md`](../../docs/references/WORKTREE_PREFLIGHT.md): full-index the exact worktree before structural discovery, verify readiness/counts, and refresh before handoff. This is optional operator tooling, not an application dependency.
-- Use codebase-memory before structural code discovery and RTK for shell work.
+- In a new worktree, follow [`docs/references/WORKTREE_PREFLIGHT.md`](../../docs/references/WORKTREE_PREFLIGHT.md): probe codebase-memory once and use an exact-worktree index when available. If unavailable, record the limitation and continue with bounded RTK discovery without retrying. This is optional operator tooling, not an application dependency.
+- Use the graph before structural code discovery when available, and RTK for shell work in every case.
 - Keep child communication append-only and correlated. Tmux wakeups are hints,
   never delivery proof.
 - Never let a child-controlled message select a lifecycle authority or mutate a

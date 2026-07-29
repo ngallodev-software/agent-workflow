@@ -17,8 +17,10 @@ Never implement a historical “completed” claim without confirming that the b
 
 Before structural discovery in a new worktree, follow
 [`docs/references/WORKTREE_PREFLIGHT.md`](../../docs/references/WORKTREE_PREFLIGHT.md):
-full-index the exact worktree, verify readiness/counts, and refresh before
-handoff. The optional MCP service is not an application dependency.
+probe the optional service once and, when available, full-index the exact
+worktree, verify readiness/counts, and refresh before handoff. If unavailable,
+record the limitation and continue with bounded RTK discovery without retrying.
+The optional MCP service is not an application dependency.
 
 Record:
 

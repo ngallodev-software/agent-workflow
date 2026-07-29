@@ -15,8 +15,10 @@ evidence-first.
 Use current source first, then current tests/schemas, then verified references, then documentation and historical plans.
 
 Before structural discovery or editing, complete the exact-worktree
-`WORKTREE_PREFLIGHT.md` procedure and generate a full codebase-memory index for
-that worktree. Record its project identity and node/edge counts in the handoff.
+`WORKTREE_PREFLIGHT.md` procedure. Probe the optional codebase-memory service
+once and use a full exact-worktree index when available. If unavailable,
+record the limitation and continue with bounded RTK discovery without retrying;
+record graph identity/counts only when they exist.
 
 ## Execution rules
 

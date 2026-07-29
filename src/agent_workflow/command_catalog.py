@@ -56,6 +56,7 @@ _ROLE_COMMANDS: dict[str, frozenset[str]] = {
             "worktree remove",
             "launch",
             "list",
+            "archive",
             "status",
             "repair",
             "attach",

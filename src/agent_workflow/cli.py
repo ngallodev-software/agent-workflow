@@ -13,6 +13,7 @@ from .command_catalog import (
     render_command_markdown,
     runtime_command_catalog,
 )
+from .archive import archive_runs
 from .config import as_dict, load_settings
 from .agent_context import auto_reuse as auto_reuse_agent
 from .agent_context import candidates as reuse_candidates
@@ -211,6 +212,30 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     commands.add_parser("list", help="list delegation runs")
+
+    archive = commands.add_parser(
+        "archive",
+        aliases=["clear"],
+        help="archive verified completed runs from the active list",
+    )
+    archive.add_argument("session_ids", nargs="*", help="run IDs to archive")
+    archive.add_argument(
+        "--all-verified",
+        action="store_true",
+        help="scan and archive every run that passes all evidence gates",
+    )
+    archive.add_argument(
+        "--verified",
+        action="store_true",
+        help="confirm the recoverable move of verified runs",
+    )
+    archive.add_argument(
+        "--dry-run", action="store_true", help="report eligible runs without moving them"
+    )
+    archive.add_argument(
+        "--reason",
+        default="verified completed work no longer needed in the active run list",
+    )
 
     assess = commands.add_parser("assess-sealed-runs", help="assess exported sealed-run evidence without inventing unavailable evaluation results")
     assess.add_argument("root", type=Path)
@@ -646,6 +671,15 @@ def main(argv: list[str] | None = None) -> int:
                     ],
                 )
             return 0
+        elif args.command in {"archive", "clear"}:
+            data = archive_runs(
+                settings,
+                args.session_ids,
+                all_verified=args.all_verified,
+                confirmed=args.verified,
+                dry_run=args.dry_run,
+                reason=args.reason,
+            )
         elif args.command == "workflow":
             if args.workflow_command == "template":
                 spec = read_json(expand_path(args.spec))

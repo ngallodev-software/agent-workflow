@@ -1,6 +1,6 @@
 # Execution protocol
 
-1. In a new worktree, follow [`docs/references/WORKTREE_PREFLIGHT.md`](../../docs/references/WORKTREE_PREFLIGHT.md): full-index the exact worktree before structural discovery, verify readiness/counts, and refresh before handoff. The optional MCP service is not an application dependency.
+1. In a new worktree, follow [`docs/references/WORKTREE_PREFLIGHT.md`](../../docs/references/WORKTREE_PREFLIGHT.md): probe codebase-memory once and use an exact-worktree index when available. If unavailable, record the limitation and continue with bounded RTK discovery without retrying; the optional MCP service is not an application dependency.
 2. Treat sealed completion collections and final receipts as authoritative. Terminal text, mutable status projections, and prose-only claims are context.
 3. Record source revision, clean/dirty state, pack validation, and the exact evidence files inspected.
 4. Phase 0 may update evaluation contracts, collectors, scorers, ledgers, reports, and their focused tests only. Do not implement HARD or MSG runtime work in this pack.

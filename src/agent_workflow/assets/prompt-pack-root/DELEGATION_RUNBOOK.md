@@ -13,10 +13,11 @@ agent-workflow worktree create /path/to/repository TICKET-ID HEAD
 Confirm the ticket's `backlog_id` is owned by exactly one active prompt pack and that all external prerequisites are complete before launch.
 
 Immediately after worktree creation, apply the repository procedure in
-`docs/references/WORKTREE_PREFLIGHT.md`: generate a full
-codebase-memory index for the exact worktree, verify it is ready, and record
-the project identity and node/edge counts. Do not substitute an index from the
-main checkout. This is an optional operator-tool check and must not become an
+`docs/references/WORKTREE_PREFLIGHT.md`: probe the optional codebase-memory
+service once and, when available, index the exact worktree, verify readiness,
+and record identity/counts. Do not substitute an index from the main checkout.
+When unavailable, record the limitation and use bounded RTK shell discovery;
+do not retry or block the run. This operator check must not become an
 `agent-workflow` package or runtime dependency.
 
 ## Parallel launch
@@ -51,6 +52,22 @@ agent-workflow tail SESSION
 ```
 
 `possibly_stalled` is advisory. It means tmux is alive while the log has not grown during the configured threshold.
+
+## Retire verified runs
+
+`agent-workflow list` is the active-run view. Retire completed work only through
+the recoverable archive command; never delete a run directory by hand:
+
+```bash
+agent-workflow archive --all-verified --dry-run --json
+agent-workflow archive SESSION-ID --verified --reason "accepted and no longer active"
+```
+
+The command rechecks the sealed receipt, completion collection, accepted
+lifecycle chain, revision, evaluation score digest when present, and tmux
+closure before moving the directory from the active `runs/` root to the state
+`archive/` root. Failed candidates remain in `list` with their evidence and
+are reported by the bulk dry run.
 
 ## Stall handling
 

@@ -31,6 +31,9 @@ agent-workflow launch SESSION WORKDIR PROMPT
 
 agent-workflow launch SESSION WORKDIR PROMPT -- COMMAND...
 agent-workflow list
+agent-workflow archive SESSION... [--verified] [--dry-run] [--reason TEXT]
+agent-workflow clear SESSION... [--verified] [--dry-run] [--reason TEXT]
+agent-workflow archive --all-verified [--verified] [--dry-run] [--reason TEXT]
 agent-workflow status SESSION [--capture N]
 agent-workflow attach SESSION
 agent-workflow tail SESSION [--lines N]
@@ -41,6 +44,8 @@ agent-workflow restart SESSION [--new-session NAME]
 ```
 
 Configured launches enforce class/executor/model allowlists and permission arguments. Implementation launches are interactive by default; exploration/review classes are non-interactive by default. At a full tmux pane limit, the CLI reports idle candidates and requires an explicit close-idle, structured non-interactive, or cancel choice. A no-go model requires `--allow-no-go-model`, which is recorded. `--structured` and native interactive TUI mode are mutually exclusive. Git worktrees must be clean unless `--allow-dirty` is explicit; retries preserve prior evidence and lineage.
+
+`archive` is the recoverable `list` cleanup operation; `clear` is an alias. It never deletes evidence. A run must have a valid sealed final receipt, completed/valid completion collection, authoritative accepted lifecycle receipt, matching accepted revision, and a closed tmux session. `--all-verified` skips runs that fail a gate and reports the reason. Use `--dry-run` first. A real move requires the explicit `--verified` confirmation and writes a read-only archive manifest under the state archive root.
 
 ## Durable messages
 

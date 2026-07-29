@@ -1,14 +1,16 @@
 # Session restore
 
 **Repository:** `/lump/apps/agent-workflow`  
-**Snapshot date:** 2026-07-26
+**Snapshot date:** 2026-07-28
 **Branch:** `master`
-**Version:** `0.2.3`
-**Current integration:** foundation hardening and ChatGPT sealed-run assessment pack are staged on `master`.
+**Version:** `0.2.5`
+**Current integration:** foundation hardening, sealed-run assessment, durable pane/process guidance, and verified-run archival are present in the current checkout.
 
 ## Current state
 
-The foundation implementation runs were sealed, integrated, and independently gated. HARD-001, HARD-002, and HARD-005 remain `in-review` pending shared acceptance; HARD-004 remains blocked. No score/report/score-set evidence was fabricated: all six sealed runs had no evaluation plan and collection failed closed on the missing score-set file.
+The foundation implementation runs were sealed, integrated, and independently gated. HARD-001, HARD-002, HARD-004, HARD-005, and HARD-008 are recorded as completed in the canonical backlog. No score/report/score-set evidence was fabricated: runs without an evaluation plan remain evaluation-unavailable.
+
+The latest process work adds a recoverable `agent-workflow archive` command (with `clear` alias) for accepted runs, plus a read-only completion template and explicit interactive-versus-structured closeout instructions. No active child agent should be assumed from terminal prose; verify with `agent-workflow list` and the tmux identity checks.
 
 Overlay content now present includes:
 
@@ -25,31 +27,63 @@ Overlay content now present includes:
 ## Verification
 
 - `python3 scripts/audit-release-assets.py`: passed; mutable checksum manifests are ignored and not part of the repository gate.
-- `python3 scripts/audit-release-assets.py`: passed.
-- shell syntax checks for installer/uninstaller and scripts: passed.
-- all four prompt packs validated: passed.
-- `python3 -m pip wheel . --no-deps`: passed; built `agent_workflow-0.2.3-py3-none-any.whl`.
-- full suite: 41 passed, 12 failed, 2 skipped, 1 strict future xfail; failures remain installed-product/executor-environment limitations and are not represented as release acceptance.
-- global host install: pending final 0.2.3 deployment verification with `./install.sh --python /home/nate/.pyenv/shims/python3 --extras mcp`.
-- installed checks: `agent-workflow --version`, `agent-workflow-mcp --help`, all three release-drift-auditor skill links, host assets, and man page passed.
-- no test files were modified.
-
-The full release gate ran in an isolated test environment and ended with `33 passed, 2 skipped, 1 xfailed, 2 failed`. The two existing acceptance failures are:
-
-1. interactive-agent reuse requires a live agent pane;
-2. workflow resume reports no authoritative child run.
-
-Both failures reproduce in isolation. They are outside the overlay’s source scope, which changed documentation, prompt packs, skills, audit scripts, and packaged prompt-root assets, not runtime implementation or tests. The expected failure is the existing BKL-002 late-steering journey.
-
-The global install intentionally used only the `mcp` extra. Installing the optional evaluator stack globally previously introduced dependency conflicts with unrelated host applications; evaluator assets are still synchronized by the installer.
+- focused invariant checks: `9 passed`.
+- installed archive acceptance journey: `1 passed`; it required explicit tmux closeout before moving the accepted run.
+- `python3 -m build --wheel --no-isolation`: passed; built `agent_workflow-0.2.5-py3-none-any.whl`.
+- final codebase-memory index: `6996` nodes and `12586` edges, with the persistent graph artifact present.
+- repository-wide pytest was attempted twice but did not return a result; do not claim a full-suite pass from this handoff. Re-run it as a bounded investigation in the new session.
 
 ## Working tree and next work
 
-The overlay changes are committed in `a62a24c`; the current handoff revision is `fd1aba1`, and the checkout is clean on `master` ahead of `origin/master`. Do not modify tests unless explicitly authorized. Next work is the P0 hardening sequence: HARD-001/HARD-002 first, then HARD-004/HARD-005, followed by the isolation, identity, drift, and supply-chain gates. Keep MCP-003 blocked until its prerequisites are accepted.
+The checkout is `master` ahead of `origin/master` by 36 commits and has
+uncommitted process/docs/test changes from this session; inspect the diff before
+integrating or committing. No commit was made for this session. The next work
+should start from the canonical `docs/BACKLOG.md`; keep MCP-003 blocked until
+its prerequisites are accepted.
 
 ## Live runtime observations
 
-At handoff capture, the main tmux server showed only the live orchestrator pane (`0:0.0`). Process inspection also found an active stdio MCP process from the repository virtualenv and older workflow tail/wait processes, including the `aw-model-effort-20260724` log tail. These are runtime leftovers rather than uncommitted repository work; inspect and stop them explicitly before treating the host as fully quiescent. Separate `the-tax-machine` monitoring processes were also visible and are outside this repository.
+The temporary R9 review session used during this turn was terminated and its
+tmux pane/session closed. The current inventory still contains one unrelated
+orphaned `running` projection, `tax-p1-sec-001-r5-review`; inspect it before
+claiming the host is quiescent. No implementation child is active for this
+turn.
+
+## New-session startup: Terra
+
+This is the handoff for a new orchestrator session. Start from the repository
+root and let the new session verify the current checkout before taking scope:
+
+```bash
+cd /lump/apps/agent-workflow
+python3 -m pip install --user --force-reinstall --no-deps dist/agent_workflow-0.2.5-py3-none-any.whl
+git status --short --branch
+agent-workflow doctor
+agent-workflow list --json
+agent-workflow archive --all-verified --dry-run --json
+```
+
+The host currently reports `agent-workflow 0.2.5`, but its installed parser
+does not yet expose the newly built `archive` command. Install the wheel above
+before using the new command, or temporarily prefix commands with
+`PYTHONPATH=/lump/apps/agent-workflow/src python3 -m agent_workflow.cli`.
+
+For the next bounded implementation, use a dedicated worktree and launch the
+implementation agent interactively with Terra:
+
+```bash
+agent-workflow worktree create /lump/apps/agent-workflow TICKET-ID master
+agent-workflow launch SESSION-ID /path/to/worktree /path/to/prompt.md \
+  --ticket TICKET-ID --pack /path/to/prompt-pack \
+  --agent-class implementation --executor codex --model gpt-5.6-terra
+```
+
+Implementation is interactive by default. If the pane limit is full, stop and
+choose explicitly between closing an idle pane, using a structured
+non-interactive run when post-run evaluation is required, or cancelling. Do
+not silently downgrade the launch. Terra is a configured model choice, not a
+replacement for the worktree, handoff, receipt, review, acceptance, and close
+gates.
 
 Useful restart commands:
 

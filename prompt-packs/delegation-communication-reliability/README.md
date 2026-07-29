@@ -28,8 +28,9 @@ Implementation tickets start interactive. Only exploration, research, or an
 explicit structured-evidence fallback may be non-interactive. Never silently
 downgrade because the pane cap is full.
 
-Use codebase-memory for structural discovery first and RTK-wrapped commands for
-shell inspection. Run the release-drift audit before the phase gate and before
+Probe codebase-memory once for structural discovery and use it when available;
+otherwise record the limitation and continue with bounded RTK-wrapped commands
+without retrying. Run the release-drift audit before the phase gate and before
 archiving. A structured provider stream is required for post-run evaluation;
 terminal/TUI text is operational context only.
 

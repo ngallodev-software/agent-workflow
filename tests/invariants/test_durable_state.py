@@ -99,3 +99,8 @@ def test_parser_command_catalog_is_complete_deterministic_and_role_scoped() -> N
     }
     assert {"progress", "ack", "agent task-complete"} <= implementation
     assert "worktree remove" not in implementation
+    orchestrator = {
+        item["command"] for item in filter_catalog(first, "orchestrator")["commands"]
+    }
+    assert "archive" in orchestrator
+    assert "archive" not in implementation

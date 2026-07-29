@@ -37,7 +37,7 @@ from .native_jobs import ValidatedNativeJob, validate_native_job
 from .messages import append_message, replay_messages, wait_for_messages
 from .manifests import task_result_contract
 from .process import redact_argv, require_command, run, secret_values_from_argv
-from .receipts import initial_completion, initial_provenance, update_provenance
+from .receipts import completion_template, initial_completion, initial_provenance, update_provenance
 from .state import (
     TERMINAL_STATUSES,
     list_statuses,
@@ -119,6 +119,7 @@ def _write_runner(
     prompt_source: Path | None = None,
     prompt_pack_root: Path | None = None,
     handoff_dir: Path | None = None,
+    completion_template_path: Path | None = None,
     command_artifacts: dict[str, Any] | None = None,
     stream_format: str = "text",
     interactive: bool = False,
@@ -172,6 +173,7 @@ def _write_runner(
         f"readonly AGENT_WORKFLOW_SESSION_ID={shlex.quote(session_id)}\n"
         f"readonly AGENT_WORKFLOW_PROMPT_SOURCE={shlex.quote(str(prompt_source))}\n"
         f"readonly AGENT_WORKFLOW_HANDOFF_DIR={shlex.quote(str(handoff_dir or ''))}\n"
+        f"readonly AGENT_WORKFLOW_COMPLETION_TEMPLATE={shlex.quote(str(completion_template_path or ''))}\n"
         f"readonly AGENT_WORKFLOW_PROMPT_PACK_ROOT={shlex.quote(str(prompt_pack_root or ''))}\n"
         f"readonly AGENT_WORKFLOW_COMMAND_CATALOG={shlex.quote(str(state_dir / str((command_artifacts or {}).get('catalog_path', 'command-catalog.json'))))}\n"
         f"readonly AGENT_WORKFLOW_COMMAND_CARD={shlex.quote(str(state_dir / str((command_artifacts or {}).get('card_path', 'command-card.md'))))}\n"
@@ -184,7 +186,8 @@ def _write_runner(
     runner_text += (
         "export AGENT_WORKFLOW_SESSION_ID AGENT_WORKFLOW_PROMPT_SOURCE "
         "AGENT_WORKFLOW_HANDOFF_DIR AGENT_WORKFLOW_PROMPT_PACK_ROOT "
-        "AGENT_WORKFLOW_COMMAND_CATALOG AGENT_WORKFLOW_COMMAND_CARD AGENT_WORKFLOW_CLI"
+        "AGENT_WORKFLOW_COMPLETION_TEMPLATE AGENT_WORKFLOW_COMMAND_CATALOG "
+        "AGENT_WORKFLOW_COMMAND_CARD AGENT_WORKFLOW_CLI"
         + (" AGENT_WORKFLOW_TMUX_SESSION\n" if close_tmux_on_exit else "\n")
         + f"export PYTHONPATH={shlex.quote(str(source_root))}${{PYTHONPATH:+:$PYTHONPATH}}\n"
         + runner_command
@@ -361,6 +364,7 @@ def _write_launch_prompt(
                 "- This interactive agent remains open after its assignment.",
                 '- Before becoming reusable, emit structured completion with `"$AGENT_WORKFLOW_CLI" agent task-complete "$AGENT_WORKFLOW_SESSION_ID" --actor <agent-name> --summary <summary>`.',
                 "- For a reused assignment, acknowledge its correlated steer message before starting work.",
+                "- Write and validate the completion handoff before task-complete; task-complete is interactive-only.",
             ]
         )
     elif detached_interactive:
@@ -370,11 +374,17 @@ def _write_launch_prompt(
                 "- Do not wait for user input or expect a user to resume this run.",
                 "- On completion, notify the calling agent through the durable completion handoff and a concise progress update.",
                 "- Exit cleanly when finished; the private tmux session will be closed automatically when possible.",
+                "- Do not invoke `agent task-complete`; that command is interactive-only.",
             ]
+        )
+    else:
+        context.append(
+            "- This is a structured non-interactive run. Do not invoke `agent task-complete`; the runner collects completion on process exit."
         )
     context.extend(
         [
             f"- completion_handoff_dir: `{handoff_dir}`",
+            f"- completion_template: `{handoff_dir / 'completion-template.json'}` (read-only starting point; copy it to `completion.json` and edit the evidence)",
             "- Write completion JSON only to `AGENT_WORKFLOW_HANDOFF_DIR/completion.json` using schema `agent-workflow/completion/v1`.",
             "- Write it atomically; optional `completion.md` and `evidence.json` sidecars may use the same handoff directory.",
             "- Canonical runtime completion paths are collector-owned; do not write to them.",
@@ -962,6 +972,17 @@ def launch(
     )
 
     completion_path = state_dir / "completion.json"
+    completion_template_path = handoff_dir / "completion-template.json"
+    atomic_write_json(
+        completion_template_path,
+        completion_template(
+            session_id=session_id,
+            ticket_id=ticket_id,
+            pack_id=pack_id,
+            base_revision=git_info["source_revision"],
+        ),
+        mode=0o444,
+    )
     atomic_write_json(
         completion_path,
         initial_completion(
@@ -1277,6 +1298,7 @@ def launch(
         prompt_source=prompt_source,
         prompt_pack_root=prompt_pack_root,
         handoff_dir=handoff_dir,
+        completion_template_path=completion_template_path,
         command_artifacts=command_artifacts,
         stream_format=executor_plan.stream_format,
         interactive=executor_interactive,

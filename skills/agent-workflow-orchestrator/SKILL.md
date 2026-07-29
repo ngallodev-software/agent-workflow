@@ -34,9 +34,12 @@ Before every implementation launch, verify: current tmux window or dedicated
 session context, configured pane capacity, idle reusable candidates, ticket and
 pack identity, worktree, and whether the run needs structured post-run evidence.
 The child must perform [`WORKTREE_PREFLIGHT.md`](../../docs/references/WORKTREE_PREFLIGHT.md)
-as its first worktree action: full-index and verify the exact worktree before
-structural discovery. Do not make launch acceptance depend on the optional MCP
-service or silently substitute another worktree's index.
+as its first worktree action: verify the exact worktree, probe the optional
+codebase-memory service once, and use its exact-worktree index when available.
+If it is unavailable or permission-gated, the child records the limitation and
+uses bounded RTK shell discovery without retrying. Launch, implementation,
+review, and acceptance must never depend on MCP availability or silently
+claim graph-backed analysis.
 | A running agent needs new guidance | Append `steer`; treat it as pending until a correlated executor acknowledgement exists. |
 
 A host-native subagent is not automatically durable, visible, resumable, or evidenced by this project. It becomes an `agent-workflow` run only when an explicit bridge invokes the CLI and records the required lifecycle evidence.

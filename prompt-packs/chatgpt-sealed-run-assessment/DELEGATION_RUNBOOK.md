@@ -13,6 +13,8 @@ Phase 1 uses a separate worktree/session and launches only after phase-0 review.
 
 For every new worktree, follow
 [`docs/references/WORKTREE_PREFLIGHT.md`](../../docs/references/WORKTREE_PREFLIGHT.md):
-full-index and verify the exact worktree before discovery, record readiness and
-counts, and refresh before handoff. This is optional operator tooling and is
-not an application dependency on MCP.
+probe the optional service once and, when available, full-index and verify the
+exact worktree before discovery, record readiness and counts, and refresh
+before handoff. If unavailable, record the limitation and continue with
+bounded RTK discovery without retrying. This is optional operator tooling and
+is not an application dependency on MCP.

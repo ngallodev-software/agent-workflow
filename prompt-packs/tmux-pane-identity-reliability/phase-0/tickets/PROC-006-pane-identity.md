@@ -24,9 +24,11 @@ discovery must address the intended pane by durable identity.
 In the newly created isolated worktree, before structural discovery or edits:
 
 1. Read `docs/references/WORKTREE_PREFLIGHT.md` and complete it exactly.
-2. Record the exact worktree path, branch, revision, dirty state, Python
-   version, codebase-memory project identity, index status, node count, and
-   edge count.
+2. Record the exact worktree path, branch, revision, dirty state, and Python
+   version. If codebase-memory is available, also record its exact project
+   identity, index status, node count, and edge count. If it is unavailable,
+   record the reason and the bounded RTK fallback searches; this optional tool
+   must not block implementation or handoff.
 3. Read `references/pane-identity.md`, the current `tmux.py`, `sessions.py`,
    `agent_context.py`, relevant schemas, fake tmux fixture, and current tests.
 4. Confirm the worktree is based on the clean master revision supplied with
@@ -120,8 +122,10 @@ pytest -q tests/acceptance/test_tmux_pane_identity_journey.py tests/invariants/t
 pytest -q
 ```
 
-Before handoff, refresh the exact worktree codebase-memory index and record
-the final counts. Use `templates/TICKET_COMPLETION.md`, write strict
+Before handoff, refresh the exact worktree codebase-memory index when the
+optional service is available and record final counts; otherwise record the
+unavailable limitation and fallback searches. Use
+`templates/TICKET_COMPLETION.md`, write strict
 `completion.json`, run `agent-workflow agent task-complete` exactly once, and
 exit the interactive executor cleanly so the runner can collect and seal the
 run. Do not claim completion from terminal prose.
