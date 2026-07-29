@@ -14,13 +14,14 @@ Read `AGENT_WORKFLOW_COMMAND_CARD` for the role-scoped signatures and `AGENT_WOR
 ## Required behavior
 
 1. Read the ticket, phase README, master prompt, execution protocol, and named references.
-2. Verify current source before editing.
-3. Stay inside writable paths.
-4. Implement the smallest coherent change.
-5. Add only tests tied to explicit acceptance criteria or a demonstrated regression.
-6. Emit durable `progress` records at meaningful checkpoints and `ack` correlated steering messages when the configured executor adapter supports semantic delivery.
-7. Preserve failed commands and unresolved contradictions in the completion report.
-8. Do not merge, broaden scope, or claim phase acceptance.
+2. In a new worktree, perform [`WORKTREE_PREFLIGHT.md`](../../docs/references/WORKTREE_PREFLIGHT.md): full-index the exact worktree before structural discovery, verify readiness, and record counts.
+3. Verify current source before editing.
+4. Stay inside writable paths.
+5. Implement the smallest coherent change.
+6. Add only tests tied to explicit acceptance criteria or a demonstrated regression.
+7. Emit durable `progress` records at meaningful checkpoints and `ack` correlated steering messages when the configured executor adapter supports semantic delivery.
+8. Preserve failed commands and unresolved contradictions in the completion report, including unavailable index evidence.
+9. Do not merge, broaden scope, or claim phase acceptance.
 
 ## Terminal contract
 

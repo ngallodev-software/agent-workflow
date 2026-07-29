@@ -33,6 +33,10 @@ models unless the caller supplies the explicit authorization flag.
 Before every implementation launch, verify: current tmux window or dedicated
 session context, configured pane capacity, idle reusable candidates, ticket and
 pack identity, worktree, and whether the run needs structured post-run evidence.
+The child must perform [`WORKTREE_PREFLIGHT.md`](../../docs/references/WORKTREE_PREFLIGHT.md)
+as its first worktree action: full-index and verify the exact worktree before
+structural discovery. Do not make launch acceptance depend on the optional MCP
+service or silently substitute another worktree's index.
 | A running agent needs new guidance | Append `steer`; treat it as pending until a correlated executor acknowledgement exists. |
 
 A host-native subagent is not automatically durable, visible, resumable, or evidenced by this project. It becomes an `agent-workflow` run only when an explicit bridge invokes the CLI and records the required lifecycle evidence.

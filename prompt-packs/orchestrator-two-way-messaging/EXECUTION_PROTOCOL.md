@@ -15,6 +15,11 @@ Never implement a historical “completed” claim without confirming that the b
 
 ## 2. Required preflight for every ticket
 
+Before structural discovery in a new worktree, follow
+[`docs/references/WORKTREE_PREFLIGHT.md`](../../docs/references/WORKTREE_PREFLIGHT.md):
+full-index the exact worktree, verify readiness/counts, and refresh before
+handoff. The optional MCP service is not an application dependency.
+
 Record:
 
 ```bash

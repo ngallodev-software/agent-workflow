@@ -15,11 +15,6 @@ Never implement a historical “completed” claim without confirming that the b
 
 ## 2. Required preflight for every ticket
 
-Before structural discovery in a new worktree, follow
-[`docs/references/WORKTREE_PREFLIGHT.md`](../../docs/references/WORKTREE_PREFLIGHT.md):
-full-index the exact worktree, verify readiness/counts, and refresh before
-handoff. The optional MCP service is not an application dependency.
-
 Record:
 
 ```bash
@@ -55,6 +50,15 @@ agent-workflow pack validate /path/to/prompt-pack
 Every delegation runs in a fresh named `tmux` session. The session name includes project/pack, phase, and ticket identity. The session must be foregroundable and must write a live persistent log.
 
 A delegation is only **potentially** stalled when its terminal is alive and the live log has not changed for the configured interval. Foreground and inspect before interrupting it. Never automatically kill a session merely because a timer elapsed.
+
+### Launch-mode rule
+
+Implementation work starts interactive unless the operator explicitly chooses a
+structured non-interactive fallback. Exploration, research, and review work is
+non-interactive by default. At the configured pane limit, report the capacity
+and idle candidates, then offer close-idle, structured non-interactive, or
+cancel. Do not silently change the launch mode. A structured provider stream is
+required for post-run evaluation; native TUI output is operational context only.
 
 ## 5. Implementation discipline
 

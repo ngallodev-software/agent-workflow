@@ -9,3 +9,5 @@ For delegated implementation, phase gates, or lifecycle control, read `docs/refe
 For output standards, read the relevant template under `templates/` or the active prompt pack's `templates/` directory. Do not treat steering references as universal instructions.
 
 Use codebase-memory-mcp first for structural code discovery. Use RTK-wrapped commands for shell inspection and preserve isolated worktrees for delegated changes.
+
+For every new agent worktree, read [`docs/references/WORKTREE_PREFLIGHT.md`](docs/references/WORKTREE_PREFLIGHT.md) and perform the full-index preflight before structural discovery or code edits. Index the exact worktree, never the main checkout or another worktree, and record readiness/counts in the handoff. This is an optional operator-tool procedure: do not make the package or runtime depend on the MCP service.

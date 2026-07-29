@@ -1,0 +1,9 @@
+phase: "0"
+name: "pane-identity-foundation"
+mandatory_order: ["PROC-006"]
+tasks:
+  - id: "PROC-006"
+    tier: A
+    session: "tmux-pane-identity-reliability-proc-006"
+    prompt: "tickets/PROC-006-pane-identity.md"
+    backlog_id: "PROC-006"

@@ -11,6 +11,7 @@ terminal output, and historical archives are not authority.
 - Use a dedicated worktree and stable `ticket`/`pack` identity.
 - Start implementation interactively unless the operator explicitly selects a
   structured non-interactive fallback.
+- In a new worktree, follow [`docs/references/WORKTREE_PREFLIGHT.md`](../../docs/references/WORKTREE_PREFLIGHT.md): full-index the exact worktree before structural discovery, verify readiness/counts, and refresh before handoff. This is optional operator tooling, not an application dependency.
 - Use codebase-memory before structural code discovery and RTK for shell work.
 - Keep child communication append-only and correlated. Tmux wakeups are hints,
   never delivery proof.

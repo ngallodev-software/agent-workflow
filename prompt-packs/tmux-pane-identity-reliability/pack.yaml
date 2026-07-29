@@ -1,0 +1,16 @@
+schema: agent-workflow/pack/v1
+pack_id: "tmux-pane-identity-reliability"
+backlog_items:
+  - "PROC-006"
+workflow:
+  name: agent-workflow
+  minimum_version: "0.2.5"
+  terminal_backend: tmux
+  requires:
+    - isolated_worktree
+    - foregroundable_session
+    - persistent_log
+    - source_baseline
+    - completion_report
+    - independent_phase_gate
+    - release_drift_audit

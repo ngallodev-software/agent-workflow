@@ -15,6 +15,13 @@ Never implement a historical “completed” claim without confirming that the b
 
 ## 2. Required preflight for every ticket
 
+For a new agent worktree, perform the repository procedure in
+`docs/references/WORKTREE_PREFLIGHT.md` before structural code discovery or
+editing. Generate and verify a full index
+for the exact worktree, record its identity and counts, and refresh it before
+the completion handoff. This is an agent/operator procedure; codebase-memory
+MCP remains optional to the application runtime.
+
 Record:
 
 ```bash

@@ -23,6 +23,10 @@ controls that phase 0 did not implement.
   commands are documented with evidence requirements.
 - Reminder hooks identify the correct control-plane command and never claim
   that terminal/TUI output is evidence.
+- A new agent worktree performs a full codebase-memory index preflight for its
+  exact root before structural discovery, records readiness/counts, and
+  refreshes the index before handoff; the optional MCP service is not made a
+  runtime or packaging dependency.
 - Templates require substantive identity, scope, commands, exit codes,
   communication evidence, and unresolved issues.
 - Stale or contradictory steering text is removed or moved to a references

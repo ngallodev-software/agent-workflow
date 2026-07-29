@@ -10,3 +10,9 @@ agent-workflow review chatgpt-eval-001 --actor reviewer --reason "Independent ev
 ```
 
 Phase 1 uses a separate worktree/session and launches only after phase-0 review. Integrate only after inspecting the complete diff and rerunning shared tests. Terminate completed sessions through `agent-workflow terminate` and verify `tmux_alive=false`.
+
+For every new worktree, follow
+[`docs/references/WORKTREE_PREFLIGHT.md`](../../docs/references/WORKTREE_PREFLIGHT.md):
+full-index and verify the exact worktree before discovery, record readiness and
+counts, and refresh before handoff. This is optional operator tooling and is
+not an application dependency on MCP.

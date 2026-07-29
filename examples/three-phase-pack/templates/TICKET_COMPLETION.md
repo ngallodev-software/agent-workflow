@@ -16,6 +16,21 @@ head_revision: ""
 | Repository/component | Revision before | Revision after | Dirty before |
 |---|---|---|---|
 
+## Worktree index and discovery
+
+| Field | Value |
+|---|---|
+| Exact worktree root | |
+| Index project identity | |
+| Index mode | `full` |
+| Index status | |
+| Nodes / edges | |
+| Artifact or digest | |
+| Limitations or fallback | |
+
+The index must belong to this worktree. If the optional codebase-memory service
+was unavailable, say so and do not claim graph-backed structural analysis.
+
 ## Scope delivered
 
 Describe only what was actually changed.

@@ -12,12 +12,6 @@ agent-workflow worktree create /path/to/repository TICKET-ID HEAD
 
 Confirm the ticket's `backlog_id` is owned by exactly one active prompt pack and that all external prerequisites are complete before launch.
 
-Immediately after worktree creation, follow
-[`docs/references/WORKTREE_PREFLIGHT.md`](../../docs/references/WORKTREE_PREFLIGHT.md):
-full-index and verify the exact worktree, record readiness/counts, and refresh
-before handoff. This operator check must not become an application dependency
-on MCP.
-
 ## Parallel launch
 
 Tasks with no dependency edge between them may run concurrently in separate worktrees and sessions. Never place two agents in the same writable worktree.
