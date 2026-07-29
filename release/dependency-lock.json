@@ -32,7 +32,7 @@
     {
       "name": "mcp",
       "version": "1.28.1",
-      "groups": ["dev", "mcp"],
+      "groups": ["mcp", "runtime"],
       "source_requirements": ["mcp==1.28.1"]
     },
     {

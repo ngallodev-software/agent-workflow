@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import tomllib
 from copy import deepcopy
 from pathlib import Path
 
@@ -26,6 +27,14 @@ def _junit(path: Path, *, failures: int = 0, errors: int = 0) -> Path:
         encoding="utf-8",
     )
     return path
+
+
+def test_mcp_is_a_core_host_dependency() -> None:
+    metadata = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    assert "mcp==1.28.1" in metadata["project"]["dependencies"]
+    lock = _load(REPO_ROOT / "release" / "dependency-lock.json")
+    mcp = next(package for package in lock["packages"] if package["name"] == "mcp")
+    assert set(mcp["groups"]) == {"mcp", "runtime"}
 
 
 def test_release_evidence_preserves_open_governance_blockers_and_writes_durable_artifacts(

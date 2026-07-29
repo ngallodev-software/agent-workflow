@@ -7,9 +7,9 @@ Usage: ./install.sh [--no-skills] [--no-hooks] [--no-deps] [--python PATH]
 
 Installs this checkout, or a supplied wheel, into the current user's Python
 environment, including its declared core dependencies, then creates launcher, skill
-symlinks, and client hook reminders. Requesting the mcp extra also registers the
-local stdio server with Codex and Claude Code. Missing dependencies may require
-network access.
+symlinks, and client hook reminders. The core package includes the local stdio
+MCP server and registers it with Codex and Claude Code. Missing dependencies may
+require network access.
 
 Options:
   --no-skills            Skip installation of agent skill symlinks.
@@ -64,10 +64,8 @@ CODEX_HOME_DIR="${CODEX_HOME:-$HOME/.codex}"
 CODEX_CONFIG_FILE="$CODEX_HOME_DIR/config.toml"
 CLAUDE_CONFIG_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 CLAUDE_SETTINGS_FILE="$CLAUDE_CONFIG_DIR/settings.json"
-MCP_CONFIG_REQUESTED=0
-if [[ "$EXTRAS" == "all" || ",$EXTRAS," == *,mcp,* ]]; then
-  MCP_CONFIG_REQUESTED=1
-fi
+# MCP is a core runtime dependency, so normal host installs configure it too.
+MCP_CONFIG_REQUESTED=1
 command -v python3 >/dev/null || { echo "python3 is required" >&2; exit 127; }
 command -v "$PYTHON_BIN" >/dev/null || {
   echo "Python interpreter not found: $PYTHON_BIN" >&2

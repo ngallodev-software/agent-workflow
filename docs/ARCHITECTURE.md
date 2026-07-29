@@ -44,7 +44,7 @@ This is an additive migration, not an immediate rename or broad repository split
 | Workflows | `workflow.py`, `scheduler.py`, `workflow_service.py`, `approval.py`, `bindings.py`, `workflow_receipt.py`, `workflow_templates.py`, `routing.py` | graph validation/replay, scheduling, approvals, result binding, aggregate seals, templates, advice |
 | Prompt packs | `pack.py`, `manifests.py`, `native_jobs.py`, `contracts.py`, `path.py` | scaffold, no-follow inventory validation, checksums/archive, structured results |
 | Evaluation | `evaluation.py`, `eval/*`, `inspect_adapter.py`, `integrations/*` | collectors, scoring, immutable trials, cohort comparison, optional adapters |
-| MCP | `mcp/server.py`, `mcp/services.py` | optional bounded read-only stdio adapter over shared read services |
+| MCP | `mcp/server.py`, `mcp/services.py` | bounded read-only stdio adapter over shared read services |
 | Tests | `tests/acceptance`, `tests/invariants`, `tests/future`, `tests/live`, `tests/release` | installed-product journeys, compact authority matrices, executable future specifications, live compatibility, and distribution checks |
 
 ## Runtime state
@@ -141,7 +141,7 @@ Raw executor events must be stable regular non-symlink files, are capped at 16 M
 
 ## MCP boundary
 
-The current MCP server is optional, local stdio, and read-only except for pack validation. It uses the public pinned `mcp` package and bounded shared read services. Configured repository/state roots and pack paths are checked component-by-component without following links; unsafe entries fail closed. It exposes no launch, workflow mutation, lifecycle mutation, raw shell, tmux, arbitrary paths, terminal capture, or HTTP transport.
+The current MCP server is local stdio and read-only except for pack validation. It uses the public pinned `mcp` package and bounded shared read services. Configured repository/state roots and pack paths are checked component-by-component without following links; unsafe entries fail closed. It exposes no launch, workflow mutation, lifecycle mutation, raw shell, tmux, arbitrary paths, terminal capture, or HTTP transport.
 
 The current and planned boundary is in [MCP server](MCP_SERVER.md). The read-only adapter reuses the parser-derived command catalog and verified launch-contract reader for capability discovery and per-run command context; it does not generate executable MCP tools from CLI commands. Future mutation tools must add durable idempotency, call existing services, and preserve launch-contract v2 command artifacts for MCP-launched children. Streamable HTTP requires a separate authorization ADR.
 
@@ -164,7 +164,7 @@ See [Security](SECURITY.md) and [MCP server](MCP_SERVER.md).
 
 The default test authority is the installed product, not private Python helpers. Acceptance tests build a wheel, install it into an isolated virtual environment, and invoke public executables across real process, Git, and filesystem boundaries. A compact invariant layer covers security, replay, scheduler, provider-accounting, and cohort rules that need exhaustive matrices. Strict future tests describe approved backlog outcomes; live tmux/provider compatibility is opt-in. See [Testing](TESTING.md).
 
-Release assets are checked by `scripts/audit-release-assets.py`; no mutable `MANIFEST.sha256` is required in the source tree. Prompt-pack transfer checksums are opt-in, while deterministic archives carry their own canonical `MANIFEST.json`. The release gate runs tests, compile checks, shell syntax checks, prompt-pack validation, and deterministic archive tooling checks. Third-party MCP SDK source is not vendored or packaged; only the pinned optional dependency and dependency record remain.
+Release assets are checked by `scripts/audit-release-assets.py`; no mutable `MANIFEST.sha256` is required in the source tree. Prompt-pack transfer checksums are opt-in, while deterministic archives carry their own canonical `MANIFEST.json`. The release gate runs tests, compile checks, shell syntax checks, prompt-pack validation, and deterministic archive tooling checks. Third-party MCP SDK source is not vendored or packaged; only the pinned dependency and dependency record remain.
 
 The repository is pre-public-release. License, reporting, supported-host, and release-ownership decisions remain blockers in [Public release readiness](PUBLIC_RELEASE_READINESS.md).
 

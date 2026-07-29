@@ -14,7 +14,7 @@ The project is **pre-public-release**. Core behavior is usable, but public distr
 - schedules restart-safe workflow DAGs with bounded parallelism, approval gates, result bindings, retries, and aggregate receipts;
 - validates and archives prompt packs deterministically;
 - collects deterministic evaluation evidence and compares matched baseline/candidate cohorts;
-- exposes an optional bounded read-only local stdio MCP adapter.
+- exposes a bounded read-only local stdio MCP adapter.
 
 It does **not** merge branches, kill suspected stalls automatically, provide a daemon or web UI, perform remote execution, or choose models autonomously.
 
@@ -27,7 +27,10 @@ It does **not** merge branches, kill suspected stalls automatically, provide a d
 - GNU tar and zstd for deterministic `.tar.zst` archives
 - a supported coding-agent executable, or an explicit command
 
-Core installation includes `jsonschema`. Optional dependency groups cover evaluation, statistics, telemetry, MLflow, shell completion, and MCP.
+Core installation includes `jsonschema` and the pinned MCP SDK required by the
+installed `agent-workflow-mcp` entry point. Optional dependency groups cover
+evaluation, statistics, telemetry, MLflow, and shell completion; `[mcp]` is
+retained as a compatibility alias.
 
 ## Install
 
@@ -134,11 +137,16 @@ The canonical JSON templates live in `templates/evaluation/` and are installed w
 
 Raw provider streams are bounded and sealed before normalization. Usage evidence distinguishes delta, cumulative, and terminal totals and never mixes provider-billed cost with local estimates. Exported-run assessment keeps completion, lifecycle sealing, structured streams, scope evidence, lifecycle disposition, evaluation artifacts, and comparability separate. Benchmark reports reject declared source, pack-checksum, model, executor, case digest, or reference identity drift; count unmatched trials explicitly; and remain descriptive when evidence or sample size is insufficient. See [Evidence and evaluation](docs/EVIDENCE_AND_EVALUATION.md).
 
-## Optional MCP server
+## MCP server
 
-Install the `mcp` extra to configure `agent-workflow-mcp` as a local stdio
-server in the user-level Codex and Claude Code MCP settings. Existing entries
-are preserved. The current adapter is read-only and bounded to configured roots. It exposes the parser-derived command catalog, an explicit capability manifest, and verified per-run command context/cards without turning CLI commands into MCP tools. It does not expose launch, workflow mutation, review, destructive lifecycle commands, raw shell, arbitrary paths, terminal capture, or HTTP. See [MCP server](docs/MCP_SERVER.md).
+The core package includes `mcp==1.28.1` and configures `agent-workflow-mcp` as
+a local stdio server in the user-level Codex and Claude Code MCP settings.
+Existing entries are preserved. The current adapter is read-only and bounded
+to configured roots. It exposes the parser-derived command catalog, an
+explicit capability manifest, and verified per-run command context/cards
+without turning CLI commands into MCP tools. It does not expose launch,
+workflow mutation, review, destructive lifecycle commands, raw shell,
+arbitrary paths, terminal capture, or HTTP. See [MCP server](docs/MCP_SERVER.md).
 
 ## State and trust
 

@@ -79,13 +79,13 @@ def _sanitized_environment():
 
 
 def build_server(settings: Settings, *, repo_root: Path | None = None) -> Any:
-    """Build the optional FastMCP server using only public SDK imports."""
+    """Build the FastMCP server using only public SDK imports."""
     try:
         from mcp.server.fastmcp import FastMCP
     except ImportError as exc:  # pragma: no cover - exercised without extra
         raise WorkflowError(
-            "agent-workflow[mcp]: optional MCP SDK is unavailable; install "
-            "'agent-workflow[mcp]'"
+            "agent-workflow MCP SDK is unavailable; reinstall the package "
+            "with dependencies enabled"
         ) from exc
 
     service = WorkflowReadService(settings, repository_root=_repo_root(str(repo_root) if repo_root else None))
@@ -153,7 +153,7 @@ def main(argv: list[str] | None = None) -> int:
             server.run(transport="stdio")
     except WorkflowError as exc:
         message = str(exc)
-        if message.startswith("agent-workflow[mcp]: optional MCP SDK is unavailable"):
+        if message.startswith("agent-workflow MCP SDK is unavailable"):
             print(message, file=sys.stderr)
         else:
             print("agent-workflow[mcp]: startup configuration is unavailable", file=sys.stderr)

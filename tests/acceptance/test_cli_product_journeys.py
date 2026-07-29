@@ -265,7 +265,7 @@ def test_source_installer_round_trip_preserves_user_owned_paths(
 
     def run(script: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            [str(REPO_ROOT / script), "--no-deps", "--extras", "mcp"]
+            [str(REPO_ROOT / script), "--no-deps"]
             if script == "install.sh"
             else [str(REPO_ROOT / script)],
             cwd=REPO_ROOT,

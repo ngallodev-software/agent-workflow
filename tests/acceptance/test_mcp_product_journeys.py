@@ -25,7 +25,7 @@ def test_installed_stdio_mcp_reads_bounded_metadata_only(
     tmp_path: Path,
 ) -> None:
     if not installed_product.mcp.exists():
-        pytest.skip("installed-product fixture did not install the optional MCP extra")
+        pytest.skip("installed-product fixture did not install the core MCP dependency")
     repo = tmp_path / "repo"
     git_repo(repo)
     prompt = tmp_path / "prompt.md"

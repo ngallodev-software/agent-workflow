@@ -21,9 +21,10 @@ cd ~/src/agent-workflow
 
 This installs the package and its core Python dependencies in editable user
 mode, then wires the launcher, skills, man pages, schemas, evaluation assets,
-and active prompt packs. To install optional integrations, use
-`./install.sh --extras eval,stats` or `./install.sh --extras all`. The
-optional local MCP server uses the pinned stable Python SDK:
+and active prompt packs. The core package includes the pinned MCP SDK because
+the installed `agent-workflow-mcp` entry point requires it. To install optional
+integrations, use `./install.sh --extras eval,stats` or
+`./install.sh --extras all`.
 
 The installer does not require an activated virtual environment. It uses the
 selected `python3` interpreter, bootstraps pip with `ensurepip` when available,
@@ -31,16 +32,15 @@ and otherwise reports the exact interpreter that needs pip. To select another
 host Python, use `./install.sh --python /path/to/python3`.
 
 ```bash
-./install.sh --extras mcp
 agent-workflow-mcp --help
 ```
 
-When the `mcp` extra is requested, the installer also registers the local
-stdio server as `agent-workflow` in the user-level Codex and Claude Code
-configuration. Existing entries with that name are preserved. The `all`
-extra includes `mcp`.
+The installer registers the local stdio server as `agent-workflow` in the
+user-level Codex and Claude Code configuration on every normal install.
+Existing entries with that name are preserved. The `mcp` extra remains
+available as a compatibility alias.
 
-The first MCP release is stdio-only. It exposes bounded run resources and
+The MCP release is stdio-only. It exposes bounded run resources and
 prompt-pack validation; it does not expose shell execution, raw tmux control,
 destructive lifecycle tools, or HTTP transport.
 
@@ -84,5 +84,5 @@ builds a wheel, then calls this installer in wheel mode against the host account
 account, configure narrowly scoped passwordless sudo for this deployment or
 run the job under the target host account. The pipeline fails if the target is
 not configured; it never silently installs only into Jenkins's private home.
-The pipeline requests the lightweight `mcp` extra; use `--extras eval` only
-when the host is intentionally dedicated to the optional evaluator stack.
+The pipeline uses the core MCP dependency; use `--extras eval` only when the
+host is intentionally dedicated to the optional evaluator stack.

@@ -2,7 +2,7 @@
 
 ## Current boundary
 
-`agent-workflow-mcp` is an optional local stdio adapter built with the pinned official Python MCP SDK. It exposes bounded read-only views of configured repository, prompt-pack, worktree, state, run, message, receipt, installed-command, and sealed run-command-context data.
+`agent-workflow-mcp` is a local stdio adapter built with the pinned official Python MCP SDK. It exposes bounded read-only views of configured repository, prompt-pack, worktree, state, run, message, receipt, installed-command, and sealed run-command-context data.
 
 The adapter is intentionally not a second orchestration engine. CLI and MCP surfaces must call the same application services and produce the same durable evidence.
 
