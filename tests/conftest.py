@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import importlib.metadata
 import os
 import shutil
 import subprocess
@@ -95,6 +96,22 @@ def installed_product(tmp_path_factory: pytest.TempPathFactory) -> InstalledProd
     environment = root / "venv"
     venv.EnvBuilder(with_pip=True, system_site_packages=True).create(environment)
     python = environment / "bin" / "python"
+    try:
+        mcp_distribution = importlib.metadata.distribution("mcp")
+    except importlib.metadata.PackageNotFoundError:
+        pytest.fail(
+            "installed-product fixture requires mcp==1.28.1 in the configured "
+            "environment; install that pinned SDK before running acceptance tests"
+        )
+    if mcp_distribution.version != "1.28.1":
+        pytest.fail(
+            "installed-product fixture requires mcp==1.28.1 in the configured "
+            f"environment; found mcp=={mcp_distribution.version}"
+        )
+    venv_site = environment / "lib" / f"python{sys.version_info.major}.{sys.version_info.minor}" / "site-packages"
+    (venv_site / "agent_workflow_configured_mcp.pth").write_text(
+        str(mcp_distribution.locate_file("")), encoding="utf-8"
+    )
     subprocess.run(
         [str(python), "-m", "pip", "install", "--ignore-installed", "--no-deps", str(wheel)],
         text=True,
@@ -102,13 +119,28 @@ def installed_product(tmp_path_factory: pytest.TempPathFactory) -> InstalledProd
         check=True,
         timeout=120,
     )
-    subprocess.run(
-        [str(python), "-m", "pip", "install", "--ignore-installed", "mcp==1.28.1"],
+    dependency = subprocess.run(
+        [
+            str(python),
+            "-c",
+            (
+                "import importlib.metadata as metadata; import mcp; "
+                "version = metadata.version('mcp'); "
+                "print(version)"
+            ),
+        ],
         text=True,
         capture_output=True,
-        check=True,
-        timeout=120,
+        check=False,
+        timeout=30,
     )
+    if dependency.returncode or dependency.stdout.strip() != "1.28.1":
+        detail = (dependency.stderr or dependency.stdout).strip().splitlines()[-1:]
+        detail_text = detail[0] if detail else "the SDK could not be imported"
+        pytest.fail(
+            "installed-product fixture requires mcp==1.28.1 in the configured "
+            f"environment; make that pinned SDK available before running acceptance tests ({detail_text})"
+        )
     return InstalledProduct(
         root=root,
         python=python,

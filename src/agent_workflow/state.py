@@ -51,7 +51,41 @@ def status_path(settings: Settings, session_id: str):
 
 
 def read_status(settings: Settings, session_id: str):
-    return _current(read_json(status_path(settings, session_id)))
+    data = _current(read_json(status_path(settings, session_id)))
+    return _migrate_legacy_tmux_status(settings, session_id, data)
+
+
+def _migrate_legacy_tmux_status(
+    settings: Settings,
+    session_id: str,
+    data: dict[str, Any],
+) -> dict[str, Any]:
+    """Upgrade an unambiguous shared-window target to stable pane identity."""
+    if data.get("tmux_mode") != "shared_window":
+        return data
+    target = data.get("tmux_target")
+    if (
+        not isinstance(target, str)
+        or not target
+        or target.startswith("%")
+        or data.get("tmux_pane_id")
+    ):
+        return data
+
+    from . import tmux
+
+    try:
+        pane = tmux.resolve_status_pane(data)
+    except WorkflowError:
+        return data
+    if pane is None or not pane.pane_id or not pane.pane_id.startswith("%"):
+        return data
+
+    migrated = dict(data)
+    migrated["tmux_pane_id"] = pane.pane_id
+    migrated["tmux_target"] = pane.pane_id
+    atomic_write_json(status_path(settings, session_id), migrated)
+    return migrated
 
 
 def write_status(settings: Settings, session_id: str, data: dict[str, Any]):
@@ -71,7 +105,7 @@ def update_status(settings: Settings, session_id: str, **changes: Any):
     path = status_path(settings, session_id)
     if not path.exists():
         raise WorkflowError(f"unknown session: {session_id}")
-    data = _current(read_json(path))
+    data = read_status(settings, session_id)
     actor = str(changes.pop("_actor", "agent-workflow"))
     reason = str(changes.pop("_reason", "status updated"))
     receipt_refs = changes.pop("_receipt_refs", ())
@@ -104,7 +138,7 @@ def list_statuses(settings: Settings):
     items = []
     for path in sorted(runs_root(settings).glob("*/status.json")):
         try:
-            items.append(_current(read_json(path)))
+            items.append(read_status(settings, path.parent.name))
         except WorkflowError as exc:
             items.append(
                 {

@@ -341,6 +341,17 @@ def resolve_pane(
     host session carries the expected run binding. A name, PID, or position
     never authorizes recovery.
     """
+    if require_binding and not target.startswith("%"):
+        if not run_id or not host_session:
+            return None
+        scan_target = (
+            target.rsplit(".", 1)[0]
+            if ":" in target and "." in target
+            else host_session
+        )
+        matches = [pane for pane in list_panes(scan_target) if pane.run_id == run_id]
+        return matches[0] if len(matches) == 1 else None
+
     direct = pane_info(target)
     if direct is not None:
         if not run_id:
