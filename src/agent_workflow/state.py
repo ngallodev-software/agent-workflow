@@ -81,9 +81,20 @@ def _migrate_legacy_tmux_status(
     if pane is None or not pane.pane_id or not pane.pane_id.startswith("%"):
         return data
 
+    window_target = data.get("tmux_window_target")
+    if not isinstance(window_target, str) or not window_target:
+        window_target = None
+        if ":" in target and "." in target:
+            candidate, pane_index = target.rsplit(".", 1)
+            if candidate and pane_index.isdigit():
+                window_target = candidate
+    if window_target is None:
+        return data
+
     migrated = dict(data)
     migrated["tmux_pane_id"] = pane.pane_id
     migrated["tmux_target"] = pane.pane_id
+    migrated["tmux_window_target"] = window_target
     atomic_write_json(status_path(settings, session_id), migrated)
     return migrated
 

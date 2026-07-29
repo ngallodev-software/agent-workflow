@@ -4,6 +4,7 @@ import json
 from dataclasses import replace
 from pathlib import Path
 
+from agent_workflow.agent_context import idle_interactive_sessions
 from agent_workflow import tmux
 from agent_workflow.config import Settings, defaults
 from agent_workflow.state import list_statuses, read_status
@@ -84,9 +85,36 @@ def test_status_migration_persists_stable_identity_on_unique_recovery(monkeypatc
 
     assert migrated["tmux_pane_id"] == "%112"
     assert migrated["tmux_target"] == "%112"
+    assert migrated["tmux_window_target"] == "shared:0"
     persisted = json.loads(path.read_text(encoding="utf-8"))
     assert persisted["tmux_pane_id"] == "%112"
     assert persisted["tmux_target"] == "%112"
+    assert persisted["tmux_window_target"] == "shared:0"
+
+
+def test_migrated_live_pane_remains_discoverable_in_its_window(
+    monkeypatch, tmp_path: Path
+) -> None:
+    settings, path = _write_status(tmp_path, _legacy_status())
+    (path.parent / "agent-context.json").write_text(
+        json.dumps(
+            {
+                "schema": "agent-workflow/agent-context/v1",
+                "interactive": True,
+                "state": "idle_reusable",
+                "updated_at": "2026-07-29T00:00:00+00:00",
+            }
+        ),
+        encoding="utf-8",
+    )
+    bound = pane("%112", run_id="run-1")
+    monkeypatch.setattr(tmux, "resolve_pane", lambda *args, **kwargs: bound)
+
+    rows = idle_interactive_sessions(settings, window_target="shared:0")
+
+    assert [row["session_id"] for row in rows] == ["run-1"]
+    assert rows[0]["tmux_pane_id"] == "%112"
+    assert json.loads(path.read_text(encoding="utf-8"))["tmux_window_target"] == "shared:0"
 
 
 def test_status_migration_is_fail_closed_for_ambiguous_recovery(
