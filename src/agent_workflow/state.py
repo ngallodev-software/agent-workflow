@@ -164,6 +164,8 @@ def repair_status(settings: Settings, session_id: str) -> dict[str, Any]:
         "launch_contract_path": str(contract_path),
         "tmux_session": session_id,
         "tmux_target": session_id,
+        "tmux_pane_id": None,
+        "tmux_window_target": None,
         "tmux_mode": "dedicated_session",
     }
     from .receipts import read_sealed_contract, verify_seal_details

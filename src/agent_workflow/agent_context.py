@@ -136,10 +136,10 @@ def complete_task(
     status = read_status(settings, session_id)
     if status.get("status") not in {"prepared", "launched", "running", "interruption_requested"}:
         raise WorkflowError("task completion requires a live execution")
-    target = str(status.get("tmux_target", session_id))
     host = str(status.get("tmux_session", session_id))
     try:
-        alive = tmux.session_exists(host) and tmux.pane_info(target) is not None
+        pane = tmux.resolve_status_pane(status) if tmux.session_exists(host) else None
+        alive = pane is not None and not pane.dead
     except WorkflowError:
         alive = False
     if not alive:
@@ -228,10 +228,10 @@ def candidates(
         if not _same_path(context.get("worktree"), workdir):
             eligible = False
             reasons.append("different_worktree")
-        target = str(status.get("tmux_target", session_id))
         host = str(status.get("tmux_session", session_id))
         try:
-            alive = tmux.session_exists(host) and tmux.pane_info(target) is not None
+            pane = tmux.resolve_status_pane(status) if tmux.session_exists(host) else None
+            alive = pane is not None and not pane.dead
         except WorkflowError:
             alive = False
         if not alive:
@@ -278,18 +278,20 @@ def idle_interactive_sessions(
 ) -> list[dict[str, Any]]:
     """Return live, explicitly idle panes in one tmux window, oldest first."""
     rows: list[dict[str, Any]] = []
-    prefix = f"{window_target}."
     for status in list_statuses(settings):
         session_id = str(status.get("session_id", ""))
         target = str(status.get("tmux_target", ""))
-        if not target.startswith(prefix):
+        status_window = status.get("tmux_window_target")
+        if status_window != window_target and not (
+            status_window is None and target.startswith(f"{window_target}.")
+        ):
             continue
         path = run_dir(settings, session_id) / CONTEXT_NAME
         if not path.is_file():
             continue
         try:
             context = _read_json(path)
-            pane = tmux.pane_info(target)
+            pane = tmux.resolve_status_pane(status)
         except WorkflowError:
             continue
         if (
@@ -304,6 +306,7 @@ def idle_interactive_sessions(
                     "agent_name": context.get("agent_name"),
                     "state": context.get("state"),
                     "tmux_target": target,
+                    "tmux_pane_id": pane.pane_id,
                     "updated_at": context.get("updated_at"),
                 }
             )
