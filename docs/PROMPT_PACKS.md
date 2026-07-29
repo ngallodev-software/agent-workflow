@@ -96,6 +96,7 @@ Do not embed host-specific absolute paths, credentials, private project names, m
 | [`delegation-communication-reliability`](../prompt-packs/delegation-communication-reliability/) | PROC-001 through PROC-005 | Planning complete; phase 0 has four independent implementation lanes, followed by operator enforcement and an independent gate. |
 | [`tmux-pane-identity-reliability`](../prompt-packs/tmux-pane-identity-reliability/) | PROC-006 | Ready; replaces mutable shared-window pane locations with durable pane identity and explicit run binding. |
 | [`chatgpt-sealed-run-assessment`](../prompt-packs/chatgpt-sealed-run-assessment/) | CHATGPT-EVAL-001, CHATGPT-TDD-001 | Assessment and future-TDD artifacts completed; planned runtime work remains blocked behind its own implementation and gates. |
+| [`force-accept-override`](../prompt-packs/force-accept-override/) | LIFE-001 | Ready for one isolated, independently reviewed manual lifecycle-override implementation. |
 
 The dependency/collision rationale is in [Determinism and security hardening plan](DETERMINISM_SECURITY_HARDENING_PLAN.md). The local two-way messaging architecture and its collision-free implementation sequence are in [Durable two-way messaging](ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md). The source findings are in [Feature determinism and security assessment](FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md).
 

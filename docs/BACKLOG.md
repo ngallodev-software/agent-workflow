@@ -29,6 +29,7 @@ The determinism and security work below is derived from the [feature determinism
 | [`delegation-communication-reliability`](../prompt-packs/delegation-communication-reliability/) | PROC-001 through PROC-005 | Planning complete; phase 0 tasks are ready for isolated implementation. |
 | [`tmux-pane-identity-reliability`](../prompt-packs/tmux-pane-identity-reliability/) | PROC-006 | Ready for isolated implementation; shared-window pane locations must be replaced by durable pane identity and explicit run binding. |
 | [`chatgpt-sealed-run-assessment`](../prompt-packs/chatgpt-sealed-run-assessment/) | CHATGPT-EVAL-001, CHATGPT-TDD-001 | Assessment and future-TDD artifacts completed; future journeys remain strict expected failures and do not unblock planned runtime work. |
+| [`force-accept-override`](../prompt-packs/force-accept-override/) | LIFE-001 | Ready for isolated implementation; add an explicit, audited manual force-accept path without weakening normal acceptance. |
 
 ## Ready now
 
@@ -42,6 +43,7 @@ The determinism and security work below is derived from the [feature determinism
 | PROC-004 | P0 | Critical | ready | Reject placeholder-only completion handoffs and require substantive identity, scope, commands, exit codes, acceptance, and unresolved-evidence fields. | [`delegation-communication-reliability`](../prompt-packs/delegation-communication-reliability/phase-0/tickets/PROC-004-completion-validation.md) |
 | PROC-005 | P1 | High | ready | Align steering, templates, hooks/reminders, and recovery references with the enforced launch, communication, observation, completion, and closeout pattern. | [`delegation-communication-reliability`](../prompt-packs/delegation-communication-reliability/phase-1/tickets/PROC-005-operator-enforcement.md) |
 | PROC-006 | P0 | Critical | ready | Replace mutable shared-window tmux pane locations with stable pane IDs and run-bound pane metadata. Task completion and lifecycle controls must not report a live pane as orphaned after pane add/remove or layout changes; genuine pane loss must remain distinguishable and recoverable. | [`tmux-pane-identity-reliability`](../prompt-packs/tmux-pane-identity-reliability/phase-0/tickets/PROC-006-pane-identity.md) |
+| LIFE-001 | P0 | Critical | ready | Add a locally interactive, explicit `force-accept` command that records an immutable override receipt with actor, reason, and failed-normal-gate evidence. It must preserve ordinary `accept` validation and truthfully document that authenticated human-only authorization remains blocked on HARD-007. | [`force-accept-override`](../prompt-packs/force-accept-override/phase-0/tickets/LIFE-001-force-accept.md) |
 | REL-001 | P0 | Critical | needs-decision | Select and add the project license, matching package metadata, and distribution policy. | [Public release readiness](PUBLIC_RELEASE_READINESS.md#governance-and-compatibility-blockers) |
 | REL-002 | P0 | Critical | blocked | Establish a real monitored vulnerability-reporting channel and update `SECURITY.md`. | [Public release readiness](PUBLIC_RELEASE_READINESS.md#governance-and-compatibility-blockers) |
 
