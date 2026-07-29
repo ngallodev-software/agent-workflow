@@ -4,10 +4,8 @@
 
 The blocker-clearance prompt was executed against the `0.2.5` source snapshot
 uploaded on 2026-07-28. At that time the repository was **not authorized to
-start `MSG-001`** and `HARD-004`/`HARD-005` were both `in-review`. The
-superseding coordinator review in [HARD-004-REVIEW-20260728.md](HARD-004-REVIEW-20260728.md)
-now closes HARD-004 individually. `HARD-005` and `FOUND-GATE-01` remain open,
-so `MSG-001` is still not authorized.
+start `MSG-001`**. Current coordinator reviews now close HARD-004, HARD-005,
+and `FOUND-GATE-01`; `MSG-001` is now ready but has not yet been launched.
 
 This result preserves the canonical dependency model rather than advancing a
 messaging ticket from implementation prose, mutable status, or incomplete
@@ -111,9 +109,9 @@ journeys from running on this host as well.
 ## Superseding current graph
 
 ```text
-HARD-004 (completed individually) ──┐
-                                    ├─> shared FOUND-GATE-01 still open
-HARD-005 (in-review) ───────────────┘              └─> MSG-001 blocked
+HARD-004 (completed) ───────────────┐
+HARD-005 (completed) ───────────────┼─> FOUND-GATE-01 (accepted)
+HARD-008 (completed) ───────────────┘              └─> MSG-001 ready
 ```
 
 The historical evidence review and graph below describe the state of the
