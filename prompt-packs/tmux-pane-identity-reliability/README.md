@@ -15,10 +15,10 @@ compatibility path for pre-fix status records.
 
 ## Source baseline
 
-The pack was prepared from the `agent-workflow` repository at the clean master
-revision produced with this pack. The checked-out source remains authoritative
-when it differs from included references. Read `references/pane-identity.md`
-before editing.
+The pack was prepared from the `agent-workflow` repository at clean master
+revision `e70409747a50e00364147af7186fb86c1486606f` on 2026-07-29. The
+checked-out source remains authoritative when it differs from included
+references. Read `references/pane-identity.md` before editing.
 
 ## Phase map
 
