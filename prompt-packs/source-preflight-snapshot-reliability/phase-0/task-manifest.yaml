@@ -1,0 +1,9 @@
+phase: "0"
+name: "fresh-source-snapshot"
+mandatory_order: ["PROC-007"]
+tasks:
+  - id: "PROC-007"
+    tier: A
+    session: "source-preflight-snapshot-proc-007"
+    prompt: "tickets/PROC-007-source-snapshot.md"
+    backlog_id: "PROC-007"
