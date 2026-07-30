@@ -1,6 +1,14 @@
 
 # Changelog
 
+## 0.3.0 — 2026-07-30
+
+- Add the sandbox-safe child control bridge, exact launcher binding, and an
+  installed-product child-completion journey.
+- Make source preflight honor configured Git excludes and make wheel builds
+  discard stale build artifacts.
+- Add enforceable, maintainer-selected semantic-version bumping.
+
 ## 0.2.5 — 2026-07-27
 
 - Add the delegation-communication-reliability prompt pack with parallel

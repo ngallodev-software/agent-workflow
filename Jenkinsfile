@@ -33,7 +33,7 @@ pipeline {
         stage('Test and release checks') {
             steps {
                 withEnv(['PIP_IGNORE_INSTALLED=1']) {
-                    sh './scripts/release-check.sh'
+                    sh 'python scripts/bump-version.py --check && ./scripts/release-check.sh'
                 }
             }
         }
