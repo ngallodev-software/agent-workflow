@@ -1394,7 +1394,9 @@ def observe(
     try:
         alive: bool | None = tmux.session_exists(host_session)
         pane = tmux.resolve_status_pane(data) if alive else None
-        if pane is not None and pane.dead:
+        if data.get("tmux_mode") == "shared_window":
+            alive = pane is not None and not pane.dead
+        elif pane is not None and pane.dead:
             alive = False
     except WorkflowError as exc:
         alive = None

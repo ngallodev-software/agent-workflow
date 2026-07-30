@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 from tests.conftest import InstalledProduct, fake_agent_path, git_repo, wait_for_status, write_config
@@ -89,3 +90,46 @@ def test_destroyed_stable_pane_is_not_rebound_to_replacement(
     )
     assert result.returncode != 0
     assert "live agent pane" in result.stderr
+
+
+def test_completed_shared_window_run_closes_bound_pane(
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+    fake_agent_path: Path,
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    git_repo(repo)
+    prompt = tmp_path / "prompt.md"
+    prompt.write_text("Complete and close the shared pane.\n", encoding="utf-8")
+    config = write_config(product_env, fake_agent=fake_agent_path)
+    env = dict(product_env)
+    env.update({
+        "TMUX": "fake-server", "TMUX_PANE": "%0", "FAKE_AGENT_MODE": "task-complete",
+        "FAKE_AGENT_DELAY": "0.2",
+    })
+
+    launched = installed_product.json(
+        "launch", "closeout-pane", repo, prompt, "--config", config,
+        "--ticket", "PROC-006", "--agent-class", "implementation", "--interactive",
+        "--", fake_agent_path, env=env,
+    )
+    pane_id = launched["tmux_pane_id"]
+    status = wait_for_status(env, "closeout-pane")
+    assert status["status"] == "completed"
+    terminated = installed_product.json(
+        "terminate", "closeout-pane", "--grace-seconds", "0", env=env
+    )
+    assert terminated["status"] == "completed"
+
+    state_path = Path(env["FAKE_TMUX_STATE"]) / "fake.json"
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline:
+        state = _fake_session(state_path)
+        if all(item["id"] != pane_id for item in state.get("panes", [])):
+            break
+        time.sleep(0.05)
+    state = _fake_session(state_path)
+    assert all(item["id"] != pane_id for item in state.get("panes", []))
+    observed = installed_product.json("status", "closeout-pane", env=env)
+    assert observed["tmux_alive"] is False
