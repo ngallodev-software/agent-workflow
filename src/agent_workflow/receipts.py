@@ -39,6 +39,7 @@ SEALED_OPTIONAL_ARTIFACTS = (
     "evaluation-runtime.json",
     "execution-metrics.json",
     "control-events.jsonl",
+    "control-intents.jsonl",
     "job-binding.json",
     "jobs/native-job.json",
     "agent-context.json",

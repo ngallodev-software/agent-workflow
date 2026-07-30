@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/control-intent/v1",
+  "type": "object",
+  "required": [
+    "schema",
+    "request_id",
+    "session_id",
+    "sequence",
+    "kind",
+    "actor",
+    "content",
+    "correlation_id",
+    "digest"
+  ],
+  "properties": {
+    "schema": {"const": "agent-workflow/control-intent/v1"},
+    "request_id": {"type": "string", "format": "uuid"},
+    "session_id": {"type": "string", "minLength": 1},
+    "sequence": {"type": "integer", "minimum": 1},
+    "kind": {"enum": ["progress", "ack", "task_complete"]},
+    "actor": {"type": "string", "minLength": 1},
+    "content": {"type": "string", "minLength": 1, "maxLength": 16384},
+    "correlation_id": {"type": ["string", "null"], "format": "uuid"},
+    "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  },
+  "additionalProperties": false
+}

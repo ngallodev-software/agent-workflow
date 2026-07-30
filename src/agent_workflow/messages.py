@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .errors import WorkflowError
-from .util import utc_now, validate_id
+from .util import atomic_write_json, utc_now, validate_id
 
 
 MESSAGE_SCHEMA = "agent-workflow/session-message/v1"
@@ -43,6 +43,10 @@ _KIND_DIRECTIONS = {
     "task_complete": "child_to_parent",
 }
 
+CONTROL_BRIDGE_SCHEMA = "agent-workflow/control-intent/v1"
+CONTROL_BRIDGE_ENV = "AGENT_WORKFLOW_CONTROL_BRIDGE"
+CONTROL_BRIDGE_MAX_BYTES = 32 * 1024
+
 
 def canonical_message_bytes(message: dict[str, Any]) -> bytes:
     """Return the bytes used to identify an immutable source message."""
@@ -55,6 +59,82 @@ def canonical_message_bytes(message: dict[str, Any]) -> bytes:
 def message_digest(message: dict[str, Any]) -> str:
     """Return a digest bound to the complete canonical source record."""
     return "sha256:" + hashlib.sha256(canonical_message_bytes(message)).hexdigest()
+
+
+def _bridge_path() -> Path | None:
+    value = os.environ.get(CONTROL_BRIDGE_ENV)
+    return Path(value) if value else None
+
+
+def bridge_available(session_id: str | None = None) -> bool:
+    """Return whether the current process is the bridged child for a run.
+
+    The bridge variables are inherited by the operator shell that launched a
+    run.  Merely seeing a writable directory must not redirect host-side CLI
+    commands into that directory.
+    """
+    if session_id is not None and os.environ.get("AGENT_WORKFLOW_SESSION_ID") != session_id:
+        return False
+    path = _bridge_path()
+    return path is not None and path.is_dir() and not path.is_symlink()
+
+
+def bridge_required(session_id: str) -> bool:
+    """Identify a launched child so missing host bridge access is explicit."""
+    return os.environ.get("AGENT_WORKFLOW_SESSION_ID") == session_id
+
+
+def write_control_intent(
+    *, session_id: str, kind: str, actor: str, content: str,
+    correlation_id: str | None = None,
+) -> dict[str, Any]:
+    """Write one bounded child intent without touching host state or tmux."""
+    bridge = _bridge_path()
+    if bridge is None:
+        raise WorkflowError("control bridge unavailable")
+    try:
+        mode = bridge.lstat().st_mode
+    except OSError as exc:
+        raise WorkflowError("control bridge unavailable") from exc
+    if not stat.S_ISDIR(mode) or stat.S_ISLNK(mode):
+        raise WorkflowError("control bridge must be a real directory")
+    validate_id(session_id, "session ID")
+    validate_id(actor, "actor ID")
+    if kind not in {"progress", "ack", "task_complete"}:
+        raise WorkflowError("unsupported bridged control kind")
+    if kind == "ack" and correlation_id is None:
+        raise WorkflowError("ack messages require correlation_id")
+    if kind != "ack" and correlation_id is not None:
+        raise WorkflowError("only ack messages may include correlation_id")
+    if correlation_id is not None:
+        _uuid(correlation_id, "correlation_id")
+    if not isinstance(content, str) or not content or len(content) > MAX_CONTENT_CHARS:
+        raise WorkflowError("invalid control intent content")
+    sequence = 1
+    for candidate in bridge.glob("intent-*.json"):
+        try:
+            sequence = max(sequence, int(candidate.stem.rsplit("-", 1)[1]) + 1)
+        except (ValueError, IndexError):
+            continue
+    intent = {
+        "schema": CONTROL_BRIDGE_SCHEMA,
+        "request_id": str(uuid.uuid4()),
+        "session_id": session_id,
+        "sequence": sequence,
+        "kind": kind,
+        "actor": actor,
+        "content": content,
+        "correlation_id": correlation_id,
+    }
+    intent["digest"] = "sha256:" + hashlib.sha256(
+        json.dumps(intent, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    target = bridge / f"intent-{intent['request_id']}-{sequence}.json"
+    atomic_write_json(target, intent, mode=0o600)
+    if target.stat().st_size > CONTROL_BRIDGE_MAX_BYTES:
+        target.unlink(missing_ok=True)
+        raise WorkflowError("control intent exceeds size limit")
+    return {"outcome": "delivered", "request_id": intent["request_id"], "sequence": sequence}
 
 
 def message_log_path(run_dir: Path) -> Path:
@@ -142,8 +222,8 @@ def validate_message(value: object, *, expected_sequence: int | None = None) -> 
         _uuid(correlation_id, "correlation_id")
     if value["kind"] == "ack" and correlation_id is None:
         raise WorkflowError("ack messages require correlation_id")
-    if value["kind"] != "ack" and correlation_id is not None:
-        raise WorkflowError("only ack messages may include correlation_id")
+    if value["kind"] not in {"ack", "error"} and correlation_id is not None:
+        raise WorkflowError("only ack and error messages may include correlation_id")
     return value
 
 
