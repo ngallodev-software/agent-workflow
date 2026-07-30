@@ -42,6 +42,7 @@ def test_shared_window_uses_stable_pane_id_through_layout_churn(
     state_path = Path(env["FAKE_TMUX_STATE"]) / "fake.json"
     state = _fake_session(state_path)
     target = next(item for item in state["panes"] if item["id"] == pane_id)
+    assert target["run_id"] == "stable-pane"
     state["panes"].insert(0, {"id": "%99", "pid": 0, "index": 0, "role": "agent"})
     for index, item in enumerate(state["panes"]):
         item["index"] = index

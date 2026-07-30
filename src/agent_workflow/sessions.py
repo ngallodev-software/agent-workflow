@@ -1349,13 +1349,6 @@ def launch(
             tmux.create_session(session_id, str(workdir), str(runner), agent_name)
             tmux_target = session_id
             tmux_session = session_id
-            tmux.set_pane_binding(
-                tmux_target,
-                run_id=session_id,
-                assignment_id=(agent_context.get("current_assignment") or {}).get(
-                    "assignment_id"
-                ),
-            )
             tmux_window_target = None
             tmux_mode = "dedicated_session"
     except Exception:
