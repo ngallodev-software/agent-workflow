@@ -10,6 +10,8 @@ from .process import redact_argv, secret_values_from_argv
 from .trust import inspect_path, require_trusted
 
 CONFIG_SCHEMA_VERSION = 1
+LUNA_MODEL = "gpt-5.6-luna"
+LUNA_REASONING_EFFORTS = ("low", "medium", "high")
 
 
 @dataclass(frozen=True)
@@ -23,6 +25,7 @@ class ExecutorPolicy:
     non_interactive_permission_args: tuple[str, ...] = ()
     environment_allowlist: tuple[str, ...] = ()
     steering_adapter: str = "unsupported"
+    reasoning_effort: str | None = None
 
 
 @dataclass(frozen=True)
@@ -117,10 +120,10 @@ def defaults(path: Path | None = None) -> Settings:
         executor_policies={
             "codex": ExecutorPolicy(
                 interactive_command=["codex"],
-                models=("gpt-5.4-mini", "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"),
-                default_model="gpt-5.4-mini",
-                no_go_models=("gpt-5.6-sol", "*fast*"),
+                models=(LUNA_MODEL,),
+                default_model=LUNA_MODEL,
                 interactive_permission_args=("--ask-for-approval", "on-request"),
+                reasoning_effort="medium",
             ),
             "claude": ExecutorPolicy(
                 interactive_command=["claude"],
@@ -136,24 +139,24 @@ def defaults(path: Path | None = None) -> Settings:
                 interactive=False,
                 default_executor="claude",
                 default_model="haiku",
-                allowed_models={"claude": ("haiku",), "codex": ("gpt-5.4-mini",)},
+                allowed_models={"claude": ("haiku",), "codex": (LUNA_MODEL,)},
             ),
             "review": AgentClassPolicy(
                 interactive=False,
                 default_executor="codex",
-                default_model="gpt-5.4-mini",
+                default_model=LUNA_MODEL,
                 allowed_models={
                     "claude": ("haiku", "sonnet"),
-                    "codex": ("gpt-5.4-mini", "gpt-5.6-luna"),
+                    "codex": (LUNA_MODEL,),
                 },
             ),
             "implementation": AgentClassPolicy(
                 interactive=True,
                 default_executor="codex",
-                default_model="gpt-5.4-mini",
+                default_model=LUNA_MODEL,
                 allowed_models={
                     "claude": ("haiku", "sonnet"),
-                    "codex": ("gpt-5.4-mini", "gpt-5.6-luna", "gpt-5.6-terra"),
+                    "codex": (LUNA_MODEL,),
                 },
             ),
         },
@@ -191,7 +194,7 @@ def _validate_shape(data: dict[str, Any]) -> None:
     executors = data.get("executors", {})
     if not isinstance(executors, dict):
         raise WorkflowError("[executors] must contain executor tables")
-    executor_keys = {"command", "interactive_command", "models", "default_model", "no_go_models", "model_arg", "permission_args", "interactive_permission_args", "non_interactive_permission_args", "environment_allowlist", "steering_adapter"}
+    executor_keys = {"command", "interactive_command", "models", "default_model", "no_go_models", "model_arg", "permission_args", "interactive_permission_args", "non_interactive_permission_args", "environment_allowlist", "steering_adapter", "reasoning_effort"}
     for name, entry in executors.items():
         _reject_unknown(entry, executor_keys, f"executors.{name}")
     classes = data.get("agent_classes", {})
@@ -293,6 +296,9 @@ def load_settings(path: Path | None = None) -> Settings:
             raise WorkflowError(
                 f"executor {name!r} steering_adapter must be unsupported or control-file-v1"
             )
+        reasoning_effort = entry.get("reasoning_effort", prior.reasoning_effort)
+        if reasoning_effort is not None and reasoning_effort not in LUNA_REASONING_EFFORTS:
+            raise WorkflowError(f"executor {name!r} reasoning_effort must be low, medium, or high")
         legacy_permission_args = strings("permission_args") if "permission_args" in entry else ()
         policies[name] = ExecutorPolicy(
             interactive_command=interactive_command,
@@ -312,6 +318,7 @@ def load_settings(path: Path | None = None) -> Settings:
                 "environment_allowlist", prior.environment_allowlist
             ),
             steering_adapter=steering_adapter,
+            reasoning_effort=reasoning_effort,
         )
     stall = _integer(data, "terminal", "stall_minutes", base.stall_minutes)
     capture = _integer(data, "terminal", "capture_lines", base.capture_lines)
@@ -569,6 +576,9 @@ def as_dict(s: Settings) -> dict[str, Any]:
                 "steering_adapter": s.executor_policies.get(
                     name, ExecutorPolicy()
                 ).steering_adapter,
+                "reasoning_effort": s.executor_policies.get(
+                    name, ExecutorPolicy()
+                ).reasoning_effort,
             }
             for name, command in s.executors.items()
         },

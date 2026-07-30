@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .config import Settings
+from .config import LUNA_MODEL, LUNA_REASONING_EFFORTS, Settings
 from .errors import WorkflowError
 from .process import ExecutableIdentity, executor_identity
 
@@ -20,6 +20,7 @@ class ExecutorPlan:
     stream_format: StreamFormat = "text"
     model: str | None = None
     no_go_authorized: bool = False
+    reasoning_effort: str | None = None
 
 
 def _insert_before_stdin(argv: list[str], values: list[str]) -> list[str]:
@@ -47,6 +48,23 @@ def _explicit_model(argv: list[str]) -> str | None:
             return argv[index + 1]
         if value.startswith("--model="):
             return value.split("=", 1)[1]
+        if value in {"-c", "--config"} and index + 1 < len(argv):
+            setting = argv[index + 1]
+            if setting.startswith("model="):
+                return setting.split("=", 1)[1].strip('"')
+    return None
+
+
+def _explicit_reasoning_effort(argv: list[str]) -> str | None:
+    for index, value in enumerate(argv):
+        if value in {"-c", "--config"} and index + 1 < len(argv):
+            setting = argv[index + 1]
+            if setting.startswith("model_reasoning_effort="):
+                return setting.split("=", 1)[1].strip('"')
+        if value.startswith(("-c", "--config=")):
+            setting = value.split("=", 1)[1] if "=" in value else ""
+            if setting.startswith("model_reasoning_effort="):
+                return setting.split("=", 1)[1].strip('"')
     return None
 
 
@@ -70,6 +88,26 @@ def _select_model(settings: Settings, executor: str | None, requested: str | Non
     return selected, no_go and allow_no_go
 
 
+def _select_reasoning_effort(
+    settings: Settings,
+    executor: str | None,
+    requested: str | None,
+    explicit: str | None,
+) -> str | None:
+    if executor != "codex":
+        if requested is not None:
+            raise WorkflowError("reasoning effort is supported only for Codex")
+        return None
+    selected = requested or explicit or settings.executor_policies[executor].reasoning_effort
+    if selected not in LUNA_REASONING_EFFORTS:
+        raise WorkflowError(
+            "Codex reasoning effort must be one of: low, medium, high"
+        )
+    if requested is not None and explicit is not None and requested != explicit:
+        raise WorkflowError("reasoning effort disagrees with the explicit Codex command")
+    return selected
+
+
 def prepare_executor(
     settings: Settings,
     executor: str | None,
@@ -78,6 +116,7 @@ def prepare_executor(
     structured: bool = False,
     interactive: bool = False,
     model: str | None = None,
+    reasoning_effort: str | None = None,
     allow_no_go_model: bool = False,
 ) -> ExecutorPlan:
     if structured and interactive:
@@ -86,17 +125,28 @@ def prepare_executor(
         executor = _infer_executor(explicit)
         argv = list(explicit)
         explicit_model = _explicit_model(argv)
+        explicit_effort = _explicit_reasoning_effort(argv)
         if model and explicit_model and model != explicit_model:
             raise WorkflowError("--model disagrees with the explicit executor command")
         selected_model, authorized = _select_model(
             settings, executor, model or explicit_model, allow_no_go_model
         )
+        if executor == "codex" and selected_model != LUNA_MODEL:
+            raise WorkflowError("automatic Codex selection requires gpt-5.6-luna")
+        selected_effort = _select_reasoning_effort(
+            settings, executor, reasoning_effort, explicit_effort
+        )
         policy = settings.executor_policies.get(executor) if executor else None
         if interactive and executor is not None:
             argv = list(policy.interactive_command if policy and policy.interactive_command else [argv[0]])
             argv.extend(policy.interactive_permission_args if policy else ())
-        if selected_model and explicit_model is None:
+        # Interactive execution rebuilds argv from the configured interactive
+        # command, so model/effort supplied to the original explicit command
+        # must be reinserted into that new command.
+        if selected_model and (explicit_model is None or interactive):
             argv = _insert_before_stdin(argv, list(policy.model_arg) + [selected_model] if policy else ["--model", selected_model])
+        if selected_effort and (explicit_effort is None or interactive):
+            argv = _insert_before_stdin(argv, ["-c", f"model_reasoning_effort={selected_effort}"])
         stream_format = "text"
         if structured and executor == "codex":
             if "--json" not in argv:
@@ -108,7 +158,7 @@ def prepare_executor(
             if "--output-format" not in argv:
                 argv.extend(["--output-format", "stream-json"])
             stream_format = "claude-stream-json"
-        return ExecutorPlan(executor, tuple(argv), stream_format, selected_model, authorized)
+        return ExecutorPlan(executor, tuple(argv), stream_format, selected_model, authorized, selected_effort)
     if not executor:
         raise WorkflowError(
             "provide --executor NAME or an explicit command after --"
@@ -123,7 +173,17 @@ def prepare_executor(
     if not argv:
         raise WorkflowError(f"executor {executor!r} has an empty command")
     policy = settings.executor_policies.get(executor)
-    selected_model, authorized = _select_model(settings, executor, model, allow_no_go_model)
+    configured_model = _explicit_model(argv)
+    if model and configured_model and model != configured_model:
+        raise WorkflowError("--model disagrees with the configured executor command")
+    selected_model, authorized = _select_model(
+        settings, executor, model or configured_model, allow_no_go_model
+    )
+    if executor == "codex" and selected_model != LUNA_MODEL:
+        raise WorkflowError("automatic Codex selection requires gpt-5.6-luna")
+    selected_effort = _select_reasoning_effort(
+        settings, executor, reasoning_effort, _explicit_reasoning_effort(argv)
+    )
     if interactive and executor in {"codex", "claude"}:
         # Built-in policies provide the provider-specific interactive flags, but
         # a configured command may intentionally be a test double or wrapper.
@@ -139,11 +199,15 @@ def prepare_executor(
         argv.extend(policy.interactive_permission_args if policy else ())
         if selected_model:
             argv.extend(list(policy.model_arg) + [selected_model] if policy else ["--model", selected_model])
-        return ExecutorPlan(executor, tuple(argv), "text", selected_model, authorized)
+        if selected_effort and _explicit_reasoning_effort(argv) is None:
+            argv.extend(["-c", f"model_reasoning_effort={selected_effort}"])
+        return ExecutorPlan(executor, tuple(argv), "text", selected_model, authorized, selected_effort)
     if policy:
         argv = _insert_before_stdin(argv, list(policy.non_interactive_permission_args))
     if selected_model:
         argv = _insert_before_stdin(argv, list(policy.model_arg) + [selected_model] if policy else ["--model", selected_model])
+    if selected_effort and _explicit_reasoning_effort(argv) is None:
+        argv = _insert_before_stdin(argv, ["-c", f"model_reasoning_effort={selected_effort}"])
     stream_format = "text"
     if executor == "codex" and "--skip-git-repo-check" not in argv:
         argv = _insert_before_stdin(argv, ["--skip-git-repo-check"])
@@ -157,7 +221,7 @@ def prepare_executor(
         if "--output-format" not in argv:
             argv.extend(["--output-format", "stream-json"])
         stream_format = "claude-stream-json"
-    return ExecutorPlan(executor, tuple(argv), stream_format, selected_model, authorized)
+    return ExecutorPlan(executor, tuple(argv), stream_format, selected_model, authorized, selected_effort)
 
 
 def executor_version(plan: ExecutorPlan) -> str | None:

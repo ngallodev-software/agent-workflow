@@ -571,8 +571,8 @@ def write_config(env: dict[str, str], *, fake_agent: Path, structured_executor: 
             [
                 "[executors.codex]",
                 f'command = ["{fake_agent}"]',
-                'models = ["gpt-5.4-mini"]',
-                'default_model = "gpt-5.4-mini"',
+                'models = ["gpt-5.6-luna"]',
+                'default_model = "gpt-5.6-luna"',
                 'model_arg = ["--model"]',
                 'interactive_permission_args = []',
                 'non_interactive_permission_args = []',

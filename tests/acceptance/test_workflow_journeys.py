@@ -20,7 +20,7 @@ def _node(node_id: str, session_id: str, prompt: Path, dependencies: list[str]) 
         "prompt_path": str(prompt),
         "agent_class": "review",
         "executor": "codex",
-        "model": "gpt-5.4-mini",
+        "model": "gpt-5.6-luna",
         "interactive": False,
         "allow_no_go_model": False,
         "routing": {"task_type": "review", "risk": "low"},

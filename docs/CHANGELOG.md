@@ -1,6 +1,12 @@
 
 # Changelog
 
+## Unreleased
+
+- Enforce automatic Codex selection of `gpt-5.6-luna` with bounded reasoning
+  effort and immutable launch evidence; hard work must be decomposed instead
+  of promoted to another automatic model.
+
 ## 0.3.0 — 2026-07-30
 
 - Add the sandbox-safe child control bridge, exact launcher binding, and an

@@ -50,7 +50,7 @@ def test_scheduler_capacity_and_dependency_release_are_graph_invariants() -> Non
 
 def test_routing_is_deterministic_advisory_and_cannot_override_enforced_policy() -> None:
     metadata = {"task_type": "review", "risk": "high", "interactive": True}
-    enforced = {"agent_class": "implementation", "executor": "codex", "model": "gpt-5.4-mini", "interactive": False}
+    enforced = {"agent_class": "implementation", "executor": "codex", "model": "gpt-5.6-luna", "interactive": False}
     settings = defaults()
     first = advise_routing(metadata, settings, enforced_selection=enforced)
     second = advise_routing(dict(metadata), settings, enforced_selection=dict(enforced))

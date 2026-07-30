@@ -1,5 +1,12 @@
 # Command reference
 
+Automatic Codex routing accepts only `gpt-5.6-luna` and reasoning effort
+`low`, `medium`, or `high` (default `medium`). The launcher passes
+`-c model_reasoning_effort=<value>` and records the value in immutable launch
+`runtime_policy`. Decompose difficult work into smaller tickets instead of
+promoting it to another automatic model; explicit non-Codex commands remain
+manual operator actions.
+
 The parser-derived command catalog is authoritative for agent execution. Run `agent-workflow commands --json` for the full machine-readable contract or `agent-workflow commands --role ROLE --format markdown` for a role-scoped command card. Agents should invoke represented commands directly and use `--help` only after a catalog/version mismatch, an argument error, or when a required command is absent. Global `--json` and `--config PATH` may appear before or after the subcommand; tokens after launch `--` belong to the delegated command.
 
 ## Top-level

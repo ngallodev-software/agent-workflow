@@ -223,6 +223,11 @@ def build_parser() -> argparse.ArgumentParser:
     launch.add_argument("--agent-class", help="configured agent work classification")
     launch.add_argument("--model", help="configured executor model")
     launch.add_argument(
+        "--reasoning-effort",
+        choices=("low", "medium", "high"),
+        help="Codex reasoning effort; larger work must be decomposed",
+    )
+    launch.add_argument(
         "--allow-no-go-model",
         action="store_true",
         help="explicitly authorize a configured no-go model for this run",
@@ -665,6 +670,7 @@ def main(argv: list[str] | None = None) -> int:
                         agent_name=args.agent_name,
                         agent_class=args.agent_class,
                         model=args.model,
+                        reasoning_effort=args.reasoning_effort,
                         allow_no_go_model=args.allow_no_go_model,
                         explicit_command=args.explicit_command,
                         ticket_id=args.ticket,

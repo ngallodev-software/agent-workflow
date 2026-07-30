@@ -2,6 +2,15 @@
 
 This document consolidates day-to-day delegation lifecycle, agent policy, recovery, and host-routing guidance.
 
+## Codex model and effort policy
+
+Automatic/default Codex routing is fixed to `gpt-5.6-luna` with reasoning
+effort `low`, `medium`, or `high`; `medium` is the shipped default. Missing or
+invalid effort, non-Luna models, and explicit Codex bypasses fail before child
+process creation. Split hard work into bounded tickets rather than selecting
+another automatic model. A manually supplied non-Codex command remains an
+explicit operator action.
+
 ## Execution model
 
 Each delegation has:

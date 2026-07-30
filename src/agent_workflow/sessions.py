@@ -441,6 +441,7 @@ def _write_launch_contract(
     redacted_command: list[str],
     executor: str | None,
     model: str | None,
+    reasoning_effort: str | None,
     stream_format: str,
     interactive: bool,
     executor_interactive: bool,
@@ -708,6 +709,7 @@ def launch(
     agent_name: str | None = None,
     agent_class: str | None = None,
     model: str | None = None,
+    reasoning_effort: str | None = None,
     allow_no_go_model: bool = False,
     explicit_command: list[str] | None = None,
     ticket_id: str | None = None,
@@ -855,6 +857,7 @@ def launch(
         settings, executor, explicit_command, structured=structured,
         interactive=executor_interactive,
         model=model,
+        reasoning_effort=reasoning_effort,
         allow_no_go_model=allow_no_go_model,
     )
     if saved_stream_format is not None:
@@ -864,6 +867,7 @@ def launch(
             saved_stream_format,
             executor_plan.model,
             executor_plan.no_go_authorized,
+            executor_plan.reasoning_effort,
         )
     command = list(executor_plan.argv)
     # Persist the resolved executable path in the runner command.  Dedicated
@@ -877,6 +881,7 @@ def launch(
         executor_plan.stream_format,
         executor_plan.model,
         executor_plan.no_go_authorized,
+        executor_plan.reasoning_effort,
     )
     compatibility = probe_executor(
         executor_plan.name,
@@ -900,6 +905,7 @@ def launch(
     environment_allowlist = list(executor_policy.environment_allowlist) if executor_policy else []
     runtime_policy: dict[str, Any] = {
         "no_go_authorized": executor_plan.no_go_authorized,
+        "codex_reasoning_effort": executor_plan.reasoning_effort,
         "steering": {
             "adapter": (executor_policy.steering_adapter if executor_policy else "unsupported"),
             "deadline_seconds": 300,
@@ -1253,6 +1259,7 @@ def launch(
         redacted_command=redacted_command,
         executor=executor_plan.name,
         model=executor_plan.model,
+        reasoning_effort=executor_plan.reasoning_effort,
         stream_format=executor_plan.stream_format,
         interactive=bool(interactive),
         executor_interactive=executor_interactive,
@@ -1886,6 +1893,7 @@ def restart(
         agent_name=restart_agent_name,
         agent_class=session.get("agent_class"),
         model=command_data.get("model"),
+        reasoning_effort=contract["runtime_policy"].get("codex_reasoning_effort"),
         allow_no_go_model=no_go_authorized,
         ticket_id=contract.get("ticket"),
         pack_id=pack.get("id"),
