@@ -1561,7 +1561,7 @@ def progress(
     content: str,
 ) -> dict[str, Any]:
     """Persist an explicit child progress update for its parent."""
-    if bridge_available():
+    if bridge_available(session_id):
         return write_control_intent(
             session_id=session_id, kind="progress", actor=actor, content=content
         )
@@ -1587,7 +1587,7 @@ def acknowledge(
     correlation_id: str,
 ) -> dict[str, Any]:
     """Record a child acknowledgement after it has applied a control request."""
-    if bridge_available():
+    if bridge_available(session_id):
         return write_control_intent(
             session_id=session_id, kind="ack", actor=actor, content=content,
             correlation_id=correlation_id,

@@ -128,7 +128,7 @@ def complete_task(
     tags: list[str] | None = None,
     files: list[str] | None = None,
 ) -> dict[str, Any]:
-    if bridge_available():
+    if bridge_available(session_id):
         return write_control_intent(
             session_id=session_id, kind="task_complete", actor=actor, content=summary
         )
@@ -188,6 +188,58 @@ def complete_task(
         state_dir, session_id=session_id, direction="child_to_parent",
         kind="task_complete", actor=actor, content=summary,
         after_commit=lambda _message: tmux.signal_waiters(tmux.wakeup_channel(state_dir)),
+    )
+    return context
+
+
+def apply_bridged_completion(
+    state_dir: Path,
+    session_id: str,
+    *,
+    actor: str,
+    summary: str,
+) -> dict[str, Any]:
+    """Apply a validated child completion using host-owned assignment state."""
+    validate_id(session_id, "session ID")
+    validate_id(actor, "actor ID")
+    summary = summary.strip()
+    if not summary or len(summary) > MAX_SUMMARY_CHARS:
+        raise WorkflowError(f"summary must be 1-{MAX_SUMMARY_CHARS} characters")
+    context = _read_json(state_dir / CONTEXT_NAME)
+    if context.get("session_id") != session_id:
+        raise WorkflowError("bridged completion session identity mismatch")
+    if not context.get("interactive"):
+        raise WorkflowError("only interactive agents can become idle_reusable")
+    if context.get("state") != "busy" or not isinstance(context.get("current_assignment"), dict):
+        raise WorkflowError("agent is not busy")
+    completed = {
+        **dict(context["current_assignment"]),
+        "completed_at": utc_now(),
+        "summary": summary,
+        "tags": [],
+        "files": [],
+    }
+    event = _append_event(state_dir, {
+        "event": "task_completed",
+        "session_id": session_id,
+        "assignment_id": completed["assignment_id"],
+        "actor": actor,
+        "ticket_id": completed.get("ticket_id"),
+        "pack_id": completed.get("pack_id"),
+        "correlation_id": None,
+        "summary": summary,
+        "tags": [],
+        "files": [],
+    })
+    context["completed_assignments"] = [*context["completed_assignments"], completed]
+    context["current_assignment"] = None
+    context["state"] = "idle_reusable"
+    context["updated_at"] = event["timestamp"]
+    atomic_write_json(state_dir / CONTEXT_NAME, context)
+    append_lifecycle_event(
+        state_dir, dimension="assignment", prior="busy", new="idle_reusable",
+        actor=actor, reason="host applied bridged task completion",
+        receipt_refs=[LEDGER_NAME, CONTEXT_NAME],
     )
     return context
 

@@ -23,6 +23,7 @@ from .eval.scope import ScopePolicy, collect_scope
 from .executors import accumulate_usage, event_text, parse_event, usage_update
 from .receipts import final_receipt_sha256, make_read_only, seal_run, update_provenance
 from .metrics import write_execution_evidence
+from .agent_context import apply_bridged_completion
 from .messages import (
     CONTROL_BRIDGE_ENV,
     CONTROL_BRIDGE_MAX_BYTES,
@@ -137,6 +138,13 @@ def _drain_control_bridge(run_dir: Path, *, active: bool) -> None:
                 raise WorkflowError("control intent identity or digest mismatch")
             if not active:
                 raise WorkflowError("request arrived after executor exit")
+            if value["kind"] == "task_complete":
+                apply_bridged_completion(
+                    run_dir,
+                    session_id,
+                    actor=str(value["actor"]),
+                    summary=str(value["content"]),
+                )
             append_message(
                 run_dir, session_id=session_id, direction="child_to_parent",
                 kind=str(value["kind"]), actor=str(value["actor"]),

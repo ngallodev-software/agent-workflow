@@ -66,7 +66,15 @@ def _bridge_path() -> Path | None:
     return Path(value) if value else None
 
 
-def bridge_available() -> bool:
+def bridge_available(session_id: str | None = None) -> bool:
+    """Return whether the current process is the bridged child for a run.
+
+    The bridge variables are inherited by the operator shell that launched a
+    run.  Merely seeing a writable directory must not redirect host-side CLI
+    commands into that directory.
+    """
+    if session_id is not None and os.environ.get("AGENT_WORKFLOW_SESSION_ID") != session_id:
+        return False
     path = _bridge_path()
     return path is not None and path.is_dir() and not path.is_symlink()
 
@@ -98,6 +106,8 @@ def write_control_intent(
         raise WorkflowError("ack messages require correlation_id")
     if kind != "ack" and correlation_id is not None:
         raise WorkflowError("only ack messages may include correlation_id")
+    if correlation_id is not None:
+        _uuid(correlation_id, "correlation_id")
     if not isinstance(content, str) or not content or len(content) > MAX_CONTENT_CHARS:
         raise WorkflowError("invalid control intent content")
     sequence = 1
