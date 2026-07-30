@@ -323,6 +323,9 @@ def build_parser() -> argparse.ArgumentParser:
     acknowledge.add_argument("correlation_id")
     acknowledge.add_argument("content")
     acknowledge.add_argument("--actor", required=True)
+    acknowledge.add_argument(
+        "--outcome", choices=("applied", "rejected"), default="applied"
+    )
 
     watch = commands.add_parser(
         "watch", help="block until a durable session message arrives"
@@ -839,6 +842,7 @@ def main(argv: list[str] | None = None) -> int:
                 actor=args.actor,
                 content=args.content,
                 correlation_id=args.correlation_id,
+                outcome=args.outcome,
             )
         elif args.command == "watch":
             data = wait_for_message(

@@ -176,12 +176,50 @@ def test_durable_messages_survive_process_boundaries_and_are_acknowledged(
         "ack", "message-run", steer["message_id"], "Applied", "--actor", "agent", env=env
     )
     assert ack["correlation_id"] == steer["message_id"]
+    duplicate = installed_product.json(
+        "ack", "message-run", steer["message_id"], "Applied again",
+        "--actor", "agent", env=env,
+    )
+    assert duplicate["duplicate"] is True
+    assert duplicate["message_id"] == ack["message_id"]
     wait_for_status(env, "message-run")
 
     replayed = installed_product.json(
         "watch", "message-run", "--after", "0", "--timeout", "0", env=env
     )
     assert [item["kind"] for item in replayed] == ["steer", "ack"]
+
+
+def test_placeholder_completion_fails_collection_and_terminal_run(
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+    fake_agent_path: Path,
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    git_repo(repo)
+    prompt = tmp_path / "prompt.md"
+    prompt.write_text("Return a substantive completion report.\n", encoding="utf-8")
+    env = dict(product_env)
+    env["FAKE_AGENT_EMPTY_COMPLETION"] = "1"
+
+    installed_product.json(
+        "launch", "empty-completion", repo, prompt, "--tier", "low",
+        "--no-interactive", "--", fake_agent_path, env=env,
+    )
+    status = wait_for_status(env, "empty-completion")
+    assert status["status"] == "failed"
+    assert status["exit_code"] == 1
+    assert status["completion_validation_status"] == "invalid"
+    assert any("completion:" in item for item in status["pump_errors"])
+    collection = json.loads(
+        (_run_dir(env, "empty-completion") / "collections" / "completion.json").read_text()
+    )
+    assert collection["validation_status"] == "invalid"
+    assert any(
+        "requires at least one acceptance criterion" in item
+        for item in collection["validation_errors"]
+    )
 
 
 

@@ -109,8 +109,12 @@ def installed_product(tmp_path_factory: pytest.TempPathFactory) -> InstalledProd
             f"environment; found mcp=={mcp_distribution.version}"
         )
     venv_site = environment / "lib" / f"python{sys.version_info.major}.{sys.version_info.minor}" / "site-packages"
-    (venv_site / "agent_workflow_configured_mcp.pth").write_text(
-        str(mcp_distribution.locate_file("")), encoding="utf-8"
+    runtime_paths = {
+        str(mcp_distribution.locate_file("")),
+        str(Path(jsonschema.__file__).resolve().parents[1]),
+    }
+    (venv_site / "agent_workflow_configured_dependencies.pth").write_text(
+        "\n".join(sorted(runtime_paths)) + "\n", encoding="utf-8"
     )
     subprocess.run(
         [str(python), "-m", "pip", "install", "--ignore-installed", "--no-deps", str(wheel)],
@@ -402,7 +406,32 @@ handoff.mkdir(parents=True, exist_ok=True)
     encoding="utf-8",
 )
 if mode == "slow":
-    time.sleep(float(os.environ.get("FAKE_AGENT_DELAY", "1.0")))
+    deadline = time.monotonic() + float(os.environ.get("FAKE_AGENT_DELAY", "1.0"))
+    steering_inbox = Path(os.environ["AGENT_WORKFLOW_STEERING_INBOX"])
+    processed = set()
+    while time.monotonic() < deadline:
+        request_paths = (
+            steering_inbox.glob("steer-*.json")
+            if os.environ.get("FAKE_AGENT_AUTO_STEER") == "1"
+            else ()
+        )
+        for request_path in request_paths:
+            if request_path.name in processed:
+                continue
+            request = json.loads(request_path.read_text(encoding="utf-8"))
+            outcome = os.environ.get("FAKE_AGENT_STEER_OUTCOME", "applied")
+            subprocess.run(
+                [
+                    os.environ["AGENT_WORKFLOW_CLI"], "ack",
+                    os.environ["AGENT_WORKFLOW_SESSION_ID"],
+                    request["message_id"],
+                    f"Fixture executor {outcome} steering",
+                    "--actor", "fixture-child", "--outcome", outcome,
+                ],
+                check=True,
+            )
+            processed.add(request_path.name)
+        time.sleep(0.05)
 if mode == "hang":
     time.sleep(float(os.environ.get("FAKE_AGENT_DELAY", "30.0")))
 try:
@@ -415,17 +444,41 @@ result = "failed" if mode == "fail" else "completed"
 completion = {
     "schema": "agent-workflow/completion/v1",
     "session_id": os.environ["AGENT_WORKFLOW_SESSION_ID"],
-    "ticket_id": None,
-    "pack_id": None,
+    "ticket_id": os.environ.get("AGENT_WORKFLOW_TICKET_ID"),
+    "pack_id": os.environ.get("AGENT_WORKFLOW_PACK_ID"),
     "result": result,
     "base_revision": head,
     "head_revision": head,
     "changed_files": [],
-    "criteria": [],
-    "commands": [],
+    "criteria": [
+        {
+            "id": "fixture-executor-finished",
+            "result": "fail" if mode == "fail" else "pass",
+            "evidence": [
+                "fake-agent reached its terminal completion handoff"
+            ],
+        }
+    ],
+    "commands": [
+        {
+            "argv": ["fake-agent", mode],
+            "cwd": str(Path.cwd()),
+            "exit_code": 7 if mode == "fail" else 0,
+            "receipt": "intentional fixture execution evidence",
+        }
+    ],
     "unresolved": ["intentional failure"] if mode == "fail" else [],
     "usage": None,
 }
+if os.environ.get("FAKE_AGENT_EMPTY_COMPLETION") == "1":
+    completion.update(
+        {
+            "base_revision": None,
+            "head_revision": None,
+            "criteria": [],
+            "commands": [],
+        }
+    )
 (handoff / "completion.json").write_text(json.dumps(completion), encoding="utf-8")
 result_json = os.environ.get("FAKE_AGENT_RESULT_JSON")
 if result_json:
@@ -523,7 +576,8 @@ def write_config(env: dict[str, str], *, fake_agent: Path, structured_executor: 
                 'model_arg = ["--model"]',
                 'interactive_permission_args = []',
                 'non_interactive_permission_args = []',
-                'environment_allowlist = ["FAKE_AGENT_MODE", "FAKE_AGENT_DELAY", "FAKE_AGENT_RESULT_JSON"]',
+                'environment_allowlist = ["FAKE_AGENT_MODE", "FAKE_AGENT_DELAY", "FAKE_AGENT_RESULT_JSON", "FAKE_AGENT_AUTO_STEER", "FAKE_AGENT_EMPTY_COMPLETION", "FAKE_AGENT_STEER_OUTCOME"]',
+                'steering_adapter = "control-file-v1"',
                 "",
                 "[git]",
                 "require_clean_source = false",

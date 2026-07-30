@@ -62,6 +62,8 @@ def create(
         "base_ref": base_ref,
         "base_revision": base_revision,
         "worktree_revision": created.head,
+        "source_cleanliness": snap.cleanliness_evidence(),
+        "worktree_cleanliness": created.cleanliness_evidence(),
     }
 
 

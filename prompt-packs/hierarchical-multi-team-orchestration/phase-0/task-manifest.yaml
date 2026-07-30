@@ -1,0 +1,21 @@
+phase: "0"
+name: "hierarchy-authority"
+mandatory_order: ["HIER-001", "HIER-002", "HIER-GATE-0"]
+tasks:
+  - id: "HIER-001"
+    tier: A
+    session: "hierarchy-contracts-hier-001"
+    prompt: "tickets/HIER-001-hierarchy-contracts.md"
+    backlog_id: "HIER-001"
+  - id: "HIER-002"
+    tier: A
+    session: "hierarchy-replay-hier-002"
+    prompt: "tickets/HIER-002-hierarchy-replay-receipts.md"
+    backlog_id: "HIER-002"
+    dependencies: ["HIER-001"]
+  - id: "HIER-GATE-0"
+    tier: A
+    task_type: gate
+    session: "hierarchy-phase-0-gate"
+    prompt: "tickets/HIER-GATE-0.md"
+    dependencies: ["HIER-002"]

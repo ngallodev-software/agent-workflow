@@ -46,6 +46,7 @@ from .preflight import preflight_error, preflight_run_record, resolve_prerequisi
 from .manifests import task_result_contract
 from .process import redact_argv, require_command, run, secret_values_from_argv
 from .receipts import completion_template, initial_completion, initial_provenance, update_provenance
+from .steering import current_delivery, queue_request, record_acknowledgement
 from .state import (
     TERMINAL_STATUSES,
     list_statuses,
@@ -899,6 +900,11 @@ def launch(
     environment_allowlist = list(executor_policy.environment_allowlist) if executor_policy else []
     runtime_policy: dict[str, Any] = {
         "no_go_authorized": executor_plan.no_go_authorized,
+        "steering": {
+            "adapter": (executor_policy.steering_adapter if executor_policy else "unsupported"),
+            "deadline_seconds": 300,
+            "max_attempts": 1,
+        },
     }
     evaluation_policy: dict[str, Any] = {}
 
@@ -938,6 +944,7 @@ def launch(
     )
     handoff_dir = _create_handoff_dir(workdir, session_id)
     (handoff_dir / "control-intents").mkdir(mode=0o700)
+    (handoff_dir / "steering-inbox").mkdir(mode=0o700)
     result_contract = (
         task_result_contract(prompt_pack_root, ticket_id)
         if prompt_pack_root is not None
@@ -1184,6 +1191,11 @@ def launch(
             "timeout_seconds": runtime.get("timeout_seconds"),
             "budgets": evaluation_data.get("budgets", {}),
             "environment_allowlist": environment_allowlist,
+            "steering": {
+                "adapter": (executor_policy.steering_adapter if executor_policy else "unsupported"),
+                "deadline_seconds": 300,
+                "max_attempts": 1,
+            },
         }
         evaluation_policy = {
             "path": str(evaluation.path) if evaluation is not None else None,
@@ -1440,6 +1452,12 @@ def observe(
         seconds_since_heartbeat = max(
             0.0, time.time() - heartbeat_path.stat().st_mtime
         )
+    executor_events_path = state_dir / "executor-events.jsonl"
+    seconds_since_executor_event_growth: float | None = None
+    if executor_events_path.is_file():
+        seconds_since_executor_event_growth = max(
+            0.0, time.time() - executor_events_path.stat().st_mtime
+        )
 
     durable = str(data.get("status", "unknown"))
     active = {"prepared", "launched", "running", "interruption_requested"}
@@ -1455,7 +1473,11 @@ def observe(
             seconds_since_heartbeat is None
             or seconds_since_heartbeat >= threshold
         )
-        if log_stale and heartbeat_stale:
+        executor_events_stale = (
+            seconds_since_executor_event_growth is None
+            or seconds_since_executor_event_growth >= threshold
+        )
+        if log_stale and heartbeat_stale and executor_events_stale:
             observed = "possibly_stalled"
         else:
             observed = "running"
@@ -1508,17 +1530,24 @@ def observe(
             if seconds_since_heartbeat is not None
             else None
         ),
+        "seconds_since_executor_event_growth": (
+            round(seconds_since_executor_event_growth, 1)
+            if seconds_since_executor_event_growth is not None
+            else None
+        ),
         "signals": {
             "tmux_alive": alive,
             "pane_dead": pane.dead if pane else None,
             "log_exists": log_path.is_file(),
             "heartbeat_exists": heartbeat_path.is_file(),
+            "executor_events_exist": executor_events_path.is_file(),
         },
         "last_event": last_event,
         "paths": {
             "status": str(state_dir / "status.json"),
             "log": str(log_path),
             "heartbeat": str(heartbeat_path),
+            "executor_events": str(executor_events_path),
             "events": str(events_path),
         },
         "safe_actions": safe_actions,
@@ -1562,9 +1591,9 @@ def steer(
     actor: str,
     content: str,
 ) -> dict[str, Any]:
-    """Persist a parent steering request without assuming executor delivery."""
+    """Persist a parent steering request and queue bounded adapter delivery."""
     _active_run(settings, session_id)
-    return _append_control_message(
+    message = _append_control_message(
         settings,
         session_id,
         direction="parent_to_child",
@@ -1572,6 +1601,8 @@ def steer(
         actor=actor,
         content=content,
     )
+    delivery = queue_request(run_dir(settings, session_id), message)
+    return {**message, "delivery_outcome": delivery["outcome"], "delivery_event_id": delivery["event_id"]}
 
 
 def progress(
@@ -1606,16 +1637,48 @@ def acknowledge(
     actor: str,
     content: str,
     correlation_id: str,
+    outcome: str = "applied",
 ) -> dict[str, Any]:
-    """Record a child acknowledgement after it has applied a control request."""
+    """Record a correlated applied or rejected steering acknowledgement."""
+    if outcome not in {"applied", "rejected"}:
+        raise WorkflowError("acknowledgement outcome must be applied or rejected")
     if bridge_available(session_id):
         return write_control_intent(
             session_id=session_id, kind="ack", actor=actor, content=content,
-            correlation_id=correlation_id,
+            correlation_id=correlation_id, outcome=outcome,
         )
     if bridge_required(session_id):
         return {"outcome": "unavailable", "reason": "control bridge unavailable"}
     _active_run(settings, session_id)
+    state_dir = run_dir(settings, session_id)
+    existing_delivery = current_delivery(state_dir, correlation_id)
+    if existing_delivery is not None and existing_delivery["outcome"] in {
+        "applied", "rejected", "expired",
+    }:
+        prior = str(existing_delivery["outcome"])
+        if prior == "expired":
+            raise WorkflowError("steering request already expired")
+        if prior != outcome:
+            raise WorkflowError(
+                f"steering request already has terminal outcome {prior}"
+            )
+        existing_ack = next(
+            (
+                item for item in reversed(replay_messages(state_dir))
+                if item.get("kind") == "ack"
+                and item.get("correlation_id") == correlation_id
+            ),
+            None,
+        )
+        if existing_ack is None:
+            raise WorkflowError(
+                "terminal steering evidence has no correlated acknowledgement"
+            )
+        return {
+            **existing_ack,
+            "delivery_outcome": prior,
+            "duplicate": True,
+        }
     message = _append_control_message(
         settings,
         session_id,
@@ -1625,8 +1688,14 @@ def acknowledge(
         content=content,
         correlation_id=correlation_id,
     )
+    record_acknowledgement(
+        state_dir,
+        correlation_id=correlation_id,
+        outcome=outcome,
+        reason=content,
+    )
     acknowledge_reuse(settings, session_id, correlation_id, actor)
-    return message
+    return {**message, "delivery_outcome": outcome}
 
 
 def messages(settings: Settings, session_id: str, *, after_sequence: int = 0) -> list[dict[str, Any]]:

@@ -98,6 +98,7 @@ Do not embed host-specific absolute paths, credentials, private project names, m
 | [`source-preflight-snapshot-reliability`](../prompt-packs/source-preflight-snapshot-reliability/) | PROC-007 | Ready; establishes reproducible exact-root Git cleanliness evidence for worktree creation and launch provenance. |
 | [`chatgpt-sealed-run-assessment`](../prompt-packs/chatgpt-sealed-run-assessment/) | CHATGPT-EVAL-001, CHATGPT-TDD-001 | Assessment and future-TDD artifacts completed; planned runtime work remains blocked behind its own implementation and gates. |
 | [`force-accept-override`](../prompt-packs/force-accept-override/) | LIFE-001 | Ready for one isolated, independently reviewed manual lifecycle-override implementation. |
+| [`hierarchical-multi-team-orchestration`](../prompt-packs/hierarchical-multi-team-orchestration/) | HIER-001 through HIER-008 | Proposed; `DEC-005` and ticket-specific accepted messaging, delegation, steering, and pane-identity foundations gate execution. The external-terminal adapter is a separately reviewed optional branch. |
 
 The dependency/collision rationale is in [Determinism and security hardening plan](DETERMINISM_SECURITY_HARDENING_PLAN.md). The local two-way messaging architecture and its collision-free implementation sequence are in [Durable two-way messaging](ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md). The source findings are in [Feature determinism and security assessment](FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md).
 

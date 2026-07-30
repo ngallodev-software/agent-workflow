@@ -83,7 +83,7 @@ agent-workflow kill SESSION
 agent-workflow restart SESSION --new-session RETRY_SESSION
 ```
 
-A potential stall is a diagnostic state, not authorization to terminate. Inspect terminal liveness, heartbeat, lifecycle events, log movement, and durable messages before acting.
+A potential stall is a diagnostic state, not authorization to terminate. Inspect terminal liveness, pane death, heartbeat age, output-log movement, executor-event growth, lifecycle events, and durable messages before acting. `possibly_stalled` requires silence across the heartbeat, log, and executor-event channels.
 
 ## Durable messages
 
@@ -102,10 +102,18 @@ reuse fails closed. Handling states are the fixed dispositions `applied`,
 agent-workflow steer SESSION "Run the focused tests." --actor orchestrator
 agent-workflow watch SESSION --after 0 --timeout 300
 agent-workflow progress SESSION "Focused tests passed." --actor child
-agent-workflow ack SESSION MESSAGE_ID "Applied." --actor child
+agent-workflow ack SESSION MESSAGE_ID "Applied." --actor child --outcome applied
 ```
 
-A steer is pending until correlated acknowledgement exists. Logs, terminal text, or a live tmux process do not prove delivery or application.
+A steer is pending until correlated acknowledgement exists. Logs, terminal text, or a live tmux process do not prove delivery or application. The default adapter is `unsupported`. Use `steering_adapter = "control-file-v1"` only for a cooperative executor/wrapper that watches `AGENT_WORKFLOW_STEERING_INBOX` and writes a correlated `ack` through the bound CLI/control bridge. The durable delivery journal distinguishes `queued`, `delivered`, `applied`, `rejected`, `unsupported`, `expired`, and `failed`; an expired request cannot later become applied.
+
+## Completion evidence
+
+JSON Schema validation is only the first gate. A `completed` handoff must match the launch session/ticket/pack identity, name real base/head revisions, include at least one acceptance criterion with evidence, include at least one successful command receipt, and contain no unresolved items. `partial`, `failed`, and `blocked` handoffs must preserve their nonzero/skipped/unavailable command receipts and explain unresolved work. Invalid completion collection is durable evidence and forces a failed terminal status.
+
+## Source cleanliness evidence
+
+`worktree create` and launch preflight execute a fresh exact-root `git -C <root> status --porcelain`. The command preserves the operator's configured Git exclude view while still disabling pagers, editors, diff helpers, and credential prompts. Worktree creation returns bounded provenance—resolved executable, exact argv/root, return code, byte counts, and output digests—without exposing the unbounded filename list. A real tracked or untracked change remains fail-closed unless `--allow-dirty` is explicit.
 
 ## Interactive agent reuse
 

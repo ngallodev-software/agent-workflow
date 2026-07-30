@@ -1,0 +1,11 @@
+flowchart LR
+  HC[Hierarchy contract] --> RC[Root capabilities]
+  HC --> DC[Team delegation contract]
+  DC --> TC[Team-lead capabilities]
+  TC --> WC[Worker launch contract]
+  WC --> W[Worker authority]
+  W -. cannot widen .-> TC
+  TC -. cannot widen .-> RC
+  WR[Worker final receipts] --> TR[Team receipt]
+  TR --> RR[Root orchestration receipt]
+  AP[Explicit lifecycle approval] --> RR

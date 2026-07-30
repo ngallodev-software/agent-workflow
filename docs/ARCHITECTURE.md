@@ -33,6 +33,10 @@ The current distribution remains the execution host while a narrow, versioned pl
 
 This is an additive migration, not an immediate rename or broad repository split. Installed plugins are trusted code, must be explicitly enabled and version-compatible, and may register only bounded command namespaces, schemas, assets, read services, and diagnostics. LangGraph may be an optional spec-authoring adapter, but its checkpoints never replace canonical JSON, append-only events, approval receipts, compiler receipts, or sealed execution evidence. See [Collaborative specification compiler and plugin-first decomposition](SPEC_AUTHORING_PLUGIN_ARCHITECTURE.md).
 
+## Planned hierarchical orchestration
+
+The next orchestration layer is a bounded three-tier hierarchy: a root orchestrator manages multiple team leads, and each team lead supervises worker sessions in panes within its own tmux window. Durable hierarchy contracts, journals, scoped delegation authority, team receipts, and root receipts remain authoritative; tmux sessions/windows/panes and optional external terminal windows are projections. The design intentionally reuses canonical session, workflow, inbox, receipt, and worktree services rather than introducing another executor or scheduler path. See [Hierarchical multi-team orchestration design](HIERARCHICAL_MULTI_TEAM_ORCHESTRATION_DESIGN.md) and [DEC-005](DECISIONS/DEC-005-HIERARCHICAL-ORCHESTRATION.md).
+
 ## Major components
 
 | Area | Modules | Responsibility |
@@ -73,6 +77,8 @@ The default XDG state root is:
         ├── provider-evidence.json         # derived and sealed
         ├── execution-metrics.json
         ├── control-events.jsonl
+        ├── messages.jsonl                 # authoritative session messages
+        ├── steering-delivery.jsonl        # adapter delivery/disposition evidence
         ├── assignments.jsonl
         ├── patch.diff
         ├── final-status.json
@@ -92,8 +98,8 @@ The session service resolves agent identity, class, executor, model, permissions
 1. records the execution transition;
 2. starts the executor as a process group and forwards interrupts;
 3. preserves stdout JSONL/text and stderr separately with capture bounds;
-4. emits heartbeat/control/evaluation evidence;
-5. collects completion, structured result, commands, scope, patch, and metrics;
+4. emits heartbeat/control/evaluation evidence and services configured cooperative steering delivery;
+5. collects and substantively validates completion, structured result, commands, scope, patch, and metrics;
 6. derives provider evidence before sealing;
 7. writes `final-status.json`, validates contracts, and under `seal.lock` atomically installs a read-only `final-receipt.json`; verification reads the receipt and sealed artifacts through stable beneath-root descriptors that reject symlinks in every path component.
 

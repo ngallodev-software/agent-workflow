@@ -236,6 +236,47 @@ def test_worktree_create_list_and_remove_uses_real_git(
     assert not destination.exists()
 
 
+def test_worktree_cleanliness_matches_operator_excludes_and_rejects_real_dirt(
+    installed_product: InstalledProduct, product_env: dict[str, str], tmp_path: Path
+) -> None:
+    repo = tmp_path / "repo"
+    git_repo(repo)
+    home = Path(product_env["HOME"])
+    excludes = home / "global-excludes"
+    excludes.write_text(".operator-cache/\n", encoding="utf-8")
+    (home / ".gitconfig").write_text(
+        f"[core]\n\texcludesfile = {excludes}\n", encoding="utf-8"
+    )
+    ignored = repo / ".operator-cache"
+    ignored.mkdir()
+    (ignored / "state.json").write_text("{}", encoding="utf-8")
+    destination = tmp_path / "clean-worktree"
+
+    created = installed_product.json(
+        "worktree", "create", repo, "CLEAN-1", "HEAD", "--dest", destination,
+        env=product_env,
+    )
+    evidence = created["source_cleanliness"]
+    assert evidence["argv"] == [
+        "git", "-C", str(repo.resolve()), "status", "--porcelain"
+    ]
+    assert evidence["returncode"] == 0
+    assert evidence["stdout_bytes"] == 0
+    assert evidence["environment_policy"] == "unsafe-inherit+operator-git-config"
+    installed_product.json(
+        "worktree", "remove", repo, destination, "--delete-branch", env=product_env
+    )
+
+    (repo / "real-untracked.txt").write_text("dirty\n", encoding="utf-8")
+    rejected = installed_product.run(
+        "worktree", "create", repo, "DIRTY-1", "HEAD", "--dest", tmp_path / "dirty-worktree",
+        env=product_env,
+    )
+    assert rejected.returncode != 0
+    assert "source repository is dirty" in rejected.stderr
+    assert "status --porcelain" in rejected.stderr
+
+
 def test_source_installer_round_trip_preserves_user_owned_paths(
     product_env: dict[str, str], tmp_path: Path
 ) -> None:

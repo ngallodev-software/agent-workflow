@@ -46,6 +46,7 @@ SEALED_OPTIONAL_ARTIFACTS = (
     "workflow-inputs.json",
     "provider-evidence.json",
     "assignments.jsonl",
+    "steering-delivery.jsonl",
     "command-catalog.json",
     "command-card.md",
 )

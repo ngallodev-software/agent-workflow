@@ -22,6 +22,7 @@ class ExecutorPolicy:
     interactive_permission_args: tuple[str, ...] = ()
     non_interactive_permission_args: tuple[str, ...] = ()
     environment_allowlist: tuple[str, ...] = ()
+    steering_adapter: str = "unsupported"
 
 
 @dataclass(frozen=True)
@@ -190,7 +191,7 @@ def _validate_shape(data: dict[str, Any]) -> None:
     executors = data.get("executors", {})
     if not isinstance(executors, dict):
         raise WorkflowError("[executors] must contain executor tables")
-    executor_keys = {"command", "interactive_command", "models", "default_model", "no_go_models", "model_arg", "permission_args", "interactive_permission_args", "non_interactive_permission_args", "environment_allowlist"}
+    executor_keys = {"command", "interactive_command", "models", "default_model", "no_go_models", "model_arg", "permission_args", "interactive_permission_args", "non_interactive_permission_args", "environment_allowlist", "steering_adapter"}
     for name, entry in executors.items():
         _reject_unknown(entry, executor_keys, f"executors.{name}")
     classes = data.get("agent_classes", {})
@@ -287,6 +288,11 @@ def load_settings(path: Path | None = None) -> Settings:
             raise WorkflowError(f"executor {name!r} default_model must be a string")
         if models and default_model not in models:
             raise WorkflowError(f"executor {name!r} default_model must be listed in models")
+        steering_adapter = entry.get("steering_adapter", prior.steering_adapter)
+        if steering_adapter not in {"unsupported", "control-file-v1"}:
+            raise WorkflowError(
+                f"executor {name!r} steering_adapter must be unsupported or control-file-v1"
+            )
         legacy_permission_args = strings("permission_args") if "permission_args" in entry else ()
         policies[name] = ExecutorPolicy(
             interactive_command=interactive_command,
@@ -305,6 +311,7 @@ def load_settings(path: Path | None = None) -> Settings:
             environment_allowlist=strings(
                 "environment_allowlist", prior.environment_allowlist
             ),
+            steering_adapter=steering_adapter,
         )
     stall = _integer(data, "terminal", "stall_minutes", base.stall_minutes)
     capture = _integer(data, "terminal", "capture_lines", base.capture_lines)
@@ -559,6 +566,9 @@ def as_dict(s: Settings) -> dict[str, Any]:
                 "environment_allowlist": list(
                     s.executor_policies.get(name, ExecutorPolicy()).environment_allowlist
                 ),
+                "steering_adapter": s.executor_policies.get(
+                    name, ExecutorPolicy()
+                ).steering_adapter,
             }
             for name, command in s.executors.items()
         },

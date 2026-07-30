@@ -57,11 +57,11 @@ The detailed gap analysis below is the pre-REL-005 audit baseline. Its open lice
   - **Acceptance journeys** (`tests/acceptance/`): installed wheel CLI discovery, pack validation, Git worktree operations, executor launch/restart, durable steer/watch/ack replay, provider-event collection, workflow validation/scheduling/resume, template expansion, evaluation comparisons
   - **Invariant matrices** (`tests/invariants/`): durable state append-only ordering, security boundary enforcement, seal integrity, scheduler dependency rules, provider accounting, evaluation identity
   - **Release checks** (`tests/release/`): asset audit, schema validity, shell syntax, documented-command matching
-  - **Future specifications** (`tests/future/`): approved backlog behavior marked as `xfail(strict=True)` (currently: `BKL-002` late steering journey)
+  - **Future specifications** (`tests/future/`): approved backlog behavior marked as `xfail(strict=True)`; implemented late steering has moved to installed-product acceptance while its external/security gates remain open
 - **Evidence:** pytest output; exit code 0 means all tests passed
 - **BACKLOG mapping:**
   - **BKL-001** (durable message cursors): covered by `tests/acceptance/test_consumer_cursor_journey.py` and `tests/invariants/test_consumer_cursors.py` (installed-wheel replay, crash windows, reconstruction, independent consumers, and digest/path integrity)
-  - **BKL-002** (post-launch steering): covered by `tests/future/test_late_steering_journey.py` (future specification, currently xfail)
+  - **BKL-002** (post-launch steering): covered by `tests/acceptance/test_late_steering_journey.py` plus steering journal invariants; live native-executor and authenticated-principal evidence remain open
   - **REL-003** (compatibility matrix): NOT covered by release-check.sh (opt-in live tests only)
 
 ### 6. Pack Validation
@@ -97,7 +97,7 @@ This closes the local pipeline execution failure, not the public release gates. 
 | ID | Priority | State | Blocker | Coverage | Gap |
 |---|---|---|---|---|---|
 | **BKL-001** | P0 | ready | Durable per-consumer message cursors, restart recovery, duplicate safety, cursor advancement | Implemented in `src/agent_workflow/consumer_cursors.py`; focused acceptance and invariant evidence cover the cursor contract | **Promote the strict acceptance evidence through the phase gate** |
-| **BKL-002** | P0 | ready | Post-launch steering for detached runs (delivered/applied/rejected evidence) | Covered only by a strict future specification (xfail) | **No runtime delivery/application evidence yet** |
+| **BKL-002** | P0 | in-review | Post-launch steering for detached runs (delivered/applied/rejected evidence) | Opt-in cooperative adapter and installed-wheel fixture prove delivery/application without restart; unsupported and terminal outcomes are durable | **HARD-007, claimed live Codex/Claude adapters, and owning phase-gate evidence remain open** |
 | **REL-001** | P0 | needs-decision | Select and add license, matching package metadata | **NOT CHECKED** | **No check for LICENSE file presence, license classifier in pyproject.toml, or license header matching** |
 | **REL-002** | P0 | blocked | Establish vulnerability-reporting channel and update SECURITY.md | **NOT CHECKED** | **No check that SECURITY.md contains a monitored contact or private mechanism** (currently reads "pre-public-release" and says this is a blocker) |
 | **REL-003** | P0 | ready | Define supported Linux/Python/tmux/executor matrix; run live compatibility journeys | **NOT CHECKED BY release-check.sh** | **Live compatibility tests are opt-in only** (separate `pytest -m live` with environment flags; not run by default gate) |
@@ -276,7 +276,7 @@ This closes the local pipeline execution failure, not the public release gates. 
 
 **Current release-check.sh coverage:**
 - ⚠️ Exercises the canonical BKL-001 cursor implementation; phase-gate review and shared post-integration journeys remain separate
-- ⚠️ Includes the BKL-002 strict future specification as an expected failure; it does not prove runtime late-steering delivery
+- ✅ Includes the installed BKL-002 cooperative-adapter journey; this proves the bounded adapter contract, not native live Codex/Claude compatibility
 - ✅ Validates distribution asset integrity, JSON/YAML/TOML syntax, link resolution
 - ✅ Runs acceptance and invariant test suites
 - ✅ Records explicit blocker checks for license selection (REL-001), vulnerability reporting (REL-002), and compatibility evidence (REL-003) without fabricating readiness

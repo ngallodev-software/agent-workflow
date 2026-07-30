@@ -59,11 +59,15 @@ Configured launches enforce class/executor/model allowlists and permission argum
 ```text
 agent-workflow steer SESSION TEXT --actor ID
 agent-workflow progress SESSION TEXT --actor ID
-agent-workflow ack SESSION MESSAGE_UUID TEXT --actor ID
+agent-workflow ack SESSION MESSAGE_UUID TEXT --actor ID [--outcome applied|rejected]
 agent-workflow watch SESSION [--after SEQUENCE] [--timeout SECONDS]
 ```
 
-These commands append validated fsynced records. `watch` replays the journal and may use a best-effort tmux wakeup hint. A steer is pending until correlated evidence proves acknowledgement/application.
+These commands append validated fsynced records. `watch` replays the journal and may use a best-effort tmux wakeup hint. A steer is pending until correlated evidence proves acknowledgement/application. Executors default to `steering_adapter = "unsupported"`; a cooperative wrapper may explicitly select `control-file-v1`, which publishes an immutable bounded request under the run handoff and records delivery outcomes in `steering-delivery.jsonl`. `--outcome rejected` is distinct from application failure or silence.
+
+`status`/`observe` reports output-log age, heartbeat age, executor-event age, tmux liveness, and pane death independently. A live pane is only advisory `possibly_stalled` when all three communication streams are stale past the configured threshold.
+
+Completed handoffs must contain matching session/ticket/pack identity, substantive revisions, criterion evidence, and command receipts. A schema-valid placeholder completion is collected as invalid and makes the run fail rather than silently sealing success. Failed, partial, and blocked completions may retain nonzero commands but must state unresolved evidence.
 
 ## Interactive agent context and reuse
 

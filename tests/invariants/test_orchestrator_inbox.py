@@ -26,7 +26,9 @@ def _make_child(tmp_path: Path, settings, session_id: str, summary: str, monkeyp
     git_repo(repo)
     prompt = tmp_path / f"{session_id}.md"
     prompt.write_text("child\n", encoding="utf-8")
+    monkeypatch.setattr("agent_workflow.tmux.session_exists", lambda *args: False)
     monkeypatch.setattr("agent_workflow.tmux.create_session", lambda *args: None)
+    monkeypatch.setattr("agent_workflow.tmux.pane_info", lambda *args: None)
     launch(
         settings,
         session_id=session_id,

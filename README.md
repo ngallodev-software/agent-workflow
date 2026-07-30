@@ -83,7 +83,7 @@ agent-workflow progress ticket-1 "Tests are green." --actor child
 agent-workflow ack ticket-1 MESSAGE_ID "Applied." --actor child
 ```
 
-The append-only message log is authoritative. tmux wakeups are only best-effort hints. A steer remains pending until the child emits correlated acknowledgement evidence; the current detached-executor late-steering gap is tracked in [BACKLOG.md](docs/BACKLOG.md).
+The append-only message log is authoritative. tmux wakeups are only best-effort hints. A steer remains pending until durable adapter and child acknowledgement evidence records its disposition. Configured cooperative executors may opt into `control-file-v1`; unverified executor modes report `unsupported` rather than treating terminal output as proof. Native live-executor compatibility remains tracked in [BACKLOG.md](docs/BACKLOG.md).
 
 ## Workflow graphs
 

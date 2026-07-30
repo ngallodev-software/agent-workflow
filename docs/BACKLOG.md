@@ -25,26 +25,69 @@ The determinism and security work below is derived from the [feature determinism
 | [`execution-isolation-and-secrets`](../prompt-packs/execution-isolation-and-secrets/) | HARD-008, HARD-003, HARD-006 | HARD-008 accepted; HARD-003 and HARD-006 remain blocked on their declared prerequisites. |
 | [`public-beta-trust-and-release`](../prompt-packs/public-beta-trust-and-release/) | HARD-007, HARD-009, HARD-010, REL-003, REL-004 | Blocked until the first two packs are accepted. |
 | [`mcp-server-next`](../prompt-packs/mcp-server-next/) | MCP-003 | Blocked on HARD-004, HARD-005, and HARD-007; future mutations must preserve the current parser-derived capability/catalog resources and launch-contract v2 command-context parity. |
-| [`orchestrator-two-way-messaging`](../prompt-packs/orchestrator-two-way-messaging/) | BKL-001, BKL-002, MSG-001 through MSG-007 | BKL-001, HARD-002, and HARD-004 prerequisites are accepted; MSG-001 is integrated and in review pending repaired installed-product and sealed acceptance evidence, while later phases remain dependency-gated. |
-| [`delegation-communication-reliability`](../prompt-packs/delegation-communication-reliability/) | PROC-001 through PROC-005 | PROC-001 and PROC-002 are integrated and in review; remaining tasks retain their declared readiness and dependencies. |
+| [`orchestrator-two-way-messaging`](../prompt-packs/orchestrator-two-way-messaging/) | BKL-001, BKL-002, MSG-001 through MSG-007 | BKL-002 now has an opt-in cooperative file adapter, durable delivery outcomes, and installed fixture evidence; it remains in review pending HARD-007, claimed live-executor adapters, and the owning phase gate. MSG-001 remains in review. |
+| [`delegation-communication-reliability`](../prompt-packs/delegation-communication-reliability/) | PROC-001 through PROC-005 | PROC-001 and PROC-002 remain in review. PROC-003 and PROC-004 are implemented with focused invariant/installed evidence and are in review pending the pack gate and remaining recovery matrix. |
 | [`tmux-pane-identity-reliability`](../prompt-packs/tmux-pane-identity-reliability/) | PROC-006 | Integrated pane-identity work is in review pending repaired closeout, live-host, and sealed acceptance evidence. |
-| [`source-preflight-snapshot-reliability`](../prompt-packs/source-preflight-snapshot-reliability/) | PROC-007 | Ready for isolated investigation and implementation; reconcile exact-root Git cleanliness evidence so worktree creation never rejects a clean source from stale or divergent command context. |
+| [`source-preflight-snapshot-reliability`](../prompt-packs/source-preflight-snapshot-reliability/) | PROC-007 | Implemented and in review: exact-root status now preserves operator Git excludes while recording bounded command provenance; focused installed clean/dirty evidence passes. |
 | [`chatgpt-sealed-run-assessment`](../prompt-packs/chatgpt-sealed-run-assessment/) | CHATGPT-EVAL-001, CHATGPT-TDD-001 | Assessment and future-TDD artifacts completed; future journeys remain strict expected failures and do not unblock planned runtime work. |
 | [`force-accept-override`](../prompt-packs/force-accept-override/) | LIFE-001 | Ready for isolated implementation; add an explicit, audited manual force-accept path without weakening normal acceptance. |
+| [`hierarchical-multi-team-orchestration`](../prompt-packs/hierarchical-multi-team-orchestration/) | HIER-001 through HIER-008 | Proposed design package; blocked on maintainer approval of DEC-005 and the ticket-specific accepted messaging, delegation, steering, and pane-identity prerequisites listed below. |
+
+## Proposed hierarchical orchestration
+
+These items implement the bounded root orchestrator → team lead → worker design. `DEC-005` authorizes the hierarchy. Existing messaging, delegation, steering, and pane-identity work remains independently gated at the first ticket that consumes each foundation; those prerequisites may proceed in parallel with the decision and Phase 0 contract work.
+
+| ID | Priority | Risk | State | Work and exit evidence | Reference |
+|---|---|---:|---|---|---|
+| HIER-001 | P0 | Critical | needs-decision | After `DEC-005` is approved, define immutable hierarchy and team-delegation contracts with fixed depth, principal identity, scope, budgets, allowed command/model policy, and capability narrowing. | [Hierarchical design](HIERARCHICAL_MULTI_TEAM_ORCHESTRATION_DESIGN.md#contracts) |
+| HIER-002 | P0 | Critical | blocked | Add append-only hierarchy/action/ack journals, deterministic replay, team receipts, and root orchestration receipts with tamper/truncation tests. Blocked on HIER-001. | [Prompt pack phase 0](../prompt-packs/hierarchical-multi-team-orchestration/phase-0/) |
+| HIER-003 | P0 | Critical | blocked | Add a managed tmux session with stable root/team window IDs and worker panes scoped to the owning team; reconcile movement, reindexing, loss, and restart without duplicate launch. Blocked on HIER-002 and accepted PROC-006. | [Managed tmux topology](HIERARCHICAL_MULTI_TEAM_ORCHESTRATION_DESIGN.md#tmux-and-terminal-design) |
+| HIER-004 | P1 | High | blocked | Add an optional configured argv-only external terminal adapter that attaches to an exact team window and fails without destroying durable team state. Blocked on HIER-003. | [Forking a new terminal](HIERARCHICAL_MULTI_TEAM_ORCHESTRATION_DESIGN.md#forking-a-new-terminal) |
+| HIER-005 | P0 | Critical | blocked | Launch a team lead as a canonical session with bounded delegation authority and allow only contract-scoped canonical worker workflows. Blocked on HIER-002, HIER-003, MSG-001, PROC-001, and PROC-002 acceptance. | [Team-lead lifecycle](HIERARCHICAL_MULTI_TEAM_ORCHESTRATION_DESIGN.md#team-lead-lifecycle) |
+| HIER-006 | P0 | Critical | blocked | Implement root ↔ team-lead and team-lead ↔ worker replayable messaging, acknowledgements, local decisions, escalation, late steering, cancel, and unavailable evidence. Blocked on HIER-005 and BKL-002. | [Message model](HIERARCHICAL_MULTI_TEAM_ORCHESTRATION_DESIGN.md#message-model) |
+| HIER-007 | P0 | Critical | blocked | Add root-level team dependency scheduling, global capacity leases, verified cross-team result bindings, retries, and fan-in. Blocked on HIER-005 and HIER-006. | [Scheduling and budgets](HIERARCHICAL_MULTI_TEAM_ORCHESTRATION_DESIGN.md#scheduling-and-budgets) |
+| HIER-008 | P0 | Critical | blocked | Deliver tree/status/attach CLI, deterministic root/team recovery, docs/skills/man pages, and a sealed two-team installed-product journey with explicit final approval. Blocked on HIER-007. | [Acceptance journeys](HIERARCHICAL_MULTI_TEAM_ORCHESTRATION_DESIGN.md#acceptance-journeys) |
+
+### Hierarchical orchestration dependency order
+
+The hierarchy work has one critical path and one optional terminal-integration branch. Prompt-pack gate IDs (`HIER-GATE-*`) are review tasks, not backlog items. A later phase must not start merely because implementation code exists; the preceding critical-path gate must accept its evidence.
+
+| Lane | Required order | Execution rule |
+|---|---|---|
+| Decision and durable authority | `DEC-005` → `HIER-001` → `HIER-002` → `HIER-GATE-0` | This lane may start while the existing messaging and pane work is being completed. |
+| Managed tmux critical path | accepted `PROC-006` + `HIER-GATE-0` → `HIER-003` → `HIER-GATE-1` | Stable pane identity must be accepted before managed team windows become executable authority projections. |
+| Team-lead runtime | accepted `MSG-001`, `PROC-001`, and `PROC-002` + `HIER-GATE-1` → `HIER-005` | The team lead reuses accepted registry/inbox, preflight, and control-handshake foundations. |
+| Hierarchical messaging | accepted `BKL-002` + `HIER-005` → `HIER-006` → `HIER-GATE-2` | Late steering must be proven before the second messaging boundary is accepted. |
+| Root scheduling and product proof | `HIER-GATE-2` → `HIER-007` → `HIER-008` → `HIER-GATE-3` | This is the final fan-out/fan-in, recovery, CLI, and sealed acceptance path. |
+| Optional external terminal branch | `HIER-003` → `HIER-004` → `HIER-GATE-1A` | This branch may run in parallel after `HIER-003`. It does not block `HIER-005`, `HIER-006`, or the core product path. If implemented, it requires its own gate evidence. |
+
+Critical path:
+
+```text
+DEC-005
+  → HIER-001 → HIER-002 → HIER-GATE-0
+  → [accepted PROC-006] → HIER-003 → HIER-GATE-1
+  → [accepted MSG-001 + PROC-001 + PROC-002] → HIER-005
+  → [accepted BKL-002] → HIER-006 → HIER-GATE-2
+  → HIER-007 → HIER-008 → HIER-GATE-3
+
+Optional parallel branch after HIER-003:
+  HIER-004 → HIER-GATE-1A
+```
 
 ## Ready now
 
 | ID | Priority | Risk | State | Work and exit evidence | Reference |
 |---|---|---:|---|---|---|
-| BKL-002 | P0 | High | ready | Add executor-specific post-launch steering for detached runs. A running executor must consume a steer without restart and emit correlated delivered/applied/rejected evidence; terminal text or process liveness is not proof. | Strict future journey in `tests/future/test_late_steering_journey.py` |
+| BKL-002 | P0 | High | in-review | Added a typed opt-in `control-file-v1` adapter, immutable request inbox, durable `queued`/`delivered`/`applied`/`rejected`/`unsupported`/`expired`/`failed` journal, correlated child bridge acknowledgement, replay/race safeguards, and an installed-wheel acceptance journey. Default and unverified executors remain `unsupported`. Acceptance still requires HARD-007, any claimed live Codex/Claude adapter evidence, and the owning phase gate. | Installed journey in `tests/acceptance/test_late_steering_journey.py` |
 | MSG-001 | P0 | Critical | in-review | Integrated at `50ea762`; repair the installed-product fixture and obtain sealed acceptance evidence for the immutable registry and append-only aggregate inbox before completion. | [Messaging design](ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md#add-one-shared-orchestrator-inbox) |
 | PROC-001 | P0 | High | in-review | Reimplemented and integrated at `7136f86`; receipt-bound preflight rejects missing, stale, and rejected lifecycle evidence before tmux creation. Obtain final phase-review/acceptance evidence without treating the invalid child completion projection as success. | [`delegation-communication-reliability`](../prompt-packs/delegation-communication-reliability/phase-0/tickets/PROC-001-authoritative-preflight.md) |
 | PROC-002 | P0 | Critical | in-review | Control bridge is integrated at `1368769`; close installed matrix and sealed-evidence gaps for correlated progress/ack delivery, application, rejection, and unavailable outcomes. | [`delegation-communication-reliability`](../prompt-packs/delegation-communication-reliability/phase-0/tickets/PROC-002-control-handshake.md) |
-| PROC-003 | P1 | High | ready | Detect silent panes independently from heartbeat, log, and executor-event growth; preserve evidence through safe terminate/retry lineage. | [`delegation-communication-reliability`](../prompt-packs/delegation-communication-reliability/phase-0/tickets/PROC-003-run-observability.md) |
-| PROC-004 | P0 | Critical | ready | Reject placeholder-only completion handoffs and require substantive identity, scope, commands, exit codes, acceptance, and unresolved-evidence fields. | [`delegation-communication-reliability`](../prompt-packs/delegation-communication-reliability/phase-0/tickets/PROC-004-completion-validation.md) |
+| PROC-003 | P1 | High | in-review | Observation now reports tmux/pane state, heartbeat age, log growth, and executor-event growth independently and marks a live pane `possibly_stalled` only when every communication channel is stale. Focused invariant evidence passes; complete installed terminate/retry closeout and the pack gate remain open. | [`delegation-communication-reliability`](../prompt-packs/delegation-communication-reliability/phase-0/tickets/PROC-003-run-observability.md) |
+| PROC-004 | P0 | Critical | in-review | Completion collection now rejects placeholder-only completed reports, identity mismatch, absent revisions, acceptance evidence, or command receipts; failed/partial/blocked reports retain real failed commands and require unresolved evidence. Invalid collection makes the terminal run fail. Focused installed and invariant evidence passes; the owning phase gate remains open. | [`delegation-communication-reliability`](../prompt-packs/delegation-communication-reliability/phase-0/tickets/PROC-004-completion-validation.md) |
 | PROC-005 | P1 | High | ready | Align steering, templates, hooks/reminders, and recovery references with the enforced launch, communication, observation, completion, and closeout pattern. | [`delegation-communication-reliability`](../prompt-packs/delegation-communication-reliability/phase-1/tickets/PROC-005-operator-enforcement.md) |
 | PROC-006 | P0 | Critical | in-review | Pane identity is integrated at `55f4ed5`; current corrective commits `5785998` and `72451cc` await integration. Complete live-host and sealed acceptance evidence: layout changes must retain the bound pane, while termination or genuine loss must report it unavailable without rebinding. | [`tmux-pane-identity-reliability`](../prompt-packs/tmux-pane-identity-reliability/phase-0/tickets/PROC-006-pane-identity.md) |
-| PROC-007 | P0 | High | ready | Reproduce and fix divergent clean-source detection: `worktree create` must derive freshness from a newly executed exact-root Git command with recorded executable/argv/exit/output digest, never a stale projection or divergent command context. A clean repository must not require `--allow-dirty`; a real dirty repository must still be rejected. | [`source-preflight-snapshot-reliability`](../prompt-packs/source-preflight-snapshot-reliability/phase-0/tickets/PROC-007-source-snapshot.md) |
+| PROC-007 | P0 | High | in-review | Exact-root cleanliness now executes a fresh `git -C <root> status --porcelain`, preserves the operator's system/global exclude view without enabling prompts or helpers, records bounded executable/argv/exit/output-digest provenance, accepts globally ignored state, and still rejects real untracked changes. Focused installed and invariant evidence passes; pack review and broader host compatibility remain open. | [`source-preflight-snapshot-reliability`](../prompt-packs/source-preflight-snapshot-reliability/phase-0/tickets/PROC-007-source-snapshot.md) |
 | LIFE-001 | P0 | Critical | ready | Add a locally interactive, explicit `force-accept` command that records an immutable override receipt with actor, reason, and failed-normal-gate evidence. It must preserve ordinary `accept` validation and truthfully document that authenticated human-only authorization remains blocked on HARD-007. | [`force-accept-override`](../prompt-packs/force-accept-override/phase-0/tickets/LIFE-001-force-accept.md) |
 | REL-001 | P0 | Critical | needs-decision | Select and add the project license, matching package metadata, and distribution policy. | [Public release readiness](PUBLIC_RELEASE_READINESS.md#governance-and-compatibility-blockers) |
 | REL-002 | P0 | Critical | blocked | Establish a real monitored vulnerability-reporting channel and update `SECURITY.md`. | [Public release readiness](PUBLIC_RELEASE_READINESS.md#governance-and-compatibility-blockers) |
@@ -101,13 +144,14 @@ These items remain tracked separately from the hardening ownership above; they a
 
 ## Decisions
 
-| ID | Priority | State | Decision |
-|---|---|---|---|
+| ID | Priority | State | Decision | Reference |
+|---|---|---|---|---|
 | DEC-001 | P0 | decided | Local JSONL authority, per-consumer FIFO, at-least-once append, digest-bound idempotency, rebuildable cursors, and a 2-second normal replay objective. | [Decision](DECISIONS/DEC-001-DURABLE-CONTROL.md) |
-| DEC-002 | P1 | needs-decision | Set benchmark policy: first executors, billing meaning, cache role, replicate count/effect threshold, and treatment of interrupted or human-assisted trials. |
-| DEC-003 | P2 | deferred | Authorize multi-host orchestration only after a measured single-host failure. Preserve replayable durable records as authority; prefer JetStream unless an existing Redis dependency is mandated. |
-| DEC-MCP-HTTP | P2 | deferred | Authorize any non-stdio MCP transport only through a separate security ADR after local adoption evidence. |
-| DEC-004 | P1 | decided | Retain `agent-workflow` as the execution host, add a versioned trusted plugin API, and build `agent-workflow-spec` as the first sibling plugin before extracting other subsystems. |
+| DEC-002 | P1 | needs-decision | Set benchmark policy: first executors, billing meaning, cache role, replicate count/effect threshold, and treatment of interrupted or human-assisted trials. | — |
+| DEC-003 | P2 | deferred | Authorize multi-host orchestration only after a measured single-host failure. Preserve replayable durable records as authority; prefer JetStream unless an existing Redis dependency is mandated. | — |
+| DEC-MCP-HTTP | P2 | deferred | Authorize any non-stdio MCP transport only through a separate security ADR after local adoption evidence. | — |
+| DEC-004 | P1 | decided | Retain `agent-workflow` as the execution host, add a versioned trusted plugin API, and build `agent-workflow-spec` as the first sibling plugin before extracting other subsystems. | — |
+| DEC-005 | P0 | needs-decision | Adopt a bounded root orchestrator → team lead → worker hierarchy with durable authority and one managed tmux window per team. | [Decision](DECISIONS/DEC-005-HIERARCHICAL-ORCHESTRATION.md) |
 
 ## Proposed specification and plugin program
 

@@ -16,6 +16,7 @@ from typing import Any, BinaryIO
 
 from .errors import WorkflowError
 from .contracts import read_launch_contract
+from .completion import substantive_completion_errors
 from .events import append_lifecycle_event
 from .diagnostics import classify_failure
 from .eval.commands import collect_commands, specs_from_data
@@ -29,6 +30,12 @@ from .messages import (
     CONTROL_BRIDGE_MAX_BYTES,
     CONTROL_BRIDGE_SCHEMA,
     append_message,
+)
+from .steering import (
+    STEERING_INBOX_ENV,
+    current_delivery,
+    deliver_pending,
+    record_acknowledgement,
 )
 from .provider_evidence import MAX_PROVIDER_EVENT_BYTES, write_provider_evidence
 from .process import (
@@ -49,6 +56,8 @@ MAX_EXECUTOR_STDOUT_BYTES = 16 * 1024 * 1024
 MAX_EXECUTOR_STDERR_BYTES = 16 * 1024 * 1024
 _RUNTIME_ENVIRONMENT = (
     "AGENT_WORKFLOW_SESSION_ID",
+    "AGENT_WORKFLOW_TICKET_ID",
+    "AGENT_WORKFLOW_PACK_ID",
     "AGENT_WORKFLOW_PROMPT_SOURCE",
     "AGENT_WORKFLOW_HANDOFF_DIR",
     "AGENT_WORKFLOW_PROMPT_PACK_ROOT",
@@ -63,6 +72,9 @@ _RUNTIME_ENVIRONMENT = (
     "FAKE_AGENT_MODE",
     "FAKE_AGENT_DELAY",
     "FAKE_AGENT_RESULT_JSON",
+    "FAKE_AGENT_AUTO_STEER",
+    "FAKE_AGENT_EMPTY_COMPLETION",
+    "FAKE_AGENT_STEER_OUTCOME",
 )
 
 
@@ -138,19 +150,58 @@ def _drain_control_bridge(run_dir: Path, *, active: bool) -> None:
                 raise WorkflowError("control intent identity or digest mismatch")
             if not active:
                 raise WorkflowError("request arrived after executor exit")
-            if value["kind"] == "task_complete":
+            intent_kind = str(value["kind"])
+            acknowledgement_outcome = value.get("outcome", "applied")
+            if intent_kind == "ack" and acknowledgement_outcome not in {"applied", "rejected"}:
+                raise WorkflowError("invalid acknowledgement outcome")
+            if intent_kind != "ack" and value.get("outcome") is not None:
+                raise WorkflowError("only acknowledgement intents may include outcome")
+            if intent_kind == "task_complete":
                 apply_bridged_completion(
                     run_dir,
                     session_id,
                     actor=str(value["actor"]),
                     summary=str(value["content"]),
                 )
-            append_message(
-                run_dir, session_id=session_id, direction="child_to_parent",
-                kind=str(value["kind"]), actor=str(value["actor"]),
-                content=str(value["content"]), correlation_id=value.get("correlation_id"),
-            )
-            outcome, reason = "applied", "authoritative host append"
+            if intent_kind == "ack":
+                correlation_id = str(value["correlation_id"])
+                existing_delivery = current_delivery(run_dir, correlation_id)
+                if existing_delivery is not None and existing_delivery["outcome"] in {
+                    "applied", "rejected", "expired",
+                }:
+                    prior = str(existing_delivery["outcome"])
+                    if prior == "expired":
+                        raise WorkflowError("steering request already expired")
+                    if prior != acknowledgement_outcome:
+                        raise WorkflowError(
+                            f"steering request already has terminal outcome {prior}"
+                        )
+                    outcome, reason = (
+                        "duplicate",
+                        "duplicate terminal acknowledgement ignored",
+                    )
+                else:
+                    append_message(
+                        run_dir, session_id=session_id, direction="child_to_parent",
+                        kind=intent_kind, actor=str(value["actor"]),
+                        content=str(value["content"]),
+                        correlation_id=correlation_id,
+                    )
+                    record_acknowledgement(
+                        run_dir,
+                        correlation_id=correlation_id,
+                        outcome=str(acknowledgement_outcome),
+                        reason=str(value["content"]),
+                    )
+                    outcome, reason = "applied", "authoritative host append"
+            else:
+                append_message(
+                    run_dir, session_id=session_id, direction="child_to_parent",
+                    kind=intent_kind, actor=str(value["actor"]),
+                    content=str(value["content"]),
+                    correlation_id=value.get("correlation_id"),
+                )
+                outcome, reason = "applied", "authoritative host append"
         except (OSError, UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError, ValueError, WorkflowError) as exc:
             reason = str(exc)
             correlation_id = intent.get("correlation_id") if intent else None
@@ -271,6 +322,18 @@ def _collect_completion(
                 raise WorkflowError("completion handoff session_id does not match run")
             from .contracts import validate_instance
             validate_instance(value, "agent-workflow/completion/v1", artifact=str(source))
+            semantic_errors = substantive_completion_errors(
+                value,
+                session_id=session_id,
+                ticket_id=launch.get("ticket"),
+                pack_id=(
+                    launch.get("pack", {}).get("id")
+                    if isinstance(launch.get("pack"), dict)
+                    else None
+                ),
+            )
+            if semantic_errors:
+                raise WorkflowError("; ".join(semantic_errors))
             completion_path = run_dir / "completion.json"
             temporary = completion_path.with_name(f".{completion_path.name}.handoff")
             temporary.write_bytes(data)
@@ -546,15 +609,31 @@ def _capture_patch(workdir: Path, run_dir: Path, path: Path) -> None:
     path.write_bytes(patch)
 
 
-def _child_environment(environment_allowlist: object, *, bridge_dir: Path) -> EnvironmentPolicy:
+def _child_environment(
+    environment_allowlist: object,
+    *,
+    bridge_dir: Path,
+    steering_dir: Path,
+    ticket_id: str | None,
+    pack_id: str | None,
+) -> EnvironmentPolicy:
     configured = environment_allowlist
     names = set(_RUNTIME_ENVIRONMENT)
     if isinstance(configured, list):
         names.update(value for value in configured if isinstance(value, str) and value)
     names.difference_update({"TMUX", "TMUX_PANE", "XDG_STATE_HOME"})
+    values = {
+        CONTROL_BRIDGE_ENV: str(bridge_dir),
+        STEERING_INBOX_ENV: str(steering_dir),
+        "XDG_STATE_HOME": str(bridge_dir.parent),
+    }
+    if ticket_id is not None:
+        values["AGENT_WORKFLOW_TICKET_ID"] = ticket_id
+    if pack_id is not None:
+        values["AGENT_WORKFLOW_PACK_ID"] = pack_id
     return EnvironmentPolicy(
         allowlist=tuple(sorted(names)),
-        values={CONTROL_BRIDGE_ENV: str(bridge_dir), "XDG_STATE_HOME": str(bridge_dir.parent)},
+        values=values,
     )
 
 
@@ -657,6 +736,13 @@ def execute(
             environment=_child_environment(
                 launch["command_plan"].get("environment_allowlist", []),
                 bridge_dir=Path(str(launch["paths"]["handoff_dir"])) / "control-intents",
+                steering_dir=Path(str(launch["paths"]["handoff_dir"])) / "steering-inbox",
+                ticket_id=launch.get("ticket"),
+                pack_id=(
+                    launch.get("pack", {}).get("id")
+                    if isinstance(launch.get("pack"), dict)
+                    else None
+                ),
             ),
             secret_values=secret_values,
             interactive=interactive,
@@ -799,7 +885,9 @@ def execute(
                 "at": utc_now(),
             },
         )
-        _drain_control_bridge(run_dir, active=process.poll() is None)
+        active = process.poll() is None
+        deliver_pending(run_dir, active=active)
+        _drain_control_bridge(run_dir, active=active)
         wait_seconds = max(0.1, heartbeat_seconds)
         if deadline is not None:
             remaining = deadline - time.monotonic()
@@ -821,6 +909,7 @@ def execute(
     # once while completion is still being finalized; later arrivals are never
     # consumed after the terminal receipt is sealed.
     _drain_control_bridge(run_dir, active=True)
+    deliver_pending(run_dir, active=False)
     if any(thread.is_alive() for thread in threads):
         pump_errors.append("stream drain deadline exceeded")
         try:
@@ -835,7 +924,15 @@ def execute(
     if pump_errors:
         return_code = return_code or 1
 
-    _collect_completion(run_dir, workdir, secret_values=secret_values)
+    completion_collection = _collect_completion(
+        run_dir, workdir, secret_values=secret_values
+    )
+    if completion_collection["validation_status"] != "valid":
+        pump_errors.append(
+            "completion: "
+            + "; ".join(completion_collection.get("validation_errors", []))
+        )
+        return_code = return_code or 1
     _collect_task_result(run_dir, workdir, secret_values=secret_values)
 
     if isinstance(runtime, dict):

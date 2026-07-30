@@ -20,6 +20,20 @@
 
 ## Unreleased
 
+- Add opt-in cooperative late steering with immutable inbox requests, durable
+  delivery/disposition records, correlated applied/rejected acknowledgements,
+  unsupported/expired evidence, and an installed-wheel acceptance journey.
+- Reject schema-valid placeholder completion handoffs; require matching
+  identity, substantive revision/criterion/command evidence, and unresolved
+  details for non-success outcomes, and fail terminal runs on invalid
+  completion collection.
+- Make source cleanliness use a fresh exact-root Git status command that
+  preserves operator global excludes while recording bounded executable,
+  argv, exit, byte-count, and output-digest provenance.
+- Report heartbeat, output-log, and executor-event ages independently when
+  diagnosing a possibly stalled live pane.
+- Harden the installed-product test fixture so declared runtime dependencies
+  remain importable in an isolated wheel environment.
 - Add recoverable `agent-workflow archive`/`clear` cleanup for accepted runs,
   with sealed-evidence, lifecycle, score-digest, revision, and tmux-closure
   gates; add archive manifests and an installed acceptance journey.

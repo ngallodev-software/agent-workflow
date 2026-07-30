@@ -75,15 +75,19 @@ def test_release_evidence_preserves_open_governance_blockers_and_writes_durable_
     }
     provenance = _load(output / "build-provenance.json")
     assert len(provenance["source"]["tree_sha256"]) == 64
-    revision = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=REPO_ROOT,
-        text=True,
-        capture_output=True,
-        check=True,
-    ).stdout.strip()
-    assert provenance["source"]["git_revision"] == revision
-    assert isinstance(provenance["source"]["git_dirty"], bool)
+    if (REPO_ROOT / ".git").exists():
+        revision = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=REPO_ROOT,
+            text=True,
+            capture_output=True,
+            check=True,
+        ).stdout.strip()
+        assert provenance["source"]["git_revision"] == revision
+        assert isinstance(provenance["source"]["git_dirty"], bool)
+    else:
+        assert provenance["source"]["git_revision"] is None
+        assert provenance["source"]["git_dirty"] is None
 
 
 def test_dependency_lock_drift_and_failed_junit_are_machine_failures(tmp_path: Path) -> None:

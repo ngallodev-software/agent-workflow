@@ -53,12 +53,16 @@ class EnvironmentPolicy:
         "FAKE_AGENT_MODE",
         "FAKE_AGENT_DELAY",
         "FAKE_AGENT_RESULT_JSON",
+        "FAKE_AGENT_AUTO_STEER",
+        "FAKE_AGENT_EMPTY_COMPLETION",
+        "FAKE_AGENT_STEER_OUTCOME",
         "XDG_CONFIG_HOME",
         "XDG_DATA_HOME",
         "XDG_STATE_HOME",
     )
     values: Mapping[str, str] = field(default_factory=dict)
     unsafe_inherit: bool = False
+    git_config_policy: str = "isolated"
 
 
 @dataclass(frozen=True)
@@ -265,16 +269,29 @@ def build_environment(
         if not isinstance(name, str) or not name or "=" in name or "\x00" in name:
             raise WorkflowError(f"invalid environment variable name: {name!r}")
         environment[name] = str(value)
-    # Git is a policy input boundary.  Do not allow host pagers, external diff
-    # helpers, editors, credential prompts, or system/global config to alter a
-    # governed snapshot. Repository-local hooks and filters remain visible to
-    # operators and are documented as repository trust decisions.
+    # Git is a policy input boundary. Pagers, external diff helpers, editors,
+    # and prompts are always disabled. Governed commands isolate system/global
+    # config by default, while an explicit operator policy preserves the same
+    # excludes/config inputs used by a human ``git status`` cleanliness check.
     if Path(command[0]).name == "git":
-        environment.update(
-            {
+        if policy.git_config_policy not in {"isolated", "operator"}:
+            raise WorkflowError(
+                "git_config_policy must be isolated or operator"
+            )
+        if policy.git_config_policy == "isolated":
+            environment.update(
+                {
                 "GIT_CONFIG_NOSYSTEM": "1",
                 "GIT_CONFIG_SYSTEM": os.devnull,
                 "GIT_CONFIG_GLOBAL": os.devnull,
+                }
+            )
+        else:
+            for name in ("GIT_CONFIG_NOSYSTEM", "GIT_CONFIG_SYSTEM", "GIT_CONFIG_GLOBAL"):
+                if name not in policy.values:
+                    environment.pop(name, None)
+        environment.update(
+            {
                 "GIT_PAGER": "cat",
                 "PAGER": "cat",
                 "GIT_EXTERNAL_DIFF": "",
@@ -285,7 +302,10 @@ def build_environment(
                 "SSH_ASKPASS": "true",
             }
         )
-    return environment, ("unsafe-inherit" if policy.unsafe_inherit else "controlled"), (
+    policy_name = "unsafe-inherit" if policy.unsafe_inherit else "controlled"
+    if Path(command[0]).name == "git" and policy.git_config_policy == "operator":
+        policy_name += "+operator-git-config"
+    return environment, policy_name, (
         tuple(str(value) for value in policy.values.values())
     )
 

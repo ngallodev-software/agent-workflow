@@ -1,0 +1,13 @@
+flowchart TD
+  S[Root restart] --> H[Read immutable hierarchy]
+  H --> E[Replay hierarchy events and cursors]
+  E --> T[Observe tmux session/windows/panes]
+  T --> V{Team has durable launch footprint?}
+  V -- no --> N[Eligible for launch under contract/budget]
+  V -- yes --> F{Verified team receipt?}
+  F -- yes --> C[Mark terminal from receipt]
+  F -- no --> P{Live team-lead process/pane observed?}
+  P -- yes --> I[Import messages and continue]
+  P -- no --> L[Record lost/intervention-required]
+  N --> D[Create window and canonical team-lead run]
+  D --> I
