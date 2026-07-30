@@ -21,6 +21,13 @@
     "events_path": {"type": "string"},
     "final_receipt_path": {"type": ["string", "null"]},
     "failure_category": {"type": ["string", "null"]}
+    ,"tmux_mode": {"type": ["string", "null"], "enum": [null, "shared_window", "dedicated_session"]}
+    ,"tmux_session": {"type": ["string", "null"]}
+    ,"tmux_target": {"type": ["string", "null"]}
+    ,"tmux_pane_id": {"type": ["string", "null"], "pattern": "^%[0-9]+$"}
+    ,"tmux_window_target": {"type": ["string", "null"]}
+    ,"pane_pid": {"type": ["integer", "null"]}
+    ,"pane_command": {"type": ["string", "null"]}
     ,"job_binding_path": {"type": ["string", "null"]}
     ,"job_binding_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}
     ,"job_id": {"type": ["string", "null"]}

@@ -1349,13 +1349,6 @@ def launch(
             tmux.create_session(session_id, str(workdir), str(runner), agent_name)
             tmux_target = session_id
             tmux_session = session_id
-            tmux.set_pane_binding(
-                tmux_target,
-                run_id=session_id,
-                assignment_id=(agent_context.get("current_assignment") or {}).get(
-                    "assignment_id"
-                ),
-            )
             tmux_window_target = None
             tmux_mode = "dedicated_session"
     except Exception:
@@ -1401,7 +1394,9 @@ def observe(
     try:
         alive: bool | None = tmux.session_exists(host_session)
         pane = tmux.resolve_status_pane(data) if alive else None
-        if pane is not None and pane.dead:
+        if data.get("tmux_mode") == "shared_window":
+            alive = pane is not None and not pane.dead
+        elif pane is not None and pane.dead:
             alive = False
     except WorkflowError as exc:
         alive = None
