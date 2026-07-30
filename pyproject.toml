@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-workflow"
-version = "0.3.0"
+version = "0.4.0"
 description = "Terminal-first, observable workflow for bounded coding-agent delegation"
 readme = "README.md"
 requires-python = ">=3.11"

@@ -1,6 +1,6 @@
 # agent-workflow repository chart pack
 
-**Release:** 0.3.0
+**Release:** 0.4.0
 **Purpose:** current-state architecture, data/evidence model, execution flows, security boundaries, and planned MCP evolution.
 
 Mermaid sources for the highest-value diagrams are also stored as individual `.mmd` files in this directory.
