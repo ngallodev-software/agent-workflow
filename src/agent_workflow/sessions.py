@@ -42,6 +42,7 @@ from .messages import (
     wait_for_messages,
     write_control_intent,
 )
+from .preflight import preflight_error, preflight_run_record, resolve_prerequisites
 from .manifests import task_result_contract
 from .process import redact_argv, require_command, run, secret_values_from_argv
 from .receipts import completion_template, initial_completion, initial_provenance, update_provenance
@@ -714,6 +715,7 @@ def launch(
     allow_dirty: bool = False,
     structured: bool = False,
     interactive: bool | None = None,
+    prerequisite_ids: list[str] | None = None,
     saved_stream_format: str | None = None,
     saved_executor: str | None = None,
     prompt_source_override: Path | None = None,
@@ -737,6 +739,30 @@ def launch(
         prompt_read = read_regular_file(prompt_source)
     except WorkflowError as exc:
         raise WorkflowError(f"prompt is not a regular file: {prompt_source.name}") from exc
+    preflight = resolve_prerequisites(settings, prerequisite_ids or [])
+    if preflight["status"] != "accepted":
+        state_dir = run_dir(settings, session_id)
+        if state_dir.exists() and any(state_dir.iterdir()):
+            raise preflight_error(preflight)
+        state_dir.mkdir(parents=True, exist_ok=True)
+        created_at = utc_now()
+        atomic_write_json(state_dir / "preflight.json", preflight, mode=0o444)
+        (state_dir / "output.log").touch()
+        write_status(
+            settings,
+            session_id,
+            preflight_run_record(
+                session_id=session_id,
+                ticket_id=ticket_id,
+                pack_id=pack_id,
+                workdir=workdir,
+                prompt_path=prompt_source,
+                log_path=state_dir / "output.log",
+                preflight=preflight,
+                created_at=created_at,
+            ),
+        )
+        raise preflight_error(preflight)
     native_job: ValidatedNativeJob | None = None
     if job_path is not None:
         native_job = _bind_native_job(

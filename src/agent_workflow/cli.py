@@ -217,6 +217,7 @@ def build_parser() -> argparse.ArgumentParser:
     launch.add_argument("--tier", choices=("low", "medium", "high", "critical"))
     launch.add_argument("--pack")
     launch.add_argument("--job", type=Path, help="validated native JSON job in the prompt pack")
+    launch.add_argument("--prerequisite", action="append", dest="prerequisites", help="required prerequisite session ID; repeatable")
     launch.add_argument("--executor")
     launch.add_argument("--agent-name", help="preferred configured agent/pane name")
     launch.add_argument("--agent-class", help="configured agent work classification")
@@ -670,6 +671,7 @@ def main(argv: list[str] | None = None) -> int:
                         allow_dirty=args.allow_dirty,
                         structured=structured_override,
                         interactive=interactive_override,
+                        prerequisite_ids=args.prerequisites,
                         evaluation_path=args.evaluation,
                     )
                     break
