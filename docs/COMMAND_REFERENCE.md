@@ -11,6 +11,13 @@ agent-workflow doctor
 agent-workflow commands [--format json|markdown] [--role all|orchestrator|implementation|review]
 agent-workflow config show
 agent-workflow completion bash|zsh|tcsh
+agent-workflow orchestrator registry create ORCHESTRATOR_ID [--workflow-id ID]
+agent-workflow orchestrator registry inspect ORCHESTRATOR_ID
+agent-workflow orchestrator registry register ORCHESTRATOR_ID SESSION
+agent-workflow orchestrator registry unregister ORCHESTRATOR_ID SESSION --state completed|abandoned
+agent-workflow orchestrator inbox import ORCHESTRATOR_ID [--session-id SESSION]
+agent-workflow orchestrator inbox list ORCHESTRATOR_ID [--after SEQUENCE] [--limit N]
+agent-workflow orchestrator inbox read ORCHESTRATOR_ID [--event-id UUID] [--include-content]
 ```
 
 `commands` is offline and generated from the exact installed parser. Every new launch stores the full catalog and a role-scoped command card in the sealed run, binds their digests into launch-contract v2, and exports their paths to the child process. `doctor` is offline. It probes only local binaries and local `--version`/`--help` surfaces.

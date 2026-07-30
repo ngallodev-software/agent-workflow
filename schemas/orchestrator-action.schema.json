@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/orchestrator-action/v1",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema", "schema_version", "action_id", "event_id", "orchestrator_id", "action", "target_session_id", "created_at", "evidence_refs"],
+  "properties": {
+    "schema": {"const": "agent-workflow/orchestrator-action/v1"}, "schema_version": {"const": 1},
+    "action_id": {"type": "string", "format": "uuid"}, "event_id": {"type": "string", "format": "uuid"},
+    "orchestrator_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"}, "action": {"enum": ["none", "assign", "unregister", "retry", "review"]},
+    "target_session_id": {"type": ["string", "null"]}, "created_at": {"type": "string", "minLength": 1},
+    "evidence_refs": {"type": "array", "maxItems": 64, "items": {"type": "string", "minLength": 1, "maxLength": 512}}
+  }
+}

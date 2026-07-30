@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/orchestrator-event/v1",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema", "schema_version", "sequence", "event_id", "workflow_id", "sender_session_id", "recipient_id", "kind", "assignment_id", "source_journal_id", "source_identity", "source_message_id", "source_sequence", "state", "summary", "created_at", "source_digest"],
+  "properties": {
+    "schema": {"const": "agent-workflow/orchestrator-event/v1"}, "schema_version": {"const": 1},
+    "sequence": {"type": "integer", "minimum": 1}, "event_id": {"type": "string", "format": "uuid"},
+    "workflow_id": {"type": ["string", "null"]}, "sender_session_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"},
+    "recipient_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"},
+    "kind": {"enum": ["agent_progress", "agent_idle", "agent_error"]}, "assignment_id": {"type": ["string", "null"], "format": "uuid"},
+    "source_journal_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, "source_identity": {"type": "string", "minLength": 1, "maxLength": 300},
+    "source_message_id": {"type": "string", "format": "uuid"}, "source_sequence": {"type": "integer", "minimum": 1},
+    "state": {"type": ["string", "null"], "enum": [null, "busy", "idle_reusable"]}, "summary": {"type": "string", "minLength": 1, "maxLength": 16384},
+    "created_at": {"type": "string", "minLength": 1}, "source_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}
