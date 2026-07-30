@@ -44,6 +44,14 @@ from .inspect_adapter import build_task as build_inspect_task
 from .inspect_adapter import run_inspect
 from .integrations.swebench import write_prediction
 from .manifests import validate_pack, write_checksum_manifest
+from .orchestrator_inbox import (
+    create_registry,
+    import_registered,
+    read_child_registry,
+    read_inbox,
+    register_child,
+    unregister_child,
+)
 from .path import absolute_path
 from .pack import archive as archive_pack
 from .pack import scaffold as scaffold_pack
@@ -146,6 +154,37 @@ def build_parser() -> argparse.ArgumentParser:
     config = commands.add_parser("config", help="configuration commands")
     config_commands = config.add_subparsers(dest="config_command", required=True)
     config_commands.add_parser("show", help="show resolved configuration")
+
+    orchestrator = commands.add_parser("orchestrator", help="orchestrator registry and inbox commands")
+    orchestrator_commands = orchestrator.add_subparsers(dest="orchestrator_command", required=True)
+    registry = orchestrator_commands.add_parser("registry", help="orchestrator identity registry")
+    registry_commands = registry.add_subparsers(dest="registry_command", required=True)
+    registry_create = registry_commands.add_parser("create", help="create an orchestrator registry")
+    registry_create.add_argument("orchestrator_id")
+    registry_create.add_argument("--workflow-id")
+    registry_inspect = registry_commands.add_parser("inspect", help="inspect an orchestrator registry")
+    registry_inspect.add_argument("orchestrator_id")
+    registry_register = registry_commands.add_parser("register", help="register a launch-verified child session")
+    registry_register.add_argument("orchestrator_id")
+    registry_register.add_argument("session_id")
+    registry_unregister = registry_commands.add_parser("unregister", help="mark a child completed or abandoned")
+    registry_unregister.add_argument("orchestrator_id")
+    registry_unregister.add_argument("session_id")
+    registry_unregister.add_argument("--state", choices=("completed", "abandoned"), required=True)
+
+    inbox = orchestrator_commands.add_parser("inbox", help="aggregate orchestrator inbox")
+    inbox_commands = inbox.add_subparsers(dest="inbox_command", required=True)
+    inbox_import = inbox_commands.add_parser("import", help="import verified child journal events")
+    inbox_import.add_argument("orchestrator_id")
+    inbox_import.add_argument("--session-id")
+    inbox_import.add_argument("--max-per-child", type=int, default=100000)
+    for name, help_text in (("list", "list bounded inbox metadata"), ("read", "read bounded inbox events")):
+        inbox_read = inbox_commands.add_parser(name, help=help_text)
+        inbox_read.add_argument("orchestrator_id")
+        inbox_read.add_argument("--after", type=int, default=0)
+        inbox_read.add_argument("--limit", type=int, default=100)
+        inbox_read.add_argument("--event-id")
+        inbox_read.add_argument("--include-content", action="store_true")
 
     worktree = commands.add_parser("worktree", help="Git worktree commands")
     worktree_commands = worktree.add_subparsers(dest="worktree_command", required=True)
@@ -559,6 +598,35 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         elif args.command == "config":
             data = as_dict(settings)
+        elif args.command == "orchestrator":
+            if args.orchestrator_command == "registry":
+                if args.registry_command == "create":
+                    data = create_registry(settings, args.orchestrator_id, workflow_id=args.workflow_id)
+                elif args.registry_command == "inspect":
+                    data = read_child_registry(settings, args.orchestrator_id)
+                elif args.registry_command == "register":
+                    data = register_child(settings, args.orchestrator_id, args.session_id)
+                else:
+                    data = unregister_child(
+                        settings, args.orchestrator_id, args.session_id, state=args.state
+                    )
+            else:
+                if args.inbox_command == "import":
+                    data = import_registered(
+                        settings,
+                        args.orchestrator_id,
+                        session_id=args.session_id,
+                        max_per_child=args.max_per_child,
+                    )
+                else:
+                    data = read_inbox(
+                        settings,
+                        args.orchestrator_id,
+                        after_sequence=args.after,
+                        limit=args.limit,
+                        event_id=args.event_id,
+                        include_content=args.include_content,
+                    )
         elif args.command == "worktree":
             if args.worktree_command == "create":
                 data = create_worktree(

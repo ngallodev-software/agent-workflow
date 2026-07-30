@@ -148,10 +148,17 @@ Use `worktree remove` only after deciding whether the branch should be retained.
 
 Global instructions may recommend `agent-workflow` for bounded delegation. They are guidance, not a security boundary. Future installer-owned hooks may block a narrowly defined set of direct delegation commands, but only after explicit maintainer authorization and an audited break-glass path. See `BKL-007` in [BACKLOG.md](BACKLOG.md).
 
-## Planned orchestrator supervisor
+## Orchestrator registry and inbox
 
-The repository does not yet provide an aggregate `orchestrator watch` service. Planned work is tracked under `BKL-001`, `BKL-002`, and `MSG-001` through `MSG-007`.
+The repository provides the `MSG-001` registry and aggregate inbox surfaces:
 
-The supervisor will be a foregroundable deterministic process. It will replay registered child journals after durable cursors, append normalized events to an orchestrator inbox, and use tmux only as a wake accelerator. It will never inject child-controlled summaries into the orchestrator pane. Commands shown in the design document are proposed interfaces until their tickets are implemented and accepted.
+```text
+agent-workflow orchestrator registry create ORCHESTRATOR_ID
+agent-workflow orchestrator registry register ORCHESTRATOR_ID SESSION
+agent-workflow orchestrator inbox import ORCHESTRATOR_ID
+agent-workflow orchestrator inbox list ORCHESTRATOR_ID --after 0 --limit 100
+```
+
+The registry binds child sessions to immutable launch evidence and preserves source evidence on unregistration. Inbox import is delivery authority only; it does not replace child lifecycle authority. The foregroundable supervisor, shared wake loop, and safe orchestrator resume adapter remain `MSG-002` and `MSG-003`.
 
 See [Durable two-way messaging](ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md).
