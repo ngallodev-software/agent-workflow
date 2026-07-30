@@ -2,7 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from .errors import WorkflowError
-from .process import require_command, run
+from .process import EnvironmentPolicy, require_command, run
 from .util import expand_path
 
 
@@ -25,7 +25,15 @@ def snapshot(path: Path) -> GitSnapshot:
         run(["git", "-C", str(root), "branch", "--show-current"]).stdout.strip()
         or "(detached)"
     )
-    dirty = bool(run(["git", "-C", str(root), "status", "--porcelain"]).stdout.strip())
+    # Match the operator's normal Git cleanliness view, including their
+    # configured excludes file.  A controlled Git environment treats harmless
+    # editor state (for example .claude/) as untracked source changes.
+    dirty = bool(
+        run(
+            ["git", "-C", str(root), "status", "--porcelain"],
+            environment=EnvironmentPolicy(unsafe_inherit=True),
+        ).stdout.strip()
+    )
     return GitSnapshot(root, head, branch, dirty)
 
 

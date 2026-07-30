@@ -114,6 +114,39 @@ def test_external_executor_completes_with_sealed_user_visible_evidence(
     assert all(item.get("session_id") != "success-run" for item in listed)
 
 
+def test_interactive_child_task_complete_uses_bound_cli_and_bridge(
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+    fake_agent_path: Path,
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    git_repo(repo)
+    prompt = tmp_path / "prompt.md"
+    prompt.write_text("Complete through the bridge.\n", encoding="utf-8")
+    env = dict(product_env)
+    env["FAKE_AGENT_MODE"] = "task-complete"
+
+    installed_product.json(
+        "launch", "bridge-child", repo, prompt, "--tier", "low",
+        "--agent-class", "implementation", "--interactive", "--",
+        fake_agent_path, env=env,
+    )
+    status = wait_for_status(env, "bridge-child")
+    assert status["status"] == "completed"
+    context = installed_product.json("agent", "context", "bridge-child", env=env)
+    assert context["state"] == "idle_reusable"
+
+    run = _run_dir(env, "bridge-child")
+    handoff = repo / ".agent-workflow-handoff" / "bridge-child"
+    exported = json.loads((handoff / "command-contract-env.json").read_text())
+    assert Path(exported["cli"]).resolve() == installed_product.cli.resolve()
+    messages = [json.loads(line) for line in (run / "messages.jsonl").read_text().splitlines()]
+    assert any(item["kind"] == "task_complete" and item["actor"] == "fixture-child" for item in messages)
+    intents = [json.loads(line) for line in (run / "control-intents.jsonl").read_text().splitlines()]
+    assert any(item["outcome"] == "applied" and item["sequence"] == 1 for item in intents)
+
+
 def test_durable_messages_survive_process_boundaries_and_are_acknowledged(
     installed_product: InstalledProduct,
     product_env: dict[str, str],

@@ -430,6 +430,15 @@ completion = {
 result_json = os.environ.get("FAKE_AGENT_RESULT_JSON")
 if result_json:
     (handoff / "result.json").write_text(result_json, encoding="utf-8")
+if mode == "task-complete":
+    subprocess.run(
+        [
+            os.environ["AGENT_WORKFLOW_CLI"], "agent", "task-complete",
+            os.environ["AGENT_WORKFLOW_SESSION_ID"],
+            "--actor", "fixture-child", "--summary", "fixture assignment complete",
+        ],
+        check=True,
+    )
 if mode == "structured":
     print(json.dumps({"event_id": "message-1", "type": "item.completed", "item": {"type": "agent_message", "text": "fake agent completed"}}))
     print(json.dumps({"event_id": "usage-1", "type": "turn.completed", "usage": {"input_tokens": 5, "cached_input_tokens": 1, "output_tokens": 3}}))

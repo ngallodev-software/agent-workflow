@@ -39,7 +39,7 @@ pipeline {
         }
         stage('Build') {
             steps {
-                    sh 'python -m build --wheel --no-isolation'
+                    sh 'rm -rf build dist && python -m build --wheel --no-isolation'
             }
         }
         stage('Host install') {

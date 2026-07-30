@@ -817,7 +817,10 @@ def execute(
             break
     for thread in threads:
         thread.join(timeout=5)
-    _drain_control_bridge(run_dir, active=False)
+    # The child may write its final intent immediately before exiting. Drain it
+    # once while completion is still being finalized; later arrivals are never
+    # consumed after the terminal receipt is sealed.
+    _drain_control_bridge(run_dir, active=True)
     if any(thread.is_alive() for thread in threads):
         pump_errors.append("stream drain deadline exceeded")
         try:
