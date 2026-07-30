@@ -10,6 +10,7 @@ import stat
 import sys
 import threading
 import time
+import uuid
 from pathlib import Path
 from typing import Any, BinaryIO
 
@@ -22,6 +23,12 @@ from .eval.scope import ScopePolicy, collect_scope
 from .executors import accumulate_usage, event_text, parse_event, usage_update
 from .receipts import final_receipt_sha256, make_read_only, seal_run, update_provenance
 from .metrics import write_execution_evidence
+from .messages import (
+    CONTROL_BRIDGE_ENV,
+    CONTROL_BRIDGE_MAX_BYTES,
+    CONTROL_BRIDGE_SCHEMA,
+    append_message,
+)
 from .provider_evidence import MAX_PROVIDER_EVENT_BYTES, write_provider_evidence
 from .process import (
     EnvironmentPolicy,
@@ -48,6 +55,7 @@ _RUNTIME_ENVIRONMENT = (
     "AGENT_WORKFLOW_COMMAND_CARD",
     "AGENT_WORKFLOW_CLI",
     "AGENT_WORKFLOW_TMUX_SESSION",
+    CONTROL_BRIDGE_ENV,
     "XDG_CONFIG_HOME",
     "XDG_DATA_HOME",
     "XDG_STATE_HOME",
@@ -55,6 +63,102 @@ _RUNTIME_ENVIRONMENT = (
     "FAKE_AGENT_DELAY",
     "FAKE_AGENT_RESULT_JSON",
 )
+
+
+def _drain_control_bridge(run_dir: Path, *, active: bool) -> None:
+    """Consume bounded child intents using host-owned state and tmux authority."""
+    launch = read_launch_contract(run_dir / "launch-contract.json")
+    session_id = str(launch["session"]["id"])
+    handoff = Path(str(launch["paths"].get("handoff_dir", ""))).resolve()
+    bridge = handoff / "control-intents"
+    if bridge.parent != handoff or bridge.is_symlink() or not bridge.is_dir():
+        return
+    evidence_path = run_dir / "control-intents.jsonl"
+    processed: set[str] = set()
+    processed_requests: set[str] = set()
+    processed_sequences: set[int] = set()
+    if evidence_path.is_file():
+        for line in evidence_path.read_text(encoding="utf-8").splitlines():
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(row, dict) and isinstance(row.get("file"), str):
+                processed.add(row["file"])
+                if isinstance(row.get("request_id"), str):
+                    processed_requests.add(row["request_id"])
+                if isinstance(row.get("sequence"), int):
+                    processed_sequences.add(row["sequence"])
+
+    def record(name: str, request_id: str | None, sequence: int | None, outcome: str, reason: str) -> None:
+        with evidence_path.open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps({
+                "file": name, "request_id": request_id, "sequence": sequence, "outcome": outcome,
+                "reason": reason, "at": utc_now(),
+            }, sort_keys=True, separators=(",", ":")) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+
+    def source_sequence(path: Path) -> int:
+        try:
+            return int(path.stem.rsplit("-", 1)[1])
+        except (ValueError, IndexError):
+            return 2**31
+
+    for source in sorted(bridge.glob("intent-*.json"), key=source_sequence):
+        if source.name in processed:
+            continue
+        intent: dict[str, Any] | None = None
+        request_id: str | None = None
+        outcome, reason = "rejected", "malformed control intent"
+        try:
+            mode = source.lstat().st_mode
+            if stat.S_ISLNK(mode) or not stat.S_ISREG(mode) or source.stat().st_size > CONTROL_BRIDGE_MAX_BYTES:
+                raise WorkflowError("unsafe or oversized control intent")
+            value = json.loads(source.read_text(encoding="utf-8"))
+            if not isinstance(value, dict) or value.get("schema") != CONTROL_BRIDGE_SCHEMA:
+                raise WorkflowError("unsupported control intent schema")
+            intent = value
+            request_id = str(value.get("request_id"))
+            uuid.UUID(request_id)
+            if request_id in processed_requests:
+                raise WorkflowError("duplicate control request")
+            sequence = value.get("sequence")
+            if (
+                not isinstance(sequence, int)
+                or sequence < 1
+                or sequence in processed_sequences
+                or sequence != max(processed_sequences, default=0) + 1
+            ):
+                raise WorkflowError("stale or duplicate control sequence")
+            body = {key: item for key, item in value.items() if key != "digest"}
+            digest = "sha256:" + hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+            if value.get("session_id") != session_id or value.get("digest") != digest:
+                raise WorkflowError("control intent identity or digest mismatch")
+            if not active:
+                raise WorkflowError("request arrived after executor exit")
+            append_message(
+                run_dir, session_id=session_id, direction="child_to_parent",
+                kind=str(value["kind"]), actor=str(value["actor"]),
+                content=str(value["content"]), correlation_id=value.get("correlation_id"),
+            )
+            outcome, reason = "applied", "authoritative host append"
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError, ValueError, WorkflowError) as exc:
+            reason = str(exc)
+            correlation_id = intent.get("correlation_id") if intent else None
+            try:
+                uuid.UUID(correlation_id) if isinstance(correlation_id, str) else None
+            except ValueError:
+                correlation_id = None
+            append_message(
+                run_dir, session_id=session_id, direction="child_to_parent", kind="error",
+                actor="agent-workflow-host",
+                content=json.dumps({"outcome": outcome, "request_id": request_id, "reason": reason}, sort_keys=True),
+                correlation_id=correlation_id if isinstance(correlation_id, str) else None,
+            )
+        record(source.name, request_id, intent.get("sequence") if intent else None, outcome, reason)
+        if intent and isinstance(intent.get("sequence"), int):
+            processed_sequences.add(intent["sequence"])
 
 
 def _read_handoff_completion(path: Path) -> bytes:
@@ -434,12 +538,16 @@ def _capture_patch(workdir: Path, run_dir: Path, path: Path) -> None:
     path.write_bytes(patch)
 
 
-def _child_environment(environment_allowlist: object) -> EnvironmentPolicy:
+def _child_environment(environment_allowlist: object, *, bridge_dir: Path) -> EnvironmentPolicy:
     configured = environment_allowlist
     names = set(_RUNTIME_ENVIRONMENT)
     if isinstance(configured, list):
         names.update(value for value in configured if isinstance(value, str) and value)
-    return EnvironmentPolicy(allowlist=tuple(sorted(names)))
+    names.difference_update({"TMUX", "TMUX_PANE", "XDG_STATE_HOME"})
+    return EnvironmentPolicy(
+        allowlist=tuple(sorted(names)),
+        values={CONTROL_BRIDGE_ENV: str(bridge_dir), "XDG_STATE_HOME": str(bridge_dir.parent)},
+    )
 
 
 def execute(
@@ -539,7 +647,8 @@ def execute(
             max_stdout_bytes=MAX_EXECUTOR_STDOUT_BYTES,
             max_stderr_bytes=MAX_EXECUTOR_STDERR_BYTES,
             environment=_child_environment(
-                launch["command_plan"].get("environment_allowlist", [])
+                launch["command_plan"].get("environment_allowlist", []),
+                bridge_dir=Path(str(launch["paths"]["handoff_dir"])) / "control-intents",
             ),
             secret_values=secret_values,
             interactive=interactive,
@@ -682,6 +791,7 @@ def execute(
                 "at": utc_now(),
             },
         )
+        _drain_control_bridge(run_dir, active=process.poll() is None)
         wait_seconds = max(0.1, heartbeat_seconds)
         if deadline is not None:
             remaining = deadline - time.monotonic()
@@ -699,6 +809,7 @@ def execute(
             break
     for thread in threads:
         thread.join(timeout=5)
+    _drain_control_bridge(run_dir, active=False)
     if any(thread.is_alive() for thread in threads):
         pump_errors.append("stream drain deadline exceeded")
         try:

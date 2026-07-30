@@ -34,7 +34,14 @@ from .executors import (
 )
 from .git import snapshot
 from .native_jobs import ValidatedNativeJob, validate_native_job
-from .messages import append_message, replay_messages, wait_for_messages
+from .messages import (
+    append_message,
+    bridge_available,
+    bridge_required,
+    replay_messages,
+    wait_for_messages,
+    write_control_intent,
+)
 from .manifests import task_result_contract
 from .process import redact_argv, require_command, run, secret_values_from_argv
 from .receipts import completion_template, initial_completion, initial_provenance, update_provenance
@@ -173,6 +180,7 @@ def _write_runner(
         f"readonly AGENT_WORKFLOW_SESSION_ID={shlex.quote(session_id)}\n"
         f"readonly AGENT_WORKFLOW_PROMPT_SOURCE={shlex.quote(str(prompt_source))}\n"
         f"readonly AGENT_WORKFLOW_HANDOFF_DIR={shlex.quote(str(handoff_dir or ''))}\n"
+        f"readonly AGENT_WORKFLOW_CONTROL_BRIDGE={shlex.quote(str((handoff_dir / 'control-intents') if handoff_dir else ''))}\n"
         f"readonly AGENT_WORKFLOW_COMPLETION_TEMPLATE={shlex.quote(str(completion_template_path or ''))}\n"
         f"readonly AGENT_WORKFLOW_PROMPT_PACK_ROOT={shlex.quote(str(prompt_pack_root or ''))}\n"
         f"readonly AGENT_WORKFLOW_COMMAND_CATALOG={shlex.quote(str(state_dir / str((command_artifacts or {}).get('catalog_path', 'command-catalog.json'))))}\n"
@@ -186,6 +194,7 @@ def _write_runner(
     runner_text += (
         "export AGENT_WORKFLOW_SESSION_ID AGENT_WORKFLOW_PROMPT_SOURCE "
         "AGENT_WORKFLOW_HANDOFF_DIR AGENT_WORKFLOW_PROMPT_PACK_ROOT "
+        "AGENT_WORKFLOW_CONTROL_BRIDGE "
         "AGENT_WORKFLOW_COMPLETION_TEMPLATE AGENT_WORKFLOW_COMMAND_CATALOG "
         "AGENT_WORKFLOW_COMMAND_CARD AGENT_WORKFLOW_CLI"
         + (" AGENT_WORKFLOW_TMUX_SESSION\n" if close_tmux_on_exit else "\n")
@@ -902,6 +911,7 @@ def launch(
         asset_path("prompt-pack-root/templates/TICKET_COMPLETION.md").read_bytes()
     )
     handoff_dir = _create_handoff_dir(workdir, session_id)
+    (handoff_dir / "control-intents").mkdir(mode=0o700)
     result_contract = (
         task_result_contract(prompt_pack_root, ticket_id)
         if prompt_pack_root is not None
@@ -1551,6 +1561,12 @@ def progress(
     content: str,
 ) -> dict[str, Any]:
     """Persist an explicit child progress update for its parent."""
+    if bridge_available():
+        return write_control_intent(
+            session_id=session_id, kind="progress", actor=actor, content=content
+        )
+    if bridge_required(session_id):
+        return {"outcome": "unavailable", "reason": "control bridge unavailable"}
     _active_run(settings, session_id)
     return _append_control_message(
         settings,
@@ -1571,6 +1587,13 @@ def acknowledge(
     correlation_id: str,
 ) -> dict[str, Any]:
     """Record a child acknowledgement after it has applied a control request."""
+    if bridge_available():
+        return write_control_intent(
+            session_id=session_id, kind="ack", actor=actor, content=content,
+            correlation_id=correlation_id,
+        )
+    if bridge_required(session_id):
+        return {"outcome": "unavailable", "reason": "control bridge unavailable"}
     _active_run(settings, session_id)
     message = _append_control_message(
         settings,

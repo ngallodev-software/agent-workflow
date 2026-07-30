@@ -15,7 +15,7 @@ from . import tmux
 from .config import Settings
 from .errors import WorkflowError
 from .events import append_lifecycle_event
-from .messages import append_message, replay_messages
+from .messages import append_message, bridge_available, bridge_required, write_control_intent
 from .state import list_statuses, read_status, run_dir
 from .util import atomic_write_json, expand_path, sha256_file, utc_now, validate_id
 
@@ -128,6 +128,12 @@ def complete_task(
     tags: list[str] | None = None,
     files: list[str] | None = None,
 ) -> dict[str, Any]:
+    if bridge_available():
+        return write_control_intent(
+            session_id=session_id, kind="task_complete", actor=actor, content=summary
+        )
+    if bridge_required(session_id):
+        return {"outcome": "unavailable", "reason": "control bridge unavailable"}
     validate_id(actor, "actor ID")
     summary = summary.strip()
     if not summary or len(summary) > MAX_SUMMARY_CHARS:
