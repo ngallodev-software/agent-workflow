@@ -3,7 +3,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import shutil
+import sys
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -318,6 +320,9 @@ def runtime_command_catalog() -> dict[str, Any]:
 
 
 def resolve_cli_executable() -> str:
+    launched_as = Path(sys.argv[0])
+    if launched_as.is_absolute() and launched_as.is_file() and os.access(launched_as, os.X_OK):
+        return str(launched_as.resolve())
     return shutil.which("agent-workflow") or "agent-workflow"
 
 
