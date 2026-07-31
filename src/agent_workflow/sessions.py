@@ -361,6 +361,7 @@ def _write_launch_prompt(
         "- A role-scoped command card is available at `AGENT_WORKFLOW_COMMAND_CARD`.",
         "- Invoke commands through `AGENT_WORKFLOW_CLI` using the catalog signatures directly.",
         "- Do not run `--help` for commands represented in the catalog. Use help only after a catalog/version mismatch, an argument error, or when a required command is absent.",
+        "- Lifecycle disposition commands (`review`, `accept`, `reject`, `force-accept`) are host-orchestrator-only and intentionally absent from child command cards. Report a recommendation and evidence; never attempt those commands from this run.",
     ]
     if prompt_pack_root is not None:
         context.append(f"- prompt_pack_root: `{prompt_pack_root}`")
@@ -402,6 +403,7 @@ def _write_launch_prompt(
             "- Write completion JSON only to `AGENT_WORKFLOW_HANDOFF_DIR/completion.json` using schema `agent-workflow/completion/v1`.",
             "- Write it atomically; optional `completion.md` and `evidence.json` sidecars may use the same handoff directory.",
             "- `result: completed` requires an empty `unresolved` list. Host-owned merge, review, acceptance, release, and pane closure are normal next steps, not unresolved defects.",
+            "- For `result: completed`, record only final verification commands that passed. Do not put exploratory, setup, staging, or unrelated failed commands in `completion.json`; preserve material failures in `completion.md` and use `partial`, `failed`, or `blocked` if they leave unresolved work.",
             "- Canonical runtime completion paths are collector-owned; do not write to them.",
             "- Matching environment variables use the `AGENT_WORKFLOW_` prefix.",
             "- At meaningful checkpoints you may emit a concise durable progress update with `\"$AGENT_WORKFLOW_CLI\" progress "

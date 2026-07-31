@@ -20,7 +20,8 @@ Use this skill after all implementation tickets in a phase have completion repor
 - verify backlog IDs, active prompt-pack ownership, and strict future-test references are collision-free;
 - run the deterministic release drift audit and inspect any generated inventory drift;
 - confirm ticket dependencies and unresolved issues;
-- record `review`, then `accept` or `reject`, only after evidence is checked;
+- report an accept/reject recommendation after evidence is checked; the host
+  orchestrator alone records `review`, then `accept` or `reject`;
 - produce a phase-gate report with an explicit decision.
 
 The gate reviewer must not merely summarize implementer reports or accept an unsealed terminal claim as durable evidence.

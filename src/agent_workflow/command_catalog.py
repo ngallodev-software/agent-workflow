@@ -43,9 +43,6 @@ _ROLE_COMMANDS: dict[str, frozenset[str]] = {
             "ledger",
             "eval report",
             "eval benchmark-report",
-            "review",
-            "accept",
-            "reject",
         }
     ),
     "orchestrator": frozenset(

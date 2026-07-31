@@ -5,7 +5,6 @@ These tests specify approved backlog outcomes that are intentionally absent. Eve
 Current coverage:
 
 - `HARD-004`: immutable launch and final-receipt authority;
-- `MSG-005`: durable restart replay without duplicate semantic effects;
 - `BKL-004`: complete, comparable evaluation cohorts and truthful ledger state;
 - `MCP-003` / `HARD-007`: authenticated mutation with preserved read-only MCP boundaries.
 

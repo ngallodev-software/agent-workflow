@@ -92,6 +92,10 @@ and an exit code. Structured non-interactive runs do not invoke
 runs follow the same schema-valid sidecar contract and report independently
 collected commands and evidence.
 
+Sandboxed reviewers report a disposition recommendation only. The host
+orchestrator records `review`, `accept`, or `reject` after inspecting evidence;
+children must not attempt lifecycle-disposition commands.
+
 ```bash
 agent-workflow interrupt SESSION
 agent-workflow terminate SESSION --grace-seconds 8

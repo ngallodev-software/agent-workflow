@@ -248,13 +248,16 @@ Global instructions may recommend `agent-workflow` for bounded delegation. They 
 Run one foreground aggregate supervisor per orchestrator:
 
 ```bash
-agent-workflow orchestrator watch ORCHESTRATOR_ID
+agent-workflow orchestrator watch ORCHESTRATOR_ID [--operator-override]
 ```
 
 It acquires a durable single-writer lease, replays registered child journals
 fairly after each timeout or wake hint, appends normalized metadata before
 advancing each source cursor, and records redacted startup/replay/error/
 shutdown metadata. A second active watcher exits with a stable diagnostic.
+Normal stale-lock recovery requires recorded process identity/start evidence;
+`--operator-override` is a bounded explicit recovery option for ambiguous
+metadata and never rewrites source journals or sealed evidence.
 
 The repository provides the `MSG-001` registry and aggregate inbox surfaces:
 

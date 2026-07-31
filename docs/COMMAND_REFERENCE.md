@@ -64,7 +64,12 @@ per-child cursors remain authoritative:
 agent-workflow orchestrator watch ORCHESTRATOR_ID
   [--interval-seconds N] [--poll-seconds N]
   [--batch-size N] [--max-per-child N] [--max-cycles N]
+  [--operator-override]
 ```
+
+`--operator-override` is a bounded local recovery authorization for ambiguous
+stale supervisor-lock metadata. It never rewrites source journals or sealed
+lifecycle evidence; normal recovery relies on process identity/start evidence.
 
 ```text
 agent-workflow supervisor once

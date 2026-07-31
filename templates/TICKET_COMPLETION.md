@@ -37,6 +37,11 @@ substitute. Its command and criterion records must use the authoritative shape:
 `task-complete` rejects an absent, schema-invalid, or non-substantive sidecar
 and leaves the assignment busy so it can be corrected.
 
+For `result: completed`, list only final verification commands that passed. Do
+not include exploratory, setup, staging, or unrelated failed commands in the
+machine sidecar. Preserve material failures in this Markdown report and use
+`partial`, `failed`, or `blocked` when they leave unresolved work.
+
 Implementation agents must commit source, test, and documentation changes before
 writing a completed sidecar. Set `base_revision` to the launch source revision
 and `head_revision` to the exact post-commit `git rev-parse HEAD`; collection
@@ -47,6 +52,10 @@ must use an absolute `cwd`, every criterion result must be `pass`, `fail`, or
 Reviewers must provide the same schema-valid sidecar evidence for the review
 run, including the exact commands and exit codes they actually ran. A Markdown
 report is supplementary and never replaces `completion.json`.
+
+Reviewers report an accept/reject recommendation only. `review`, `accept`,
+`reject`, and `force-accept` mutate canonical lifecycle state and are executed
+only by the host orchestrator, never from a sandboxed reviewer.
 
 For a `completed` result, `unresolved` must be empty. Do not list normal
 host-owned merge, review, acceptance, release, or pane-closure work as an
