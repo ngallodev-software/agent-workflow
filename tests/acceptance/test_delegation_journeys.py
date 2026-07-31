@@ -147,6 +147,30 @@ def test_interactive_child_task_complete_uses_bound_cli_and_bridge(
     assert any(item["outcome"] == "applied" and item["sequence"] == 1 for item in intents)
 
 
+def test_sandboxed_child_terminate_does_not_write_host_state(
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+    fake_agent_path: Path,
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    git_repo(repo)
+    prompt = tmp_path / "prompt.md"
+    prompt.write_text("Complete and exit normally.\n", encoding="utf-8")
+    env = dict(product_env)
+    env["FAKE_AGENT_MODE"] = "task-complete-terminate"
+
+    installed_product.json(
+        "launch", "bridge-child-terminate", repo, prompt, "--tier", "low",
+        "--agent-class", "implementation", "--interactive", "--",
+        fake_agent_path, env=env,
+    )
+    status = wait_for_status(env, "bridge-child-terminate")
+    assert status["status"] == "completed"
+    assert status["completion_validation_status"] == "valid"
+    assert not any("Read-only file system" in item for item in status["pump_errors"])
+
+
 def test_bridged_task_complete_rejects_invalid_handoff_before_reuse(
     installed_product: InstalledProduct,
     product_env: dict[str, str],

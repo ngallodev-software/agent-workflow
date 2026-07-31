@@ -1643,6 +1643,20 @@ def _active_run(settings: Settings, session_id: str) -> dict[str, Any]:
     return status
 
 
+def _child_lifecycle_control(session_id: str) -> dict[str, Any] | None:
+    """Keep sandboxed children from mutating host-owned lifecycle state.
+
+    The runner owns tmux and the canonical state root.  A child completes by
+    writing its handoff and exiting; the host collects and seals that exit.
+    """
+    if bridge_available(session_id) or bridge_required(session_id):
+        return {
+            "outcome": "unavailable",
+            "reason": "lifecycle controls are host-owned; exit the child normally",
+        }
+    return None
+
+
 def _append_control_message(
     settings: Settings,
     session_id: str,
@@ -1797,6 +1811,9 @@ def wait_for_message(
 
 
 def interrupt(settings: Settings, session_id: str) -> dict[str, Any]:
+    child_control = _child_lifecycle_control(session_id)
+    if child_control is not None:
+        return child_control
     prior = read_status(settings, session_id)
     host_session = str(prior.get("tmux_session", session_id))
     if not tmux.session_exists(host_session):
@@ -1819,6 +1836,9 @@ def terminate(
     session_id: str,
     grace_seconds: int,
 ) -> dict[str, Any]:
+    child_control = _child_lifecycle_control(session_id)
+    if child_control is not None:
+        return child_control
     prior = read_status(settings, session_id)
     host_session = str(prior.get("tmux_session", session_id))
     if tmux.session_exists(host_session):
@@ -1848,6 +1868,9 @@ def terminate(
 
 
 def kill(settings: Settings, session_id: str) -> dict[str, Any]:
+    child_control = _child_lifecycle_control(session_id)
+    if child_control is not None:
+        return child_control
     prior = read_status(settings, session_id)
     host_session = str(prior.get("tmux_session", session_id))
     if tmux.session_exists(host_session):
@@ -1889,6 +1912,9 @@ def restart(
     session_id: str,
     new_session: str | None = None,
 ) -> dict[str, Any]:
+    child_control = _child_lifecycle_control(session_id)
+    if child_control is not None:
+        return child_control
     state_dir = run_dir(settings, session_id)
     contract = read_launch_contract(state_dir / "launch-contract.json")
     lifecycle = reconstruct_lifecycle(state_dir / "events.jsonl")

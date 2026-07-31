@@ -483,12 +483,20 @@ if os.environ.get("FAKE_AGENT_EMPTY_COMPLETION") == "1":
 result_json = os.environ.get("FAKE_AGENT_RESULT_JSON")
 if result_json:
     (handoff / "result.json").write_text(result_json, encoding="utf-8")
-if mode == "task-complete":
+if mode in {"task-complete", "task-complete-terminate"}:
     subprocess.run(
         [
             os.environ["AGENT_WORKFLOW_CLI"], "agent", "task-complete",
             os.environ["AGENT_WORKFLOW_SESSION_ID"],
             "--actor", "fixture-child", "--summary", "fixture assignment complete",
+        ],
+        check=True,
+    )
+if mode == "task-complete-terminate":
+    subprocess.run(
+        [
+            os.environ["AGENT_WORKFLOW_CLI"], "terminate",
+            os.environ["AGENT_WORKFLOW_SESSION_ID"], "--grace-seconds", "0",
         ],
         check=True,
     )

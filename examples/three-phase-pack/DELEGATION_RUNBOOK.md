@@ -80,6 +80,10 @@ are reported by the bulk dry run.
 
 ## Stop controls
 
+Only the host orchestrator may use lifecycle controls. A sandboxed child must
+write its completion handoff, invoke `agent task-complete` once, and exit
+normally; the host runner owns tmux, canonical state, and final sealing.
+
 ```bash
 agent-workflow interrupt SESSION
 agent-workflow terminate SESSION --grace-seconds 8
