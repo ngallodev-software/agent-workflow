@@ -11,6 +11,32 @@ head_revision: ""
 
 # Ticket Completion Report
 
+## Required machine completion sidecar
+
+Before `agent task-complete`, write
+`$AGENT_WORKFLOW_HANDOFF_DIR/completion.json`. The Markdown report is not a
+substitute. Its command and criterion records must use the authoritative shape:
+
+```json
+{
+  "schema": "agent-workflow/completion/v1",
+  "session_id": "<session>",
+  "ticket_id": "<ticket-or-null>",
+  "pack_id": "<pack-or-null>",
+  "result": "completed",
+  "base_revision": "<git-sha>",
+  "head_revision": "<git-sha>",
+  "changed_files": ["src/example.py"],
+  "criteria": [{"id": "criterion", "result": "pass", "evidence": ["test output"]}],
+  "commands": [{"argv": ["pytest", "-q"], "cwd": "/absolute/worktree", "exit_code": 0, "receipt": "1 passed"}],
+  "unresolved": [],
+  "usage": null
+}
+```
+
+`task-complete` rejects an absent, schema-invalid, or non-substantive sidecar
+and leaves the assignment busy so it can be corrected.
+
 ## Source baseline
 
 | Repository/component | Revision before | Revision after | Dirty before |

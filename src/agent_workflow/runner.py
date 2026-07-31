@@ -167,6 +167,13 @@ def _drain_control_bridge(run_dir: Path, *, active: bool) -> None:
             if intent_kind != "ack" and value.get("outcome") is not None:
                 raise WorkflowError("only acknowledgement intents may include outcome")
             if intent_kind == "task_complete":
+                completion = _collect_completion(
+                    run_dir,
+                    Path(str(launch["worktree"]["path"])),
+                )
+                if completion["validation_status"] != "valid":
+                    details = "; ".join(completion.get("validation_errors", []))
+                    raise WorkflowError(f"task completion handoff is invalid: {details}")
                 apply_bridged_completion(
                     run_dir,
                     session_id,
@@ -1015,6 +1022,14 @@ def execute(
             "completion: "
             + "; ".join(completion_collection.get("validation_errors", []))
         )
+        return_code = return_code or 1
+    context_path = run_dir / "agent-context.json"
+    try:
+        context = json.loads(context_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        context = {}
+    if context.get("state") == "reuse_pending":
+        pump_errors.append("assignment: reused agent exited before acknowledging the pending assignment")
         return_code = return_code or 1
     _collect_task_result(run_dir, workdir, secret_values=secret_values)
 

@@ -154,7 +154,18 @@ def complete_task(
         raise WorkflowError("only interactive agents can become idle_reusable")
     if context.get("state") != "busy":
         raise WorkflowError(f"agent is not busy: {context.get('state')}")
-    state_dir = run_dir(settings, session_id)
+    # A task-complete transition is an authority boundary.  Validate and
+    # collect the sidecar before making the agent reusable so a malformed
+    # human-readable report cannot later become a sealed invalid completion.
+    from .runner import _collect_completion
+
+    receipt = _collect_completion(
+        state_dir := run_dir(settings, session_id),
+        Path(str(status["workdir"])),
+    )
+    if receipt["validation_status"] != "valid":
+        details = "; ".join(receipt.get("validation_errors", []))
+        raise WorkflowError(f"task completion handoff is invalid: {details}")
     completed = {
         **dict(context["current_assignment"]),
         "completed_at": utc_now(),

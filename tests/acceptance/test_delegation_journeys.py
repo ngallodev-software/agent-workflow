@@ -121,7 +121,7 @@ def test_interactive_child_task_complete_uses_bound_cli_and_bridge(
     tmp_path: Path,
 ) -> None:
     repo = tmp_path / "repo"
-    git_repo(repo)
+    head = git_repo(repo)
     prompt = tmp_path / "prompt.md"
     prompt.write_text("Complete through the bridge.\n", encoding="utf-8")
     env = dict(product_env)
@@ -145,6 +145,39 @@ def test_interactive_child_task_complete_uses_bound_cli_and_bridge(
     assert any(item["kind"] == "task_complete" and item["actor"] == "fixture-child" for item in messages)
     intents = [json.loads(line) for line in (run / "control-intents.jsonl").read_text().splitlines()]
     assert any(item["outcome"] == "applied" and item["sequence"] == 1 for item in intents)
+
+
+def test_bridged_task_complete_rejects_invalid_handoff_before_reuse(
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+    fake_agent_path: Path,
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    git_repo(repo)
+    prompt = tmp_path / "prompt.md"
+    prompt.write_text("Attempt completion with an invalid handoff.\n", encoding="utf-8")
+    env = dict(product_env)
+    env["FAKE_AGENT_MODE"] = "task-complete"
+    env["FAKE_AGENT_EMPTY_COMPLETION"] = "1"
+
+    installed_product.json(
+        "launch", "invalid-bridge", repo, prompt, "--tier", "low",
+        "--agent-class", "implementation", "--interactive", "--",
+        fake_agent_path, env=env,
+    )
+    status = wait_for_status(env, "invalid-bridge")
+    assert status["status"] == "failed"
+    context = installed_product.json("agent", "context", "invalid-bridge", env=env)
+    assert context["state"] == "busy"
+    intents = [
+        json.loads(line)
+        for line in (_run_dir(env, "invalid-bridge") / "control-intents.jsonl").read_text().splitlines()
+    ]
+    assert any(
+        item["outcome"] == "rejected" and "task completion handoff is invalid" in item["reason"]
+        for item in intents
+    )
 
 
 def test_durable_messages_survive_process_boundaries_and_are_acknowledged(
@@ -230,7 +263,7 @@ def test_interactive_agent_reuse_requires_completion_selection_and_correlated_ac
     tmp_path: Path,
 ) -> None:
     repo = tmp_path / "repo"
-    git_repo(repo)
+    head = git_repo(repo)
     prompt = tmp_path / "first-assignment.md"
     prompt.write_text("Remain available for a second assignment.\n", encoding="utf-8")
     env = dict(product_env)
@@ -256,6 +289,26 @@ def test_interactive_agent_reuse_requires_completion_selection_and_correlated_ac
     initial = installed_product.json("agent", "context", "reuse-agent", env=env)
     assert initial["state"] == "busy"
     assert initial["interactive"] is True
+    handoff = repo / ".agent-workflow-handoff" / "reuse-agent"
+    (handoff / "completion.json").write_text(
+        json.dumps(
+            {
+                "schema": "agent-workflow/completion/v1",
+                "session_id": "reuse-agent",
+                "ticket_id": "REUSE-1",
+                "pack_id": None,
+                "result": "completed",
+                "base_revision": head,
+                "head_revision": head,
+                "changed_files": [],
+                "criteria": [{"id": "first-assignment", "result": "pass", "evidence": ["fixture handoff"]}],
+                "commands": [{"argv": ["fake-agent", "slow"], "cwd": str(repo), "exit_code": 0, "receipt": "fixture completion"}],
+                "unresolved": [],
+                "usage": None,
+            }
+        ),
+        encoding="utf-8",
+    )
 
     completed = installed_product.json(
         "agent",
@@ -323,6 +376,48 @@ def test_interactive_agent_reuse_requires_completion_selection_and_correlated_ac
     assert acknowledged["state"] == "busy"
     assert acknowledged["reuse_count"] == 1
     wait_for_status(env, "reuse-agent")
+
+
+def test_pending_reuse_cannot_seal_as_completed(
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+    fake_agent_path: Path,
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    head = git_repo(repo)
+    prompt = tmp_path / "prompt.md"
+    prompt.write_text("Remain available briefly.\n", encoding="utf-8")
+    env = dict(product_env)
+    env["FAKE_AGENT_MODE"] = "slow"
+    env["FAKE_AGENT_DELAY"] = "1.0"
+    installed_product.json(
+        "launch", "pending-reuse", repo, prompt, "--ticket", "REUSE-PENDING",
+        "--tier", "low", "--agent-class", "implementation", "--interactive",
+        "--", fake_agent_path, env=env,
+    )
+    handoff = repo / ".agent-workflow-handoff" / "pending-reuse"
+    (handoff / "completion.json").write_text(json.dumps({
+        "schema": "agent-workflow/completion/v1", "session_id": "pending-reuse",
+        "ticket_id": "REUSE-PENDING", "pack_id": None, "result": "completed",
+        "base_revision": head, "head_revision": head, "changed_files": [],
+        "criteria": [{"id": "fixture", "result": "pass", "evidence": ["fixture handoff"]}],
+        "commands": [{"argv": ["fake-agent", "slow"], "cwd": str(repo), "exit_code": 0, "receipt": "fixture completion"}],
+        "unresolved": [], "usage": None,
+    }), encoding="utf-8")
+    installed_product.json(
+        "agent", "task-complete", "pending-reuse", "--actor", "worker",
+        "--summary", "First assignment complete", env=env,
+    )
+    followup = tmp_path / "followup.md"
+    followup.write_text("Acknowledge before continuing.\n", encoding="utf-8")
+    installed_product.json(
+        "agent", "reuse", "pending-reuse", followup, "--actor", "orchestrator",
+        "--ticket", "REUSE-PENDING-2", env=env,
+    )
+    status = wait_for_status(env, "pending-reuse")
+    assert status["status"] == "failed"
+    assert any("pending assignment" in item for item in status["pump_errors"])
 
 def test_executor_failure_is_terminal_sealed_and_restartable(
     installed_product: InstalledProduct,
