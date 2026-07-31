@@ -46,6 +46,10 @@ Tests must exercise the installed public command/service path first; retain only
 - A second supervisor cannot become an active writer.
 - SIGTERM or Ctrl-C exits cleanly without advancing an uncommitted cursor.
 - Restarting the supervisor resumes from durable evidence.
+- Installed-product evidence covers lost and duplicate wake hints; focused
+  deterministic invariants cover bounded round-robin replay,
+  single-supervisor exclusion, and SIGTERM/SIGINT cursor resume without
+  treating the hint or terminal output as authority.
 
 ## Security acceptance
 

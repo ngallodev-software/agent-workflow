@@ -85,3 +85,10 @@ pytest
 ```
 
 Then apply the `phase-gate-review` and `release-drift-auditor` skills. A high-risk implementer must not be the only reviewer, and actor labels alone do not prove reviewer independence.
+
+Implementation changes must be committed before the completed handoff is
+written. Bind `base_revision` to the launch revision and `head_revision` to the
+exact post-commit Git HEAD; use absolute command working directories and exact
+exit codes. Structured non-interactive runs write the sidecar and exit without
+`agent task-complete`. Independent reviewers provide their own schema-valid
+sidecar with independently collected commands and evidence.

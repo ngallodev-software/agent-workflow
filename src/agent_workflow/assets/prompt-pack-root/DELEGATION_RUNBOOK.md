@@ -84,6 +84,14 @@ Only the host orchestrator may use lifecycle controls. A sandboxed child must
 write its completion handoff, invoke `agent task-complete` once, and exit
 normally; the host runner owns tmux, canonical state, and final sealing.
 
+Before writing a completed handoff, an implementation agent commits all source,
+test, and documentation changes. Its sidecar records the launch baseline and
+the exact post-commit `git rev-parse HEAD`; every command has an absolute `cwd`
+and an exit code. Structured non-interactive runs do not invoke
+`agent task-complete`; they write the sidecar and exit for collection. Review
+runs follow the same schema-valid sidecar contract and report independently
+collected commands and evidence.
+
 ```bash
 agent-workflow interrupt SESSION
 agent-workflow terminate SESSION --grace-seconds 8

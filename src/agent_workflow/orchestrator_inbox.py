@@ -354,6 +354,7 @@ def register_child(settings: Settings, orchestrator_id: str, session_id: str) ->
     if prior is not None:
         if prior["identity_digest"] != entry_identity:
             raise OrchestratorInboxError("child session is already registered with conflicting immutable evidence")
+        tmux.register_orchestrator_wakeup(settings.state_root, orchestrator_id, session_id)
         return {"registry": registry, "child": prior, "path": str(orchestrator_dir(settings, orchestrator_id) / REGISTRY_NAME)}
     if len(registry["children"]) >= MAX_CHILDREN:
         raise OrchestratorInboxError("orchestrator child registry is full")
@@ -376,6 +377,7 @@ def register_child(settings: Settings, orchestrator_id: str, session_id: str) ->
     registry["children"].append(child)
     registry["updated_at"] = now
     _write_registry(settings, registry)
+    tmux.register_orchestrator_wakeup(settings.state_root, orchestrator_id, session_id)
     return {"registry": registry, "child": child, "path": str(orchestrator_dir(settings, orchestrator_id) / REGISTRY_NAME)}
 
 
@@ -584,6 +586,12 @@ def replay_registered(
     records_by_child = {child["session_id"]: _source_records(Path(child["source_journal_path"])) for child in children}
     if any(cursors[child["session_id"]] > len(records_by_child[child["session_id"]]) for child in children):
         raise OrchestratorInboxError("orchestrator source cursor is ahead of its journal")
+    # Rotate the starting child from durable source progress. This preserves
+    # bounded round-robin fairness even when a batch is smaller than the child
+    # count, and it reconstructs identically after supervisor restart.
+    if children:
+        start = sum(cursors.values()) % len(children)
+        children = children[start:] + children[:start]
     imported: list[dict[str, Any]] = []
     advanced = 0
     position = 0

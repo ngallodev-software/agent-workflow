@@ -31,6 +31,11 @@ controls that phase 0 did not implement.
   communication evidence, and unresolved issues.
 - Stale or contradictory steering text is removed or moved to a references
   folder with an explicit read-when-needed boundary.
+- Completed implementation handoffs are written only after source/test/doc
+  changes are committed and include schema-valid revision-bound evidence;
+  structured non-interactive runs write the sidecar and exit without
+  `agent task-complete`, while interactive implementation reuse keeps its
+  existing steering path.
 - Add or update a documentation/installer smoke test where the public surface
   is executable, and report its exit code.
 

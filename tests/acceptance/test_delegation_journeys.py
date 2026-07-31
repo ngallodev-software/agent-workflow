@@ -63,6 +63,7 @@ def test_external_executor_completes_with_sealed_user_visible_evidence(
 
     contract = json.loads((run / "launch-contract.json").read_text())
     assert contract["schema"] == "agent-workflow/launch-contract/v2"
+    assert contract["command_plan"]["executor_interactive"] is False
     binding = contract["command_catalog"]
     assert binding["role"] == "implementation"
     assert binding["catalog_sha256"] == sha256_file(run / binding["catalog_path"])

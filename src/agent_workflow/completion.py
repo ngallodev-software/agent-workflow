@@ -104,3 +104,20 @@ def substantive_completion_errors(
         if _empty_or_placeholder(item):
             errors.append(f"unresolved[{index}] is empty or placeholder-only")
     return errors
+
+
+def completion_revision_errors(
+    value: dict[str, Any],
+    *,
+    expected_base_revision: str | None,
+    actual_head_revision: str | None,
+) -> list[str]:
+    """Bind completed evidence to the launch baseline and current source HEAD."""
+    if value.get("result") != "completed":
+        return []
+    errors: list[str] = []
+    if not expected_base_revision or value.get("base_revision") != expected_base_revision:
+        errors.append("completed base_revision does not match the launch source revision")
+    if not actual_head_revision or value.get("head_revision") != actual_head_revision:
+        errors.append("completed head_revision does not match the worktree Git HEAD")
+    return errors

@@ -45,7 +45,7 @@ def watch(
         raise WorkflowError("watch bounds must be positive")
     if max_cycles is not None and max_cycles < 1:
         raise WorkflowError("max_cycles must be positive")
-    interval = float(interval_seconds or settings.supervisor_interval_seconds)
+    interval = float(settings.supervisor_interval_seconds if interval_seconds is None else interval_seconds)
     if interval <= 0:
         raise WorkflowError("watch interval must be positive")
     directory = orchestrator_dir(settings, orchestrator_id)
@@ -80,15 +80,21 @@ def watch(
                     _record(directory, "error", cycle=cycles, error_type=type(exc).__name__)
                     if max_cycles is not None and cycles >= max_cycles:
                         break
-                    time.sleep(min(interval * (2 ** min(failures - 1, 4)), 60.0))
+                    stop.wait(min(interval * (2 ** min(failures - 1, 4)), 60.0))
                     continue
                 if max_cycles is not None and cycles >= max_cycles:
                     break
                 started = time.monotonic()
                 woke = wait_for_wakeup(orchestrator_wakeup_channel(orchestrator_id), interval)
                 elapsed = time.monotonic() - started
+                _record(
+                    directory,
+                    "wake",
+                    cycle=cycles,
+                    wake_reason="signal" if woke else "timeout",
+                )
                 if not woke and elapsed < poll_seconds:
-                    time.sleep(poll_seconds - elapsed)
+                    stop.wait(poll_seconds - elapsed)
             reason = "shutdown" if stop.is_set() else "completed"
             _record(directory, reason, cycles=cycles, advanced=total_advanced, imported=total_imported)
             return {"orchestrator_id": orchestrator_id, "state": reason, "cycles": cycles, "advanced": total_advanced, "imported": total_imported}

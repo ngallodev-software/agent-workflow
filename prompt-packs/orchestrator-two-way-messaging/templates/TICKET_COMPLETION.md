@@ -18,6 +18,13 @@ head_revision: ""
 
 ## Scope delivered
 
+Commit implementation, test, and documentation changes before recording a
+completed handoff. Set `base_revision` to the launch revision and
+`head_revision` to the exact post-commit `git rev-parse HEAD`; completion
+collection verifies both against real source state. Every command must have an
+absolute `cwd`, criteria may use only `pass`, `fail`, or `not_verified`, and a
+completed result requires `unresolved: []`.
+
 Describe only what was actually changed.
 
 ## Files changed
@@ -33,6 +40,10 @@ Describe only what was actually changed.
 | | pass/fail/not verified | command/file |
 
 ## Tests and validation
+
+Independent reviewers must supply their own schema-valid completion sidecar
+with exact review commands and exit codes. Markdown, terminal output, and
+unsealed projections are supplementary evidence only.
 
 | Command | Exit code | Contract or failure protected |
 |---|---:|---|

@@ -12,6 +12,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable
 
+from . import tmux
 from .errors import WorkflowError
 from .util import atomic_write_json, utc_now, validate_id
 
@@ -346,6 +347,11 @@ def append_message(
     if after_commit is not None:
         try:
             after_commit(message)
+        except Exception:
+            pass
+    if direction == "child_to_parent":
+        try:
+            tmux.signal_registered_orchestrators(run_dir)
         except Exception:
             pass
     return message

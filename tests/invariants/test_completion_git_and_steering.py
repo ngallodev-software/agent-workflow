@@ -4,7 +4,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from agent_workflow.completion import substantive_completion_errors
+from agent_workflow.completion import completion_revision_errors, substantive_completion_errors
 from agent_workflow.git import snapshot
 from agent_workflow.steering import append_delivery_event, replay_delivery_events
 
@@ -114,6 +114,18 @@ def test_substantive_completion_rejects_missing_command_exit_code() -> None:
         value, session_id="run-1", ticket_id="T-1", pack_id="pack-1"
     )
     assert "commands[0].exit_code is missing or invalid" in errors
+
+
+def test_completed_revisions_bind_to_launch_baseline_and_current_head() -> None:
+    value = _completion(base_revision="launch", head_revision="old-head")
+    assert completion_revision_errors(
+        value, expected_base_revision="launch", actual_head_revision="current-head"
+    ) == ["completed head_revision does not match the worktree Git HEAD"]
+    assert completion_revision_errors(
+        _completion(base_revision="wrong-base", head_revision="current-head"),
+        expected_base_revision="launch",
+        actual_head_revision="current-head",
+    ) == ["completed base_revision does not match the launch source revision"]
 
 
 def test_git_snapshot_matches_operator_global_excludes_and_records_provenance(

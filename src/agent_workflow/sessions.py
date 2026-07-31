@@ -799,12 +799,10 @@ def launch(
         allow_active_name=allow_active_agent_name,
     )
     # `interactive` describes user-visible/reusable assignment semantics.
-    # Explicit commands and structured runs must receive the prompt through
-    # stdin and close deterministically. Named Codex/Claude runs may retain a
-    # detached interactive executor so a later delivery adapter can steer it.
-    executor_interactive = not structured and (
-        bool(interactive) or executor in {"codex", "claude"}
-    )
+    # Structured and non-interactive runs always use the deterministic executor
+    # command. Only interactive implementation agents retain a steerable
+    # interactive provider process.
+    executor_interactive = not structured and bool(interactive)
     interactive_parent_target = tmux.current_window_target() if interactive else None
     parent_target = (
         interactive_parent_target

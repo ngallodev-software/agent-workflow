@@ -37,6 +37,17 @@ substitute. Its command and criterion records must use the authoritative shape:
 `task-complete` rejects an absent, schema-invalid, or non-substantive sidecar
 and leaves the assignment busy so it can be corrected.
 
+Implementation agents must commit source, test, and documentation changes before
+writing a completed sidecar. Set `base_revision` to the launch source revision
+and `head_revision` to the exact post-commit `git rev-parse HEAD`; collection
+rejects completed evidence that does not bind to those revisions. Every command
+must use an absolute `cwd`, every criterion result must be `pass`, `fail`, or
+`not_verified`, and `result: completed` requires `unresolved: []`.
+
+Reviewers must provide the same schema-valid sidecar evidence for the review
+run, including the exact commands and exit codes they actually ran. A Markdown
+report is supplementary and never replaces `completion.json`.
+
 For a `completed` result, `unresolved` must be empty. Do not list normal
 host-owned merge, review, acceptance, release, or pane-closure work as an
 unresolved item; report those as next steps in the Markdown handoff instead.

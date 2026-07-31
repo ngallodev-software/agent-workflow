@@ -19,6 +19,13 @@ head_revision: ""
 
 ## Scope delivered
 
+Commit implementation, test, and documentation changes before recording a
+completed handoff. The machine sidecar must use schema
+`agent-workflow/completion/v1`, set `base_revision` to the launch revision and
+`head_revision` to the exact post-commit `git rev-parse HEAD`, and use an
+absolute path in every command `cwd`. Use only `pass`, `fail`, or `not_verified`
+criterion results; a completed result has `unresolved: []`.
+
 Describe only the implemented behavior. Placeholder text is invalid.
 
 ## Files changed and non-targets
@@ -37,6 +44,10 @@ Describe only the implemented behavior. Placeholder text is invalid.
 
 Record progress/ack/steer message IDs, correlation IDs, delivery/application or
 rejection outcomes, and any unavailable adapter. Terminal text is not proof.
+
+Reviewer runs must also publish a schema-valid completion sidecar with the
+review commands, exit codes, and evidence actually collected. Do not treat a
+Markdown report or terminal capture as a substitute.
 
 ## Tests and validation
 

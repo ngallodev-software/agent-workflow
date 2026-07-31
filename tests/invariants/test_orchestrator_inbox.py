@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import fcntl
 import json
+import os
+import signal
 import uuid
 from dataclasses import replace
 from pathlib import Path
@@ -16,6 +19,10 @@ from agent_workflow.orchestrator_inbox import (
     register_child,
     unregister_child,
 )
+from agent_workflow.orchestrator_inbox import orchestrator_dir, replay_registered
+from agent_workflow.orchestrator_supervisor import watch
+from agent_workflow.messages import append_message
+from agent_workflow.tmux import orchestrator_wakeup_channel
 from agent_workflow.sessions import launch
 from agent_workflow.util import atomic_write_json, utc_now
 from tests.conftest import git_repo
@@ -152,3 +159,67 @@ def test_inbox_rejects_unverified_source_claim_and_symlink(tmp_path: Path, monke
     inbox.symlink_to(settings.state_root / "runs" / "child-one" / "messages.jsonl")
     with pytest.raises(WorkflowError):
         import_registered(settings, "main-orchestrator")
+
+
+def test_replay_uses_bounded_round_robin_across_small_batches(tmp_path: Path, monkeypatch) -> None:
+    settings = replace(defaults(tmp_path / "config.toml"), state_root=tmp_path / "state")
+    for session_id in ("child-one", "child-two", "child-three"):
+        _make_child(tmp_path, settings, session_id, session_id, monkeypatch)
+    create_registry(settings, "fair-watcher")
+    for session_id in ("child-one", "child-two", "child-three"):
+        register_child(settings, "fair-watcher", session_id)
+
+    delivered = []
+    for _ in range(3):
+        report = replay_registered(settings, "fair-watcher", batch_size=1, max_per_child=1)
+        delivered.extend(item["sender_session_id"] for item in report["imported"])
+    assert delivered == ["child-one", "child-two", "child-three"]
+
+
+def test_registered_child_message_signals_one_shared_opaque_channel(tmp_path: Path, monkeypatch) -> None:
+    settings = replace(defaults(tmp_path / "config.toml"), state_root=tmp_path / "state")
+    _make_child(tmp_path, settings, "wake-child", "wake complete", monkeypatch)
+    create_registry(settings, "wake-watcher")
+    register_child(settings, "wake-watcher", "wake-child")
+    channels: list[str] = []
+    monkeypatch.setattr("agent_workflow.tmux.signal_waiters", channels.append)
+    append_message(
+        settings.state_root / "runs" / "wake-child",
+        session_id="wake-child", direction="child_to_parent", kind="progress",
+        actor="child", content="durable progress",
+    )
+    assert channels == [orchestrator_wakeup_channel("wake-watcher")]
+
+
+def test_watch_rejects_second_active_supervisor_with_stable_diagnostic(tmp_path: Path, monkeypatch) -> None:
+    settings = replace(defaults(tmp_path / "config.toml"), state_root=tmp_path / "state")
+    create_registry(settings, "leased-watcher")
+    directory = orchestrator_dir(settings, "leased-watcher")
+    with (directory / ".supervisor.lock").open("a+b") as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with pytest.raises(WorkflowError, match="orchestrator supervisor already active"):
+            watch(settings, "leased-watcher", interval_seconds=0.01, max_cycles=1)
+        fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
+
+@pytest.mark.parametrize("shutdown_signal", [signal.SIGTERM, signal.SIGINT])
+def test_signal_shutdown_preserves_cursor_resume_boundary(
+    tmp_path: Path, monkeypatch, shutdown_signal: signal.Signals
+) -> None:
+    settings = replace(defaults(tmp_path / "config.toml"), state_root=tmp_path / "state")
+    _make_child(tmp_path, settings, "signal-child", "signal complete", monkeypatch)
+    create_registry(settings, "signal-watcher")
+    register_child(settings, "signal-watcher", "signal-child")
+
+    def interrupting_wait(_channel: str, _timeout: float) -> bool:
+        os.kill(os.getpid(), shutdown_signal)
+        return False
+
+    monkeypatch.setattr("agent_workflow.orchestrator_supervisor.wait_for_wakeup", interrupting_wait)
+    result = watch(settings, "signal-watcher", interval_seconds=0.01, poll_seconds=0.01)
+    assert result["state"] == "shutdown"
+    assert result["advanced"] == 1
+    resumed = replay_registered(settings, "signal-watcher", batch_size=1)
+    assert resumed["advanced"] == 0
+    events = (orchestrator_dir(settings, "signal-watcher") / "supervisor-events.jsonl").read_text()
+    assert '"reason":"shutdown"' in events

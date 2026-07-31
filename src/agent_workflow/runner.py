@@ -17,7 +17,7 @@ from typing import Any, BinaryIO
 from . import tmux
 from .errors import WorkflowError
 from .contracts import read_launch_contract
-from .completion import substantive_completion_errors
+from .completion import completion_revision_errors, substantive_completion_errors
 from .events import append_lifecycle_event
 from .diagnostics import classify_failure
 from .health import (
@@ -54,6 +54,7 @@ from .process import (
     redact_bytes,
     redact_text,
     run_bytes,
+    run,
     secret_values_from_argv,
     spawn,
 )
@@ -302,6 +303,19 @@ def _require_real_handoff_dir(handoff: Path, workdir: Path) -> None:
             raise WorkflowError("completion handoff directory must not contain symlinks")
 
 
+def _worktree_head_revision(workdir: Path) -> str:
+    result = run(
+        ["git", "-C", str(workdir), "rev-parse", "--verify", "HEAD"],
+        check=False,
+        max_stdout_bytes=128,
+        max_stderr_bytes=1024,
+    )
+    head = result.stdout.strip()
+    if result.returncode != 0 or not head:
+        raise WorkflowError("completion requires a readable worktree Git HEAD")
+    return head
+
+
 def _collect_completion(
     run_dir: Path,
     workdir: Path,
@@ -369,6 +383,13 @@ def _collect_completion(
             )
             if semantic_errors:
                 raise WorkflowError("; ".join(semantic_errors))
+            revision_errors = completion_revision_errors(
+                value,
+                expected_base_revision=launch["worktree"].get("source_revision"),
+                actual_head_revision=_worktree_head_revision(contract_workdir),
+            )
+            if revision_errors:
+                raise WorkflowError("; ".join(revision_errors))
             completion_path = run_dir / "completion.json"
             temporary = completion_path.with_name(f".{completion_path.name}.handoff")
             temporary.write_bytes(data)

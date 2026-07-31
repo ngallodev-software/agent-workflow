@@ -37,3 +37,10 @@ At completion, require a non-default schema-valid completion report, a valid
 completion collection, final receipt, evaluation collection/report when
 required, and ledger row. Close sessions only with `agent-workflow terminate`
 and verify `tmux_alive=false` and `pane_dead=true` or an absent pane.
+
+Implementation changes must be committed before the completed handoff is
+written. Bind `base_revision` to the launch revision and `head_revision` to the
+exact post-commit Git HEAD; use absolute command working directories and exact
+exit codes. Structured non-interactive runs write the sidecar and exit without
+`agent task-complete`. Independent reviewers provide their own schema-valid
+sidecar with independently collected commands and evidence.
