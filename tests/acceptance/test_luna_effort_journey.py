@@ -57,3 +57,6 @@ def test_installed_codex_fixture_records_luna_effort(
     assert contract["command_plan"]["model"] == "gpt-5.6-luna"
     assert contract["runtime_policy"]["codex_reasoning_effort"] == "high"
     assert "model_reasoning_effort=high" in contract["command_plan"]["argv"]
+    handoff = repo / ".agent-workflow-handoff" / "luna-effort-journey"
+    add_dir = contract["command_plan"]["argv"].index("--add-dir")
+    assert contract["command_plan"]["argv"][add_dir + 1] == str(handoff)

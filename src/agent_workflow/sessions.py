@@ -856,6 +856,9 @@ def launch(
         if native_job is not None
         else None
     )
+    handoff_dir = _create_handoff_dir(workdir, session_id)
+    (handoff_dir / "control-intents").mkdir(mode=0o700)
+    (handoff_dir / "steering-inbox").mkdir(mode=0o700)
     executor_plan = prepare_executor(
         settings, executor, explicit_command, structured=structured,
         interactive=executor_interactive,
@@ -878,6 +881,12 @@ def launch(
     # resolving here keeps the sealed run tied to the exact executable that was
     # preflighted and prevents a false not-found/orphan result.
     command[0] = require_command(command[0])
+    if executor_plan.name == "codex" and "--add-dir" not in command:
+        # The durable handoff is executor-written but collector-owned.  Make
+        # this exact run-local directory an explicit Codex writable root so a
+        # child never needs a broad sandbox escalation just to publish its
+        # completion/control sidecars.
+        command.extend(["--add-dir", str(handoff_dir)])
     executor_plan = ExecutorPlan(
         executor_plan.name,
         tuple(command),
@@ -951,9 +960,6 @@ def launch(
     (state_dir / "completion.md").write_bytes(
         asset_path("prompt-pack-root/templates/TICKET_COMPLETION.md").read_bytes()
     )
-    handoff_dir = _create_handoff_dir(workdir, session_id)
-    (handoff_dir / "control-intents").mkdir(mode=0o700)
-    (handoff_dir / "steering-inbox").mkdir(mode=0o700)
     result_contract = (
         task_result_contract(prompt_pack_root, ticket_id)
         if prompt_pack_root is not None
