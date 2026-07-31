@@ -10,6 +10,7 @@ import shlex
 import shutil
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +34,8 @@ from .executors import (
     prepare_executor,
 )
 from .git import snapshot
+from .health import last_event as last_health_event
+from .health import semantic_progress
 from .native_jobs import ValidatedNativeJob, validate_native_job
 from .messages import (
     append_message,
@@ -1465,6 +1468,42 @@ def observe(
         seconds_since_executor_event_growth = max(
             0.0, time.time() - executor_events_path.stat().st_mtime
         )
+    terminal_events_path = state_dir / "terminal-events.jsonl"
+    seconds_since_terminal_event_growth: float | None = None
+    if terminal_events_path.is_file():
+        seconds_since_terminal_event_growth = max(
+            0.0, time.time() - terminal_events_path.stat().st_mtime
+        )
+    progress = semantic_progress(state_dir)
+    seconds_since_semantic_progress = progress["seconds_since_semantic_progress"]
+    if seconds_since_semantic_progress is None:
+        baseline = data.get("started_at") or data.get("created_at")
+        if isinstance(baseline, str) and baseline:
+            try:
+                seconds_since_semantic_progress = max(
+                    0.0, time.time() - datetime.fromisoformat(baseline).timestamp()
+                )
+            except ValueError:
+                pass
+    latest_health = last_health_event(state_dir / "run-health-samples.jsonl") or {}
+    latest_permission = last_health_event(state_dir / "permission-events.jsonl")
+    permission_state = (
+        str(latest_permission.get("state"))
+        if isinstance(latest_permission, dict) and latest_permission.get("state")
+        else None
+    )
+    process_result_path = state_dir / "process-result.json"
+    process_result: dict[str, Any] = {}
+    if process_result_path.is_file():
+        try:
+            value = json.loads(process_result_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            value = {}
+        if isinstance(value, dict):
+            process_result = value
+    output_capture_exhausted = bool(
+        process_result.get("stdout_truncated") or process_result.get("stderr_truncated")
+    )
 
     durable = str(data.get("status", "unknown"))
     active = {"prepared", "launched", "running", "interruption_requested"}
@@ -1472,19 +1511,19 @@ def observe(
         observed = "terminal_unavailable"
     elif alive and durable in active:
         threshold = settings.stall_minutes * 60
-        log_stale = (
-            seconds_since_log_growth is None
-            or seconds_since_log_growth >= threshold
+        executor_alive = (
+            latest_health.get("executor", {}).get("alive")
+            if isinstance(latest_health.get("executor"), dict)
+            else None
         )
-        heartbeat_stale = (
-            seconds_since_heartbeat is None
-            or seconds_since_heartbeat >= threshold
-        )
-        executor_events_stale = (
-            seconds_since_executor_event_growth is None
-            or seconds_since_executor_event_growth >= threshold
-        )
-        if log_stale and heartbeat_stale and executor_events_stale:
+        if executor_alive is False:
+            observed = "orphaned"
+        elif permission_state == "pending":
+            observed = "blocked_permission"
+        elif (
+            seconds_since_semantic_progress is None
+            or seconds_since_semantic_progress >= threshold
+        ):
             observed = "possibly_stalled"
         else:
             observed = "running"
@@ -1505,6 +1544,8 @@ def observe(
     failure_category = (
         "orphaned"
         if observed == "orphaned"
+        else "permission_wait"
+        if observed == "blocked_permission"
         else "stalled"
         if observed == "possibly_stalled"
         else "terminal_unavailable"
@@ -1519,6 +1560,8 @@ def observe(
         safe_actions.append(f"agent-workflow restart {session_id}")
     elif observed == "possibly_stalled":
         safe_actions.append(f"agent-workflow interrupt {session_id}")
+    elif observed == "blocked_permission":
+        safe_actions.append(f"agent-workflow attach {session_id}")
     result = {
         **data,
         "tmux_alive": alive,
@@ -1542,12 +1585,31 @@ def observe(
             if seconds_since_executor_event_growth is not None
             else None
         ),
+        "seconds_since_terminal_event_growth": (
+            round(seconds_since_terminal_event_growth, 1)
+            if seconds_since_terminal_event_growth is not None
+            else None
+        ),
+        "seconds_since_semantic_progress": (
+            round(float(seconds_since_semantic_progress), 1)
+            if seconds_since_semantic_progress is not None
+            else None
+        ),
+        "last_semantic_progress_at": progress["last_semantic_progress_at"],
+        "last_semantic_progress_source": progress["last_semantic_progress_source"],
+        "latest_health": latest_health,
+        "permission_state": permission_state,
+        "latest_permission_event": latest_permission,
+        "output_capture_exhausted": output_capture_exhausted,
         "signals": {
             "tmux_alive": alive,
             "pane_dead": pane.dead if pane else None,
             "log_exists": log_path.is_file(),
             "heartbeat_exists": heartbeat_path.is_file(),
             "executor_events_exist": executor_events_path.is_file(),
+            "terminal_events_exist": terminal_events_path.is_file(),
+            "health_samples_exist": (state_dir / "run-health-samples.jsonl").is_file(),
+            "permission_events_exist": (state_dir / "permission-events.jsonl").is_file(),
         },
         "last_event": last_event,
         "paths": {
@@ -1555,6 +1617,12 @@ def observe(
             "log": str(log_path),
             "heartbeat": str(heartbeat_path),
             "executor_events": str(executor_events_path),
+            "terminal_events": str(terminal_events_path),
+            "health_samples": str(state_dir / "run-health-samples.jsonl"),
+            "permission_events": str(state_dir / "permission-events.jsonl"),
+            "incident_events": str(state_dir / "incident-events.jsonl"),
+            "remediation_events": str(state_dir / "remediation-events.jsonl"),
+            "process_result": str(process_result_path),
             "events": str(events_path),
         },
         "safe_actions": safe_actions,

@@ -11,6 +11,10 @@ REL-005 is complete. `release-check.sh` now writes pytest JUnit XML and invokes 
 
 The detailed gap analysis below is the pre-REL-005 audit baseline. Its open license, monitored-channel, and compatibility findings remain accurate as REL-001, REL-002, and REL-003 blockers; its statements that REL-005 evidence automation is missing are superseded by this update. Full transitive hashes, reproducible builds, and authenticated signing remain HARD-010.
 
+## Self-healing evidence update — 2026-07-30
+
+Release validation now includes the new supervisor command surface, package-owned SVG/PNG documentation assets, bounded health/terminal/permission/incident/remediation artifacts in receipt inventory, and the `bounded-self-healing-supervisor` prompt-pack DAG. Full public support still requires the `SUP-003` through `SUP-006` security, resource, identity, retention, and live-compatibility gates.
+
 ## Current Checks Coverage
 
 ### 1. Python Bytecode Cleanup

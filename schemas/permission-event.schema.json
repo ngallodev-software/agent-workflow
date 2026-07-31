@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/permission-event/v1",
+  "type": "object",
+  "required": ["schema", "event_id", "session_id", "recorded_at", "principal", "operation", "resource_class", "target", "requested_access", "state", "source", "policy_rule_id", "evidence_sha256", "remediation_class"],
+  "properties": {
+    "schema": {"const": "agent-workflow/permission-event/v1"},
+    "event_id": {"type": "string", "pattern": "^[0-9a-f]{24}$"},
+    "session_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "recorded_at": {"type": "string", "minLength": 1, "maxLength": 64},
+    "principal": {"type": ["string", "null"], "maxLength": 256},
+    "operation": {"type": "string", "minLength": 1, "maxLength": 128},
+    "resource_class": {"type": "string", "minLength": 1, "maxLength": 128},
+    "target": {"type": ["string", "null"], "maxLength": 1024},
+    "requested_access": {"type": ["string", "null"], "maxLength": 256},
+    "state": {"enum": ["pending", "denied", "cleared"]},
+    "source": {"type": "string", "minLength": 1, "maxLength": 128},
+    "policy_rule_id": {"type": ["string", "null"], "maxLength": 128},
+    "evidence_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "remediation_class": {"type": "string", "minLength": 1, "maxLength": 128}
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,22 @@
+flowchart TB
+    Operator[Operator / root orchestrator]
+    Supervisor[Foreground supervisor]
+    Status[Mutable status projection]
+    Runner[Run supervisor / runner]
+    Executor[Coding-agent executor]
+    Tmux[tmux pane / window]
+    Durable[(Durable run evidence)]
+    HumanGate{Authority-changing decision?}
+
+    Operator --> Supervisor
+    Supervisor -->|observe and reconcile| Status
+    Supervisor -->|health probe / opt-in signal| Runner
+    Runner --> Executor
+    Executor <--> Tmux
+    Tmux -->|bounded changing snapshots| Durable
+    Runner -->|health, process, completion| Durable
+    Supervisor -->|incidents and remediation| Durable
+    Durable -->|replay / verify| Supervisor
+    Supervisor --> HumanGate
+    HumanGate -->|yes: escalate| Operator
+    HumanGate -->|no: bounded rule| Runner

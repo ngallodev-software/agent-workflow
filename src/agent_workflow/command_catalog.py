@@ -68,6 +68,8 @@ _ROLE_COMMANDS: dict[str, frozenset[str]] = {
             "archive",
             "status",
             "repair",
+            "supervisor once",
+            "supervisor run",
             "attach",
             "tail",
             "steer",

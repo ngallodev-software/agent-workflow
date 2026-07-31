@@ -84,8 +84,8 @@ def build_server(settings: Settings, *, repo_root: Path | None = None) -> Any:
         from mcp.server.fastmcp import FastMCP
     except ImportError as exc:  # pragma: no cover - exercised without extra
         raise WorkflowError(
-            "agent-workflow MCP SDK is unavailable; reinstall the package "
-            "with dependencies enabled"
+            "agent-workflow MCP SDK is unavailable; reinstall with the pinned "
+            "MCP dependency (for example: pip install 'agent-workflow[mcp]')"
         ) from exc
 
     service = WorkflowReadService(settings, repository_root=_repo_root(str(repo_root) if repo_root else None))

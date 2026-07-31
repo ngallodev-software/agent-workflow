@@ -1,11 +1,11 @@
 
 # Changelog
 
-## Unreleased
+## 0.4.0 — 2026-07-30
 
-- Enforce automatic Codex selection of `gpt-5.6-luna` with bounded reasoning
-  effort and immutable launch evidence; hard work must be decomposed instead
-  of promoted to another automatic model.
+- Enforce automatic Codex selection of `gpt-5.6-luna` with bounded
+  low/medium/high reasoning effort and immutable launch evidence; difficult
+  work must be decomposed rather than promoted to another automatic model.
 
 ## 0.3.0 — 2026-07-30
 
@@ -25,6 +25,12 @@
   release-drift audit and transfer archive.
 
 ## Unreleased
+
+- Redesigned the root README with responsive light/dark repository-owned graphics, clearer current-state positioning, architecture and self-healing diagrams, an evidence map, and an explicit pre-public-release roadmap.
+- Added `DEC-006`, the detailed self-healing supervisor architecture, four Mermaid source diagrams, and the sequenced `bounded-self-healing-supervisor` prompt pack.
+- Added bounded run-health, interactive-terminal, permission, incident, remediation, and process-result evidence; runner heartbeat is now distinct from semantic progress.
+- Added a foregroundable `supervisor once|run` command with safe projection repair, incident deduplication, one-shot progress probes, and explicitly opted-in bounded interrupt/orphan restart.
+- Updated status observation, configuration, command catalog, receipts, operations, security, testing, architecture, prompt-pack ownership, and backlog sequencing for unattended diagnosis and deterministic recovery.
 
 - Add opt-in cooperative late steering with immutable inbox requests, durable
   delivery/disposition records, correlated applied/rejected acknowledgements,

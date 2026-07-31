@@ -4,8 +4,7 @@ Automatic Codex routing accepts only `gpt-5.6-luna` and reasoning effort
 `low`, `medium`, or `high` (default `medium`). The launcher passes
 `-c model_reasoning_effort=<value>` and records the value in immutable launch
 `runtime_policy`. Decompose difficult work into smaller tickets instead of
-promoting it to another automatic model; explicit non-Codex commands remain
-manual operator actions.
+promoting it to another automatic model.
 
 The parser-derived command catalog is authoritative for agent execution. Run `agent-workflow commands --json` for the full machine-readable contract or `agent-workflow commands --role ROLE --format markdown` for a role-scoped command card. Agents should invoke represented commands directly and use `--help` only after a catalog/version mismatch, an argument error, or when a required command is absent. Global `--json` and `--config PATH` may appear before or after the subcommand; tokens after launch `--` belong to the delegated command.
 
@@ -39,6 +38,7 @@ agent-workflow worktree remove REPO WORKTREE [--delete-branch] [--force]
 agent-workflow launch SESSION WORKDIR PROMPT
   [--ticket ID] [--tier low|medium|high|critical] [--pack PACK] [--job JOB]
   [--agent-name NAME] [--agent-class CLASS] [--executor NAME] [--model MODEL]
+  [--reasoning-effort low|medium|high]
   [--allow-no-go-model] [--evaluation PLAN] [--structured]
   [--interactive|--no-interactive] [--allow-dirty]
   [--pane-limit-action prompt|close-idle|non-interactive|cancel]
@@ -61,6 +61,26 @@ Configured launches enforce class/executor/model allowlists and permission argum
 
 `archive` is the recoverable `list` cleanup operation; `clear` is an alias. It never deletes evidence. A run must have a valid sealed final receipt, completed/valid completion collection, authoritative accepted lifecycle receipt, matching accepted revision, and a closed tmux session. `--all-verified` skips runs that fail a gate and reports the reason. Use `--dry-run` first. A real move requires the explicit `--verified` confirmation and writes a read-only archive manifest under the state archive root.
 
+## Supervisor
+
+```text
+agent-workflow supervisor once
+  [--session SESSION]...
+  [--capture-interactive|--no-capture-interactive]
+  [--capture-lines N]
+  [--probe-stalled|--no-probe-stalled]
+  [--interrupt-stalled|--no-interrupt-stalled]
+  [--restart-orphaned|--no-restart-orphaned]
+  [--max-remediation-attempts N]
+
+agent-workflow supervisor run
+  [the same policy options]
+  [--interval-seconds N]
+  [--max-cycles N]
+```
+
+`once` performs one evidence, reconciliation, diagnosis, and remediation cycle. `run` repeats the same deterministic cycle in the foreground. `--session` is repeatable and limits scope. Interactive capture and one bounded progress probe follow configuration defaults; interrupt and orphan restart are disabled unless explicitly enabled. All performed actions are journaled with rule IDs and attempt ceilings. Global `--json` prints the cycle report as structured data.
+
 ## Durable messages
 
 ```text
@@ -72,7 +92,7 @@ agent-workflow watch SESSION [--after SEQUENCE] [--timeout SECONDS]
 
 These commands append validated fsynced records. `watch` replays the journal and may use a best-effort tmux wakeup hint. A steer is pending until correlated evidence proves acknowledgement/application. Executors default to `steering_adapter = "unsupported"`; a cooperative wrapper may explicitly select `control-file-v1`, which publishes an immutable bounded request under the run handoff and records delivery outcomes in `steering-delivery.jsonl`. `--outcome rejected` is distinct from application failure or silence.
 
-`status`/`observe` reports output-log age, heartbeat age, executor-event age, tmux liveness, and pane death independently. A live pane is only advisory `possibly_stalled` when all three communication streams are stale past the configured threshold.
+`status`/`observe` reports runner heartbeat, executor/process liveness, semantic-progress age/source, output/event/terminal activity, permission state, tmux liveness, pane death, and output-capture exhaustion independently. A fresh heartbeat is liveness evidence only; it cannot prevent `possibly_stalled` when every semantic-progress source is stale.
 
 Completed handoffs must contain matching session/ticket/pack identity, substantive revisions, criterion evidence, and command receipts. A schema-valid placeholder completion is collected as invalid and makes the run fail rather than silently sealing success. Failed, partial, and blocked completions may retain nonzero commands but must state unresolved evidence.
 

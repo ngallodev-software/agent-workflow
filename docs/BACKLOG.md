@@ -31,7 +31,52 @@ The determinism and security work below is derived from the [feature determinism
 | [`source-preflight-snapshot-reliability`](../prompt-packs/source-preflight-snapshot-reliability/) | PROC-007 | Implemented and in review: exact-root status now preserves operator Git excludes while recording bounded command provenance; focused installed clean/dirty evidence passes. |
 | [`chatgpt-sealed-run-assessment`](../prompt-packs/chatgpt-sealed-run-assessment/) | CHATGPT-EVAL-001, CHATGPT-TDD-001 | Assessment and future-TDD artifacts completed; future journeys remain strict expected failures and do not unblock planned runtime work. |
 | [`force-accept-override`](../prompt-packs/force-accept-override/) | LIFE-001 | Ready for isolated implementation; add an explicit, audited manual force-accept path without weakening normal acceptance. |
+| [`codex-luna-effort-policy`](../prompt-packs/codex-luna-effort-policy/) | POL-001 | Integrated and in review; automatic Codex selection is Luna-only with low/medium/high effort and immutable launch evidence. |
 | [`hierarchical-multi-team-orchestration`](../prompt-packs/hierarchical-multi-team-orchestration/) | HIER-001 through HIER-008 | Proposed design package; blocked on maintainer approval of DEC-005 and the ticket-specific accepted messaging, delegation, steering, and pane-identity prerequisites listed below. |
+| [`bounded-self-healing-supervisor`](../prompt-packs/bounded-self-healing-supervisor/) | SUP-001 through SUP-008 | SUP-001 and SUP-002 are implemented and in review. Security enforcement, authenticated authority, live compatibility, hierarchy integration, and performance control remain sequenced behind their declared gates. |
+
+## Bounded self-healing supervision
+
+`DEC-006` establishes a deterministic `observe → diagnose → act → verify → record` loop. Automatic actions may repair reconstructable projections, replay durable records, send bounded probes, or exercise explicitly preauthorized interrupt/restart policy. They may never grant permissions, expose credentials, alter acceptance criteria, choose an unauthorized model/tool, merge work, delete evidence, or widen any delegation or resource budget.
+
+| ID | Priority | Risk | State | Work and exit evidence | Reference |
+|---|---|---:|---|---|---|
+| SUP-001 | P0 | Critical | in-review | Bounded health, process-result, terminal, permission, incident, and remediation evidence now separates supervisor liveness, executor liveness, semantic progress, and blocked state. Interactive terminal capture is change-driven, ANSI-cleaned, redacted, and advisory. Closeout requires the Phase 0 gate and installed live-tmux evidence. | [Architecture](SELF_HEALING_SUPERVISOR_ARCHITECTURE.md#evidence-model) |
+| SUP-002 | P0 | Critical | in-review | A foregroundable supervisor now repairs reconstructable status projections, samples health, classifies incidents, deduplicates evidence, and applies attempt-bounded safe probes. Interrupt and orphan restart remain disabled by default and require explicit operator policy. Closeout requires replay/restart/tamper and installed-product gate evidence. | [Supervisor loop](SELF_HEALING_SUPERVISOR_ARCHITECTURE.md#supervisor-lifecycle) |
+| SUP-003 | P0 | Critical | blocked | Apply field-level redaction, retention, export, and deletion policy to terminal, permission, health, incident, and remediation evidence while preserving useful digests/categories. Blocked on accepted HARD-006 and SUP-GATE-0. | [Privacy and retention](SELF_HEALING_SUPERVISOR_ARCHITECTURE.md#security-and-privacy) |
+| SUP-004 | P0 | Critical | blocked | Enforce CPU, memory, process, descriptor, wall-time, output, disk, and network policy where supported; record effective controls; pause launches and narrow concurrency under pressure without raising ceilings. Blocked on accepted HARD-003 and SUP-GATE-0. | [Resource control](SELF_HEALING_SUPERVISOR_ARCHITECTURE.md#performance-and-capacity) |
+| SUP-005 | P0 | Critical | blocked | Bind permission decisions, steering, remediation, review, and escalation to authenticated principals and immutable delegation policy. Blocked on accepted HARD-007 and SUP-GATE-0. | [Authority boundary](DECISIONS/DEC-006-BOUNDED-SELF-HEALING.md) |
+| SUP-006 | P0 | Critical | blocked | Prove installed recovery across supported hosts, tmux versions, source archives/checkouts, and every claimed executor: permission wait, no-progress stall, process/pane loss, missed wake, projection/cursor corruption, resource exhaustion, and restart. Blocked on SUP-GATE-1 and REL-003. | [Compatibility matrix](../prompt-packs/bounded-self-healing-supervisor/phase-2/) |
+| SUP-007 | P0 | Critical | blocked | Integrate the accepted supervisor at root and team-lead scope, preserving team isolation, escalation lineage, global/local budgets, and presentation-only tmux recovery. Blocked on SUP-GATE-2, HIER-005, and HIER-006. | [Hierarchy integration](SELF_HEALING_SUPERVISOR_ARCHITECTURE.md#hierarchical-integration) |
+| SUP-008 | P1 | High | blocked | Detect comparable process/performance regressions and deterministically pause launches, narrow concurrency, or select only configured preapproved fallback policy using static thresholds and hysteresis. Blocked on SUP-006, SUP-007, BKL-004, and HIER-007. | [Performance control](SELF_HEALING_SUPERVISOR_ARCHITECTURE.md#performance-and-capacity) |
+
+### Self-healing dependency order
+
+The current Phase 0 implementation may be reviewed immediately. Security-governed work deliberately fans out only after the Phase 0 gate; all three Phase 1 lanes must be accepted before compatibility claims or automatic recovery are widened.
+
+| Lane | Required order | Execution rule |
+|---|---|---|
+| Observable foundation | `SUP-001 → SUP-002 → SUP-GATE-0` | Implemented and ready for independent installed/live review. |
+| Privacy and retention | accepted `HARD-006` + `SUP-GATE-0 → SUP-003` | May run in parallel with SUP-004 and SUP-005. |
+| Resource enforcement | accepted `HARD-003` + `SUP-GATE-0 → SUP-004` | May narrow launch capacity; may never raise limits automatically. |
+| Authenticated authority | accepted `HARD-007` + `SUP-GATE-0 → SUP-005` | Human authority remains mandatory for permissions and acceptance. |
+| Governed gate | `SUP-003 + SUP-004 + SUP-005 → SUP-GATE-1` | No broad recovery compatibility claim before this gate. |
+| Installed recovery matrix | accepted `REL-003` + `SUP-GATE-1 → SUP-006 → SUP-GATE-2` | Must prove every claimed host/executor combination and fail closed elsewhere. |
+| Hierarchical supervision | `SUP-GATE-2 + HIER-005 + HIER-006 → SUP-007` | Team leads supervise only their delegated workers; root owns cross-team policy. |
+| Performance control | `SUP-007 + SUP-006 + BKL-004 + HIER-007 → SUP-008 → SUP-GATE-3` | Static configured thresholds only; no online/model-authored policy. |
+
+```text
+SUP-001 → SUP-002 → SUP-GATE-0
+                      ├─ [HARD-006] → SUP-003 ─┐
+                      ├─ [HARD-003] → SUP-004 ─┼→ SUP-GATE-1
+                      └─ [HARD-007] → SUP-005 ─┘
+                                                ↓
+                               [REL-003] → SUP-006 → SUP-GATE-2
+                                                ↓
+                     [HIER-005 + HIER-006] → SUP-007
+                                                ↓
+                     [BKL-004 + HIER-007] → SUP-008 → SUP-GATE-3
+```
 
 ## Proposed hierarchical orchestration
 
@@ -83,13 +128,13 @@ Optional parallel branch after HIER-003:
 | MSG-001 | P0 | Critical | in-review | Integrated at `50ea762`; repair the installed-product fixture and obtain sealed acceptance evidence for the immutable registry and append-only aggregate inbox before completion. | [Messaging design](ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md#add-one-shared-orchestrator-inbox) |
 | PROC-001 | P0 | High | in-review | Reimplemented and integrated at `7136f86`; receipt-bound preflight rejects missing, stale, and rejected lifecycle evidence before tmux creation. Obtain final phase-review/acceptance evidence without treating the invalid child completion projection as success. | [`delegation-communication-reliability`](../prompt-packs/delegation-communication-reliability/phase-0/tickets/PROC-001-authoritative-preflight.md) |
 | PROC-002 | P0 | Critical | in-review | Control bridge is integrated at `1368769`; close installed matrix and sealed-evidence gaps for correlated progress/ack delivery, application, rejection, and unavailable outcomes. | [`delegation-communication-reliability`](../prompt-packs/delegation-communication-reliability/phase-0/tickets/PROC-002-control-handshake.md) |
-| PROC-003 | P1 | High | in-review | Observation now reports tmux/pane state, heartbeat age, log growth, and executor-event growth independently and marks a live pane `possibly_stalled` only when every communication channel is stale. Focused invariant evidence passes; complete installed terminate/retry closeout and the pack gate remain open. | [`delegation-communication-reliability`](../prompt-packs/delegation-communication-reliability/phase-0/tickets/PROC-003-run-observability.md) |
+| PROC-003 | P1 | High | in-review | Observation now separates runner heartbeat, executor/process liveness, semantic progress, terminal activity, permission state, pane death, and output-capture exhaustion. A fresh heartbeat no longer masks a no-progress stall. The new supervisor journals bounded health/incident evidence; installed terminate/retry/live-host closeout and the owning pack gate remain open. | [`delegation-communication-reliability`](../prompt-packs/delegation-communication-reliability/phase-0/tickets/PROC-003-run-observability.md) |
 | PROC-004 | P0 | Critical | in-review | Completion collection now rejects placeholder-only completed reports, identity mismatch, absent revisions, acceptance evidence, or command receipts; failed/partial/blocked reports retain real failed commands and require unresolved evidence. Invalid collection makes the terminal run fail. Focused installed and invariant evidence passes; the owning phase gate remains open. | [`delegation-communication-reliability`](../prompt-packs/delegation-communication-reliability/phase-0/tickets/PROC-004-completion-validation.md) |
 | PROC-005 | P1 | High | ready | Align steering, templates, hooks/reminders, and recovery references with the enforced launch, communication, observation, completion, and closeout pattern. | [`delegation-communication-reliability`](../prompt-packs/delegation-communication-reliability/phase-1/tickets/PROC-005-operator-enforcement.md) |
 | PROC-006 | P0 | Critical | in-review | Pane identity is integrated at `55f4ed5`; current corrective commits `5785998` and `72451cc` await integration. Complete live-host and sealed acceptance evidence: layout changes must retain the bound pane, while termination or genuine loss must report it unavailable without rebinding. | [`tmux-pane-identity-reliability`](../prompt-packs/tmux-pane-identity-reliability/phase-0/tickets/PROC-006-pane-identity.md) |
 | PROC-007 | P0 | High | in-review | Exact-root cleanliness now executes a fresh `git -C <root> status --porcelain`, preserves the operator's system/global exclude view without enabling prompts or helpers, records bounded executable/argv/exit/output-digest provenance, accepts globally ignored state, and still rejects real untracked changes. Focused installed and invariant evidence passes; pack review and broader host compatibility remain open. | [`source-preflight-snapshot-reliability`](../prompt-packs/source-preflight-snapshot-reliability/phase-0/tickets/PROC-007-source-snapshot.md) |
 | LIFE-001 | P0 | Critical | ready | Add a locally interactive, explicit `force-accept` command that records an immutable override receipt with actor, reason, and failed-normal-gate evidence. It must preserve ordinary `accept` validation and truthfully document that authenticated human-only authorization remains blocked on HARD-007. | [`force-accept-override`](../prompt-packs/force-accept-override/phase-0/tickets/LIFE-001-force-accept.md) |
-| POL-001 | P0 | High | in-review | Automatic Codex selection is Luna-only with bounded low/medium/high effort, deterministic `-c model_reasoning_effort=...` argv, immutable launch effort evidence, and pre-launch bypass rejection. Focused installed/invariant evidence remains required. | [`codex-luna-effort-policy`](../prompt-packs/codex-luna-effort-policy/phase-0/tickets/POL-001-luna-effort-policy.md) |
+| POL-001 | P0 | High | in-review | Automatic Codex selection is Luna-only with bounded low/medium/high effort, deterministic `-c model_reasoning_effort=...` argv, immutable launch effort evidence, and pre-launch bypass rejection. Focused installed/invariant evidence passes; final phase evidence remains open. | [`codex-luna-effort-policy`](../prompt-packs/codex-luna-effort-policy/phase-0/tickets/POL-001-luna-effort-policy.md) |
 | REL-001 | P0 | Critical | needs-decision | Select and add the project license, matching package metadata, and distribution policy. | [Public release readiness](PUBLIC_RELEASE_READINESS.md#governance-and-compatibility-blockers) |
 | REL-002 | P0 | Critical | blocked | Establish a real monitored vulnerability-reporting channel and update `SECURITY.md`. | [Public release readiness](PUBLIC_RELEASE_READINESS.md#governance-and-compatibility-blockers) |
 
@@ -125,7 +170,7 @@ These items remain tracked separately from the hardening ownership above; they a
 
 | ID | Priority | Risk | State | Missing prerequisite and exit evidence | Reference |
 |---|---|---:|---|---|---|
-| MSG-002 | P0 | Critical | blocked | After BKL-001, MSG-001, HARD-001, and HARD-008, add a foregroundable single-writer supervisor, shared hashed tmux wake channel, periodic replay fallback, bounded fairness, and cursor-after-commit fan-in. | [Messaging design](ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md#use-one-shared-wake-channel) |
+| MSG-002 | P0 | Critical | blocked | Reuse the implemented foreground supervisor foundation, then after BKL-001, MSG-001, HARD-001, and HARD-008 add aggregate single-writer inbox ownership, shared hashed tmux wake channels, periodic replay fallback, bounded fairness, and cursor-after-commit fan-in. The health supervisor does not yet satisfy aggregate messaging ownership. | [Messaging design](ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md#use-one-shared-wake-channel) |
 | MSG-003 | P0 | Critical | blocked | After MSG-002, HARD-004, HARD-006, HARD-007, and HARD-008, add fixed-format orchestrator wake/resume adapters that receive opaque event IDs only and cannot inject child-controlled content. | [Messaging design](ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md#the-supervisor-must-wake-the-orchestrator-safely) |
 | MSG-004 | P1 | High | blocked | After MSG-002, MSG-003, MSG-005, and HARD-007, distinguish durable event delivery, orchestrator application acknowledgement, and linked scheduling/lifecycle action evidence through shared services. | [Messaging design](ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md#acknowledgement-model) |
 | MSG-005 | P1 | Critical | blocked | After BKL-001, MSG-001, and MSG-002, reconstruct delivery after supervisor/orchestrator restart, missed or duplicate signals, corrupt cursors, and every cursor/inbox crash window without duplicate semantic effects. | [Messaging design](ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md#failure-and-restart-behavior) |
@@ -153,6 +198,7 @@ These items remain tracked separately from the hardening ownership above; they a
 | DEC-MCP-HTTP | P2 | deferred | Authorize any non-stdio MCP transport only through a separate security ADR after local adoption evidence. | — |
 | DEC-004 | P1 | decided | Retain `agent-workflow` as the execution host, add a versioned trusted plugin API, and build `agent-workflow-spec` as the first sibling plugin before extracting other subsystems. | — |
 | DEC-005 | P0 | needs-decision | Adopt a bounded root orchestrator → team lead → worker hierarchy with durable authority and one managed tmux window per team. | [Decision](DECISIONS/DEC-005-HIERARCHICAL-ORCHESTRATION.md) |
+| DEC-006 | P0 | decided | Use bounded deterministic self-healing: durable evidence is authoritative; automatic action must be preauthorized, idempotent, attempt-bounded, verified, and incapable of widening authority. | [Decision](DECISIONS/DEC-006-BOUNDED-SELF-HEALING.md) |
 
 ## Proposed specification and plugin program
 

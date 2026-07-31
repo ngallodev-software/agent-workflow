@@ -39,6 +39,7 @@ EXCLUDED_DIRS = {
     "testing-output",
 }
 EXCLUDED_FILES = {".coverage", "docs/BACKLOG.html"}
+BINARY_SUFFIXES = {".gif", ".ico", ".jpeg", ".jpg", ".png", ".webp"}
 
 
 def release_files(root: Path = ROOT) -> tuple[Path, ...]:
@@ -249,6 +250,8 @@ def main(argv: list[str] | None = None) -> int:
     for path in release_files_list:
         data = path.read_bytes()
         rel = path.relative_to(ROOT)
+        if rel.suffix.lower() in BINARY_SUFFIXES:
+            continue
         if b"\x00" in data:
             fail(f"{rel}: contains NUL bytes")
         if b"\r\n" in data:

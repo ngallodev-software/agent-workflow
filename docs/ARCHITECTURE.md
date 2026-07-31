@@ -37,12 +37,25 @@ This is an additive migration, not an immediate rename or broad repository split
 
 The next orchestration layer is a bounded three-tier hierarchy: a root orchestrator manages multiple team leads, and each team lead supervises worker sessions in panes within its own tmux window. Durable hierarchy contracts, journals, scoped delegation authority, team receipts, and root receipts remain authoritative; tmux sessions/windows/panes and optional external terminal windows are projections. The design intentionally reuses canonical session, workflow, inbox, receipt, and worktree services rather than introducing another executor or scheduler path. See [Hierarchical multi-team orchestration design](HIERARCHICAL_MULTI_TEAM_ORCHESTRATION_DESIGN.md) and [DEC-005](DECISIONS/DEC-005-HIERARCHICAL-ORCHESTRATION.md).
 
+## Implemented bounded supervision and self-healing
+
+The current runtime includes a foregroundable supervisor governed by [DEC-006](DECISIONS/DEC-006-BOUNDED-SELF-HEALING.md). It separates runner heartbeat, executor/process liveness, semantic progress, and known blocked state; records bounded health, terminal, permission, incident, process-result, and remediation evidence; repairs reconstructable mutable status; and may issue one bounded progress probe. Interrupt and orphan restart rules are disabled by default and must be explicitly authorized. The supervisor cannot grant permissions, widen resource or delegation policy, change acceptance criteria, merge work, or delete evidence.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/self-healing-loop-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="assets/self-healing-loop-light.svg">
+  <img alt="Bounded self-healing supervisor loop" src="assets/self-healing-loop-light.svg" width="100%">
+</picture>
+
+The detailed topology, evidence contracts, state model, security boundary, and remaining dependency plan are in [Self-healing supervisor architecture](SELF_HEALING_SUPERVISOR_ARCHITECTURE.md).
+
 ## Major components
 
 | Area | Modules | Responsibility |
 |---|---|---|
 | CLI/config | `cli.py`, `config.py`, `doctor.py` | live parser, configuration, local capability checks |
 | Sessions/processes | `sessions.py`, `runner.py`, `executors.py`, `tmux.py`, `process.py` | canonical launch, process ownership, structured streams, retry/recovery |
+| Health/supervision | `health.py`, `diagnostics.py`, `supervisor.py` | liveness/progress separation, bounded terminal/resource evidence, incident classification, deterministic remediation |
 | Durable state | `state.py`, `events.py`, `messages.py`, `ledger.py` | status projections, append-only lifecycle/control records, ledgers |
 | Evidence | `receipts.py`, `metrics.py`, `provider_evidence.py`, `lifecycle.py` | final seals, metrics, provider usage, review/accept/reject receipts |
 | Workflows | `workflow.py`, `scheduler.py`, `workflow_service.py`, `approval.py`, `bindings.py`, `workflow_receipt.py`, `workflow_templates.py`, `routing.py` | graph validation/replay, scheduling, approvals, result binding, aggregate seals, templates, advice |
@@ -76,6 +89,12 @@ The default XDG state root is:
         ├── result.json                    # optional structured task result
         ├── provider-evidence.json         # derived and sealed
         ├── execution-metrics.json
+        ├── process-result.json             # exact process exit/signal/truncation facts
+        ├── run-health-samples.jsonl        # bounded liveness, resource, progress samples
+        ├── terminal-events.jsonl           # changed, redacted interactive snapshots
+        ├── permission-events.jsonl         # observed waits, denials, and clears
+        ├── incident-events.jsonl           # typed unattended-diagnosis findings
+        ├── remediation-events.jsonl        # bounded action and verification trail
         ├── control-events.jsonl
         ├── messages.jsonl                 # authoritative session messages
         ├── steering-delivery.jsonl        # adapter delivery/disposition evidence

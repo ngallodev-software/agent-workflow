@@ -1,0 +1,28 @@
+phase: "1"
+name: "governed-security-and-enforcement"
+mandatory_order: ["SUP-003", "SUP-004", "SUP-005", "SUP-GATE-1"]
+tasks:
+  - id: "SUP-003"
+    tier: A
+    session: "supervisor-retention-sup-003"
+    prompt: "tickets/SUP-003-redaction-retention.md"
+    backlog_id: "SUP-003"
+    dependencies: ["SUP-GATE-0"]
+  - id: "SUP-004"
+    tier: A
+    session: "supervisor-resources-sup-004"
+    prompt: "tickets/SUP-004-resource-enforcement.md"
+    backlog_id: "SUP-004"
+    dependencies: ["SUP-GATE-0"]
+  - id: "SUP-005"
+    tier: A
+    session: "supervisor-principals-sup-005"
+    prompt: "tickets/SUP-005-authenticated-remediation.md"
+    backlog_id: "SUP-005"
+    dependencies: ["SUP-GATE-0"]
+  - id: "SUP-GATE-1"
+    tier: A
+    task_type: gate
+    session: "self-healing-phase-1-gate"
+    prompt: "tickets/SUP-GATE-1.md"
+    dependencies: ["SUP-003", "SUP-004", "SUP-005"]

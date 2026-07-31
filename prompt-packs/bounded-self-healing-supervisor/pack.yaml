@@ -1,0 +1,23 @@
+schema: agent-workflow/pack/v1
+pack_id: "bounded-self-healing-supervisor"
+backlog_items:
+  - "SUP-001"
+  - "SUP-002"
+  - "SUP-003"
+  - "SUP-004"
+  - "SUP-005"
+  - "SUP-006"
+  - "SUP-007"
+  - "SUP-008"
+workflow:
+  name: agent-workflow
+  minimum_version: "0.3.0"
+  terminal_backend: tmux
+  requires:
+    - isolated_worktree
+    - foregroundable_session
+    - persistent_log
+    - source_baseline
+    - completion_report
+    - independent_phase_gate
+    - release_drift_audit

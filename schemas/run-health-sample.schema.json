@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/run-health-sample/v1",
+  "type": "object",
+  "required": ["schema", "session_id", "recorded_at", "runner", "executor", "host", "tmux_pane_id", "pane_dead", "output_bytes", "stderr_bytes", "executor_event_bytes", "terminal_event_bytes", "last_semantic_progress_at", "seconds_since_semantic_progress", "last_semantic_progress_source"],
+  "properties": {
+    "schema": {"const": "agent-workflow/run-health-sample/v1"},
+    "session_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "recorded_at": {"type": "string", "minLength": 1, "maxLength": 64},
+    "runner": {"$ref": "#/$defs/process"},
+    "executor": {"$ref": "#/$defs/process"},
+    "host": {"$ref": "#/$defs/host"},
+    "tmux_pane_id": {"type": ["string", "null"], "maxLength": 128},
+    "pane_dead": {"type": ["boolean", "null"]},
+    "output_bytes": {"type": ["integer", "null"], "minimum": 0},
+    "stderr_bytes": {"type": ["integer", "null"], "minimum": 0},
+    "executor_event_bytes": {"type": ["integer", "null"], "minimum": 0},
+    "terminal_event_bytes": {"type": ["integer", "null"], "minimum": 0},
+    "last_semantic_progress_at": {"type": ["string", "null"], "maxLength": 64},
+    "seconds_since_semantic_progress": {"type": ["number", "null"], "minimum": 0},
+    "last_semantic_progress_source": {"enum": [null, "output", "stderr", "executor_event", "terminal_event", "message", "control_intent", "steering_delivery", "completion"]}
+  },
+  "$defs": {
+    "process": {
+      "type": "object",
+      "required": ["pid", "alive", "state", "parent_pid", "process_start_ticks", "cpu_user_seconds", "cpu_system_seconds", "rss_bytes", "peak_rss_bytes", "threads", "read_bytes", "write_bytes", "open_fd_count", "child_process_count", "collector"],
+      "properties": {
+        "pid": {"type": ["integer", "null"], "minimum": 1},
+        "alive": {"type": ["boolean", "null"]},
+        "state": {"type": ["string", "null"], "maxLength": 8},
+        "parent_pid": {"type": ["integer", "null"], "minimum": 0},
+        "process_start_ticks": {"type": ["integer", "null"], "minimum": 0},
+        "cpu_user_seconds": {"type": ["number", "null"], "minimum": 0},
+        "cpu_system_seconds": {"type": ["number", "null"], "minimum": 0},
+        "rss_bytes": {"type": ["integer", "null"], "minimum": 0},
+        "peak_rss_bytes": {"type": ["integer", "null"], "minimum": 0},
+        "threads": {"type": ["integer", "null"], "minimum": 0},
+        "read_bytes": {"type": ["integer", "null"], "minimum": 0},
+        "write_bytes": {"type": ["integer", "null"], "minimum": 0},
+        "open_fd_count": {"type": ["integer", "null"], "minimum": 0},
+        "child_process_count": {"type": ["integer", "null"], "minimum": 0},
+        "collector": {"type": ["string", "null"], "maxLength": 64}
+      },
+      "additionalProperties": false
+    },
+    "host": {
+      "type": "object",
+      "required": ["load_1m", "load_5m", "load_15m", "available_memory_bytes", "disk_free_bytes", "disk_total_bytes"],
+      "properties": {
+        "load_1m": {"type": ["number", "null"], "minimum": 0},
+        "load_5m": {"type": ["number", "null"], "minimum": 0},
+        "load_15m": {"type": ["number", "null"], "minimum": 0},
+        "available_memory_bytes": {"type": ["integer", "null"], "minimum": 0},
+        "disk_free_bytes": {"type": ["integer", "null"], "minimum": 0},
+        "disk_total_bytes": {"type": ["integer", "null"], "minimum": 0}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

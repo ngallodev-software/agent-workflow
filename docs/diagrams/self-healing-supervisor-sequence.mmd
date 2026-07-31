@@ -1,0 +1,29 @@
+sequenceDiagram
+    participant S as Supervisor
+    participant D as Durable evidence
+    participant T as tmux
+    participant R as Runner
+    participant E as Executor
+    participant H as Human principal
+
+    S->>D: replay status, health, incidents, remediations
+    S->>T: resolve stable pane and capture bounded snapshot
+    T-->>S: pane state and terminal text
+    S->>R: sample runner/executor process state
+    R-->>S: liveness and resource facts
+    S->>D: append health and terminal events
+    S->>S: classify semantic progress and blocker
+    alt healthy
+        S->>D: no incident
+    else live but no progress
+        S->>D: append process_alive_no_progress incident
+        S->>E: durable progress probe
+        E-->>D: progress or acknowledgement
+    else permission required
+        S->>D: append permission_wait incident
+        S->>H: escalate; do not auto-approve
+    else opt-in recovery authorized
+        S->>D: append remediation intent
+        S->>R: interrupt or lineage-preserving restart
+        S->>D: append verified outcome
+    end

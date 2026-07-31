@@ -88,6 +88,13 @@ class Settings:
     config_schema_version: int = CONFIG_SCHEMA_VERSION
     security: SecurityPolicy = field(default_factory=SecurityPolicy)
     repository_allowlist: tuple[Path, ...] = ()
+    supervisor_interval_seconds: int = 10
+    supervisor_probe_stalled: bool = True
+    supervisor_interrupt_stalled: bool = False
+    supervisor_restart_orphaned: bool = False
+    supervisor_max_remediation_attempts: int = 1
+    supervisor_capture_interactive: bool = True
+    supervisor_capture_lines: int = 200
 
     @property
     def max_interactive_agent_panes(self) -> int:
@@ -177,7 +184,7 @@ def _reject_unknown(table: object, allowed: set[str], label: str) -> None:
 def _validate_shape(data: dict[str, Any]) -> None:
     _reject_unknown(
         data,
-        {"schema_version", "paths", "terminal", "git", "pack", "agents", "agent_classes", "executors", "security"},
+        {"schema_version", "paths", "terminal", "git", "pack", "agents", "agent_classes", "executors", "security", "supervisor"},
         "root",
     )
     sections = {
@@ -187,6 +194,15 @@ def _validate_shape(data: dict[str, Any]) -> None:
         "pack": {"archive_level", "write_sha256", "validate_before_archive"},
         "agents": {"preferred_names", "generated_prefix", "default_executor", "profiles", "non_interactive_tmux", "default_class", "reuse_stale_minutes"},
         "security": {"mode", "executable_digest", "policy_files"},
+        "supervisor": {
+            "interval_seconds",
+            "probe_stalled",
+            "interrupt_stalled",
+            "restart_orphaned",
+            "max_remediation_attempts",
+            "capture_interactive",
+            "capture_lines",
+        },
     }
     for name, allowed in sections.items():
         if name in data:
@@ -335,6 +351,24 @@ def load_settings(path: Path | None = None) -> Settings:
         base.max_interactive_agent_vertical,
     )
     level = _integer(data, "pack", "archive_level", base.archive_level)
+    supervisor_interval = _integer(
+        data,
+        "supervisor",
+        "interval_seconds",
+        base.supervisor_interval_seconds,
+    )
+    supervisor_attempts = _integer(
+        data,
+        "supervisor",
+        "max_remediation_attempts",
+        base.supervisor_max_remediation_attempts,
+    )
+    supervisor_capture_lines = _integer(
+        data,
+        "supervisor",
+        "capture_lines",
+        base.supervisor_capture_lines,
+    )
     reuse_stale = _integer(
         data, "agents", "reuse_stale_minutes", base.reuse_stale_minutes
     )
@@ -430,6 +464,9 @@ def load_settings(path: Path | None = None) -> Settings:
         or max_interactive_width < 1
         or max_interactive_vertical < 1
         or reuse_stale < 1
+        or supervisor_interval < 1
+        or supervisor_attempts < 1
+        or supervisor_capture_lines < 1
         or not 1 <= level <= 22
     ):
         raise WorkflowError("invalid stall_minutes, capture_lines, or archive_level")
@@ -502,6 +539,33 @@ def load_settings(path: Path | None = None) -> Settings:
             policy_files=tuple(absolute_path(Path(os.path.expandvars(value))) for value in policy_files),
         ),
         repository_allowlist=tuple(absolute_path(Path(os.path.expandvars(value))) for value in repository_allowlist),
+        supervisor_interval_seconds=supervisor_interval,
+        supervisor_probe_stalled=_boolean(
+            data,
+            "supervisor",
+            "probe_stalled",
+            base.supervisor_probe_stalled,
+        ),
+        supervisor_interrupt_stalled=_boolean(
+            data,
+            "supervisor",
+            "interrupt_stalled",
+            base.supervisor_interrupt_stalled,
+        ),
+        supervisor_restart_orphaned=_boolean(
+            data,
+            "supervisor",
+            "restart_orphaned",
+            base.supervisor_restart_orphaned,
+        ),
+        supervisor_max_remediation_attempts=supervisor_attempts,
+        supervisor_capture_interactive=_boolean(
+            data,
+            "supervisor",
+            "capture_interactive",
+            base.supervisor_capture_interactive,
+        ),
+        supervisor_capture_lines=supervisor_capture_lines,
     )
     require_trusted(
         inspect_path(path, label="configuration file", allow_missing=False),
@@ -552,6 +616,15 @@ def as_dict(s: Settings) -> dict[str, Any]:
             "archive_level": s.archive_level,
             "write_sha256": s.write_sha256,
             "validate_before_archive": s.validate_before_archive,
+        },
+        "supervisor": {
+            "interval_seconds": s.supervisor_interval_seconds,
+            "probe_stalled": s.supervisor_probe_stalled,
+            "interrupt_stalled": s.supervisor_interrupt_stalled,
+            "restart_orphaned": s.supervisor_restart_orphaned,
+            "max_remediation_attempts": s.supervisor_max_remediation_attempts,
+            "capture_interactive": s.supervisor_capture_interactive,
+            "capture_lines": s.supervisor_capture_lines,
         },
         "executors": {
             name: {

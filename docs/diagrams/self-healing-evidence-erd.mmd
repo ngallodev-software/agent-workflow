@@ -1,0 +1,58 @@
+erDiagram
+    RUN ||--o{ HEALTH_SAMPLE : emits
+    RUN ||--o{ TERMINAL_EVENT : captures
+    RUN ||--o{ PERMISSION_EVENT : observes
+    RUN ||--o{ INCIDENT_EVENT : diagnoses
+    RUN ||--o{ REMEDIATION_EVENT : attempts
+    RUN ||--o| PROCESS_RESULT : terminates_with
+    INCIDENT_EVENT ||--o{ REMEDIATION_EVENT : motivates
+    REMEDIATION_EVENT }o--o| RUN : may_create_retry
+
+    RUN {
+      string session_id PK
+      string launch_contract_sha256
+      string retry_of_run_id
+    }
+    HEALTH_SAMPLE {
+      string recorded_at
+      int runner_pid
+      int executor_pid
+      boolean executor_alive
+      int rss_bytes
+      int disk_free_bytes
+      string last_semantic_progress_at
+    }
+    TERMINAL_EVENT {
+      string recorded_at
+      string pane_id
+      string content_sha256
+      string bounded_content
+    }
+    PERMISSION_EVENT {
+      string event_id PK
+      string state
+      string source
+      string policy_rule_id
+      string evidence_sha256
+    }
+    INCIDENT_EVENT {
+      string incident_id PK
+      string category
+      string severity
+      string fingerprint
+    }
+    REMEDIATION_EVENT {
+      string event_id PK
+      string incident_id FK
+      string rule_id
+      string action
+      string outcome
+    }
+    PROCESS_RESULT {
+      int exit_code
+      int signal
+      boolean timed_out
+      boolean stdout_truncated
+      int stdout_bytes
+      int peak_rss_bytes
+    }

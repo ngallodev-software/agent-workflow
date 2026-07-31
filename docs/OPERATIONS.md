@@ -8,8 +8,7 @@ Automatic/default Codex routing is fixed to `gpt-5.6-luna` with reasoning
 effort `low`, `medium`, or `high`; `medium` is the shipped default. Missing or
 invalid effort, non-Luna models, and explicit Codex bypasses fail before child
 process creation. Split hard work into bounded tickets rather than selecting
-another automatic model. A manually supplied non-Codex command remains an
-explicit operator action.
+another automatic model.
 
 ## Execution model
 
@@ -92,7 +91,47 @@ agent-workflow kill SESSION
 agent-workflow restart SESSION --new-session RETRY_SESSION
 ```
 
-A potential stall is a diagnostic state, not authorization to terminate. Inspect terminal liveness, pane death, heartbeat age, output-log movement, executor-event growth, lifecycle events, and durable messages before acting. `possibly_stalled` requires silence across the heartbeat, log, and executor-event channels.
+A potential stall is a diagnostic state, not authorization to terminate. Inspect runner heartbeat, executor/process liveness, pane death, semantic progress, terminal snapshots, output/event growth, permission state, lifecycle events, and durable messages before acting. A fresh supervisor heartbeat does not count as semantic progress and cannot conceal a stuck executor.
+
+## Foreground supervision and bounded recovery
+
+Run one reconciliation cycle during diagnosis or a continuous foreground loop while delegations are active:
+
+```bash
+agent-workflow --json supervisor once
+agent-workflow supervisor run --interval-seconds 10
+```
+
+Safe defaults collect evidence, repair a missing or corrupt `status.json` only when immutable authority can reconstruct it, deduplicate incidents, and send at most one progress probe per incident/rule ceiling. Automatic interruption and restart are disabled by default:
+
+```bash
+agent-workflow supervisor run \
+  --interrupt-stalled \
+  --restart-orphaned \
+  --max-remediation-attempts 1
+```
+
+Enable those switches only under an operator-approved policy. A restart always creates a new run ID and preserves retry lineage. The supervisor never approves a permission request, changes a model/tool allowlist, increases resource limits, accepts implementation evidence, merges a branch, or deletes a run.
+
+Key evidence:
+
+| Artifact | Operational use |
+|---|---|
+| `run-health-samples.jsonl` | distinguish runner/executor liveness, host pressure, and semantic progress |
+| `terminal-events.jsonl` | inspect bounded changed interactive output without treating pane text as authority |
+| `permission-events.jsonl` | surface observed permission waits, denials, and later clears |
+| `incident-events.jsonl` | stable typed diagnosis with deduplicated fingerprints |
+| `remediation-events.jsonl` | rule, attempt, action, result, and verification history |
+| `process-result.json` | exact exit/signal, timeout/cancel, bytes, and truncation outcome |
+
+### Incident response order
+
+1. Read `agent-workflow status SESSION` and the latest incident/remediation records.
+2. Confirm immutable launch authority and whether semantic progress actually stopped.
+3. Resolve permission, credential, sandbox, or policy incidents manually; do not widen access through a retry.
+4. For a transient stall, allow the bounded probe before opting into interruption.
+5. Restart only when the original process is proven unavailable or terminal and the retry budget permits it.
+6. Verify the new run from durable evidence, not from a pane appearing active.
 
 ## Durable messages
 

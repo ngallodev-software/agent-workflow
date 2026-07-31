@@ -1,0 +1,22 @@
+phase: "3"
+name: "hierarchy-and-performance-control"
+mandatory_order: ["SUP-007", "SUP-008", "SUP-GATE-3"]
+tasks:
+  - id: "SUP-007"
+    tier: A
+    session: "hierarchical-supervision-sup-007"
+    prompt: "tickets/SUP-007-hierarchy-integration.md"
+    backlog_id: "SUP-007"
+    dependencies: ["SUP-GATE-2"]
+  - id: "SUP-008"
+    tier: A
+    session: "adaptive-performance-sup-008"
+    prompt: "tickets/SUP-008-performance-control.md"
+    backlog_id: "SUP-008"
+    dependencies: ["SUP-007"]
+  - id: "SUP-GATE-3"
+    tier: A
+    task_type: gate
+    session: "self-healing-phase-3-gate"
+    prompt: "tickets/SUP-GATE-3.md"
+    dependencies: ["SUP-008"]

@@ -19,7 +19,7 @@ def test_installed_cli_exposes_operable_public_surface(
     assert version.stdout.strip() == f"agent-workflow {expected_version}"
 
     help_result = installed_product.run("--help", env=product_env, check=True)
-    for command in ("doctor", "launch", "workflow", "eval", "pack", "worktree"):
+    for command in ("doctor", "launch", "workflow", "eval", "pack", "worktree", "supervisor"):
         assert command in help_result.stdout
     launch_help = installed_product.run("launch", "--help", env=product_env, check=True)
     launch_help_text = " ".join(launch_help.stdout.split())

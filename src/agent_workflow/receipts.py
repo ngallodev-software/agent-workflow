@@ -49,6 +49,12 @@ SEALED_OPTIONAL_ARTIFACTS = (
     "steering-delivery.jsonl",
     "command-catalog.json",
     "command-card.md",
+    "run-health-samples.jsonl",
+    "terminal-events.jsonl",
+    "permission-events.jsonl",
+    "incident-events.jsonl",
+    "remediation-events.jsonl",
+    "process-result.json",
 )
 SEALED_OPTIONAL_TREES = ("assignments",)
 

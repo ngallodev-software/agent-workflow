@@ -14,11 +14,20 @@ import uuid
 from pathlib import Path
 from typing import Any, BinaryIO
 
+from . import tmux
 from .errors import WorkflowError
 from .contracts import read_launch_contract
 from .completion import substantive_completion_errors
 from .events import append_lifecycle_event
 from .diagnostics import classify_failure
+from .health import (
+    PROCESS_RESULT_SCHEMA,
+    last_event,
+    record_health_sample,
+    record_incident,
+    record_terminal_capture,
+    write_process_result,
+)
 from .eval.commands import collect_commands, specs_from_data
 from .eval.scope import ScopePolicy, collect_scope
 from .executors import accumulate_usage, event_text, parse_event, usage_update
@@ -41,6 +50,7 @@ from .provider_evidence import MAX_PROVIDER_EVENT_BYTES, write_provider_evidence
 from .process import (
     EnvironmentPolicy,
     ProcessRequest,
+    redact_argv,
     redact_bytes,
     redact_text,
     run_bytes,
@@ -750,6 +760,37 @@ def execute(
         )
     except WorkflowError as exc:
         finished_at = utc_now()
+        category = classify_failure(exit_code=127, stderr=str(exc))
+        write_process_result(
+            run_dir / "process-result.json",
+            {
+                "schema": PROCESS_RESULT_SCHEMA,
+                "argv": list(redact_argv(command, secret_values=secret_values)),
+                "resolved_executable": None,
+                "returncode": 127,
+                "exit_code": 127,
+                "signal": None,
+                "timed_out": False,
+                "cancelled": False,
+                "stdout_truncated": False,
+                "stderr_truncated": False,
+                "stdout_bytes": 0,
+                "stderr_bytes": 0,
+                "duration_seconds": round(time.monotonic() - wall_started, 6),
+                "error_category": category,
+                "runner_pid": os.getpid(),
+                "executor_pid": None,
+                "recorded_at": finished_at,
+            },
+        )
+        record_incident(
+            run_dir,
+            session_id=str(launch["session"]["id"]),
+            category=category or "spawn_error",
+            severity="high",
+            summary="executor could not be started",
+            evidence={"exit_code": 127, "error": str(exc)},
+        )
         update_provenance(
             run_dir,
             finished_at=finished_at,
@@ -764,9 +805,7 @@ def execute(
             "status": "failed",
             "finished_at": finished_at,
             "exit_code": 127,
-            "failure_category": classify_failure(
-                exit_code=127, stderr=str(exc)
-            ),
+            "failure_category": category,
             "updated_at": finished_at,
         }
         atomic_write_json(run_dir / "final-status.json", final_status)
@@ -880,12 +919,41 @@ def execute(
         atomic_write_json(
             heartbeat_path,
             {
-                "schema": "agent-workflow/heartbeat/v1",
-                "pid": process.pid,
+                "schema": "agent-workflow/heartbeat/v2",
+                "runner_pid": os.getpid(),
+                "executor_pid": process.pid,
                 "at": utc_now(),
             },
         )
         active = process.poll() is None
+        pane_id = os.environ.get("TMUX_PANE") if interactive else None
+        if pane_id:
+            try:
+                record_terminal_capture(
+                    run_dir,
+                    session_id=str(launch["session"]["id"]),
+                    pane_id=pane_id,
+                    content=tmux.capture(pane_id, 200),
+                    secret_values=secret_values,
+                )
+            except WorkflowError as exc:
+                # Terminal capture is observability evidence, not execution
+                # authority. Record the failure without terminating useful work.
+                record_incident(
+                    run_dir,
+                    session_id=str(launch["session"]["id"]),
+                    category="terminal_capture_unavailable",
+                    severity="medium",
+                    summary="interactive pane capture failed",
+                    evidence={"error": str(exc), "pane_id": pane_id},
+                )
+        record_health_sample(
+            run_dir,
+            session_id=str(launch["session"]["id"]),
+            runner_pid=os.getpid(),
+            executor_pid=process.pid,
+            tmux_pane_id=pane_id,
+        )
         deliver_pending(run_dir, active=active)
         _drain_control_bridge(run_dir, active=active)
         wait_seconds = max(0.1, heartbeat_seconds)
@@ -921,6 +989,21 @@ def execute(
             thread.join(timeout=2)
         if any(thread.is_alive() for thread in threads):
             pump_errors.append("stream pump did not stop after descriptor close")
+    process_result = process.result()
+    write_process_result(
+        run_dir / "process-result.json",
+        {
+            "schema": PROCESS_RESULT_SCHEMA,
+            **process_result.as_dict(include_output=False),
+            "runner_pid": os.getpid(),
+            "executor_pid": process.pid,
+            "recorded_at": utc_now(),
+        },
+    )
+    if process_result.stdout_truncated:
+        pump_errors.append("stdout capture limit exceeded; output truncated")
+    if process_result.stderr_truncated:
+        pump_errors.append("stderr capture limit exceeded; output truncated")
     if pump_errors:
         return_code = return_code or 1
 
@@ -1040,28 +1123,60 @@ def execute(
         },
     )
     current = _read_status(status_path)
+    terminal_event = last_event(run_dir / "terminal-events.jsonl")
+    diagnostic_stderr = stderr_path.read_text(
+        encoding="utf-8", errors="replace"
+    )[-8192:]
+    if terminal_event and isinstance(terminal_event.get("content"), str):
+        diagnostic_stderr += "\n" + str(terminal_event["content"])[-8192:]
+    failure_category = (
+        "budget_exhausted"
+        if budget_exceeded
+        else "timeout"
+        if timed_out
+        else classify_failure(
+            exit_code=return_code,
+            stderr=diagnostic_stderr,
+            errors=pump_errors,
+        )
+    )
     final_status = {
         **_authoritative_projection(launch, run_dir, current),
         "status": terminal_status,
         "finished_at": finished_at,
         "exit_code": return_code,
         "pump_errors": pump_errors,
-        "failure_category": (
-            "budget_exhausted"
-            if budget_exceeded
-            else "timeout"
-            if timed_out
-            else classify_failure(
-                exit_code=return_code,
-                stderr=stderr_path.read_text(encoding="utf-8", errors="replace")[-8192:],
-                errors=pump_errors,
-            )
-        ),
+        "failure_category": failure_category,
+        "stdout_bytes": process_result.stdout_bytes,
+        "stderr_bytes": process_result.stderr_bytes,
+        "stdout_truncated": process_result.stdout_truncated,
+        "stderr_truncated": process_result.stderr_truncated,
         "budget_exceeded": budget_exceeded,
         "wall_seconds": round(wall_seconds, 6),
         "updated_at": finished_at,
     }
     _capture_patch(workdir, run_dir, run_dir / "patch.diff")
+    record_health_sample(
+        run_dir,
+        session_id=str(launch["session"]["id"]),
+        runner_pid=os.getpid(),
+        executor_pid=process.pid,
+        tmux_pane_id=os.environ.get("TMUX_PANE") if interactive else None,
+    )
+    if failure_category:
+        record_incident(
+            run_dir,
+            session_id=str(launch["session"]["id"]),
+            category=failure_category,
+            severity="high",
+            summary="executor finished with a classified failure",
+            evidence={
+                "exit_code": return_code,
+                "pump_errors": pump_errors,
+                "stdout_truncated": process_result.stdout_truncated,
+                "stderr_truncated": process_result.stderr_truncated,
+            },
+        )
     atomic_write_json(run_dir / "final-status.json", final_status)
     write_execution_evidence(run_dir, elapsed_seconds=wall_seconds)
     try:

@@ -13,6 +13,18 @@ orchestrator_side = "left"
 max_interactive_agent_width = 2
 max_interactive_agent_vertical = 3
 
+[supervisor]
+# The supervisor is foregroundable; no background daemon is installed.
+interval_seconds = 10
+capture_interactive = true
+capture_lines = 200
+# A progress probe is a safe message-only remediation and is enabled by default.
+probe_stalled = true
+# Authority-changing actions remain explicit opt-ins.
+interrupt_stalled = false
+restart_orphaned = false
+max_remediation_attempts = 1
+
 [git]
 branch_prefix = "impl/"
 require_clean_source = true

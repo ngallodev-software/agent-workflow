@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/process-result/v1",
+  "type": "object",
+  "required": ["schema", "argv", "resolved_executable", "returncode", "exit_code", "signal", "timed_out", "cancelled", "stdout_truncated", "stderr_truncated", "stdout_bytes", "stderr_bytes", "duration_seconds", "error_category", "runner_pid", "executor_pid", "recorded_at"],
+  "properties": {
+    "schema": {"const": "agent-workflow/process-result/v1"},
+    "argv": {"type": "array", "maxItems": 256, "items": {"type": "string", "maxLength": 16384}},
+    "resolved_executable": {"type": ["string", "null"], "maxLength": 4096},
+    "executable_version": {"type": ["string", "null"], "maxLength": 4096},
+    "executable_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+    "returncode": {"type": "integer"},
+    "exit_code": {"type": ["integer", "null"]},
+    "signal": {"type": ["integer", "null"], "minimum": 1},
+    "timed_out": {"type": "boolean"},
+    "cancelled": {"type": "boolean"},
+    "stdout_truncated": {"type": "boolean"},
+    "stderr_truncated": {"type": "boolean"},
+    "stdout_bytes": {"type": "integer", "minimum": 0},
+    "stderr_bytes": {"type": "integer", "minimum": 0},
+    "stdout_spool": {"type": ["string", "null"], "maxLength": 4096},
+    "stderr_spool": {"type": ["string", "null"], "maxLength": 4096},
+    "duration_seconds": {"type": "number", "minimum": 0},
+    "error_category": {"type": "string", "minLength": 1, "maxLength": 128},
+    "environment_policy": {"type": "string", "minLength": 1, "maxLength": 128},
+    "runner_pid": {"type": "integer", "minimum": 1},
+    "executor_pid": {"type": ["integer", "null"], "minimum": 1},
+    "recorded_at": {"type": "string", "minLength": 1, "maxLength": 64}
+  },
+  "additionalProperties": false
+}

@@ -34,9 +34,16 @@ The deterministic fake executor and tmux shim are external executables, not mock
 - deterministic advisory routing that cannot override enforced policy;
 - provider delta/cumulative/terminal accounting and duplicate identity rules;
 - evaluation template/schema semantics, unavailable-data handling, cohort identity drift, deterministic archive inputs, and low-sample claims;
-- the bounded JSON Pointer subset used for result binding.
+- the bounded JSON Pointer subset used for result binding;
+- health collection, semantic-progress calculation, terminal-capture redaction/change detection, permission transitions, incident deduplication, projection repair, and remediation ceilings.
 
 Prefer one parameterized matrix to many nearly identical tests.
+
+### Supervisor and recovery journeys
+
+Supervisor coverage must prove behavior through the installed CLI where host facilities are available. Required journeys include a progressing run, a live process with no semantic progress, an interactive permission wait, output-capture exhaustion, process/pane loss, corrupt mutable projection, missed wake/replay, one-probe idempotence, explicit interrupt/restart opt-in, and supervisor restart. Every journey must assert durable incident/remediation evidence and retry lineage rather than merely inspect console text.
+
+Low-level tests may inject deterministic health samples or fake tmux/process observations, but they may not make mutable status or pane text authoritative. Live host/executor matrices remain gated under `SUP-006`.
 
 ### Release checks
 

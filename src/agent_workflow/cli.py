@@ -67,6 +67,7 @@ from .sessions import steer as steer_session
 from .sessions import terminate as terminate_session
 from .sessions import wait_for_message
 from .state import list_statuses, read_status, repair_status, runs_root
+from .supervisor import SupervisorOptions, supervise_loop, supervise_once
 from .tmux import attach as attach_tmux
 from .util import atomic_write_bytes, atomic_write_json, expand_path, read_json
 from .scheduler import SchedulerService
@@ -107,7 +108,7 @@ def _print_table(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="agent-workflow")
-    parser.add_argument("--version", action="version", version="%(prog)s 0.4.0")
+    parser.add_argument("--version", action="version", version="%(prog)s 0.5.0")
     parser.add_argument("--config", type=Path, help="override config.toml path")
     parser.add_argument(
         "--json",
@@ -299,6 +300,57 @@ def build_parser() -> argparse.ArgumentParser:
         "repair", help="rebuild a mutable status projection from run authority"
     )
     repair.add_argument("session_id")
+
+    supervisor = commands.add_parser(
+        "supervisor",
+        help="collect health evidence and apply bounded remediation policy",
+    )
+    supervisor_commands = supervisor.add_subparsers(
+        dest="supervisor_command", required=True
+    )
+
+    def add_supervisor_options(command: argparse.ArgumentParser) -> None:
+        command.add_argument(
+            "--session",
+            action="append",
+            default=[],
+            help="limit supervision to a run ID; repeatable",
+        )
+        command.add_argument(
+            "--capture-interactive",
+            action=argparse.BooleanOptionalAction,
+            default=None,
+        )
+        command.add_argument("--capture-lines", type=int)
+        command.add_argument(
+            "--probe-stalled",
+            action=argparse.BooleanOptionalAction,
+            default=None,
+        )
+        command.add_argument(
+            "--interrupt-stalled",
+            action=argparse.BooleanOptionalAction,
+            default=None,
+            help="opt in to bounded Ctrl-C after the progress-probe allowance is exhausted",
+        )
+        command.add_argument(
+            "--restart-orphaned",
+            action=argparse.BooleanOptionalAction,
+            default=None,
+            help="opt in to lineage-preserving restart of orphaned interactive runs",
+        )
+        command.add_argument("--max-remediation-attempts", type=int)
+
+    supervisor_once_parser = supervisor_commands.add_parser(
+        "once", help="run one reconciliation and remediation cycle"
+    )
+    add_supervisor_options(supervisor_once_parser)
+    supervisor_run_parser = supervisor_commands.add_parser(
+        "run", help="run the foreground supervisor loop"
+    )
+    add_supervisor_options(supervisor_run_parser)
+    supervisor_run_parser.add_argument("--interval-seconds", type=int)
+    supervisor_run_parser.add_argument("--max-cycles", type=int)
 
     attach = commands.add_parser("attach", help="foreground a delegation")
     attach.add_argument("session_id")
@@ -818,6 +870,35 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 print(rendered, end="")
                 return 0
+        elif args.command == "supervisor":
+            options = SupervisorOptions.from_settings(
+                settings,
+                capture_interactive=args.capture_interactive,
+                capture_lines=args.capture_lines,
+                probe_stalled=args.probe_stalled,
+                interrupt_stalled=args.interrupt_stalled,
+                restart_orphaned=args.restart_orphaned,
+                max_remediation_attempts=args.max_remediation_attempts,
+            )
+            if args.supervisor_command == "once":
+                data = supervise_once(
+                    settings,
+                    session_ids=args.session,
+                    options=options,
+                )
+            else:
+                reports = supervise_loop(
+                    settings,
+                    interval_seconds=args.interval_seconds,
+                    max_cycles=args.max_cycles,
+                    session_ids=args.session,
+                    options=options,
+                )
+                data = {
+                    "schema": "agent-workflow/supervisor-loop-report/v1",
+                    "cycle_count": len(reports),
+                    "reports": reports,
+                }
         elif args.command == "status":
             capture_lines = (
                 settings.capture_lines if args.capture == -1 else args.capture

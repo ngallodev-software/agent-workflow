@@ -1,40 +1,89 @@
-# agent-workflow
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/agent-workflow-hero-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/agent-workflow-hero-light.svg">
+    <img alt="agent-workflow — durable orchestration for coding-agent teams" src="docs/assets/agent-workflow-hero-light.svg" width="100%">
+  </picture>
+</div>
 
-`agent-workflow` is a terminal-first control plane for bounded coding-agent work. It launches agents in isolated Git worktrees and tmux sessions, preserves durable evidence, supports restart-safe dependency graphs, and keeps review and acceptance under operator control.
+<div align="center">
+  <strong>Local-first orchestration for bounded coding-agent work.</strong><br>
+  Isolated Git worktrees, tmux-native execution, replayable control, sealed evidence, and policy-bounded recovery.
+</div>
 
-The project is **pre-public-release**. Core behavior is usable, but public distribution is blocked on deterministic execution/security controls, license selection, a monitored vulnerability channel, external compatibility runs, and release-governance decisions tracked in [Public release readiness](docs/PUBLIC_RELEASE_READINESS.md).
+<div align="center">
+  <a href="docs/INSTALLATION.md">Install</a> ·
+  <a href="docs/COMMAND_REFERENCE.md">Commands</a> ·
+  <a href="docs/ARCHITECTURE.md">Architecture</a> ·
+  <a href="docs/OPERATIONS.md">Operations</a> ·
+  <a href="docs/BACKLOG.md">Roadmap</a>
+</div>
 
-## What it does
+> **Status:** pre-public-release. The single-host execution, evidence, workflow, messaging, evaluation, MCP-read, and foreground supervision foundations are implemented. Hierarchical root-orchestrator → team-lead → worker orchestration is designed and sequenced, but remains gated by the decisions and dependencies in [`docs/BACKLOG.md`](docs/BACKLOG.md).
 
-- creates and manages ticket worktrees;
-- launches named Codex, Claude, or explicit commands through one execution path;
-- records prompts, argv, source state, logs, structured provider events, patches, completion handoffs, and immutable receipts;
-- supports status, attach, tail, interrupt, terminate, restart, review, acceptance, and rejection;
-- stores durable steer, progress, acknowledgement, and watch records;
-- schedules restart-safe workflow DAGs with bounded parallelism, approval gates, result bindings, retries, and aggregate receipts;
-- validates and archives prompt packs deterministically;
-- collects deterministic evaluation evidence and compares matched baseline/candidate cohorts;
-- exposes a bounded read-only local stdio MCP adapter.
+## Why agent-workflow exists
 
-It does **not** merge branches, kill suspected stalls automatically, provide a daemon or web UI, perform remote execution, or choose models autonomously.
+Coding agents are useful, but unattended work becomes difficult to trust when the only record is a terminal pane someone happened to watch. `agent-workflow` turns delegation into a reconstructable process:
 
-## Requirements
+- every run starts from immutable launch authority;
+- implementation work is isolated in a Git worktree;
+- control messages and acknowledgements are durable and replayable;
+- process, terminal, permission, incident, and remediation evidence survive the interactive session;
+- completion claims are validated against substantive evidence;
+- review and acceptance remain explicit human authority.
+
+The application favors **deterministic control code around probabilistic agents**. tmux is the presentation layer; durable records and sealed receipts are the source of truth.
+
+## What works today
+
+| Capability | Current implementation |
+|---|---|
+| Isolated execution | Ticket worktrees, clean-source checks, bounded executor argv/environment, named tmux sessions and panes |
+| Durable run evidence | Launch contract, source baseline, prompt, command, output, provider events, patch, completion handoff, process result, final receipt |
+| Two-way control | Append-only steer, progress, acknowledgement, watch, cooperative `control-file-v1` delivery, replay-safe outcomes |
+| Workflow scheduling | Restart-safe DAGs, bounded parallelism, approval gates, result bindings, retries, aggregate receipts |
+| Unattended diagnosis | Separate runner liveness and semantic progress, interactive terminal snapshots, process/resource samples, permission and incident journals |
+| Bounded self-correction | Foreground supervisor, projection repair, one-shot progress probes, opt-in interruption and lineage-preserving restart |
+| Evaluation | Deterministic templates, provider-neutral usage evidence, cohort comparison, sealed-run assessment and ledgers |
+| MCP | Bounded read-only local stdio adapter for command and run context |
+
+The application does **not** merge branches, approve permissions, expand filesystem/network authority, accept work automatically, or silently retry without preserved lineage.
+
+## Architecture at a glance
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/architecture-overview-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/architecture-overview-light.svg">
+  <img alt="Root orchestrator, team leads, worker panes, and the durable evidence plane" src="docs/assets/architecture-overview-light.svg" width="100%">
+</picture>
+
+The graphic shows the approved target topology. The current runtime implements the worker/run, durable evidence, messaging, workflow, and supervisor foundations. The multi-window team-lead layer is described in [`docs/HIERARCHICAL_MULTI_TEAM_ORCHESTRATION_DESIGN.md`](docs/HIERARCHICAL_MULTI_TEAM_ORCHESTRATION_DESIGN.md) and remains backlog-gated.
+
+### Authority model
+
+```text
+Immutable authority                 Recoverable projections
+────────────────────────────────    ────────────────────────────────
+launch-contract.json                status.json
+append-only messages/journals       tmux session/window/pane layout
+workflow snapshot + events          terminal capture returned by status
+sealed completion and receipts      derived summaries and dashboards
+```
+
+A projection may be rebuilt. Authority-changing actions—permission grants, policy expansion, acceptance, merge, destructive cleanup—cannot be inferred from a projection or delegated to an unverified agent.
+
+## Quick start
+
+### Requirements
 
 - Python 3.11+
 - Git
 - tmux
 - Bash
-- GNU tar and zstd for deterministic `.tar.zst` archives
-- a supported coding-agent executable, or an explicit command
+- GNU tar and zstd for deterministic archives
+- Codex, Claude, or an explicit executor command
 
-Core installation includes `jsonschema` and the pinned MCP SDK required by the
-installed `agent-workflow-mcp` entry point. Optional dependency groups cover
-evaluation, statistics, telemetry, MLflow, and shell completion; `[mcp]` is
-retained as a compatibility alias.
-
-## Install
-
-From a source checkout:
+### Install from a source checkout
 
 ```bash
 ./install.sh
@@ -42,9 +91,9 @@ export PATH="$HOME/.local/bin:$PATH"
 agent-workflow doctor
 ```
 
-The installer uses an editable local installation, links the shipped skills into supported discovery roots, and creates a starter XDG configuration without replacing unrelated files. See [Installation](docs/INSTALLATION.md) and [`config/agent-workflow.example.toml`](config/agent-workflow.example.toml).
+The installer creates an editable local installation, links repository skills into supported discovery roots, and writes a starter XDG configuration without replacing unrelated files. See [`docs/INSTALLATION.md`](docs/INSTALLATION.md).
 
-## First run
+### Launch and inspect a run
 
 ```bash
 agent-workflow worktree create /path/to/repo TICKET-1 HEAD
@@ -60,30 +109,73 @@ agent-workflow status ticket-1 --capture 50
 agent-workflow attach ticket-1
 ```
 
-An explicit executor command can be supplied after `--`:
+Use an explicit command after `--` when the executor is not configured:
 
 ```bash
 agent-workflow launch ticket-1 /path/to/worktree ticket.md -- \
   codex exec --sandbox workspace-write --skip-git-repo-check -
 ```
 
-Review and disposition remain explicit:
+### Control the run durably
 
 ```bash
-agent-workflow review ticket-1 --actor reviewer --reason "evidence checked"
-agent-workflow accept ticket-1 --actor reviewer --reason "criteria met" --revision SHA
-```
+agent-workflow steer ticket-1 \
+  "Run the focused tests before editing." \
+  --actor orchestrator
 
-## Durable control
-
-```bash
-agent-workflow steer ticket-1 "Run the focused tests before editing." --actor orchestrator
 agent-workflow watch ticket-1 --after 0 --timeout 300
-agent-workflow progress ticket-1 "Tests are green." --actor child
+agent-workflow progress ticket-1 "Focused tests pass." --actor child
 agent-workflow ack ticket-1 MESSAGE_ID "Applied." --actor child
 ```
 
-The append-only message log is authoritative. tmux wakeups are only best-effort hints. A steer remains pending until durable adapter and child acknowledgement evidence records its disposition. Configured cooperative executors may opt into `control-file-v1`; unverified executor modes report `unsupported` rather than treating terminal output as proof. Native live-executor compatibility remains tracked in [BACKLOG.md](docs/BACKLOG.md).
+The journal commit happens before any tmux wake hint. A request remains pending until durable delivery and acknowledgement evidence records its disposition.
+
+### Run the foreground supervisor
+
+```bash
+# One evidence/reconciliation cycle.
+agent-workflow supervisor once --json
+
+# Continuous foreground supervision; safe status probes are enabled by default.
+agent-workflow supervisor run --interval-seconds 10
+
+# Authority-changing recovery is always explicit.
+agent-workflow supervisor run \
+  --interrupt-stalled \
+  --restart-orphaned \
+  --max-remediation-attempts 1
+```
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/self-healing-loop-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/self-healing-loop-light.svg">
+  <img alt="Observe, diagnose, authorize, act, verify, and record self-healing loop" src="docs/assets/self-healing-loop-light.svg" width="100%">
+</picture>
+
+The supervisor is deliberately foregroundable rather than a hidden daemon. It automatically repairs mutable status projections and may send a bounded progress probe. Interrupt and restart rules remain disabled unless the operator authorizes them in configuration or on the command line. Permission grants and acceptance never become automatic.
+
+## Evidence produced by a run
+
+The configured state root normally contains:
+
+```text
+~/.local/state/agent-workflow/runs/<session-id>/
+├── launch-contract.json          immutable launch authority
+├── source-baseline.json          source identity and cleanliness evidence
+├── output.log                    normalized non-interactive output
+├── executor-events.jsonl         structured provider stream
+├── terminal-events.jsonl         bounded change-driven interactive snapshots
+├── run-health-samples.jsonl      process, resource, and progress samples
+├── permission-events.jsonl       observed permission waits and denials
+├── incident-events.jsonl         typed unattended-diagnosis findings
+├── remediation-events.jsonl      attempted correction and verification trail
+├── process-result.json           exit, signal, timeout, byte, and truncation facts
+├── completion.json               validated child handoff
+├── patch.diff                    collected implementation delta
+└── final-receipt.json            sealed artifact inventory and checksums
+```
+
+Worktree `.delegations/` entries are only discoverability links. The XDG state directory remains the evidence authority.
 
 ## Workflow graphs
 
@@ -96,9 +188,9 @@ agent-workflow workflow seal ./workflow-run ./workflow.json
 agent-workflow workflow verify ./workflow-run ./workflow.json
 ```
 
-Workflow state is reconstructed from an immutable normalized snapshot and append-only event journal. Child sessions use the normal launch service. Approval nodes rely on canonical lifecycle receipts, and result bindings copy bounded JSON Pointer values from sealed predecessor results.
+Workflow state is reconstructed from an immutable normalized snapshot and append-only event journal. Child tasks use the same launch and receipt path as direct runs.
 
-Authorized templates:
+Authorized templates include:
 
 ```bash
 agent-workflow workflow template pipeline ./spec.json --output ./workflow.json
@@ -106,59 +198,54 @@ agent-workflow workflow template parallel-review-fan-in ./spec.json --output ./w
 agent-workflow workflow template implementation-independent-review ./spec.json --output ./workflow.json
 ```
 
-## Prompt packs
+## Prompt packs and evaluation
 
 ```bash
 agent-workflow pack scaffold ./my-pack --phases 3
 agent-workflow pack validate ./my-pack
 agent-workflow pack archive ./my-pack ./my-pack.tar.zst
-```
 
-Prompt-pack dependencies form a validated cross-phase DAG. Tickets may declare JSON Schema result contracts whose validated handoffs are sealed with run evidence. See [Prompt packs](docs/PROMPT_PACKS.md).
-
-## Evaluation
-
-```bash
 agent-workflow eval template evaluation-plan --output ./evaluation.json
-agent-workflow eval template benchmark-manifest --output ./benchmark.json
-agent-workflow eval validate ./evaluation.json --pack ./prompt-pack
-agent-workflow eval validate-benchmark ./benchmark.json --pack ./prompt-pack
+agent-workflow eval validate ./evaluation.json --pack ./my-pack
 agent-workflow eval score SESSION
 agent-workflow eval report SESSION --format markdown
-agent-workflow eval collect SESSION --output ./candidate-trials.json
-agent-workflow eval benchmark-report ./benchmark.json ./baseline-trials.json ./candidate-trials.json \
-  --output ./benchmark-report.json --markdown ./benchmark-report.md
-agent-workflow eval ledger-row SESSION --output ./ledger-row.json
-agent-workflow eval archive-plan SESSION --retention-class release --output ./archive-plan.json
-agent-workflow assess-sealed-runs ./exported-runs --output ./assessment.json
 ```
 
-The canonical JSON templates live in `templates/evaluation/` and are installed with the package. They cover rich evaluation plans, benchmark/cohort identity, sealed-run assessment, benchmark reporting, evidence-first ledger rows, and lifecycle/archive inputs. Rendering is deterministic, unavailable values remain `null` or `unavailable`, and repository validation never requires `MANIFEST.sha256` or another tracked `*.sha256` file.
+Prompt-pack dependencies form a validated cross-phase DAG. Evaluation evidence keeps provider totals, local estimates, unavailable values, retry lineage, source identity, and cohort comparability distinct. See [`docs/PROMPT_PACKS.md`](docs/PROMPT_PACKS.md) and [`docs/EVIDENCE_AND_EVALUATION.md`](docs/EVIDENCE_AND_EVALUATION.md).
 
-Raw provider streams are bounded and sealed before normalization. Usage evidence distinguishes delta, cumulative, and terminal totals and never mixes provider-billed cost with local estimates. Exported-run assessment keeps completion, lifecycle sealing, structured streams, scope evidence, lifecycle disposition, evaluation artifacts, and comparability separate. Benchmark reports reject declared source, pack-checksum, model, executor, case digest, or reference identity drift; count unmatched trials explicitly; and remain descriptive when evidence or sample size is insufficient. See [Evidence and evaluation](docs/EVIDENCE_AND_EVALUATION.md).
+## Security boundaries
 
-## MCP server
+`agent-workflow` is local-first, but local does not mean unbounded.
 
-The core package includes `mcp==1.28.1` and configures `agent-workflow-mcp` as
-a local stdio server in the user-level Codex and Claude Code MCP settings.
-Existing entries are preserved. The current adapter is read-only and bounded
-to configured roots. It exposes the parser-derived command catalog, an
-explicit capability manifest, and verified per-run command context/cards
-without turning CLI commands into MCP tools. It does not expose launch,
-workflow mutation, review, destructive lifecycle commands, raw shell,
-arbitrary paths, terminal capture, or HTTP. See [MCP server](docs/MCP_SERVER.md).
+- subprocesses use argv arrays rather than shell strings;
+- child environments are allowlisted;
+- executor identity and configured permission arguments are recorded;
+- launch, scope, model, and budget authority is immutable for the run;
+- terminal and journal capture is bounded;
+- automatic remediation cannot expand authority;
+- review, acceptance, and merge remain human decisions.
 
-## State and trust
+The remaining governed-sandbox and authenticated-principal work is tracked under `HARD-003`, `HARD-006`, and `HARD-007` in [`docs/BACKLOG.md`](docs/BACKLOG.md). See [`docs/SECURITY.md`](docs/SECURITY.md) for the complete trust model.
 
-Authoritative run evidence is stored below the configured XDG state root, normally:
+## Project state and roadmap
+
+The next major layer is bounded hierarchical orchestration:
 
 ```text
-~/.local/state/agent-workflow/runs/<session-id>/
+root orchestrator
+  ├── team-lead window A
+  │     ├── worker pane A1
+  │     └── worker pane A2
+  └── team-lead window B
+        ├── worker pane B1
+        └── worker pane B2
 ```
 
-Worktree `.delegations/` entries are discoverability links, not evidence authorities. Status files and terminal captures are projections. Sealed receipts, lifecycle records, workflow snapshots, workflow journals, and verified child evidence determine state transitions. See [Architecture](docs/ARCHITECTURE.md) and [Security](docs/SECURITY.md).
+The root will create and reconcile team windows, while each team lead coordinates worker panes under a narrowed delegation contract. Durable records remain authoritative across tmux loss and restart. The dependency order is explicit in [`docs/BACKLOG.md`](docs/BACKLOG.md); the full design is in [`docs/HIERARCHICAL_MULTI_TEAM_ORCHESTRATION_DESIGN.md`](docs/HIERARCHICAL_MULTI_TEAM_ORCHESTRATION_DESIGN.md).
 
-## Development and testing
+Public distribution remains blocked on release-governance and security decisions in [`docs/PUBLIC_RELEASE_READINESS.md`](docs/PUBLIC_RELEASE_READINESS.md).
+
+## Development
 
 ```bash
 ./scripts/bootstrap-dev.sh
@@ -166,26 +253,28 @@ Worktree `.delegations/` entries are discoverability links, not evidence authori
 ./scripts/release-check.sh
 ```
 
-The default suite is acceptance-first: it builds and installs a wheel, invokes public executables as subprocesses, and exercises real Git/filesystem/process journeys. `agent-workflow commands --json` exposes the parser-derived command contract; every launch seals that catalog plus a role-scoped command card so agents can invoke known signatures without routine help probing. The release check also writes JUnit results, a CycloneDX SBOM, source/build provenance, and a machine-readable blocker report. A compact invariant layer protects security, replay, accounting, and release-evidence boundaries. Strict expected-failure future journeys keep approved TDD work visible, and live tmux/provider checks remain opt-in. See [Testing](docs/TESTING.md) and [Release evidence](docs/RELEASE_EVIDENCE.md).
+The suite is acceptance-first: build a wheel, install it, and exercise public commands through real filesystem, Git, and process journeys. A compact invariant layer protects replay, security, accounting, evidence, and release boundaries. Live tmux/provider checks remain opt-in. See [`docs/TESTING.md`](docs/TESTING.md).
 
-## Documentation
+## Documentation map
 
-- [Command reference](docs/COMMAND_REFERENCE.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [Collaborative specification compiler and plugin-first decomposition](docs/SPEC_AUTHORING_PLUGIN_ARCHITECTURE.md)
-- [Repository diagrams](docs/diagrams/REPOSITORY_CHART_PACK.md)
-- [Operations](docs/OPERATIONS.md)
-- [Durable two-way orchestrator messaging design](docs/ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md)
-- [Prompt packs](docs/PROMPT_PACKS.md)
-- [Evidence and evaluation](docs/EVIDENCE_AND_EVALUATION.md)
-- [Testing](docs/TESTING.md)
-- [MCP server](docs/MCP_SERVER.md)
-- [Feature determinism and security assessment](docs/FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md)
-- [Determinism and security hardening plan](docs/DETERMINISM_SECURITY_HARDENING_PLAN.md)
-- [Public release readiness](docs/PUBLIC_RELEASE_READINESS.md)
-- [Release evidence](docs/RELEASE_EVIDENCE.md)
-- [Backlog](docs/BACKLOG.md)
-- [Contributing](docs/CONTRIBUTING.md)
-- [Support](docs/SUPPORT.md)
+| Topic | Document |
+|---|---|
+| Architecture and authority | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
+| Self-healing supervisor design | [`docs/SELF_HEALING_SUPERVISOR_ARCHITECTURE.md`](docs/SELF_HEALING_SUPERVISOR_ARCHITECTURE.md) |
+| Hierarchical orchestration | [`docs/HIERARCHICAL_MULTI_TEAM_ORCHESTRATION_DESIGN.md`](docs/HIERARCHICAL_MULTI_TEAM_ORCHESTRATION_DESIGN.md) |
+| Commands | [`docs/COMMAND_REFERENCE.md`](docs/COMMAND_REFERENCE.md) |
+| Operations and recovery | [`docs/OPERATIONS.md`](docs/OPERATIONS.md) |
+| Security | [`docs/SECURITY.md`](docs/SECURITY.md) |
+| Evidence and evaluation | [`docs/EVIDENCE_AND_EVALUATION.md`](docs/EVIDENCE_AND_EVALUATION.md) |
+| Prompt packs | [`docs/PROMPT_PACKS.md`](docs/PROMPT_PACKS.md) |
+| MCP server | [`docs/MCP_SERVER.md`](docs/MCP_SERVER.md) |
+| Testing | [`docs/TESTING.md`](docs/TESTING.md) |
+| Canonical backlog | [`docs/BACKLOG.md`](docs/BACKLOG.md) |
 
-The repository is the source of truth. Completed implementation prompt packs, release-run ledgers, and one-off audit reports are intentionally not retained as parallel documentation; Git history and the changelog preserve that history.
+## README presentation notes
+
+GitHub Flavored Markdown supports headings, tables, fenced code, images, and a sanitized subset of inline HTML. It does not provide repository authors with arbitrary page CSS or a full-page background. This README therefore uses repository-owned SVG assets and `<picture>` elements for polished light/dark presentation without depending on unsupported styles.
+
+## Contributing and support
+
+The project is not yet accepting a public compatibility promise. Internal contributors should begin with [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md), run the release checks, and preserve durable evidence contracts. Support and disclosure guidance is in [`docs/SUPPORT.md`](docs/SUPPORT.md).

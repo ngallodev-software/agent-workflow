@@ -23,7 +23,8 @@ The project is pre-public-release and does not yet have a monitored public vulne
 - Named executors are resolved to the actual launched path and probed through the bounded process substrate. Versioned compatibility data supplies adapter versions and explanation codes; unsupported governed adapters fail closed. Doctor and provenance omit credentials.
 - Prompt packs, native jobs, prompts, and MCP repository/state roots use component-wise no-follow traversal; irregular entries and content changes during validation are rejected. Pack archives are built from the validated inventory and include a typed canonical manifest.
 - Runtime schemas come only from the executing source checkout or installed package asset set; duplicate IDs, malformed assets, and missing packaged assets fail closed.
-- The project does not automatically merge, delete failed worktrees, terminate suspected stalls, expose remote execution, or authorize network MCP transport.
+- Bounded health supervision records changed/redacted terminal snapshots, process/resource samples, permission observations, typed incidents, and remediation outcomes. Mutable status repair is allowed only from immutable authority; safe progress probes are attempt-bounded. Interrupt/restart are disabled by default and cannot widen authority.
+- The project does not automatically merge, delete failed worktrees, grant permissions, expose credentials, expand sandbox/network/model policy, accept work, expose remote execution, or authorize network MCP transport.
 
 ## Known pre-public limitations
 
@@ -34,8 +35,9 @@ These are active release blockers, not theoretical future hardening:
 - MCP reads are metadata-minimal, bounded, and component-wise no-follow, but the installed stdio journey remains unverified and phase-gate acceptance remains open (`HARD-005`).
 - writable-path policy for untrusted commands is primarily post-run detection rather than a preventative OS sandbox (`HARD-003`);
 - some runner/evaluation decisions still depend on mutable status projections rather than one immutable launch authority (`HARD-004`);
-- default sensitive-content classification, redaction, and retention controls are incomplete (`HARD-006`);
-- actor strings are not authenticated principals, so reviewer independence is procedural rather than cryptographically or OS-authenticated (`HARD-007`);
+- terminal and incident capture uses bounded redaction, but comprehensive field-level classification, retention, export, and deletion policy remains incomplete (`HARD-006`, `SUP-003`);
+- process/resource telemetry is observational; preventative CPU/memory/disk/network enforcement and adaptive backpressure remain incomplete (`HARD-003`, `SUP-004`);
+- actor strings are not authenticated principals, so reviewer independence and remediation/permission attribution remain procedural rather than cryptographically or OS-authenticated (`HARD-007`, `SUP-005`);
 - config/executable ownership and compatibility evidence are enforced by explicit local/governed/release policy; repository-local hooks and filters remain an operator-visible trust decision rather than being silently disabled;
 - release checks now emit a synchronized direct-dependency lock, CycloneDX SBOM, structured test evidence, and source/build provenance (`REL-005`), but full transitive hashes, independent reproducibility, and authenticated signing/attestation remain open (`HARD-010`).
 
@@ -47,7 +49,7 @@ Do not describe these controls as complete until their backlog exit evidence exi
 - Keep credentials and private data out of prompts, argv, logs, repositories, and state bundles.
 - Review patches and evidence before executing project code or accepting a run.
 - Use separate operating-system accounts, containers, or disposable hosts for higher-risk targets.
-- Protect the XDG state directory; it can contain source paths, prompts, model output, provider streams, and code fragments.
+- Protect the XDG state directory; it can contain source paths, prompts, model output, provider streams, bounded terminal snapshots, process telemetry, permission observations, and code fragments.
 - Do not publish a receipt bundle without reviewing every sealed artifact it references.
 - Treat current actor labels as commentary, not proof of reviewer identity.
 

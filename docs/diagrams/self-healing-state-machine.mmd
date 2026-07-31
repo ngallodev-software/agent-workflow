@@ -1,0 +1,22 @@
+stateDiagram-v2
+    [*] --> Running
+    Running --> BlockedPermission: permission event pending
+    Running --> PossiblyStalled: semantic progress stale
+    Running --> Orphaned: process/pane missing
+    Running --> Completed: sealed terminal evidence
+
+    BlockedPermission --> Running: human resolves; later progress clears event
+    BlockedPermission --> Failed: denial or executor exit
+
+    PossiblyStalled --> Running: progress probe produces durable progress
+    PossiblyStalled --> InterruptionRequested: opt-in bounded interrupt
+    PossiblyStalled --> Escalated: probe allowance exhausted
+
+    Orphaned --> RetryRun: opt-in lineage-preserving restart
+    Orphaned --> Escalated: restart not authorized or fails
+
+    InterruptionRequested --> Failed
+    RetryRun --> Running
+    Completed --> [*]
+    Failed --> [*]
+    Escalated --> [*]
