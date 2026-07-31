@@ -60,6 +60,7 @@ _ROLE_COMMANDS: dict[str, frozenset[str]] = {
             "orchestrator inbox import",
             "orchestrator inbox list",
             "orchestrator inbox read",
+            "orchestrator watch",
             "worktree create",
             "worktree list",
             "worktree remove",

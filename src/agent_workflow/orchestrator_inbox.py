@@ -23,6 +23,7 @@ from .messages import message_digest, validate_message
 from .path import read_regular_file
 from .state import run_dir
 from .util import atomic_write_json, fsync_directory, utc_now, validate_id
+from . import tmux
 
 
 REGISTRY_SCHEMA = "agent-workflow/orchestrator-registry/v1"
@@ -117,7 +118,7 @@ def orchestrator_key(orchestrator_id: str) -> str:
 
 
 def orchestrator_wakeup_channel(orchestrator_id: str) -> str:
-    return f"agent-workflow/v1/orchestrator/{orchestrator_key(orchestrator_id)}"
+    return tmux.orchestrator_wakeup_channel(orchestrator_id)
 
 
 def orchestrator_dir(settings: Settings, orchestrator_id: str, *, create: bool = False) -> Path:
@@ -526,6 +527,99 @@ def import_registered(settings: Settings, orchestrator_id: str, *, session_id: s
             result = import_message(settings, orchestrator_id, child["session_id"], source)
             imported.append(_metadata(result["event"], include_content=False) | {"duplicate": result["duplicate"]})
     return {"orchestrator_id": orchestrator_id, "imported": imported, "count": len(imported)}
+
+
+def _cursor_path(directory: Path, child: Mapping[str, Any]) -> Path:
+    cursor_root = _real_directory(directory / "cursors", create=True, label="orchestrator cursor root")
+    key = hashlib.sha256(child["identity_digest"].encode("utf-8")).hexdigest()
+    return cursor_root / f"{key}.json"
+
+
+def _read_source_cursor(path: Path, child: Mapping[str, Any]) -> int:
+    if not path.exists():
+        return 0
+    _regular_file(path, label="orchestrator source cursor")
+    try:
+        value = json.loads(read_regular_file(path, max_bytes=MAX_RECORD_BYTES).data.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError, WorkflowError) as exc:
+        raise OrchestratorInboxError("orchestrator source cursor is invalid") from exc
+    if not isinstance(value, dict) or value.get("schema") != "agent-workflow/orchestrator-source-cursor/v1":
+        raise OrchestratorInboxError("orchestrator source cursor has an unsupported schema")
+    if value.get("child_identity_digest") != child["identity_digest"] or value.get("source_journal_id") != child["source_journal_id"]:
+        raise OrchestratorInboxError("orchestrator source cursor identity does not match registry")
+    sequence = value.get("last_source_sequence")
+    if not isinstance(sequence, int) or isinstance(sequence, bool) or sequence < 0:
+        raise OrchestratorInboxError("orchestrator source cursor sequence is invalid")
+    return sequence
+
+
+def _write_source_cursor(path: Path, child: Mapping[str, Any], sequence: int, message: Mapping[str, Any]) -> None:
+    value = {
+        "schema": "agent-workflow/orchestrator-source-cursor/v1",
+        "schema_version": 1,
+        "child_identity_digest": child["identity_digest"],
+        "source_journal_id": child["source_journal_id"],
+        "last_source_sequence": sequence,
+        "last_source_message_id": message["message_id"],
+        "updated_at": utc_now(),
+    }
+    atomic_write_json(path, value, mode=0o600)
+    fsync_directory(path.parent)
+
+
+def replay_registered(
+    settings: Settings,
+    orchestrator_id: str,
+    *,
+    batch_size: int = 100,
+    max_per_child: int = 25,
+) -> dict[str, Any]:
+    """Fairly replay registered journals, committing inbox before cursors."""
+    if batch_size < 1 or batch_size > MAX_SOURCE_RECORDS or max_per_child < 1 or max_per_child > MAX_SOURCE_RECORDS:
+        raise OrchestratorInboxError("replay batch limits are outside the bounded range")
+    registry = _read_registry(settings, orchestrator_id)
+    children = [item for item in registry["children"] if item["state"] == "active"]
+    directory = orchestrator_dir(settings, orchestrator_id)
+    cursors = {child["session_id"]: _read_source_cursor(_cursor_path(directory, child), child) for child in children}
+    records_by_child = {child["session_id"]: _source_records(Path(child["source_journal_path"])) for child in children}
+    if any(cursors[child["session_id"]] > len(records_by_child[child["session_id"]]) for child in children):
+        raise OrchestratorInboxError("orchestrator source cursor is ahead of its journal")
+    imported: list[dict[str, Any]] = []
+    advanced = 0
+    position = 0
+    processed_by_child: dict[str, int] = {child["session_id"]: 0 for child in children}
+    while position < batch_size and children:
+        made_progress = False
+        for child in children:
+            if position >= batch_size:
+                break
+            sid = child["session_id"]
+            if processed_by_child[sid] >= max_per_child:
+                continue
+            sequence = cursors[sid]
+            records = records_by_child[sid]
+            if sequence >= len(records):
+                continue
+            source = records[sequence]
+            if source["kind"] in _EVENT_KINDS:
+                result = import_message(settings, orchestrator_id, sid, source)
+                imported.append(_metadata(result["event"], include_content=False) | {"duplicate": result["duplicate"]})
+            _write_source_cursor(_cursor_path(directory, child), child, source["sequence"], source)
+            cursors[sid] = source["sequence"]
+            position += 1
+            advanced += 1
+            processed_by_child[sid] += 1
+            made_progress = True
+        if not made_progress:
+            break
+    return {
+        "orchestrator_id": orchestrator_id,
+        "children": len(children),
+        "advanced": advanced,
+        "count": len(imported),
+        "imported": imported,
+        "remaining": sum(max(0, len(records_by_child[c["session_id"]]) - cursors[c["session_id"]]) for c in children),
+    }
 
 
 def read_inbox(settings: Settings, orchestrator_id: str, *, after_sequence: int = 0, limit: int = 100, event_id: str | None = None, include_content: bool = False) -> list[dict[str, Any]]:

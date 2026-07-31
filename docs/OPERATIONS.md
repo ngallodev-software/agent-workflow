@@ -245,6 +245,17 @@ Global instructions may recommend `agent-workflow` for bounded delegation. They 
 
 ## Orchestrator registry and inbox
 
+Run one foreground aggregate supervisor per orchestrator:
+
+```bash
+agent-workflow orchestrator watch ORCHESTRATOR_ID
+```
+
+It acquires a durable single-writer lease, replays registered child journals
+fairly after each timeout or wake hint, appends normalized metadata before
+advancing each source cursor, and records redacted startup/replay/error/
+shutdown metadata. A second active watcher exits with a stable diagnostic.
+
 The repository provides the `MSG-001` registry and aggregate inbox surfaces:
 
 ```text

@@ -75,6 +75,14 @@ def wakeup_channel(run_dir: Path) -> str:
     return f"agent-workflow/v1/{digest}"
 
 
+def orchestrator_wakeup_channel(orchestrator_id: str) -> str:
+    """Return one opaque shared channel for an orchestrator identity."""
+    if not isinstance(orchestrator_id, str) or not orchestrator_id:
+        raise WorkflowError("orchestrator identity must be non-empty text")
+    digest = hashlib.sha256(orchestrator_id.encode("utf-8")).hexdigest()
+    return f"agent-workflow/v1/orchestrator/{digest}"
+
+
 def signal_waiters(channel: str) -> None:
     """Best-effort wake hint; durable message replay remains authoritative."""
     try:

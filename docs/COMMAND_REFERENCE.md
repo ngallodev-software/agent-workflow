@@ -56,6 +56,16 @@ Configured launches enforce class/executor/model allowlists and permission argum
 
 ## Supervisor
 
+The aggregate child-journal supervisor runs in the foreground and treats the
+hashed tmux channel only as a wake hint. Durable journals, the inbox, and
+per-child cursors remain authoritative:
+
+```text
+agent-workflow orchestrator watch ORCHESTRATOR_ID
+  [--interval-seconds N] [--poll-seconds N]
+  [--batch-size N] [--max-per-child N] [--max-cycles N]
+```
+
 ```text
 agent-workflow supervisor once
   [--session SESSION]...

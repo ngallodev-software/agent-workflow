@@ -215,6 +215,6 @@ The current deterministic versus guidance-driven feature inventory is maintained
 
 ## Planned aggregate orchestrator messaging
 
-The current implementation has durable per-session steer/progress/ack records, explicit reusable-agent lifecycle transitions, and the `MSG-001` multi-session aggregate orchestrator registry/inbox. It does not yet have the deterministic supervisor that resumes an orchestrator when children complete.
+The current implementation has durable per-session steer/progress/ack records, explicit reusable-agent lifecycle transitions, the `MSG-001` multi-session aggregate orchestrator registry/inbox, and a foreground `orchestrator watch` supervisor. It uses one hashed shared wake channel only as a hint; fair replay from child journals and per-child cursors remain authoritative.
 
 The implementation keeps per-session journals and sealed lifecycle evidence authoritative; the registry binds verified child sessions and the append-only aggregate inbox is delivery authority only. Future work uses one shared hashed `tmux wait-for` channel only as a wake hint and fixed orchestrator notifications containing opaque event IDs rather than child-controlled text. See [Durable two-way messaging](ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md) and the collision-safe [`orchestrator-two-way-messaging`](../prompt-packs/orchestrator-two-way-messaging/) pack.

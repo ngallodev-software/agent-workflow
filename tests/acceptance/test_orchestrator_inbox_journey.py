@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tests.conftest import InstalledProduct, fake_agent_path, git_repo, wait_for_status
+from tests.conftest import InstalledProduct, git_repo, wait_for_status
 
 
 def test_installed_cli_registers_verified_children_and_deduplicates_inbox(
@@ -52,3 +52,39 @@ def test_installed_cli_registers_verified_children_and_deduplicates_inbox(
     assert repeated["count"] == 2
     assert all(item["duplicate"] for item in repeated["imported"])
     assert len(installed_product.json("orchestrator", "inbox", "list", "main-orchestrator", env=product_env)) == 2
+
+
+def test_installed_orchestrator_watch_replays_once_and_resumes_from_cursor(
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+    fake_agent_path: Path,
+    tmp_path: Path,
+) -> None:
+    prompt = tmp_path / "prompt.md"
+    prompt.write_text("watch fixture\n", encoding="utf-8")
+    child_env = dict(product_env)
+    child_env["FAKE_AGENT_MODE"] = "task-complete"
+    repo = tmp_path / "watch-child"
+    git_repo(repo)
+    installed_product.json(
+        "launch", "watch-child", repo, prompt, "--interactive", "--", fake_agent_path,
+        env=child_env,
+    )
+    assert wait_for_status(child_env, "watch-child")["status"] == "completed"
+    installed_product.json("orchestrator", "registry", "create", "watcher", env=product_env)
+    installed_product.json(
+        "orchestrator", "registry", "register", "watcher", "watch-child", env=product_env
+    )
+
+    first = installed_product.json(
+        "orchestrator", "watch", "watcher", "--max-cycles", "1", env=product_env
+    )
+    assert first["state"] == "completed"
+    assert first["advanced"] >= 1
+    assert first["imported"] == 1
+
+    second = installed_product.json(
+        "orchestrator", "watch", "watcher", "--max-cycles", "1", env=product_env
+    )
+    assert second["advanced"] == 0
+    assert len(installed_product.json("orchestrator", "inbox", "list", "watcher", env=product_env)) == 1

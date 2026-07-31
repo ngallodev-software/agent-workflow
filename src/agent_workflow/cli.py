@@ -70,6 +70,7 @@ from .sessions import terminate as terminate_session
 from .sessions import wait_for_message
 from .state import list_statuses, read_status, repair_status, runs_root
 from .supervisor import SupervisorOptions, supervise_loop, supervise_once
+from .orchestrator_supervisor import watch as watch_orchestrator
 from .tmux import attach as attach_tmux
 from .util import atomic_write_bytes, atomic_write_json, expand_path, read_json
 from .scheduler import SchedulerService
@@ -188,6 +189,16 @@ def build_parser() -> argparse.ArgumentParser:
         inbox_read.add_argument("--limit", type=int, default=100)
         inbox_read.add_argument("--event-id")
         inbox_read.add_argument("--include-content", action="store_true")
+
+    watch_parser = orchestrator_commands.add_parser(
+        "watch", help="foreground shared-wakeup inbox supervisor"
+    )
+    watch_parser.add_argument("orchestrator_id")
+    watch_parser.add_argument("--interval-seconds", type=float)
+    watch_parser.add_argument("--poll-seconds", type=float, default=0.2)
+    watch_parser.add_argument("--batch-size", type=int, default=100)
+    watch_parser.add_argument("--max-per-child", type=int, default=25)
+    watch_parser.add_argument("--max-cycles", type=int)
 
     worktree = commands.add_parser("worktree", help="Git worktree commands")
     worktree_commands = worktree.add_subparsers(dest="worktree_command", required=True)
@@ -726,7 +737,17 @@ def main(argv: list[str] | None = None) -> int:
                         settings, args.orchestrator_id, args.session_id, state=args.state
                     )
             else:
-                if args.inbox_command == "import":
+                if args.orchestrator_command == "watch":
+                    data = watch_orchestrator(
+                        settings,
+                        args.orchestrator_id,
+                        interval_seconds=args.interval_seconds,
+                        poll_seconds=args.poll_seconds,
+                        batch_size=args.batch_size,
+                        max_per_child=args.max_per_child,
+                        max_cycles=args.max_cycles,
+                    )
+                elif args.inbox_command == "import":
                     data = import_registered(
                         settings,
                         args.orchestrator_id,
