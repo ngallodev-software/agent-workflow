@@ -105,6 +105,10 @@ agent-workflow supervisor run \
 
 Enable those switches only under an operator-approved policy. A restart always creates a new run ID and preserves retry lineage. The supervisor never approves a permission request, changes a model/tool allowlist, increases resource limits, accepts implementation evidence, merges a branch, or deletes a run.
 
+### Manual force acceptance
+
+`agent-workflow force-accept SESSION --actor ID --reason TEXT --acknowledge FORCE-ACCEPT` is an explicit local operator override for a terminal run whose ordinary acceptance gate cannot be satisfied. The acknowledgement token is a narrowly documented manual confirmation mechanism; the actor value is an operator-supplied label, not authenticated-human authorization. The command writes a read-only `force-accept-receipt.json` linked to the sealed final-receipt digest with the session, actor, timestamp, reason, command identity, and normal-gate failures, then projects `force-accepted` in status and ledger output. It never rewrites normal lifecycle, completion, evaluation, review, or final-receipt artifacts. Running/launched sessions, missing or tampered sealed evidence, and repeated requests fail closed. HARD-007 remains the required future authenticated authority boundary.
+
 Key evidence:
 
 | Artifact | Operational use |

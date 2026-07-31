@@ -621,6 +621,11 @@ def build_ledger_row(run_dir: Path) -> dict[str, Any]:
             if chain:
                 disposition = chain[-1]["receipt"].get("action")
                 disposition_path = chain[-1]["path"].relative_to(run_dir).as_posix()
+            override_path = run_dir / "force-accept-receipt.json"
+            if override_path.is_file():
+                override = json.loads(override_path.read_text(encoding="utf-8"))
+                disposition = override.get("schema") == "agent-workflow/force-accept-receipt/v1" and "force-accepted" or disposition
+                disposition_path = override_path.relative_to(run_dir).as_posix()
         except WorkflowError as exc:
             failures.append(str(exc))
     workflow = provenance.get("workflow")
@@ -711,4 +716,3 @@ def build_lifecycle_archive(
     }
     validate_instance(value, LIFECYCLE_ARCHIVE_SCHEMA, artifact="lifecycle archive plan")
     return value
-

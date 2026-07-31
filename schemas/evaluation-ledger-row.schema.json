@@ -45,7 +45,7 @@
     },
     "disposition": {
       "type": ["string", "null"],
-      "enum": ["reviewed", "accepted", "rejected", null]
+      "enum": ["reviewed", "accepted", "force-accepted", "rejected", null]
     },
     "evidence_paths": {
       "type": "object",
@@ -81,4 +81,3 @@
   },
   "additionalProperties": false
 }
-

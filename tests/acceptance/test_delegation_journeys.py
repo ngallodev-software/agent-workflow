@@ -24,7 +24,7 @@ def test_external_executor_completes_with_sealed_user_visible_evidence(
     tmp_path: Path,
 ) -> None:
     repo = tmp_path / "repo"
-    git_repo(repo)
+    head = git_repo(repo)
     prompt = tmp_path / "prompt.md"
     prompt.write_text("Inspect the repository and report completion.\n", encoding="utf-8")
 
@@ -145,6 +145,54 @@ def test_interactive_child_task_complete_uses_bound_cli_and_bridge(
     assert any(item["kind"] == "task_complete" and item["actor"] == "fixture-child" for item in messages)
     intents = [json.loads(line) for line in (run / "control-intents.jsonl").read_text().splitlines()]
     assert any(item["outcome"] == "applied" and item["sequence"] == 1 for item in intents)
+
+
+def test_force_accept_preserves_normal_rejection_and_records_distinct_override(
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+    fake_agent_path: Path,
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    head = git_repo(repo)
+    prompt = tmp_path / "prompt.md"
+    prompt.write_text("Complete the fixture task.\n", encoding="utf-8")
+    env = dict(product_env)
+    installed_product.json(
+        "launch", "force-accept-run", repo, prompt, "--tier", "low",
+        "--no-interactive", "--", fake_agent_path, env=env,
+    )
+    assert wait_for_status(env, "force-accept-run")["status"] == "completed"
+    run = _run_dir(env, "force-accept-run")
+
+    ordinary = installed_product.run(
+        "accept", "force-accept-run", "--actor", "operator",
+        "--reason", "ordinary gate should reject", "--revision", head, env=env,
+    )
+    assert ordinary.returncode == 2
+    assert "prior reviewed" in ordinary.stderr
+    forced = installed_product.json(
+        "force-accept", "force-accept-run", "--actor", "operator",
+        "--reason", "documented emergency local override",
+        "--acknowledge", "FORCE-ACCEPT", env=env,
+    )
+    assert forced["disposition"] == "force-accepted"
+    receipt_path = run / "force-accept-receipt.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert receipt["schema"] == "agent-workflow/force-accept-receipt/v1"
+    assert receipt["session_id"] == "force-accept-run"
+    assert receipt["final_receipt_sha256"]
+    assert "acceptance requires a prior reviewed disposition" in receipt["normal_gate_failures"]
+    assert receipt_path.stat().st_mode & 0o222 == 0
+
+    listed = installed_product.json("list", env=env)
+    assert next(item for item in listed if item["session_id"] == "force-accept-run")["disposition"] == "force-accepted"
+    repeated = installed_product.run(
+        "force-accept", "force-accept-run", "--actor", "operator",
+        "--reason", "repeat", "--acknowledge", "FORCE-ACCEPT", env=env,
+    )
+    assert repeated.returncode == 2
+    assert "already exists" in repeated.stderr
 
 
 def test_sandboxed_child_terminate_does_not_write_host_state(

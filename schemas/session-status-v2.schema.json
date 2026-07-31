@@ -9,7 +9,7 @@
     "ticket_id": {"type": ["string", "null"]},
     "pack_id": {"type": ["string", "null"]},
     "status": {"enum": ["prepared", "launched", "running", "interruption_requested", "completed", "failed", "interrupted", "killed"]},
-    "disposition": {"type": ["string", "null"], "enum": [null, "reviewed", "accepted", "rejected"]},
+    "disposition": {"type": ["string", "null"], "enum": [null, "reviewed", "accepted", "force-accepted", "rejected"]},
     "created_at": {"type": "string"},
     "updated_at": {"type": "string"},
     "workdir": {"type": "string"},

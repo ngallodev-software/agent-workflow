@@ -141,10 +141,13 @@ Template request files contain `workflow_id`, `pack_id`, `pack_manifest_sha256`,
 ```text
 agent-workflow review SESSION --actor ID --reason TEXT
 agent-workflow accept SESSION --actor ID --reason TEXT --revision SHA
+agent-workflow force-accept SESSION --actor ID --reason TEXT --acknowledge FORCE-ACCEPT
 agent-workflow reject SESSION --actor ID --reason TEXT
 ```
 
 Review/accept/reject append immutable lifecycle receipts. Acceptance requires a prior review, valid final seal and collected completion, exact head revision, stable passing scores when evaluation is required, and reviewer independence for high/critical tiers.
+
+`force-accept` is a separate local operator override for a terminal run when the normal gate cannot be satisfied. It requires the exact `FORCE-ACCEPT` acknowledgement and a non-empty reason, writes the immutable `force-accept-receipt.json`, and reports `force-accepted` distinctly from normal `accepted`. It never changes normal review, completion, evaluation, or final-receipt evidence. The actor label is not authenticated human authorization; HARD-007 remains the required future security boundary. Running/launched runs, missing or invalid sealed evidence, and repeated overrides are rejected.
 
 ## Evaluation
 

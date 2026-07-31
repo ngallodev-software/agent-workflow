@@ -39,6 +39,7 @@ from .eval.templating import (
 )
 from .errors import InteractiveCapacityError, WorkflowError
 from .ledger import build_ledger, render_ledger
+from .approval import force_accept
 from .lifecycle import record as record_lifecycle
 from .inspect_adapter import build_task as build_inspect_task
 from .index_store import index_status, query_index_report, rebuild_index, sync_index, verify_index
@@ -505,6 +506,17 @@ def build_parser() -> argparse.ArgumentParser:
         lifecycle.add_argument("--reason", required=True)
         if name == "accept":
             lifecycle.add_argument("--revision", required=True)
+
+    force = commands.add_parser(
+        "force-accept", help="record an explicit local operator acceptance override"
+    )
+    force.add_argument("session_id")
+    force.add_argument("--actor", required=True)
+    force.add_argument("--reason", required=True)
+    force.add_argument(
+        "--acknowledge", required=True, choices=("FORCE-ACCEPT",),
+        help="explicitly acknowledge the unauthenticated local override",
+    )
 
     evaluation = commands.add_parser("eval", help="evaluation commands")
     evaluation_commands = evaluation.add_subparsers(dest="eval_command", required=True)
@@ -1070,6 +1082,16 @@ def main(argv: list[str] | None = None) -> int:
                 actor=args.actor,
                 reason=args.reason,
                 revision=args.revision if args.command == "accept" else None,
+            )
+        elif args.command == "force-accept":
+            command = list(sys.argv if argv is None else ["agent-workflow", *argv])
+            data = force_accept(
+                settings,
+                args.session_id,
+                actor=args.actor,
+                reason=args.reason,
+                acknowledgement=args.acknowledge,
+                command=command,
             )
         elif args.command == "eval":
             if args.eval_command == "validate":

@@ -29,7 +29,7 @@ def _next_action(row: dict[str, Any]) -> str:
         return f"agent-workflow restart {session}"
     if row.get("evaluation_required") and not row.get("score_verdict"):
         return f"agent-workflow eval score {session}"
-    if row.get("disposition") != "accepted":
+    if row.get("disposition") not in {"accepted", "force-accepted"}:
         return f"agent-workflow review {session} --actor ID --reason TEXT"
     return "next dependency-unblocked ticket"
 
