@@ -1,4 +1,4 @@
-.TH AGENT-WORKFLOW 1 "2026-07-30" "agent-workflow 0.5.1" "User Commands"
+.TH AGENT-WORKFLOW 1 "2026-07-30" "agent-workflow 0.6.0" "User Commands"
 .SH NAME
 agent-workflow \- terminal-first delegated execution, workflow, evidence, and review CLI
 .SH SYNOPSIS
@@ -8,7 +8,7 @@ agent-workflow \- terminal-first delegated execution, workflow, evidence, and re
 .I COMMAND
 .RI [ ARGS ]
 .SH DESCRIPTION
-agent-workflow creates isolated Git worktrees, launches configured coding executors through tmux, stores durable run evidence, supports restart-safe workflow graphs, and seals review and evaluation receipts. Durable JSON/JSONL records and read-only receipts are authoritative; tmux capture and logs are observational.
+agent-workflow creates isolated Git worktrees, launches configured coding executors through tmux, stores durable run evidence, supports restart-safe workflow graphs, and seals review and evaluation receipts. Durable JSON/JSONL records and read-only receipts are authoritative; tmux capture, logs, and SQLite rows are observational or reconstructable projections.
 .SH COMMAND FAMILIES
 .TP
 .B doctor, commands, config, completion
@@ -19,6 +19,12 @@ Create, list, and remove isolated ticket worktrees.
 .TP
 .B launch, list, status, attach, tail, restart
 Launch and observe delegated sessions.
+.TP
+.B archive, clear
+Recoverably move verified accepted runs from active state into the authoritative archive and refresh the searchable projection.
+.TP
+.B supervisor
+Collect bounded health evidence and apply explicitly authorized deterministic remediation in a foreground loop.
 .TP
 .B steer, progress, ack, watch
 Append and replay durable control/progress records. A steer is pending until correlated evidence proves acknowledgement/application.
@@ -34,6 +40,9 @@ Validate, template, start, replay, resume, seal, and verify workflow graphs. See
 .TP
 .B review, accept, reject
 Append immutable lifecycle receipts. Acceptance requires exact revision and valid evidence.
+.TP
+.B index
+Maintain and query the rebuildable SQLite projection over authoritative run and workflow evidence. See agent-workflow-index(1).
 .TP
 .B eval, ledger
 Render and validate evaluation/benchmark templates, score sealed runs, collect immutable trials, compare cohorts, render benchmark reports and evidence-ledger rows, prepare archive inputs, and render pack ledgers.
@@ -51,7 +60,7 @@ Request machine-readable output where supported.
 .B --version
 Print the release version.
 .SH EVIDENCE
-Run evidence is normally stored below ~/.local/state/agent-workflow/runs/SESSION. final-receipt.json seals required and optional artifacts. Review dispositions are separate read-only receipts. Structured provider evidence is bounded and sealed before trial extraction.
+Run evidence is normally stored below ~/.local/state/agent-workflow/runs/SESSION. final-receipt.json seals required and optional artifacts. Review dispositions are separate read-only receipts. Structured provider evidence is bounded and sealed before trial extraction. The host-local SQLite index stores normalized searchable fields and source provenance but excludes raw prompt, terminal, message, and log bodies.
 .SH MCP
 The optional local stdio server is a separate executable, agent-workflow-mcp(1). It is currently bounded/read-only plus pack validation; planned mutation tools are not present.
 .SH FILES
@@ -60,6 +69,6 @@ The optional local stdio server is a separate executable, agent-workflow-mcp(1).
 Default user configuration.
 .TP
 .I ~/.local/state/agent-workflow/
-Default durable state root.
+Default durable state root. The rebuildable database is normally under the index subdirectory.
 .SH SEE ALSO
-agent-workflow-workflow(1), agent-workflow-mcp(1), docs/COMMAND_REFERENCE.md, docs/ARCHITECTURE.md
+agent-workflow-index(1), agent-workflow-workflow(1), agent-workflow-mcp(1), docs/COMMAND_REFERENCE.md, docs/ARCHITECTURE.md

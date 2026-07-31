@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/index-query/v1",
+  "type": "object",
+  "required": [
+    "schema",
+    "database",
+    "authority",
+    "freshness",
+    "current_run_count",
+    "stale_run_count",
+    "error_count",
+    "kind",
+    "rows"
+  ],
+  "properties": {
+    "schema": {"const": "agent-workflow/index-query/v1"},
+    "database": {"type": "string", "minLength": 1},
+    "authority": {"const": "json-jsonl-sealed-receipts"},
+    "freshness": {"enum": ["current", "stale", "incomplete"]},
+    "current_run_count": {"type": "integer", "minimum": 0},
+    "stale_run_count": {"type": "integer", "minimum": 0},
+    "error_count": {"type": "integer", "minimum": 0},
+    "kind": {
+      "enum": [
+        "runs",
+        "incidents",
+        "permissions",
+        "performance",
+        "workflows",
+        "workflow-nodes",
+        "errors"
+      ]
+    },
+    "rows": {
+      "type": "array",
+      "items": {"type": "object"}
+    }
+  },
+  "additionalProperties": false
+}

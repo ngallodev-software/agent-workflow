@@ -7,7 +7,7 @@ The complete visual inventory is in [Repository Chart Pack](diagrams/REPOSITORY_
 ## Architectural principles
 
 1. Durable JSON/JSONL records and immutable receipts are authoritative.
-2. `status.json`, rendered ledgers, tmux capture, and logs are projections or observations.
+2. `status.json`, rendered ledgers, tmux capture, logs, and SQLite rows are projections or observations.
 3. The CLI, workflow scheduler, and MCP adapter use shared services; there is no alternate executor path.
 4. Every delegated ticket receives isolated Git source state and a durable run directory.
 5. Approval is a separate evidence-backed lifecycle dimension, never implied by process success.
@@ -49,6 +49,18 @@ The current runtime includes a foregroundable supervisor governed by [DEC-006](D
 
 The detailed topology, evidence contracts, state model, security boundary, and remaining dependency plan are in [Self-healing supervisor architecture](SELF_HEALING_SUPERVISOR_ARCHITECTURE.md).
 
+## Rebuildable searchable projection
+
+[DEC-007](DECISIONS/DEC-007-REBUILDABLE-SQLITE-PROJECTION.md) adds a host-local SQLite projection without changing the evidence authority model. A single indexer scans validated run and workflow artifacts, writes normalized searchable fields plus source-file/record provenance in one transaction per run, and exposes curated read-only queries. The supervisor performs an incremental sync after each cycle by default.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/evidence-index-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="assets/evidence-index-light.svg">
+  <img alt="Authoritative JSON and JSONL evidence projected into a rebuildable SQLite query store" src="assets/evidence-index-light.svg" width="100%">
+</picture>
+
+The database is not lifecycle, permission, acceptance, workflow, or remediation authority. Removing it and running `agent-workflow index rebuild` is a supported recovery operation. Raw prompts, message bodies, terminal bodies, and large logs remain outside SQLite; indexed rows retain bounded normalized fields, source path, sequence, schema identity, and SHA-256 provenance. See [SQLite evidence index architecture](SQLITE_EVIDENCE_INDEX_ARCHITECTURE.md).
+
 ## Major components
 
 | Area | Modules | Responsibility |
@@ -57,6 +69,7 @@ The detailed topology, evidence contracts, state model, security boundary, and r
 | Sessions/processes | `sessions.py`, `runner.py`, `executors.py`, `tmux.py`, `process.py` | canonical launch, process ownership, structured streams, retry/recovery |
 | Health/supervision | `health.py`, `diagnostics.py`, `supervisor.py` | liveness/progress separation, bounded terminal/resource evidence, incident classification, deterministic remediation |
 | Durable state | `state.py`, `events.py`, `messages.py`, `ledger.py` | status projections, append-only lifecycle/control records, ledgers |
+| Search projection | `index_store.py` | versioned SQLite schema, deterministic rebuild/incremental reconciliation, source provenance, curated read-only queries |
 | Evidence | `receipts.py`, `metrics.py`, `provider_evidence.py`, `lifecycle.py` | final seals, metrics, provider usage, review/accept/reject receipts |
 | Workflows | `workflow.py`, `scheduler.py`, `workflow_service.py`, `approval.py`, `bindings.py`, `workflow_receipt.py`, `workflow_templates.py`, `routing.py` | graph validation/replay, scheduling, approvals, result binding, aggregate seals, templates, advice |
 | Prompt packs | `pack.py`, `manifests.py`, `native_jobs.py`, `contracts.py`, `path.py` | scaffold, no-follow inventory validation, checksums/archive, structured results |
@@ -66,10 +79,13 @@ The detailed topology, evidence contracts, state model, security boundary, and r
 
 ## Runtime state
 
-The default XDG state root is:
+The default XDG state root contains authoritative run evidence and a separately rebuildable query projection:
 
 ```text
 ~/.local/state/agent-workflow/
+├── index/
+│   ├── agent-workflow.sqlite3            # disposable/searchable projection
+│   └── index.lock                         # exclusive indexer writer lock
 └── runs/
     └── <session-id>/
         ├── status.json                    # mutable projection
@@ -108,7 +124,7 @@ The default XDG state root is:
         └── receipts/                      # canonical read-only lifecycle chain
 ```
 
-A worktree-local `.delegations/<session-id>` symlink points to the durable run directory. Git local exclude metadata hides `.delegations/`, and deleting the worktree does not delete evidence.
+A worktree-local `.delegations/<session-id>` symlink points to the durable run directory. Git local exclude metadata hides `.delegations/`, and deleting the worktree does not delete evidence. The SQLite file may be deleted or migrated independently because all indexed state is reconstructable from these source artifacts.
 
 ## Session execution boundary
 

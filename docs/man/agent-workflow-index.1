@@ -1,0 +1,102 @@
+.TH AGENT-WORKFLOW-INDEX 1 "2026-07-30" "agent-workflow 0.6.0" "User Commands"
+.SH NAME
+agent-workflow-index \- rebuild and query the host-local SQLite evidence projection
+.SH SYNOPSIS
+.B agent-workflow index status
+.br
+.B agent-workflow index sync
+.RI [ --run " SESSION" ]
+.RI [ --active-only ]
+.br
+.B agent-workflow index rebuild
+.RI [ --run " SESSION" ]
+.RI [ --active-only ]
+.br
+.B agent-workflow index verify
+.RI [ --full ]
+.br
+.B agent-workflow index query
+.I KIND
+.RI [ FILTERS ]
+.SH DESCRIPTION
+The index command maintains a host-local SQLite projection over authoritative JSON, JSONL, immutable workflow snapshots, and sealed receipts. The database is disposable and reconstructable. It is never launch, lifecycle, workflow, permission, remediation, review, acceptance, merge, or deletion authority.
+.PP
+One locked indexer owns writes. SQLite uses WAL mode, full synchronous durability, foreign-key enforcement, a bounded busy timeout, and a versioned schema. Queries use fixed parameterized views; the CLI does not expose arbitrary SQL.
+.SH SUBCOMMANDS
+.TP
+.B status
+Report database path, schema and application versions, journal mode, source/indexed run counts, last synchronization, freshness, and index errors.
+.TP
+.B sync
+Incrementally reconcile changed active and archived run directories. Use
+.B --run
+for one session or
+.B --active-only
+to exclude archived evidence.
+.TP
+.B rebuild
+Remove and recreate the selected projection from authoritative source evidence. A full rebuild also replaces WAL and shared-memory companions. Rebuilding does not alter source artifacts.
+.TP
+.B verify
+Run SQLite integrity and foreign-key checks. With
+.B --full,
+rehash every indexed source artifact and report missing, changed, or mismatched evidence.
+.TP
+.B query
+Query one curated read-only view. JSON output is an agent-workflow/index-query/v1 envelope containing projection freshness, stale/error counts, and rows. Human output prints the freshness summary before the table. Supported kinds are
+.BR runs ,
+.BR incidents ,
+.BR permissions ,
+.BR performance ,
+.BR workflows ,
+.B workflow-nodes
+and
+.BR errors .
+.SH QUERY FILTERS
+.TP
+.B --session SESSION
+Limit results to one run/session where the selected view supports it.
+.TP
+.B --state STATE
+Filter run, incident, permission, or workflow state where supported.
+.TP
+.B --category CATEGORY
+Filter incident or index-error category.
+.TP
+.B --executor NAME
+Filter runs or performance observations by executor.
+.TP
+.B --model MODEL
+Filter runs or performance observations by model.
+.TP
+.B --pack PACK
+Filter run or workflow ownership by prompt-pack ID.
+.TP
+.B --limit N
+Bound returned rows.
+.SH AUTHORITY AND PRIVACY
+Every indexed source retains relative path, record sequence where applicable, schema identity, size/metadata, and SHA-256 provenance. Raw prompts, terminal bodies, message bodies, output logs, credentials, and unrestricted provider payloads are excluded. A query result must be reopened against original evidence before any authority-changing action.
+.SH FILES
+.TP
+.I ~/.local/state/agent-workflow/index/agent-workflow.sqlite3
+Default rebuildable SQLite projection.
+.TP
+.I ~/.local/state/agent-workflow/index/index.lock
+Exclusive indexer writer lock.
+.TP
+.I ~/.local/state/agent-workflow/runs/
+Active authoritative run evidence.
+.TP
+.I ~/.local/state/agent-workflow/archive/
+Archived authoritative run evidence.
+.SH RECOVERY
+A missing or corrupt database is recovered with:
+.PP
+.nf
+agent-workflow index rebuild
+agent-workflow index verify --full
+.fi
+.PP
+A corrupt source run is quarantined as an index error; it is not rewritten or silently repaired.
+.SH SEE ALSO
+agent-workflow(1), agent-workflow-workflow(1), docs/SQLITE_EVIDENCE_INDEX_ARCHITECTURE.md

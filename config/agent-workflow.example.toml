@@ -24,6 +24,8 @@ probe_stalled = true
 interrupt_stalled = false
 restart_orphaned = false
 max_remediation_attempts = 1
+# Keep the host-local SQLite projection current after every supervisor cycle.
+sync_index = true
 
 [git]
 branch_prefix = "impl/"

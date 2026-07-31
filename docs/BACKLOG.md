@@ -34,6 +34,7 @@ The determinism and security work below is derived from the [feature determinism
 | [`codex-luna-effort-policy`](../prompt-packs/codex-luna-effort-policy/) | POL-001 | Integrated and in review; automatic Codex selection is Luna-only with low/medium/high effort and immutable launch evidence. |
 | [`hierarchical-multi-team-orchestration`](../prompt-packs/hierarchical-multi-team-orchestration/) | HIER-001 through HIER-008 | Proposed design package; blocked on maintainer approval of DEC-005 and the ticket-specific accepted messaging, delegation, steering, and pane-identity prerequisites listed below. |
 | [`bounded-self-healing-supervisor`](../prompt-packs/bounded-self-healing-supervisor/) | SUP-001 through SUP-008 | SUP-001 and SUP-002 are implemented and in review. Security enforcement, authenticated authority, live compatibility, hierarchy integration, and performance control remain sequenced behind their declared gates. |
+| [`sqlite-evidence-index`](../prompt-packs/sqlite-evidence-index/) | IDX-001 through IDX-007 | IDX-001 through IDX-005 are implemented and in review. Privacy-governed analytical export and measured-scale checkpoint work remain explicitly gated. |
 
 ## Bounded self-healing supervision
 
@@ -76,6 +77,43 @@ SUP-001 → SUP-002 → SUP-GATE-0
                      [HIER-005 + HIER-006] → SUP-007
                                                 ↓
                      [BKL-004 + HIER-007] → SUP-008 → SUP-GATE-3
+```
+
+## Searchable evidence projection
+
+`DEC-007` replaces the former defer-until-slow `ARC-002` posture. JSON/JSONL artifacts, immutable snapshots, and sealed receipts remain authoritative; SQLite is a host-local, fully rebuildable operational projection. Prompt-pack gate IDs (`IDX-GATE-*`) are independent review tasks, not backlog items.
+
+| ID | Priority | Risk | State | Work and exit evidence | Reference |
+|---|---|---:|---|---|---|
+| IDX-001 | P0 | Critical | in-review | Versioned SQLite schema, application identity, WAL/foreign-key/full-sync configuration, owner-only storage, exclusive writer locking, and source-file/record SHA-256 provenance are implemented. Closeout requires migration and installed-product review at `IDX-GATE-0`. | [Decision](DECISIONS/DEC-007-REBUILDABLE-SQLITE-PROJECTION.md) |
+| IDX-002 | P0 | Critical | in-review | Full rebuild, active/archive discovery, changed-run incremental reconciliation, stable no-follow/shared-lock reads, atomic per-run replacement, stale-row pruning, source-digest verification, and corrupt-run quarantine are implemented. Closeout requires interruption, archive, and rebuild-equivalence evidence. | [Reconciliation](SQLITE_EVIDENCE_INDEX_ARCHITECTURE.md#rebuild-and-incremental-synchronization) |
+| IDX-003 | P0 | High | in-review | Normalized run, source, event, health, permission, incident, remediation, process, performance, workflow-node, and workflow-edge projections plus curated views are implemented. Raw prompts, terminal/message bodies, credentials, and large logs are excluded. | [Schema and ERD](SQLITE_EVIDENCE_INDEX_ARCHITECTURE.md#data-model) |
+| IDX-004 | P1 | High | in-review | `index status|sync|rebuild|verify|query`, freshness-bearing query envelopes, fixed parameterized filters, help/catalog/completion integration, man pages, README, and operator/security/testing documentation are implemented. The isolated wheel-installed delete/rebuild journey and release drift audit pass; closeout awaits independent `IDX-GATE-1` review. | [Command reference](COMMAND_REFERENCE.md#searchable-evidence-index) |
+| IDX-005 | P1 | High | in-review | Foreground supervisor cycles incrementally synchronize the projection by default and report indexing failures without stopping health supervision. Closeout requires concurrency, failure-injection, and representative active/archive evidence. | [Supervisor integration](SQLITE_EVIDENCE_INDEX_ARCHITECTURE.md#supervisor-integration) |
+| IDX-006 | P1 | High | blocked | After accepted HARD-006, SUP-003, IDX-GATE-1, and comparable BKL-004 evidence, define privacy-governed immutable analytical exports, retention/deletion rules, provenance, and cohort semantics for offline Parquet/DuckDB analysis. | [Analytical path](SQLITE_EVIDENCE_INDEX_ARCHITECTURE.md#security-and-privacy) |
+| IDX-007 | P2 | Medium | blocked | After IDX-GATE-2 and measured scale evidence, add reconstructable byte-offset/sequence checkpoints, migration compatibility, bounded capacity claims, and truncation/rotation recovery without making checkpoints authoritative. | [Scale evolution](SQLITE_EVIDENCE_INDEX_ARCHITECTURE.md#performance-strategy) |
+
+### SQLite projection dependency order
+
+The first two phases are implemented and may be independently reviewed. Privacy and scale work remain off the critical path until their external evidence exists.
+
+| Lane | Required order | Execution rule |
+|---|---|---|
+| Authority and schema | `DEC-007 → IDX-001` | No query feature may precede the authority/provenance boundary. |
+| Reconciliation and projections | `IDX-001 → {IDX-002 ∥ IDX-003} → IDX-GATE-0` | Rebuild/reconciliation and typed schema lanes may run in parallel after the base migration contract. |
+| Public product surface | `IDX-GATE-0 → {IDX-004 ∥ IDX-005} → IDX-GATE-1` | CLI/docs and supervisor integration are independent lanes sharing one accepted projection service. |
+| Governed analytics | accepted `HARD-006` + `SUP-003` + `BKL-004` + `IDX-GATE-1 → IDX-006 → IDX-GATE-2` | No analytical export before field classification, retention, and comparable evidence are accepted. |
+| Measured optimization | measured scale evidence + `IDX-GATE-2 → IDX-007 → IDX-GATE-3` | Add checkpoints only after measured need; complete rebuild remains mandatory. |
+
+```text
+DEC-007 → IDX-001 → ┬→ IDX-002 ─┐
+                     └→ IDX-003 ─┴→ IDX-GATE-0
+                                      ├→ IDX-004 ─┐
+                                      └→ IDX-005 ─┴→ IDX-GATE-1
+                                                       ↓
+                     [HARD-006 + SUP-003 + BKL-004] → IDX-006 → IDX-GATE-2
+                                                                            ↓
+                                                        [measured scale] → IDX-007 → IDX-GATE-3
 ```
 
 ## Proposed hierarchical orchestration
@@ -199,6 +237,7 @@ These items remain tracked separately from the hardening ownership above; they a
 | DEC-004 | P1 | decided | Retain `agent-workflow` as the execution host, add a versioned trusted plugin API, and build `agent-workflow-spec` as the first sibling plugin before extracting other subsystems. | — |
 | DEC-005 | P0 | needs-decision | Adopt a bounded root orchestrator → team lead → worker hierarchy with durable authority and one managed tmux window per team. | [Decision](DECISIONS/DEC-005-HIERARCHICAL-ORCHESTRATION.md) |
 | DEC-006 | P0 | decided | Use bounded deterministic self-healing: durable evidence is authoritative; automatic action must be preauthorized, idempotent, attempt-bounded, verified, and incapable of widening authority. | [Decision](DECISIONS/DEC-006-BOUNDED-SELF-HEALING.md) |
+| DEC-007 | P0 | decided | Keep JSON/JSONL, immutable snapshots, and sealed receipts authoritative while adding a host-local, single-writer, fully rebuildable SQLite projection for cross-run search and analysis. | [Decision](DECISIONS/DEC-007-REBUILDABLE-SQLITE-PROJECTION.md) |
 
 ## Proposed specification and plugin program
 
@@ -221,7 +260,6 @@ These existing items already own the assessment's P2 recommendations. The harden
 | ID | Priority | Trigger |
 |---|---|---|
 | ARC-001 | P2 | Add a transport-neutral notifier only after measured wakeup latency or operability requires it; replay remains mandatory. |
-| ARC-002 | P3 | Add a reconstructable SQLite index only after JSONL replay/scan cost is measured as a problem. |
 | ARC-003 | P3 | Add a multi-host broker, shared-artifact references, and cross-trust signing only after `DEC-003`. |
 | MCP-004 | P2 | Add policy-gated review/disposition and interrupt/terminate tools after `MCP-003`; preserve the capability/command-context resources and never infer authorization from catalog membership; force kill remains excluded. |
 | WF-006 | P2 | Consider evidence-derived routing recommendations only after comparable real-executor cohorts exist; no online learning or vector-memory dependency. |
@@ -230,7 +268,10 @@ These existing items already own the assessment's P2 recommendations. The harden
 
 | Release | Summary |
 |---|---|
+| 0.5.1 | Completion handoffs validate before reuse, invalid child bridge intents are rejected, and pending reuse cannot seal as successful. |
+| 0.5.0 | Bounded self-healing supervision added with Luna-only automatic Codex policy preserved. |
 | 0.3.0 | Sandbox-safe child control bridge, launcher-executable binding, source-snapshot repair, clean wheel builds, and enforceable semantic-version bump checks. PROC-001, PROC-002, PROC-006, and MSG-001 remain separately tracked as in-review until their acceptance evidence is complete. |
+| 0.3.0 SQLite projection design | `ARC-002` superseded by decided `DEC-007`; implementation is tracked under `IDX-001` through `IDX-007`. |
 | 0.1.x | Worktrees, tmux lifecycle, durable state, prompt packs, evaluation, provider adapters, skills, and packaging foundations. |
 | 0.2.0 | Workflow DAGs, approvals, result binding, aggregate receipts, templates, routing advice, and provider/trial evidence. |
 | 0.2.1 | Authority, replay, locking, symlink, scorer-receipt, provider-accounting, and immutable-input hardening. |

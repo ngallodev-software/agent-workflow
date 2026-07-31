@@ -20,6 +20,7 @@ AUTHORITIES = (
     (ROOT / "docs/man/agent-workflow.1", re.compile(r"agent-workflow ([0-9.]+)")),
     (ROOT / "docs/man/agent-workflow-workflow.1", re.compile(r"agent-workflow ([0-9.]+)")),
     (ROOT / "docs/man/agent-workflow-mcp.1", re.compile(r"agent-workflow ([0-9.]+)")),
+    (ROOT / "docs/man/agent-workflow-index.1", re.compile(r"agent-workflow ([0-9.]+)")),
     (ROOT / "docs/diagrams/REPOSITORY_CHART_PACK.md", re.compile(r"\*\*Release:\*\* ([0-9.]+)")),
     (ROOT / "release/release-policy.json", re.compile(r'(?m)^  "version": "([^"]+)",$')),
     (ROOT / "release/dependency-lock.json", re.compile(r'(?m)^  "version": "([^"]+)",$')),

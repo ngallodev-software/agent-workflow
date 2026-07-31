@@ -1,0 +1,22 @@
+phase: "1"
+name: "product-surfaces-and-supervision"
+mandatory_order: ["IDX-004", "IDX-005", "IDX-GATE-1"]
+tasks:
+  - id: "IDX-004"
+    tier: A
+    session: "sqlite-cli-idx-004"
+    prompt: "tickets/cli-docs-and-query-surface.md"
+    backlog_id: "IDX-004"
+    dependencies: ["IDX-GATE-0"]
+  - id: "IDX-005"
+    tier: A
+    session: "sqlite-supervisor-idx-005"
+    prompt: "tickets/supervisor-index-health.md"
+    backlog_id: "IDX-005"
+    dependencies: ["IDX-GATE-0"]
+  - id: "IDX-GATE-1"
+    tier: A
+    task_type: gate
+    session: "sqlite-phase-1-gate"
+    prompt: "tickets/IDX-GATE-1.md"
+    dependencies: ["IDX-004", "IDX-005"]

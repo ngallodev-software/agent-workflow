@@ -190,7 +190,7 @@ def archive_runs(
     if not dry_run:
         for candidate in eligible:
             archived.append(_archive_one(settings, candidate, reason=reason))
-    return {
+    report = {
         "archive_root": str(_archive_root(settings)),
         "dry_run": dry_run,
         "requested": selected,
@@ -198,3 +198,14 @@ def archive_runs(
         "archived": archived,
         "skipped": skipped,
     }
+    if archived:
+        # Archive movement changes only storage location. Keep the disposable
+        # projection current without allowing index failure to invalidate the
+        # already-completed authoritative archive operation.
+        try:
+            from .index_store import sync_index
+
+            report["index_sync"] = sync_index(settings)
+        except WorkflowError as exc:
+            report["index_sync_error"] = str(exc)
+    return report

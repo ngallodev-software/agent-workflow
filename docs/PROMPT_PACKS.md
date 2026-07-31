@@ -100,10 +100,11 @@ Do not embed host-specific absolute paths, credentials, private project names, m
 | [`force-accept-override`](../prompt-packs/force-accept-override/) | LIFE-001 | Ready for one isolated, independently reviewed manual lifecycle-override implementation. |
 | [`codex-luna-effort-policy`](../prompt-packs/codex-luna-effort-policy/) | POL-001 | Integrated Luna-only automatic Codex selection with bounded reasoning effort; final review remains open. |
 | [`hierarchical-multi-team-orchestration`](../prompt-packs/hierarchical-multi-team-orchestration/) | HIER-001 through HIER-008 | Proposed; `DEC-005` and ticket-specific accepted messaging, delegation, steering, and pane-identity foundations gate execution. The external-terminal adapter is a separately reviewed optional branch. |
+| [`bounded-self-healing-supervisor`](../prompt-packs/bounded-self-healing-supervisor/) | SUP-001 through SUP-008 | SUP-001 and SUP-002 are implemented and in review; security/resource/principal, compatibility, hierarchy, and performance phases remain gated. |
+| [`sqlite-evidence-index`](../prompt-packs/sqlite-evidence-index/) | IDX-001 through IDX-007 | IDX-001 through IDX-005 are implemented and in review; governed analytical export and measured-scale optimization remain gated. |
 
 The dependency/collision rationale is in [Determinism and security hardening plan](DETERMINISM_SECURITY_HARDENING_PLAN.md). The local two-way messaging architecture and its collision-free implementation sequence are in [Durable two-way messaging](ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md). The source findings are in [Feature determinism and security assessment](FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md).
 
-- `bounded-self-healing-supervisor`: four-phase completion of health evidence, safe foreground supervision, governed security/resource/principal enforcement, installed recovery compatibility, hierarchy integration, and evidence-derived performance control. Phase 0 is implemented and in review; later phases remain dependency-gated.
 
 ## Execution authority
 

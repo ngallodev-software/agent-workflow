@@ -1,0 +1,7 @@
+{
+  "schema": "agent-workflow/source-baseline/v1",
+  "repository_root": "/absolute/repository/root",
+  "source_revision": "<commit-or-null>",
+  "source_dirty": false,
+  "recorded_at": "<UTC timestamp>"
+}

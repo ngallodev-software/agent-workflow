@@ -1,11 +1,5 @@
 # Command reference
 
-Automatic Codex routing accepts only `gpt-5.6-luna` and reasoning effort
-`low`, `medium`, or `high` (default `medium`). The launcher passes
-`-c model_reasoning_effort=<value>` and records the value in immutable launch
-`runtime_policy`. Decompose difficult work into smaller tickets instead of
-promoting it to another automatic model.
-
 The parser-derived command catalog is authoritative for agent execution. Run `agent-workflow commands --json` for the full machine-readable contract or `agent-workflow commands --role ROLE --format markdown` for a role-scoped command card. Agents should invoke represented commands directly and use `--help` only after a catalog/version mismatch, an argument error, or when a required command is absent. Global `--json` and `--config PATH` may appear before or after the subcommand; tokens after launch `--` belong to the delegated command.
 
 ## Top-level
@@ -38,7 +32,6 @@ agent-workflow worktree remove REPO WORKTREE [--delete-branch] [--force]
 agent-workflow launch SESSION WORKDIR PROMPT
   [--ticket ID] [--tier low|medium|high|critical] [--pack PACK] [--job JOB]
   [--agent-name NAME] [--agent-class CLASS] [--executor NAME] [--model MODEL]
-  [--reasoning-effort low|medium|high]
   [--allow-no-go-model] [--evaluation PLAN] [--structured]
   [--interactive|--no-interactive] [--allow-dirty]
   [--pane-limit-action prompt|close-idle|non-interactive|cancel]
@@ -72,6 +65,7 @@ agent-workflow supervisor once
   [--interrupt-stalled|--no-interrupt-stalled]
   [--restart-orphaned|--no-restart-orphaned]
   [--max-remediation-attempts N]
+  [--sync-index|--no-sync-index]
 
 agent-workflow supervisor run
   [the same policy options]
@@ -79,7 +73,23 @@ agent-workflow supervisor run
   [--max-cycles N]
 ```
 
-`once` performs one evidence, reconciliation, diagnosis, and remediation cycle. `run` repeats the same deterministic cycle in the foreground. `--session` is repeatable and limits scope. Interactive capture and one bounded progress probe follow configuration defaults; interrupt and orphan restart are disabled unless explicitly enabled. All performed actions are journaled with rule IDs and attempt ceilings. Global `--json` prints the cycle report as structured data.
+`once` performs one evidence, reconciliation, diagnosis, and remediation cycle. `run` repeats the same deterministic cycle in the foreground. `--session` is repeatable and limits scope. Interactive capture and one bounded progress probe follow configuration defaults; interrupt and orphan restart are disabled unless explicitly enabled. All performed actions are journaled with rule IDs and attempt ceilings. Incremental SQLite reconciliation is enabled by default and may be disabled for a cycle with `--no-sync-index`; an indexing error is reported but does not stop supervision. Global `--json` prints the cycle report as structured data.
+
+## Searchable evidence index
+
+```text
+agent-workflow index status
+agent-workflow index sync [--run SESSION] [--active-only]
+agent-workflow index rebuild [--run SESSION] [--active-only]
+agent-workflow index verify [--full]
+agent-workflow index query runs|incidents|permissions|performance|workflows|workflow-nodes|errors
+  [--session SESSION] [--state STATE] [--category CATEGORY]
+  [--executor NAME] [--model MODEL] [--pack PACK] [--limit N]
+```
+
+`status` reports the database path, schema/application versions, source and indexed run counts, freshness, journal mode, and recorded index errors. `sync` reconciles only changed source directories; `rebuild` replaces the projection from authoritative JSON/JSONL and sealed receipts. `verify` always runs SQLite integrity and foreign-key checks; `--full` additionally rehashes indexed source files.
+
+`query` exposes fixed, parameterized operational views rather than arbitrary SQL. JSON output uses an `agent-workflow/index-query/v1` envelope containing freshness, stale/error counts, and `rows`; human output prints the same freshness summary before the table. Rows include source provenance. The index is disposable: lifecycle, permission, workflow, remediation, review, and acceptance authority remains in source artifacts and sealed receipts. Raw prompts, terminal/message bodies, and large logs are not copied into SQLite. See [SQLite evidence index architecture](SQLITE_EVIDENCE_INDEX_ARCHITECTURE.md).
 
 ## Durable messages
 

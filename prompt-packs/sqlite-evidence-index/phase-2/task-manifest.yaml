@@ -1,0 +1,16 @@
+phase: "2"
+name: "governed-analytical-exports"
+mandatory_order: ["IDX-006", "IDX-GATE-2"]
+tasks:
+  - id: "IDX-006"
+    tier: A
+    session: "sqlite-analytics-idx-006"
+    prompt: "tickets/privacy-governed-analytics.md"
+    backlog_id: "IDX-006"
+    dependencies: ["IDX-GATE-1"]
+  - id: "IDX-GATE-2"
+    tier: A
+    task_type: gate
+    session: "sqlite-phase-2-gate"
+    prompt: "tickets/IDX-GATE-2.md"
+    dependencies: ["IDX-006"]

@@ -19,6 +19,7 @@ Use `agent-workflow commands --role orchestrator --format markdown` or the full 
 | Bounded ticket requiring an isolated worktree, persistent evidence, independent review, or recovery | Use `agent-workflow` with a validated prompt pack. |
 | Focused read-only investigation where a host-native subagent is explicitly preferred | Use the host-native mechanism and state that it is not an `agent-workflow` run. |
 | User-visible child panes are required while the orchestrator is inside tmux | Invoke `agent-workflow launch`; never hand-create the tmux session or pane. |
+| A running agent needs new guidance | Append `steer`; treat it as pending until a correlated executor acknowledgement exists. |
 
 Select an agent class explicitly when the task differs from the configured
 default. `exploratory` and `review` are non-interactive detached runs by
@@ -40,7 +41,6 @@ If it is unavailable or permission-gated, the child records the limitation and
 uses bounded RTK shell discovery without retrying. Launch, implementation,
 review, and acceptance must never depend on MCP availability or silently
 claim graph-backed analysis.
-| A running agent needs new guidance | Append `steer`; treat it as pending until a correlated executor acknowledgement exists. |
 
 A host-native subagent is not automatically durable, visible, resumable, or evidenced by this project. It becomes an `agent-workflow` run only when an explicit bridge invokes the CLI and records the required lifecycle evidence.
 
@@ -71,6 +71,20 @@ agent-workflow restart project-p0-01
 
 `steer` persists a durable request. It does not prove that a one-shot executor consumed semantic input. Only a correlated acknowledgement from a supported executor adapter establishes delivery/application.
 
+## Cross-run operational queries
+
+Use the rebuildable SQLite projection for search and fleet analysis, never for authority:
+
+```bash
+agent-workflow index sync
+agent-workflow index query runs --state possibly_stalled
+agent-workflow index query incidents --category permission_wait
+agent-workflow index query workflows --pack PACK_ID
+agent-workflow index verify --full
+```
+
+A query result is a locator and summary. Reopen and verify the original run artifacts and receipts before interrupting, restarting, reviewing, accepting, merging, or changing policy. If index freshness or verification is not current, rebuild it; do not edit SQLite to repair source evidence.
+
 ## Review and acceptance
 
 ```bash
@@ -85,6 +99,7 @@ Terminal text is operational context, not sealed proof. Inspect the authoritativ
 
 - [`docs/COMMAND_REFERENCE.md`](../../docs/COMMAND_REFERENCE.md)
 - [`docs/OPERATIONS.md`](../../docs/OPERATIONS.md)
+- [`docs/SQLITE_EVIDENCE_INDEX_ARCHITECTURE.md`](../../docs/SQLITE_EVIDENCE_INDEX_ARCHITECTURE.md)
 - [`docs/PROMPT_PACKS.md`](../../docs/PROMPT_PACKS.md)
 - [`docs/TESTING.md`](../../docs/TESTING.md)
 - [`EXECUTION_PROTOCOL.md`](../../docs/references/EXECUTION_PROTOCOL.md)

@@ -1,0 +1,16 @@
+phase: "3"
+name: "measured-scale-and-checkpoints"
+mandatory_order: ["IDX-007", "IDX-GATE-3"]
+tasks:
+  - id: "IDX-007"
+    tier: A
+    session: "sqlite-scale-idx-007"
+    prompt: "tickets/measured-scale-and-checkpoints.md"
+    backlog_id: "IDX-007"
+    dependencies: ["IDX-GATE-2"]
+  - id: "IDX-GATE-3"
+    tier: A
+    task_type: gate
+    session: "sqlite-phase-3-gate"
+    prompt: "tickets/IDX-GATE-3.md"
+    dependencies: ["IDX-007"]

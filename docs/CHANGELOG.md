@@ -1,12 +1,6 @@
 
 # Changelog
 
-## 0.4.0 — 2026-07-30
-
-- Enforce automatic Codex selection of `gpt-5.6-luna` with bounded
-  low/medium/high reasoning effort and immutable launch evidence; difficult
-  work must be decomposed rather than promoted to another automatic model.
-
 ## 0.3.0 — 2026-07-30
 
 - Add the sandbox-safe child control bridge, exact launcher binding, and an
@@ -25,6 +19,11 @@
   release-drift audit and transfer archive.
 
 ## Unreleased
+
+- Add `DEC-007` and a host-local, fully rebuildable SQLite evidence projection while preserving JSON/JSONL, snapshots, and sealed receipts as execution authority.
+- Add `agent-workflow index status|sync|rebuild|verify|query`, versioned migrations, WAL/foreign-key configuration, exclusive writer locking, source provenance, corrupt-run quarantine, freshness-bearing query envelopes, and curated read-only run/workflow/incident/permission/performance views. Mixed-currency cost groups return null averages and currencies rather than misleading aggregates.
+- Synchronize the index after foreground-supervisor cycles by default, without allowing projection failure to interrupt health supervision.
+- Add the SQLite index architecture, ERD/data-flow/trust diagrams, responsive README graphic, operations/security/testing/evaluation guidance, man page, prompt pack, and sequenced `IDX-*` backlog program.
 
 - Redesigned the root README with responsive light/dark repository-owned graphics, clearer current-state positioning, architecture and self-healing diagrams, an evidence map, and an explicit pre-public-release roadmap.
 - Added `DEC-006`, the detailed self-healing supervisor architecture, four Mermaid source diagrams, and the sequenced `bounded-self-healing-supervisor` prompt pack.

@@ -2,14 +2,6 @@
 
 This document consolidates day-to-day delegation lifecycle, agent policy, recovery, and host-routing guidance.
 
-## Codex model and effort policy
-
-Automatic/default Codex routing is fixed to `gpt-5.6-luna` with reasoning
-effort `low`, `medium`, or `high`; `medium` is the shipped default. Missing or
-invalid effort, non-Luna models, and explicit Codex bypasses fail before child
-process creation. Split hard work into bounded tickets rather than selecting
-another automatic model.
-
 ## Execution model
 
 Each delegation has:
@@ -132,6 +124,49 @@ Key evidence:
 4. For a transient stall, allow the bounded probe before opting into interruption.
 5. Restart only when the original process is proven unavailable or terminal and the retry budget permits it.
 6. Verify the new run from durable evidence, not from a pane appearing active.
+
+## Searchable evidence projection
+
+The host-local SQLite database is an operational projection, not execution authority. The supervisor performs `index sync` after each cycle by default. For manual operations:
+
+```bash
+agent-workflow index status
+agent-workflow index sync
+agent-workflow index query runs --state possibly_stalled
+agent-workflow index query incidents --category permission_wait
+agent-workflow index verify
+```
+
+Use a full verification before relying on an older index for analysis:
+
+```bash
+agent-workflow index verify --full
+```
+
+`--full` rehashes every indexed source artifact in addition to SQLite integrity and foreign-key checks. A mismatch indicates stale or altered source evidence; it does not rewrite the source file.
+
+### Rebuild and corruption recovery
+
+If the database is missing, corrupt, on an unsupported schema, or suspected of drift:
+
+```bash
+agent-workflow index rebuild
+agent-workflow index verify --full
+```
+
+The rebuild removes only the SQLite projection and its WAL/SHM companions, acquires the exclusive indexer lock, then reconstructs rows from validated active and archived run evidence. A corrupt individual run is quarantined as an index error while healthy runs remain queryable. Never repair an authoritative JSON/JSONL artifact by editing SQLite.
+
+For a scoped repair:
+
+```bash
+agent-workflow index rebuild --run SESSION
+```
+
+The database does not require an independent evidence backup because it is reconstructable. Back up or transfer authoritative run/archive directories and their sealed receipts instead. Do not copy a live WAL database as the sole record of a run.
+
+### Concurrency and freshness
+
+Only the indexer writes. It uses an exclusive state-root lock, short transactions, WAL mode, foreign keys, and stable shared-lock reads of append-only journals. Query commands are fixed and read-only. `index status` reports source/index counts, last synchronization, and errors; automation must treat a stale or incomplete index as a query limitation rather than a lifecycle fact. Disable supervisor reconciliation temporarily with `--no-sync-index` or `[supervisor].sync_index = false`.
 
 ## Durable messages
 

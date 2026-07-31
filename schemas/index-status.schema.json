@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/index-status/v1",
+  "type": "object",
+  "required": [
+    "schema",
+    "database",
+    "exists",
+    "authority",
+    "application_id",
+    "schema_version",
+    "journal_mode",
+    "source_run_count",
+    "run_count",
+    "current_run_count",
+    "stale_run_count",
+    "freshness",
+    "error_count",
+    "last_sync_at",
+    "last_sync_scope",
+    "size_bytes"
+  ],
+  "properties": {
+    "schema": {
+      "const": "agent-workflow/index-status/v1"
+    },
+    "database": {
+      "type": "string",
+      "minLength": 1
+    },
+    "exists": {
+      "type": "boolean"
+    },
+    "authority": {
+      "const": "json-jsonl-sealed-receipts"
+    },
+    "schema_version": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1
+    },
+    "run_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "error_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "last_sync_at": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "last_sync_scope": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "size_bytes": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "application_id": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1
+    },
+    "journal_mode": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "source_run_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "current_run_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "stale_run_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "freshness": {
+      "enum": [
+        "missing",
+        "current",
+        "stale",
+        "incomplete"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

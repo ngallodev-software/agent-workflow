@@ -13,10 +13,10 @@ Run from the repository root:
 
 ```bash
 python3 scripts/audit-release-assets.py
-agent-workflow pack validate prompt-packs/deterministic-enforcement-foundations
-agent-workflow pack validate prompt-packs/execution-isolation-and-secrets
-agent-workflow pack validate prompt-packs/public-beta-trust-and-release
-agent-workflow pack validate prompt-packs/mcp-server-next
+for pack in prompt-packs/*/pack.yaml; do
+  agent-workflow pack validate "$(dirname "$pack")"
+done
+agent-workflow index verify --full
 ```
 
 Treat a failing audit as a release blocker. Do not waive duplicate task IDs, unknown `backlog_id` values, cross-pack ownership, broken links, stale mirrors, invalid checksums, or missing active-pack documentation through prose.
@@ -28,7 +28,7 @@ Compare the live implementation with:
 - `BACKLOG.md` state, dependencies, and prompt-pack ownership;
 - active pack manifests, ticket IDs, prerequisites, and checksums;
 - public CLI help, command reference, man pages, shell completion, and examples;
-- schemas, migrations, packaged assets, and version markers;
+- schemas, migrations, packaged assets, version markers, and rebuildable SQLite projection provenance;
 - README, architecture, operations, testing, MCP, security, support, and release-readiness claims;
 - skills and portable execution/runbook copies;
 - chart-pack authority, trust-boundary, test, and release diagrams;
@@ -45,7 +45,8 @@ Classify every finding:
 4. **Security drift** — guidance claims preventative enforcement when implementation is only advisory or detective.
 5. **Evidence drift** — tests, reports, or completion claims are not derived from sealed/verified evidence.
 6. **Release drift** — version, manifest, packaging, dependency, support, license, or vulnerability-reporting claims disagree.
-7. **Diagram drift** — architecture or trust-boundary diagrams omit or misclassify a changed authority path.
+7. **Index drift** — SQLite schema/query claims, source provenance, freshness, or privacy exclusions disagree with the authoritative artifacts.
+8. **Diagram drift** — architecture or trust-boundary diagrams omit or misclassify a changed authority path.
 
 ## Agent review procedure
 

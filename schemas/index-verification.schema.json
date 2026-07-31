@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/index-verification/v1",
+  "type": "object",
+  "required": ["schema", "database", "valid", "schema_version", "expected_schema_version", "integrity_check", "foreign_key_errors", "source_verification", "source_mismatches"],
+  "properties": {
+    "schema": {"const": "agent-workflow/index-verification/v1"},
+    "database": {"type": "string", "minLength": 1},
+    "valid": {"type": "boolean"},
+    "schema_version": {"type": "integer", "minimum": 1},
+    "expected_schema_version": {"type": "integer", "minimum": 1},
+    "integrity_check": {"type": "array", "items": {"type": "string"}},
+    "foreign_key_errors": {"type": "array", "items": {"type": "object"}},
+    "source_verification": {"enum": ["full", "not-requested"]},
+    "source_mismatches": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": false
+}

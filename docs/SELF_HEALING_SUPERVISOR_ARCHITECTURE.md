@@ -308,7 +308,11 @@ probe_stalled = true
 interrupt_stalled = false
 restart_orphaned = false
 max_remediation_attempts = 1
+# Keep the rebuildable SQLite query projection current after each cycle.
+sync_index = true
 ```
+
+Index synchronization is best-effort relative to supervision: an index error is reported and journaled but does not stop health collection or bounded recovery. SQLite remains a projection and is never used as the sole authority for remediation.
 
 There is no hidden daemon or auto-start service in the current release. A future service wrapper must invoke this same foreground command and preserve its durable ownership rules.
 

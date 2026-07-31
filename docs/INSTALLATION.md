@@ -44,6 +44,8 @@ The MCP release is stdio-only. It exposes bounded run resources and
 prompt-pack validation; it does not expose shell execution, raw tmux control,
 destructive lifecycle tools, or HTTP transport.
 
+The searchable evidence index uses Python's standard-library SQLite support; it does not install or require a database service. Create it after installation with `agent-workflow index rebuild`.
+
 ## Installed locations
 
 ```text
@@ -54,6 +56,7 @@ destructive lifecycle tools, or HTTP transport.
 ~/.local/share/agent-workflow/prompt-packs/
 ~/.local/share/man/man1/
 ~/.local/state/agent-workflow/runs/
+~/.local/state/agent-workflow/index/agent-workflow.sqlite3
 ~/.agents/skills/
 ~/.codex/skills/
 ~/.claude/skills/
@@ -67,7 +70,7 @@ name must resolve to the same source directory; the installer refuses unrelated
 files or symlinks rather than creating ambiguous divergent copies. See
 [`DELEGATION_RUNBOOK.md`](references/DELEGATION_RUNBOOK.md) for invocation names and paired executor launch examples.
 
-XDG environment variables override config, state, and data roots.
+XDG environment variables override config, state, and data roots. The SQLite file is a rebuildable projection; preserve the run/archive directories and sealed receipts as the actual evidence backup.
 
 Configuration is schema-versioned (`schema_version = 1`) and unknown policy keys
 are rejected. The example config includes `[security].mode = "local"`; use

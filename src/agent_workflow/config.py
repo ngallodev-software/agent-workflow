@@ -95,6 +95,7 @@ class Settings:
     supervisor_max_remediation_attempts: int = 1
     supervisor_capture_interactive: bool = True
     supervisor_capture_lines: int = 200
+    supervisor_sync_index: bool = True
 
     @property
     def max_interactive_agent_panes(self) -> int:
@@ -202,6 +203,7 @@ def _validate_shape(data: dict[str, Any]) -> None:
             "max_remediation_attempts",
             "capture_interactive",
             "capture_lines",
+            "sync_index",
         },
     }
     for name, allowed in sections.items():
@@ -566,6 +568,12 @@ def load_settings(path: Path | None = None) -> Settings:
             base.supervisor_capture_interactive,
         ),
         supervisor_capture_lines=supervisor_capture_lines,
+        supervisor_sync_index=_boolean(
+            data,
+            "supervisor",
+            "sync_index",
+            base.supervisor_sync_index,
+        ),
     )
     require_trusted(
         inspect_path(path, label="configuration file", allow_missing=False),
@@ -625,6 +633,7 @@ def as_dict(s: Settings) -> dict[str, Any]:
             "max_remediation_attempts": s.supervisor_max_remediation_attempts,
             "capture_interactive": s.supervisor_capture_interactive,
             "capture_lines": s.supervisor_capture_lines,
+            "sync_index": s.supervisor_sync_index,
         },
         "executors": {
             name: {
@@ -649,9 +658,6 @@ def as_dict(s: Settings) -> dict[str, Any]:
                 "steering_adapter": s.executor_policies.get(
                     name, ExecutorPolicy()
                 ).steering_adapter,
-                "reasoning_effort": s.executor_policies.get(
-                    name, ExecutorPolicy()
-                ).reasoning_effort,
             }
             for name, command in s.executors.items()
         },

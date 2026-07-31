@@ -13,6 +13,7 @@ from .config import Settings
 from .contracts import read_launch_contract
 from .diagnostics import diagnose_observation
 from .errors import WorkflowError
+from .index_store import sync_index
 from .health import (
     permission_signal,
     record_health_sample,
@@ -45,6 +46,7 @@ class SupervisorOptions:
     interrupt_stalled: bool
     restart_orphaned: bool
     max_remediation_attempts: int
+    sync_index: bool
 
     @classmethod
     def from_settings(
@@ -57,6 +59,7 @@ class SupervisorOptions:
         interrupt_stalled: bool | None = None,
         restart_orphaned: bool | None = None,
         max_remediation_attempts: int | None = None,
+        sync_index_enabled: bool | None = None,
     ) -> "SupervisorOptions":
         return cls(
             capture_interactive=(
@@ -83,6 +86,11 @@ class SupervisorOptions:
             max_remediation_attempts=(
                 max_remediation_attempts
                 or settings.supervisor_max_remediation_attempts
+            ),
+            sync_index=(
+                settings.supervisor_sync_index
+                if sync_index_enabled is None
+                else sync_index_enabled
             ),
         )
 
@@ -412,6 +420,26 @@ def supervise_once(
             }
         )
 
+    index_report: dict[str, Any] | None = None
+    if options.sync_index:
+        try:
+            index_report = sync_index(settings)
+        except WorkflowError as exc:
+            from .index_store import database_path
+
+            index_report = {
+                "schema": "agent-workflow/index-sync-report/v1",
+                "database": str(database_path(settings)),
+                "authority": "json-jsonl-sealed-receipts",
+                "indexed": [],
+                "indexed_count": 0,
+                "skipped": [],
+                "skipped_count": 0,
+                "pruned": [],
+                "error_count": 1,
+                "errors": [{"session_id": None, "error": str(exc)}],
+            }
+
     return {
         "schema": SUPERVISOR_REPORT_SCHEMA,
         "recorded_at": utc_now(),
@@ -422,11 +450,13 @@ def supervise_once(
             "interrupt_stalled": options.interrupt_stalled,
             "restart_orphaned": options.restart_orphaned,
             "max_remediation_attempts": options.max_remediation_attempts,
+            "sync_index": options.sync_index,
         },
         "repaired_projection_count": len(repaired),
         "repaired_projections": repaired,
         "run_count": len(results),
         "runs": results,
+        "index_sync": index_report,
     }
 
 

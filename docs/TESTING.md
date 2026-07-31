@@ -45,6 +45,12 @@ Supervisor coverage must prove behavior through the installed CLI where host fac
 
 Low-level tests may inject deterministic health samples or fake tmux/process observations, but they may not make mutable status or pane text authoritative. Live host/executor matrices remain gated under `SUP-006`.
 
+### SQLite projection journeys
+
+`tests/invariants/test_sqlite_index.py` exercises deterministic rebuild, unchanged-run incremental sync, curated run/performance queries, query-freshness envelopes, workflow node/edge materialization, same-size/same-mtime source-change detection, source tamper detection, corrupt-run quarantine, mixed-currency nulling, and the invariant that terminal bodies never enter the database. Installed-product validation must additionally build a wheel, invoke the public `agent-workflow index` commands, delete the database, rebuild it, and compare query results and source provenance.
+
+Migration tests start from every supported prior schema version. Corruption tests must distinguish a damaged SQLite projection—which is disposable—from damaged authoritative evidence, which must fail closed and remain untouched. Performance work must use generated multi-run fixtures and publish source-count, event-count, database-size, sync-time, rebuild-time, and query-latency evidence rather than relying on unit-level timing assertions.
+
 ### Release checks
 
 `tests/release/` validates distribution properties: repository release assets, JSON Schemas, shell syntax, agreement between documented primary commands and installed help, deterministic backlog/prompt-pack ownership, release-policy/lock synchronization, and the durable release-evidence path. Static documentation and metadata checks belong here, not in behavioral unit tests.

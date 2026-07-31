@@ -1,6 +1,6 @@
 # agent-workflow repository chart pack
 
-**Release:** 0.5.1
+**Release:** 0.6.0
 **Purpose:** current-state architecture, data/evidence model, execution flows, security boundaries, and planned MCP evolution.
 
 Mermaid sources for the highest-value diagrams are also stored as individual `.mmd` files in this directory.
@@ -18,6 +18,9 @@ flowchart LR
   Tmux --> Executors[Codex / Claude executors]
   Executors --> Artifacts[Run artifacts + JSONL evidence]
   Core --> Artifacts
+  Core --> Index[(Rebuildable SQLite index)]
+  Artifacts --> Index
+  Index --> Core
   Core --> Workflow[Workflow graph scheduler]
   Workflow --> Core
   Reviewer[Independent reviewer] --> CLI
@@ -34,6 +37,7 @@ flowchart TB
   cli --> sessions[sessions.py]
   cli --> workflow_service[workflow_service.py]
   cli --> lifecycle[lifecycle.py]
+  cli --> index_store[index_store.py]
   cli --> messages[messages.py]
   cli --> evalpkg[eval/*]
   cli --> pack[pack.py/manifests.py]
@@ -59,6 +63,9 @@ flowchart TB
   mcp_services --> messages
   mcp_services --> receipts
   mcp_services --> command_catalog[command_catalog.py]
+  index_store --> state
+  index_store --> contracts
+  supervisor[supervisor.py] --> index_store
   mcp_services --> contracts
   contracts[contracts.py + schemas/] --> cli
   contracts --> sessions
@@ -87,6 +94,7 @@ flowchart TB
     Provider[provider-evidence.json]
     Trial[trial-evidence.json]
     Terminal[tmux capture / logs]
+    Index[(SQLite evidence projection)]
   end
   Snapshot --> WFStatus
   Events --> WFStatus
@@ -102,6 +110,12 @@ flowchart TB
   Events --> WFR
   Control --> Status
   Terminal -. observational only .-> Status
+  Snapshot --> Index
+  Events --> Index
+  Control --> Index
+  Final --> Index
+  Life --> Index
+  Index -. searchable only; never authority .-> Status
 ```
 
 ## 4. Session run artifact tree
@@ -135,6 +149,34 @@ flowchart TB
   Final -->|hashes| Completion
   Final -->|hashes| Provider
 ```
+
+## 4A. Searchable evidence projection
+
+```mermaid
+flowchart LR
+  subgraph Source[Authoritative evidence]
+    Runs[Run JSON/JSONL]
+    Workflows[Workflow snapshots/events]
+    Receipts[Sealed and lifecycle receipts]
+  end
+  Reconcile[No-follow schema-validating reconciler]
+  DB[(SQLite WAL projection)]
+  CLI[Fixed read-only CLI queries]
+  Supervisor[Foreground supervisor]
+  Analysis[Operational/performance analysis]
+
+  Runs --> Reconcile
+  Workflows --> Reconcile
+  Receipts --> Reconcile
+  Reconcile --> DB
+  DB --> CLI
+  DB --> Supervisor
+  DB --> Analysis
+  DB -. delete and rebuild .-> Reconcile
+  DB -. cannot authorize or rewrite .-> Source
+```
+
+Every row is derived and traceable to source path, sequence where applicable, schema identity, and digest. Raw prompts, terminal/message bodies, credentials, and large logs remain outside SQLite.
 
 ## 5. Delegated run lifecycle
 

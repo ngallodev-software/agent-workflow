@@ -44,6 +44,7 @@ The application favors **deterministic control code around probabilistic agents*
 | Workflow scheduling | Restart-safe DAGs, bounded parallelism, approval gates, result bindings, retries, aggregate receipts |
 | Unattended diagnosis | Separate runner liveness and semantic progress, interactive terminal snapshots, process/resource samples, permission and incident journals |
 | Bounded self-correction | Foreground supervisor, projection repair, one-shot progress probes, opt-in interruption and lineage-preserving restart |
+| Searchable evidence | Rebuildable SQLite projection for cross-run, workflow, incident, permission, and performance queries |
 | Evaluation | Deterministic templates, provider-neutral usage evidence, cohort comparison, sealed-run assessment and ledgers |
 | MCP | Bounded read-only local stdio adapter for command and run context |
 
@@ -68,6 +69,7 @@ launch-contract.json                status.json
 append-only messages/journals       tmux session/window/pane layout
 workflow snapshot + events          terminal capture returned by status
 sealed completion and receipts      derived summaries and dashboards
+                                    rebuildable SQLite evidence index
 ```
 
 A projection may be rebuilt. Authority-changing actions—permission grants, policy expansion, acceptance, merge, destructive cleanup—cannot be inferred from a projection or delegated to an unverified agent.
@@ -177,6 +179,30 @@ The configured state root normally contains:
 
 Worktree `.delegations/` entries are only discoverability links. The XDG state directory remains the evidence authority.
 
+## Search and analyze across runs
+
+JSON/JSONL artifacts and sealed receipts remain the source of truth. A host-local SQLite database provides a disposable, transactionally consistent projection for operational search and analysis:
+
+```bash
+agent-workflow index status
+agent-workflow index sync
+agent-workflow index query runs --state possibly_stalled --limit 25
+agent-workflow index query incidents --category permission_wait
+agent-workflow index query performance --executor codex --model MODEL
+agent-workflow index verify --full
+
+# Delete and reconstruct every indexed row from authoritative evidence.
+agent-workflow index rebuild
+```
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/evidence-index-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/evidence-index-light.svg">
+  <img alt="Authoritative run evidence reconciled into a rebuildable SQLite query projection" src="docs/assets/evidence-index-light.svg" width="100%">
+</picture>
+
+Each query reports whether the projection is `current`, `stale`, or `incomplete` before presenting rows. The index stores normalized searchable fields, source paths, record sequence, and SHA-256 provenance. It deliberately excludes raw prompts, terminal bodies, message bodies, and large logs. One indexer owns writes; reporting surfaces use read-only queries. Database loss or corruption does not lose execution history: `agent-workflow index rebuild` recreates the projection from validated source artifacts. See [`docs/SQLITE_EVIDENCE_INDEX_ARCHITECTURE.md`](docs/SQLITE_EVIDENCE_INDEX_ARCHITECTURE.md) and [`DEC-007`](docs/DECISIONS/DEC-007-REBUILDABLE-SQLITE-PROJECTION.md).
+
 ## Workflow graphs
 
 ```bash
@@ -229,7 +255,7 @@ The remaining governed-sandbox and authenticated-principal work is tracked under
 
 ## Project state and roadmap
 
-The next major layer is bounded hierarchical orchestration:
+The searchable evidence projection and bounded supervisor foundations are implemented and in review. The next major orchestration layer is bounded hierarchical orchestration:
 
 ```text
 root orchestrator
@@ -261,6 +287,8 @@ The suite is acceptance-first: build a wheel, install it, and exercise public co
 |---|---|
 | Architecture and authority | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
 | Self-healing supervisor design | [`docs/SELF_HEALING_SUPERVISOR_ARCHITECTURE.md`](docs/SELF_HEALING_SUPERVISOR_ARCHITECTURE.md) |
+| Searchable SQLite evidence projection | [`docs/SQLITE_EVIDENCE_INDEX_ARCHITECTURE.md`](docs/SQLITE_EVIDENCE_INDEX_ARCHITECTURE.md) |
+| SQLite implementation verification | [`docs/SQLITE_EVIDENCE_INDEX_IMPLEMENTATION_VERIFICATION_20260730.md`](docs/SQLITE_EVIDENCE_INDEX_IMPLEMENTATION_VERIFICATION_20260730.md) |
 | Hierarchical orchestration | [`docs/HIERARCHICAL_MULTI_TEAM_ORCHESTRATION_DESIGN.md`](docs/HIERARCHICAL_MULTI_TEAM_ORCHESTRATION_DESIGN.md) |
 | Commands | [`docs/COMMAND_REFERENCE.md`](docs/COMMAND_REFERENCE.md) |
 | Operations and recovery | [`docs/OPERATIONS.md`](docs/OPERATIONS.md) |

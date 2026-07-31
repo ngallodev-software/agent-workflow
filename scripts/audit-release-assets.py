@@ -381,6 +381,7 @@ def main(argv: list[str] | None = None) -> int:
         ROOT / "docs/man/agent-workflow.1": f"agent-workflow {EXPECTED_VERSION}",
         ROOT / "docs/man/agent-workflow-workflow.1": f"agent-workflow {EXPECTED_VERSION}",
         ROOT / "docs/man/agent-workflow-mcp.1": f"agent-workflow {EXPECTED_VERSION}",
+        ROOT / "docs/man/agent-workflow-index.1": f"agent-workflow {EXPECTED_VERSION}",
         ROOT / "docs/diagrams/REPOSITORY_CHART_PACK.md": f"**Release:** {EXPECTED_VERSION}",
     }
     for path, needle in version_locations.items():

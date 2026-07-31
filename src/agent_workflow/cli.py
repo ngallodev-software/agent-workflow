@@ -41,6 +41,7 @@ from .errors import InteractiveCapacityError, WorkflowError
 from .ledger import build_ledger, render_ledger
 from .lifecycle import record as record_lifecycle
 from .inspect_adapter import build_task as build_inspect_task
+from .index_store import index_status, query_index_report, rebuild_index, sync_index, verify_index
 from .inspect_adapter import run_inspect
 from .integrations.swebench import write_prediction
 from .manifests import validate_pack, write_checksum_manifest
@@ -108,7 +109,7 @@ def _print_table(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="agent-workflow")
-    parser.add_argument("--version", action="version", version="%(prog)s 0.5.1")
+    parser.add_argument("--version", action="version", version="%(prog)s 0.6.0")
     parser.add_argument("--config", type=Path, help="override config.toml path")
     parser.add_argument(
         "--json",
@@ -340,6 +341,12 @@ def build_parser() -> argparse.ArgumentParser:
             help="opt in to lineage-preserving restart of orphaned interactive runs",
         )
         command.add_argument("--max-remediation-attempts", type=int)
+        command.add_argument(
+            "--sync-index",
+            action=argparse.BooleanOptionalAction,
+            default=None,
+            help="reconcile the rebuildable SQLite projection after each cycle",
+        )
 
     supervisor_once_parser = supervisor_commands.add_parser(
         "once", help="run one reconciliation and remediation cycle"
@@ -351,6 +358,41 @@ def build_parser() -> argparse.ArgumentParser:
     add_supervisor_options(supervisor_run_parser)
     supervisor_run_parser.add_argument("--interval-seconds", type=int)
     supervisor_run_parser.add_argument("--max-cycles", type=int)
+
+    index = commands.add_parser(
+        "index", help="rebuildable SQLite projection and analytical queries"
+    )
+    index_commands = index.add_subparsers(dest="index_command", required=True)
+    index_commands.add_parser("status", help="show index location, version, and freshness")
+    for name, help_text in (
+        ("sync", "incrementally reconcile changed run directories"),
+        ("rebuild", "recreate the projection from authoritative evidence"),
+    ):
+        index_write = index_commands.add_parser(name, help=help_text)
+        index_write.add_argument("--run", dest="session_id", help="limit indexing to one run ID")
+        index_write.add_argument(
+            "--active-only", action="store_true", help="exclude archived runs from discovery"
+        )
+    index_verify = index_commands.add_parser(
+        "verify", help="check SQLite integrity and optional source digests"
+    )
+    index_verify.add_argument(
+        "--full", action="store_true", help="rehash every indexed source artifact"
+    )
+    index_query = index_commands.add_parser(
+        "query", help="query curated read-only operational views"
+    )
+    index_query.add_argument(
+        "kind",
+        choices=("runs", "incidents", "permissions", "performance", "workflows", "workflow-nodes", "errors"),
+    )
+    index_query.add_argument("--session", dest="session_id")
+    index_query.add_argument("--state")
+    index_query.add_argument("--category")
+    index_query.add_argument("--executor")
+    index_query.add_argument("--model")
+    index_query.add_argument("--pack", dest="pack_id")
+    index_query.add_argument("--limit", type=int, default=100)
 
     attach = commands.add_parser("attach", help="foreground a delegation")
     attach.add_argument("session_id")
@@ -879,6 +921,7 @@ def main(argv: list[str] | None = None) -> int:
                 interrupt_stalled=args.interrupt_stalled,
                 restart_orphaned=args.restart_orphaned,
                 max_remediation_attempts=args.max_remediation_attempts,
+                sync_index_enabled=args.sync_index,
             )
             if args.supervisor_command == "once":
                 data = supervise_once(
@@ -899,6 +942,49 @@ def main(argv: list[str] | None = None) -> int:
                     "cycle_count": len(reports),
                     "reports": reports,
                 }
+        elif args.command == "index":
+            if args.index_command == "status":
+                data = index_status(settings)
+            elif args.index_command == "sync":
+                data = sync_index(
+                    settings,
+                    session_id=args.session_id,
+                    include_archived=not args.active_only,
+                )
+            elif args.index_command == "rebuild":
+                data = rebuild_index(
+                    settings,
+                    session_id=args.session_id,
+                    include_archived=not args.active_only,
+                )
+            elif args.index_command == "verify":
+                data = verify_index(settings, full=args.full)
+            else:
+                report = query_index_report(
+                    settings,
+                    args.kind,
+                    session_id=args.session_id,
+                    state=args.state,
+                    category=args.category,
+                    executor=args.executor,
+                    model=args.model,
+                    pack_id=args.pack_id,
+                    limit=args.limit,
+                )
+                if args.json:
+                    _print_json(report)
+                else:
+                    print(
+                        "index: "
+                        f"{report['freshness']} "
+                        f"({report['current_run_count']} current, "
+                        f"{report['stale_run_count']} stale, "
+                        f"{report['error_count']} errors)"
+                    )
+                    rows = report["rows"]
+                    columns = [(key, key.upper()) for key in (rows[0].keys() if rows else [])]
+                    _print_table(rows, columns)
+                return 0
         elif args.command == "status":
             capture_lines = (
                 settings.capture_lines if args.capture == -1 else args.capture

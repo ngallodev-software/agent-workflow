@@ -13,7 +13,7 @@ The project is pre-public-release and does not yet have a monitored public vulne
 - Commands are represented as argv arrays rather than shell command strings in governed launch paths.
 - IDs are restricted before they become paths, tmux names, or evidence keys.
 - Many authority files are regular read-only files verified through stable descriptors and content digests.
-- Status files, logs, and terminal capture are projections, not authorities.
+- Status files, logs, terminal capture, and SQLite index rows are projections, not authorities.
 - Workflow state is reconstructed from an immutable snapshot and append-only journal.
 - Approval is explicit and binds an actor label, reason, revision, and sealed evidence.
 - Provider usage fails closed on mixed modes, conflicting identities, malformed totals, or incomplete cost metadata.
@@ -24,7 +24,14 @@ The project is pre-public-release and does not yet have a monitored public vulne
 - Prompt packs, native jobs, prompts, and MCP repository/state roots use component-wise no-follow traversal; irregular entries and content changes during validation are rejected. Pack archives are built from the validated inventory and include a typed canonical manifest.
 - Runtime schemas come only from the executing source checkout or installed package asset set; duplicate IDs, malformed assets, and missing packaged assets fail closed.
 - Bounded health supervision records changed/redacted terminal snapshots, process/resource samples, permission observations, typed incidents, and remediation outcomes. Mutable status repair is allowed only from immutable authority; safe progress probes are attempt-bounded. Interrupt/restart are disabled by default and cannot widen authority.
+- The SQLite evidence index is host-local and rebuildable. A single locked writer imports bounded normalized fields plus source digests; fixed read-only queries cannot mutate authority. Raw prompts, message bodies, terminal bodies, executor output, credentials, and large logs are excluded from the index by design.
 - The project does not automatically merge, delete failed worktrees, grant permissions, expose credentials, expand sandbox/network/model policy, accept work, expose remote execution, or authorize network MCP transport.
+
+## Search-index trust boundary
+
+The database at the configured state root is a convenience and analysis surface. It must never be used to authorize launch, steering, permission, review, acceptance, merge, retry, or deletion. Every indexed source row carries a relative source path, record sequence where applicable, schema identity, and SHA-256 provenance. Full verification rehashes those sources; rebuilding from source is the recovery path.
+
+The index deliberately avoids arbitrary SQL through the CLI and does not duplicate high-risk free-form bodies. Any future Parquet export, remote query API, or multi-user database requires the `HARD-006` retention/redaction decision and a separate exposure review. SQLite file ownership and directory permissions remain subject to the same trust checks as the rest of the state root.
 
 ## Known pre-public limitations
 
@@ -35,7 +42,7 @@ These are active release blockers, not theoretical future hardening:
 - MCP reads are metadata-minimal, bounded, and component-wise no-follow, but the installed stdio journey remains unverified and phase-gate acceptance remains open (`HARD-005`).
 - writable-path policy for untrusted commands is primarily post-run detection rather than a preventative OS sandbox (`HARD-003`);
 - some runner/evaluation decisions still depend on mutable status projections rather than one immutable launch authority (`HARD-004`);
-- terminal and incident capture uses bounded redaction, but comprehensive field-level classification, retention, export, and deletion policy remains incomplete (`HARD-006`, `SUP-003`);
+- terminal, incident, and searchable index fields use bounded redaction/exclusion, but comprehensive field-level classification, retention, export, deletion, and analytical-release policy remains incomplete (`HARD-006`, `SUP-003`, `IDX-006`);
 - process/resource telemetry is observational; preventative CPU/memory/disk/network enforcement and adaptive backpressure remain incomplete (`HARD-003`, `SUP-004`);
 - actor strings are not authenticated principals, so reviewer independence and remediation/permission attribution remain procedural rather than cryptographically or OS-authenticated (`HARD-007`, `SUP-005`);
 - config/executable ownership and compatibility evidence are enforced by explicit local/governed/release policy; repository-local hooks and filters remain an operator-visible trust decision rather than being silently disabled;

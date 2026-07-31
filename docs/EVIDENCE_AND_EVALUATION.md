@@ -11,7 +11,15 @@
 5. **Workflow receipt:** a terminal aggregate commits to the workflow snapshot, journal, node bindings, child receipts, approvals, retry lineage, and disposition.
 6. **Evaluation evidence:** scorer receipts, score sets, trial evidence, and cohort comparisons bind conclusions to sealed source evidence.
 
-Status JSON files are projections and may be regenerated.
+Status JSON files and the SQLite evidence index are projections and may be regenerated.
+
+## Searchable operational projection
+
+`agent-workflow index` materializes validated run, workflow, health, incident, permission, remediation, process, and performance fields into a host-local SQLite database. The projection exists to answer cross-run questions efficiently; it does not replace source artifacts or sealed receipts. Every imported file and record is traceable through relative path, sequence, schema identity, size, modification metadata, and SHA-256 digest.
+
+The index intentionally excludes prompts, raw terminal/message bodies, large output logs, and credentials. Fixed read-only query kinds cover operational run views, incident and permission summaries, performance observations, workflow state, and index errors. Performance projections keep provider-billed and locally estimated cost separate and do not average across incompatible currencies. A complete rebuild from authoritative evidence is always supported. See [SQLite evidence index architecture](SQLITE_EVIDENCE_INDEX_ARCHITECTURE.md).
+
+SQLite is the operational catalog for the current single-host design. Privacy-governed Parquet snapshots and DuckDB analysis may be added later for large immutable cohorts; PostgreSQL or another shared service is deferred until multi-host orchestration is authorized and demonstrated.
 
 ## Provider event envelope
 
