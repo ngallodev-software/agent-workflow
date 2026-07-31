@@ -167,9 +167,17 @@ def _drain_control_bridge(run_dir: Path, *, active: bool) -> None:
             if intent_kind != "ack" and value.get("outcome") is not None:
                 raise WorkflowError("only acknowledgement intents may include outcome")
             if intent_kind == "task_complete":
+                completion_sha256 = value.get("completion_sha256")
+                if (
+                    not isinstance(completion_sha256, str)
+                    or len(completion_sha256) != 64
+                    or any(character not in "0123456789abcdef" for character in completion_sha256)
+                ):
+                    raise WorkflowError("task completion intent requires a completion handoff digest")
                 completion = _collect_completion(
                     run_dir,
                     Path(str(launch["worktree"]["path"])),
+                    expected_source_sha256=completion_sha256,
                 )
                 if completion["validation_status"] != "valid":
                     details = "; ".join(completion.get("validation_errors", []))
@@ -295,7 +303,11 @@ def _require_real_handoff_dir(handoff: Path, workdir: Path) -> None:
 
 
 def _collect_completion(
-    run_dir: Path, workdir: Path, *, secret_values: tuple[str, ...] = ()
+    run_dir: Path,
+    workdir: Path,
+    *,
+    secret_values: tuple[str, ...] = (),
+    expected_source_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Collect native executor evidence before downstream collectors and sealing."""
     launch = read_launch_contract(run_dir / "launch-contract.json")
@@ -323,7 +335,13 @@ def _collect_completion(
             raise FileNotFoundError("launch has no completion handoff")
         _require_real_handoff_dir(handoff, contract_workdir)
         assert source is not None
-        data = redact_bytes(_read_handoff_completion(source), secret_values)
+        source_data = _read_handoff_completion(source)
+        if (
+            expected_source_sha256 is not None
+            and hashlib.sha256(source_data).hexdigest() != expected_source_sha256
+        ):
+            raise WorkflowError("task completion handoff changed after task-complete intent")
+        data = redact_bytes(source_data, secret_values)
     except FileNotFoundError as exc:
         receipt["validation_errors"] = [str(exc)]
     except WorkflowError as exc:

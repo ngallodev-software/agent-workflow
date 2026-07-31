@@ -492,6 +492,18 @@ if mode in {"task-complete", "task-complete-terminate"}:
         ],
         check=True,
     )
+if mode == "task-complete-mutate":
+    subprocess.run(
+        [
+            os.environ["AGENT_WORKFLOW_CLI"], "agent", "task-complete",
+            os.environ["AGENT_WORKFLOW_SESSION_ID"],
+            "--actor", "fixture-child", "--summary", "fixture assignment complete",
+        ],
+        check=True,
+    )
+    completion["result"] = "blocked"
+    completion["unresolved"] = ["fixture replaced completion after task-complete"]
+    (handoff / "completion.json").write_text(json.dumps(completion), encoding="utf-8")
 if mode == "task-complete-terminate":
     subprocess.run(
         [

@@ -245,6 +245,37 @@ def test_bridged_task_complete_rejects_invalid_handoff_before_reuse(
     assert any(item["outcome"] == "rejected" and "task completion handoff is invalid" in item["reason"] for item in intents)
 
 
+def test_bridged_task_complete_binds_the_finalized_completion_digest(
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+    fake_agent_path: Path,
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    git_repo(repo)
+    prompt = tmp_path / "prompt.md"
+    prompt.write_text("Attempt to replace the completion after task-complete.\n", encoding="utf-8")
+    env = dict(product_env)
+    env["FAKE_AGENT_MODE"] = "task-complete-mutate"
+    installed_product.json(
+        "launch", "mutated-bridge", repo, prompt, "--tier", "low",
+        "--agent-class", "implementation", "--interactive", "--",
+        fake_agent_path, env=env,
+    )
+    wait_for_status(env, "mutated-bridge")
+    context = installed_product.json("agent", "context", "mutated-bridge", env=env)
+    assert context["state"] == "busy"
+    intents = [
+        json.loads(line)
+        for line in (_run_dir(env, "mutated-bridge") / "control-intents.jsonl").read_text().splitlines()
+    ]
+    assert any(
+        item["outcome"] == "rejected"
+        and "task completion handoff changed after task-complete intent" in item["reason"]
+        for item in intents
+    )
+
+
 def test_durable_messages_survive_process_boundaries_and_are_acknowledged(
     installed_product: InstalledProduct,
     product_env: dict[str, str],

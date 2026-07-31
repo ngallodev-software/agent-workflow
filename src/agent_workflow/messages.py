@@ -46,6 +46,7 @@ _KIND_DIRECTIONS = {
 CONTROL_BRIDGE_SCHEMA = "agent-workflow/control-intent/v1"
 CONTROL_BRIDGE_ENV = "AGENT_WORKFLOW_CONTROL_BRIDGE"
 CONTROL_BRIDGE_MAX_BYTES = 32 * 1024
+_SHA256_HEX_LENGTH = 64
 
 
 def canonical_message_bytes(message: dict[str, Any]) -> bytes:
@@ -115,6 +116,22 @@ def write_control_intent(
         _uuid(correlation_id, "correlation_id")
     if not isinstance(content, str) or not content or len(content) > MAX_CONTENT_CHARS:
         raise WorkflowError("invalid control intent content")
+    completion_sha256: str | None = None
+    if kind == "task_complete":
+        handoff_value = os.environ.get("AGENT_WORKFLOW_HANDOFF_DIR")
+        if not handoff_value:
+            raise WorkflowError("task completion requires a completion handoff directory")
+        completion_path = Path(handoff_value) / "completion.json"
+        try:
+            mode = completion_path.lstat().st_mode
+        except OSError as exc:
+            raise WorkflowError("task completion requires a completion handoff") from exc
+        if stat.S_ISLNK(mode) or not stat.S_ISREG(mode):
+            raise WorkflowError("task completion handoff must be a regular non-symlink file")
+        try:
+            completion_sha256 = hashlib.sha256(completion_path.read_bytes()).hexdigest()
+        except OSError as exc:
+            raise WorkflowError("cannot read task completion handoff") from exc
     sequence = 1
     for candidate in bridge.glob("intent-*.json"):
         try:
@@ -131,6 +148,7 @@ def write_control_intent(
         "content": content,
         "correlation_id": correlation_id,
         "outcome": outcome,
+        "completion_sha256": completion_sha256,
     }
     intent["digest"] = "sha256:" + hashlib.sha256(
         json.dumps(intent, sort_keys=True, separators=(",", ":")).encode("utf-8")
