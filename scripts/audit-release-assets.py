@@ -196,9 +196,12 @@ def _audit_backlog_and_prompt_pack_ownership() -> None:
                     global_task_ids[task_id] = str(manifest.relative_to(ROOT))
                 task_type = task.get("task_type", "implementation")
                 backlog_id = task.get("backlog_id", "")
-                if task_type in {"gate", "review"}:
+                if task_type in {"gate", "review", "historical"}:
                     if backlog_id:
-                        fail(f"{manifest.relative_to(ROOT)}:{task.get('_line')}: gate task {task_id} must not claim backlog_id")
+                        fail(
+                            f"{manifest.relative_to(ROOT)}:{task.get('_line')}: "
+                            f"{task_type} task {task_id} must not claim backlog_id"
+                        )
                     continue
                 if not backlog_id:
                     fail(f"{manifest.relative_to(ROOT)}:{task.get('_line')}: implementation task {task_id} missing backlog_id")

@@ -4,9 +4,12 @@
 
 Implement reliable two-way messaging between spawned agents and the orchestrator without making tmux, terminal output, polling, or prompt prose authoritative.
 
-The target architecture is documented in [`docs/ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md`](../../docs/ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md). This pack owns `BKL-001`, `BKL-002`, and `MSG-001` through `MSG-007`. Canonical status remains in [`BACKLOG.md`](../../docs/BACKLOG.md).
+The target architecture is documented in [`docs/ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md`](../../docs/ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md). This pack actively owns `BKL-001`, `BKL-002`, and `MSG-002` through `MSG-007`. `MSG-001` remains as a historical prerequisite after its sealed force-acceptance record. Canonical unfinished status remains in [`BACKLOG.md`](../../docs/BACKLOG.md).
 
 ## Collision-free ownership
+
+Historical manifest tasks preserve dependency edges and ticket provenance, but
+do not claim an unfinished backlog item or appear in `backlog_items`.
 
 - `BKL-001` and `BKL-002` existed in the backlog but were not owned by another active pack. This pack becomes their sole implementation owner.
 - `MSG-*` is a new namespace reserved for this messaging implementation.

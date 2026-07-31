@@ -8,7 +8,7 @@ tasks:
     prompt: "tickets/BKL-001-durable-consumer-cursors.md"
     backlog_id: "BKL-001"
   - id: "MSG-001"
+    task_type: "historical"
     tier: A
     session: "messaging-orchestrator-inbox"
     prompt: "tickets/MSG-001-orchestrator-registry-inbox.md"
-    backlog_id: "MSG-001"

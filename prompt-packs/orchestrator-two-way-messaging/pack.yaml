@@ -3,7 +3,6 @@ pack_id: "orchestrator-two-way-messaging"
 backlog_items:
   - "BKL-001"
   - "BKL-002"
-  - "MSG-001"
   - "MSG-002"
   - "MSG-003"
   - "MSG-004"
