@@ -57,6 +57,7 @@ def test_external_executor_completes_with_sealed_user_visible_evidence(
     launch_prompt = (handoff / "prompt-seen.txt").read_text()
     assert "Inspect the repository" in launch_prompt
     assert "Do not run `--help` for commands represented in the catalog" in launch_prompt
+    assert "Host-owned merge, review, acceptance, release, and pane closure" in launch_prompt
     assert (handoff / "completion-template.json").is_file()
     assert "structured non-interactive run" in launch_prompt
 

@@ -37,6 +37,10 @@ substitute. Its command and criterion records must use the authoritative shape:
 `task-complete` rejects an absent, schema-invalid, or non-substantive sidecar
 and leaves the assignment busy so it can be corrected.
 
+For a `completed` result, `unresolved` must be empty. Do not list normal
+host-owned merge, review, acceptance, release, or pane-closure work as an
+unresolved item; report those as next steps in the Markdown handoff instead.
+
 ## Source baseline
 
 | Repository/component | Revision before | Revision after | Dirty before |

@@ -401,6 +401,7 @@ def _write_launch_prompt(
             f"- completion_template: `{handoff_dir / 'completion-template.json'}` (read-only starting point; copy it to `completion.json` and edit the evidence)",
             "- Write completion JSON only to `AGENT_WORKFLOW_HANDOFF_DIR/completion.json` using schema `agent-workflow/completion/v1`.",
             "- Write it atomically; optional `completion.md` and `evidence.json` sidecars may use the same handoff directory.",
+            "- `result: completed` requires an empty `unresolved` list. Host-owned merge, review, acceptance, release, and pane closure are normal next steps, not unresolved defects.",
             "- Canonical runtime completion paths are collector-owned; do not write to them.",
             "- Matching environment variables use the `AGENT_WORKFLOW_` prefix.",
             "- At meaningful checkpoints you may emit a concise durable progress update with `\"$AGENT_WORKFLOW_CLI\" progress "
