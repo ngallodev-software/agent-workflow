@@ -83,6 +83,39 @@ def test_substantive_completion_accepts_failure_with_real_unresolved_evidence() 
     ) == []
 
 
+def test_substantive_completion_preserves_failed_command_as_non_success() -> None:
+    value = _completion(
+        commands=[
+            {
+                "argv": ["python3", "-m", "pytest"],
+                "cwd": ".",
+                "exit_code": 1,
+                "receipt": "1 failed",
+            }
+        ]
+    )
+    errors = substantive_completion_errors(
+        value, session_id="run-1", ticket_id="T-1", pack_id="pack-1"
+    )
+    assert "completed result cannot hide commands[0] exit_code 1" in errors
+
+
+def test_substantive_completion_rejects_missing_command_exit_code() -> None:
+    value = _completion(
+        commands=[
+            {
+                "argv": ["python3", "-m", "pytest"],
+                "cwd": ".",
+                "receipt": "exit code unavailable",
+            }
+        ]
+    )
+    errors = substantive_completion_errors(
+        value, session_id="run-1", ticket_id="T-1", pack_id="pack-1"
+    )
+    assert "commands[0].exit_code is missing or invalid" in errors
+
+
 def test_git_snapshot_matches_operator_global_excludes_and_records_provenance(
     tmp_path: Path, monkeypatch,
 ) -> None:

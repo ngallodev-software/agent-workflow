@@ -83,6 +83,8 @@ def substantive_completion_errors(
         cwd = command.get("cwd")
         receipt = command.get("receipt")
         exit_code = command.get("exit_code")
+        if not isinstance(exit_code, int) or isinstance(exit_code, bool):
+            errors.append(f"commands[{index}].exit_code is missing or invalid")
         if not argv or any(_empty_or_placeholder(item) for item in argv):
             errors.append(f"commands[{index}].argv is empty or placeholder-only")
         if _empty_or_placeholder(cwd):
@@ -91,6 +93,10 @@ def substantive_completion_errors(
             errors.append(f"commands[{index}].receipt is empty or placeholder-only")
         if exit_code == 0:
             successful_commands += 1
+        elif result == "completed":
+            errors.append(
+                f"completed result cannot hide commands[{index}] exit_code {exit_code}"
+            )
     if result == "completed" and commands and successful_commands == 0:
         errors.append("completed result requires at least one successful command receipt")
 
