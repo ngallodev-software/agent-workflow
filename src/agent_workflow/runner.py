@@ -65,6 +65,7 @@ from .path import read_regular_file
 MAX_COMPLETION_HANDOFF_BYTES = 1024 * 1024
 MAX_EXECUTOR_STDOUT_BYTES = 16 * 1024 * 1024
 MAX_EXECUTOR_STDERR_BYTES = 16 * 1024 * 1024
+CONTROL_POLL_SECONDS = 0.25
 _RUNTIME_ENVIRONMENT = (
     "AGENT_WORKFLOW_SESSION_ID",
     "AGENT_WORKFLOW_TICKET_ID",
@@ -961,48 +962,59 @@ def execute(
         thread.start()
     deadline = time.monotonic() + timeout_seconds if timeout_seconds else None
     timed_out = False
+    last_health_at: float | None = None
     while True:
-        atomic_write_json(
-            heartbeat_path,
-            {
-                "schema": "agent-workflow/heartbeat/v2",
-                "runner_pid": os.getpid(),
-                "executor_pid": process.pid,
-                "at": utc_now(),
-            },
-        )
+        now = time.monotonic()
         active = process.poll() is None
-        pane_id = os.environ.get("TMUX_PANE") if interactive else None
-        if pane_id:
-            try:
-                record_terminal_capture(
-                    run_dir,
-                    session_id=str(launch["session"]["id"]),
-                    pane_id=pane_id,
-                    content=tmux.capture(pane_id, 200),
-                    secret_values=secret_values,
-                )
-            except WorkflowError as exc:
-                # Terminal capture is observability evidence, not execution
-                # authority. Record the failure without terminating useful work.
-                record_incident(
-                    run_dir,
-                    session_id=str(launch["session"]["id"]),
-                    category="terminal_capture_unavailable",
-                    severity="medium",
-                    summary="interactive pane capture failed",
-                    evidence={"error": str(exc), "pane_id": pane_id},
-                )
-        record_health_sample(
-            run_dir,
-            session_id=str(launch["session"]["id"]),
-            runner_pid=os.getpid(),
-            executor_pid=process.pid,
-            tmux_pane_id=pane_id,
-        )
-        deliver_pending(run_dir, active=active)
-        _drain_control_bridge(run_dir, active=active)
-        wait_seconds = max(0.1, heartbeat_seconds)
+        if last_health_at is None or now - last_health_at >= max(0.1, heartbeat_seconds):
+            atomic_write_json(
+                heartbeat_path,
+                {
+                    "schema": "agent-workflow/heartbeat/v2",
+                    "runner_pid": os.getpid(),
+                    "executor_pid": process.pid,
+                    "at": utc_now(),
+                },
+            )
+            pane_id = os.environ.get("TMUX_PANE") if interactive else None
+            if pane_id:
+                try:
+                    record_terminal_capture(
+                        run_dir,
+                        session_id=str(launch["session"]["id"]),
+                        pane_id=pane_id,
+                        content=tmux.capture(pane_id, 200),
+                        secret_values=secret_values,
+                    )
+                except WorkflowError as exc:
+                    # Terminal capture is observability evidence, not execution
+                    # authority. Record the failure without terminating useful work.
+                    record_incident(
+                        run_dir,
+                        session_id=str(launch["session"]["id"]),
+                        category="terminal_capture_unavailable",
+                        severity="medium",
+                        summary="interactive pane capture failed",
+                        evidence={"error": str(exc), "pane_id": pane_id},
+                    )
+            record_health_sample(
+                run_dir,
+                session_id=str(launch["session"]["id"]),
+                runner_pid=os.getpid(),
+                executor_pid=process.pid,
+                tmux_pane_id=pane_id,
+            )
+            last_health_at = now
+        if not active:
+            return_code = process.returncode
+            if return_code is None:
+                return_code = 0
+            break
+        # Control delivery is intentionally more responsive than observability
+        # sampling so short-lived cooperative executors can consume steering.
+        _drain_control_bridge(run_dir, active=True)
+        deliver_pending(run_dir, active=True)
+        wait_seconds = min(max(0.1, heartbeat_seconds), CONTROL_POLL_SECONDS)
         if deadline is not None:
             remaining = deadline - time.monotonic()
             if remaining <= 0:

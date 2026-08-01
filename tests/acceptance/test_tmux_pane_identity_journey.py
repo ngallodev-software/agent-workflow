@@ -22,7 +22,7 @@ def test_shared_window_uses_stable_pane_id_through_layout_churn(
     tmp_path: Path,
 ) -> None:
     repo = tmp_path / "repo"
-    git_repo(repo)
+    head = git_repo(repo)
     prompt = tmp_path / "prompt.md"
     prompt.write_text("Remain available while the window layout changes.\n", encoding="utf-8")
     config = write_config(product_env, fake_agent=fake_agent_path)
@@ -48,6 +48,31 @@ def test_shared_window_uses_stable_pane_id_through_layout_churn(
     for index, item in enumerate(state["panes"]):
         item["index"] = index
     _write_fake_session(state_path, state)
+
+    handoff = repo / ".agent-workflow-handoff" / "stable-pane"
+    (handoff / "completion.json").write_text(json.dumps({
+        "schema": "agent-workflow/completion/v1",
+        "session_id": "stable-pane",
+        "ticket_id": "PROC-006",
+        "pack_id": None,
+        "result": "completed",
+        "base_revision": head,
+        "head_revision": head,
+        "changed_files": [],
+        "criteria": [{
+            "id": "pane-binding",
+            "result": "pass",
+            "evidence": ["bound pane remained live through layout churn"],
+        }],
+        "commands": [{
+            "argv": ["fake-agent", "slow"],
+            "cwd": str(repo),
+            "exit_code": 0,
+            "receipt": "pane identity fixture completion",
+        }],
+        "unresolved": [],
+        "usage": None,
+    }), encoding="utf-8")
 
     completed = installed_product.json(
         "agent", "task-complete", "stable-pane", "--config", config,
