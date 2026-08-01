@@ -320,6 +320,40 @@ def test_corrupt_run_is_quarantined_without_losing_other_runs(tmp_path: Path) ->
     assert query_index(settings, "errors", session_id="corrupt")
 
 
+def test_symlinked_authoritative_artifact_is_quarantined_and_exposed(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    run = _seed_run(settings, "symlinked-incident")
+    rebuild_index(settings)
+
+    marker = tmp_path / "external-marker.jsonl"
+    marker.write_text("SECRET MARKER CONTENT\n", encoding="utf-8")
+    incident_path = run / "incident-events.jsonl"
+    incident_path.unlink()
+    incident_path.symlink_to(marker)
+
+    report = sync_index(settings)
+    assert report["indexed_count"] == 0
+    assert report["error_count"] == 1
+    assert report["errors"][0]["session_id"] == "symlinked-incident"
+    assert "unsafe symlink artifact(s): incident-events.jsonl" in report["errors"][0]["error"]
+
+    run_row = query_index(settings, "runs", session_id="symlinked-incident")[0]
+    assert run_row["index_state"] == "error"
+    assert query_index(settings, "incidents", session_id="symlinked-incident") == []
+    assert index_status(settings)["freshness"] == "incomplete"
+
+    with sqlite3.connect(database_path(settings)) as connection:
+        assert "SECRET MARKER CONTENT" not in "\n".join(connection.iterdump())
+
+    verification = verify_index(settings, full=True)
+    assert verification["valid"] is False
+    assert {
+        "session_id": "symlinked-incident",
+        "path": "incident-events.jsonl",
+        "reason": "unsafe_symlink",
+    } in verification["source_mismatches"]
+
+
 def test_workflow_projection_materializes_nodes_and_edges(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     run = _seed_run(settings, "workflow-owner")

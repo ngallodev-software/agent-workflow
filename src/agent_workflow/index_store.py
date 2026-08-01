@@ -556,14 +556,47 @@ def _discover_runs(
     return [discovered[key] for key in sorted(discovered)]
 
 
-def _artifact_paths(run_dir: Path) -> list[Path]:
+def _scan_artifact_paths(run_dir: Path) -> tuple[list[Path], list[str]]:
     paths: list[Path] = []
+    unsafe: list[str] = []
     for path in sorted(run_dir.rglob("*")):
-        if path.is_symlink() or not path.is_file() or path.name in IGNORED_FILENAMES:
+        if path.name in IGNORED_FILENAMES:
             continue
-        if path.suffix.lower() in JSON_ARTIFACT_SUFFIXES | TEXT_METADATA_SUFFIXES:
+        if path.suffix.lower() not in JSON_ARTIFACT_SUFFIXES | TEXT_METADATA_SUFFIXES:
+            continue
+        relative = path.relative_to(run_dir).as_posix()
+        if path.is_symlink():
+            unsafe.append(relative)
+        elif path.is_file():
             paths.append(path)
+    return paths, unsafe
+
+
+def _unsafe_artifact_paths(run_dir: Path) -> list[str]:
+    return _scan_artifact_paths(run_dir)[1]
+
+
+def _artifact_paths(run_dir: Path) -> list[Path]:
+    paths, unsafe = _scan_artifact_paths(run_dir)
+    if unsafe:
+        details = ", ".join(unsafe[:8])
+        if len(unsafe) > 8:
+            details += ", ..."
+        raise WorkflowError(f"unsafe symlink artifact(s): {details[:512]}")
     return paths
+
+
+def _error_source_fingerprint(run_dir: Path, session_id: str) -> str:
+    digest = hashlib.sha256()
+    unsafe = _unsafe_artifact_paths(run_dir)
+    if unsafe:
+        for relative in unsafe:
+            digest.update(relative.encode("utf-8"))
+            digest.update(b"\0unsafe-symlink\n")
+    else:
+        digest.update(session_id.encode("utf-8"))
+        digest.update(b"\0index-error\n")
+    return f"error-{digest.hexdigest()}"
 
 
 def _source_fingerprint(run_dir: Path) -> str:
@@ -1085,7 +1118,21 @@ def _sync_locked(
         )
         discovered_ids = {item[0] for item in discovered}
         for current_session_id, storage_class, run_dir in discovered:
-            fingerprint = _source_fingerprint(run_dir)
+            try:
+                fingerprint = _source_fingerprint(run_dir)
+            except Exception as exc:  # preserve a bounded run-level authority error
+                fingerprint = _error_source_fingerprint(run_dir, current_session_id)
+                with connection:
+                    _record_index_error(
+                        connection,
+                        session_id=current_session_id,
+                        storage_class=storage_class,
+                        run_dir=run_dir,
+                        source_fingerprint=fingerprint,
+                        error=exc,
+                    )
+                errors.append({"session_id": current_session_id, "error": str(exc)[:4096]})
+                continue
             current = connection.execute(
                 "SELECT source_fingerprint, source_dir, storage_class, index_state FROM runs WHERE session_id = ?",
                 (current_session_id,),
@@ -1301,6 +1348,17 @@ def verify_index(settings: Settings, *, full: bool = False) -> dict[str, Any]:
         integrity = [str(row[0]) for row in connection.execute("PRAGMA integrity_check")]
         foreign_keys = [dict(row) for row in connection.execute("PRAGMA foreign_key_check")]
         if full:
+            for session_id, _, run_dir in _discover_runs(
+                settings, include_archived=True, session_id=None
+            ):
+                for relative in _unsafe_artifact_paths(run_dir):
+                    mismatches.append(
+                        {
+                            "session_id": session_id,
+                            "path": relative,
+                            "reason": "unsafe_symlink",
+                        }
+                    )
             for row in connection.execute(
                 "SELECT r.source_dir, f.session_id, f.relative_path, f.sha256, f.size_bytes "
                 "FROM source_files f JOIN runs r ON r.session_id=f.session_id ORDER BY f.session_id,f.relative_path"
