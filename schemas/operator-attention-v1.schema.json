@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-workflow.dev/schemas/operator-attention-v1.schema.json",
+  "title": "Agent Workflow Operator Attention",
+  "description": "A derived presentation contract. Durable workflow and lifecycle records remain authoritative.",
+  "type": "object",
+  "required": [
+    "version",
+    "attention",
+    "label",
+    "reasons",
+    "observed_at"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "attention": {
+      "enum": [
+        "green",
+        "yellow",
+        "red",
+        "neutral"
+      ]
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1
+    },
+    "lifecycle_status": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "reasons": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "run_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "pane_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^%[0-9]+$"
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source_digest": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  },
+  "additionalProperties": false
+}

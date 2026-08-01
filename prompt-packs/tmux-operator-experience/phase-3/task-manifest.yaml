@@ -1,0 +1,16 @@
+phase: "3"
+name: "core-acceptance-and-gate"
+mandatory_order: ["TMUXUI-009", "TMUXUI-GATE-001"]
+tasks:
+  - id: "TMUXUI-009"
+    tier: A
+    session: "tmux-ui-acceptance-and-docs"
+    prompt: "tickets/TMUXUI-009-acceptance-and-docs.md"
+    backlog_id: "TMUXUI-009"
+    dependencies: ["TMUXUI-005", "TMUXUI-006", "TMUXUI-007"]
+  - id: "TMUXUI-GATE-001"
+    tier: A
+    session: "tmux-ui-core-independent-gate"
+    prompt: "tickets/TMUXUI-GATE-001-core-review.md"
+    task_type: "gate"
+    dependencies: ["TMUXUI-009"]

@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="Action required">
+  <path d="M43 8 H85 L120 43 V85 L85 120 H43 L8 85 V43 Z" fill="#DC2626" stroke="#0F172A" stroke-width="6" stroke-linejoin="round"/>
+  <text x="64" y="82" text-anchor="middle" font-family="DejaVu Sans, Arial, sans-serif" font-size="62" font-weight="700" fill="#FFFFFF">×</text>
+</svg>
