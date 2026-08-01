@@ -39,6 +39,9 @@ MAX_SUMMARY_CHARS = 16_384
 MAX_CHILDREN = 10_000
 MAX_READ_EVENTS = 1_000
 MAX_SOURCE_RECORDS = 100_000
+CURSOR_QUARANTINE_NAME = "cursor-quarantine"
+ACKNOWLEDGEMENTS_NAME = "acknowledgements.jsonl"
+ACTIONS_NAME = "actions.jsonl"
 
 _EVENT_KINDS = {
     "progress": "agent_progress",
@@ -147,6 +150,11 @@ def _validate_event(value: object) -> dict[str, Any]:
     if value.get("assignment_id") is not None:
         _uuid(value["assignment_id"], "assignment_id")
     return value
+
+
+def event_digest(event: Mapping[str, Any]) -> str:
+    """Return the canonical digest used by all event projections."""
+    return _digest(dict(event))
 
 
 def _read_registry(settings: Settings, orchestrator_id: str) -> dict[str, Any]:
@@ -403,7 +411,15 @@ def unregister_child(settings: Settings, orchestrator_id: str, session_id: str, 
 
 
 def _source_records(path: Path) -> list[dict[str, Any]]:
-    return _read_jsonl(path, schema="agent-workflow/session-message/v1", max_records=MAX_SOURCE_RECORDS)
+    records = _read_jsonl(path, schema="agent-workflow/session-message/v1", max_records=MAX_SOURCE_RECORDS)
+    seen: dict[str, str] = {}
+    for record in records:
+        digest = message_digest(record)
+        prior = seen.get(record["message_id"])
+        if prior is not None:
+            raise OrchestratorInboxError("source journal contains a duplicate message ID")
+        seen[record["message_id"]] = digest
+    return records
 
 
 def _verify_source(child: dict[str, Any], record: Mapping[str, Any], settings: Settings) -> tuple[dict[str, Any], Path, dict[str, Any], dict[str, Any] | None]:
@@ -527,7 +543,10 @@ def import_registered(settings: Settings, orchestrator_id: str, *, session_id: s
             if source["kind"] not in _EVENT_KINDS:
                 continue
             result = import_message(settings, orchestrator_id, child["session_id"], source)
-            imported.append(_metadata(result["event"], include_content=False) | {"duplicate": result["duplicate"]})
+            imported.append(
+                _metadata(result["event"], include_content=False)
+                | {"duplicate": result["duplicate"], "event_digest": event_digest(result["event"])}
+            )
     return {"orchestrator_id": orchestrator_id, "imported": imported, "count": len(imported)}
 
 
@@ -537,9 +556,9 @@ def _cursor_path(directory: Path, child: Mapping[str, Any]) -> Path:
     return cursor_root / f"{key}.json"
 
 
-def _read_source_cursor(path: Path, child: Mapping[str, Any]) -> int:
+def _read_source_cursor(path: Path, child: Mapping[str, Any]) -> dict[str, Any]:
     if not path.exists():
-        return 0
+        return {"last_source_sequence": 0, "last_source_message_id": None}
     _regular_file(path, label="orchestrator source cursor")
     try:
         value = json.loads(read_regular_file(path, max_bytes=MAX_RECORD_BYTES).data.decode("utf-8"))
@@ -552,21 +571,257 @@ def _read_source_cursor(path: Path, child: Mapping[str, Any]) -> int:
     sequence = value.get("last_source_sequence")
     if not isinstance(sequence, int) or isinstance(sequence, bool) or sequence < 0:
         raise OrchestratorInboxError("orchestrator source cursor sequence is invalid")
-    return sequence
+    message_id = value.get("last_source_message_id")
+    if message_id is not None:
+        _uuid(message_id, "orchestrator source cursor message ID")
+    if sequence == 0 and message_id is not None:
+        raise OrchestratorInboxError("orchestrator source cursor has a message for sequence zero")
+    return {"last_source_sequence": sequence, "last_source_message_id": message_id}
 
 
-def _write_source_cursor(path: Path, child: Mapping[str, Any], sequence: int, message: Mapping[str, Any]) -> None:
+def _write_source_cursor(
+    path: Path,
+    child: Mapping[str, Any],
+    sequence: int,
+    message: Mapping[str, Any] | None,
+) -> None:
     value = {
         "schema": "agent-workflow/orchestrator-source-cursor/v1",
         "schema_version": 1,
         "child_identity_digest": child["identity_digest"],
         "source_journal_id": child["source_journal_id"],
         "last_source_sequence": sequence,
-        "last_source_message_id": message["message_id"],
+        "last_source_message_id": message["message_id"] if message is not None else None,
         "updated_at": utc_now(),
     }
     atomic_write_json(path, value, mode=0o600)
     fsync_directory(path.parent)
+
+
+def _quarantine_cursor(path: Path, reason: str) -> dict[str, Any]:
+    """Discard only a bounded projection and retain redacted diagnosis."""
+    try:
+        raw = path.read_bytes()[:MAX_RECORD_BYTES]
+        size = path.stat().st_size
+    except OSError:
+        raw = b""
+        size = None
+    metadata = {
+        "schema": "agent-workflow/orchestrator-cursor-quarantine/v1",
+        "reason": reason[:256],
+        "size_bytes": size,
+        "sha256": hashlib.sha256(raw).hexdigest(),
+        "content_redacted": True,
+        "quarantined_at": utc_now(),
+    }
+    quarantine = _real_directory(path.parent / CURSOR_QUARANTINE_NAME, create=True, label="cursor quarantine")
+    target = quarantine / f"{hashlib.sha256(path.name.encode('utf-8')).hexdigest()}.json"
+    atomic_write_json(target, metadata, mode=0o600)
+    if path.exists() or path.is_symlink():
+        path.unlink()
+    fsync_directory(quarantine)
+    return metadata
+
+
+def _reconstruct_source_cursor(
+    child: Mapping[str, Any],
+    source_records: list[dict[str, Any]],
+    inbox_records: list[dict[str, Any]],
+) -> tuple[int, Mapping[str, Any] | None]:
+    """Rebuild the highest source prefix proven by the durable inbox."""
+    source_id = child["source_journal_id"]
+    session_id = child["session_id"]
+    evidence: dict[str, dict[str, Any]] = {}
+    for event in inbox_records:
+        if event["sender_session_id"] != session_id or event["source_journal_id"] != source_id:
+            continue
+        identity = f"{session_id}:{event['source_message_id']}"
+        if event["source_identity"] != identity:
+            raise OrchestratorInboxError("inbox event source identity is inconsistent")
+        prior = evidence.get(identity)
+        if prior is not None and prior["source_digest"] != event["source_digest"]:
+            raise OrchestratorInboxError("inbox source identity is reused with different bytes")
+        if prior is not None and prior["source_sequence"] != event["source_sequence"]:
+            raise OrchestratorInboxError("inbox source identity has conflicting sequence evidence")
+        evidence[identity] = event
+
+    source_ids = {record["message_id"] for record in source_records}
+    if any(identity.rsplit(":", 1)[-1] not in source_ids for identity in evidence):
+        raise OrchestratorInboxError("inbox event references a source ID absent from the registered journal")
+
+    sequence = 0
+    message: Mapping[str, Any] | None = None
+    for record in source_records:
+        if record["kind"] in _EVENT_KINDS:
+            event = evidence.get(f"{session_id}:{record['message_id']}")
+            if event is None:
+                break
+            if event["source_sequence"] != record["sequence"] or event["source_digest"] != message_digest(record):
+                raise OrchestratorInboxError("inbox evidence conflicts with the source journal")
+        sequence = record["sequence"]
+        message = record
+    return sequence, message
+
+
+def _read_optional_journal(path: Path, schema: str) -> list[dict[str, Any]]:
+    if not path.exists():
+        return []
+    return _read_jsonl(path, schema=schema, max_records=MAX_SOURCE_RECORDS)
+
+
+def _validate_event_projection(
+    records: list[dict[str, Any]],
+    inbox_records: list[dict[str, Any]],
+    *,
+    orchestrator_id: str,
+    schema: str,
+) -> dict[str, dict[str, Any]]:
+    """Validate acknowledgement/action evidence against inbox authority."""
+    events = {item["event_id"]: item for item in inbox_records}
+    validated: dict[str, dict[str, Any]] = {}
+    for record in records:
+        if record.get("orchestrator_id") != orchestrator_id:
+            raise OrchestratorInboxError(f"{schema} record claims another orchestrator")
+        event_id = _uuid(record["event_id"], f"{schema} event ID")
+        event = events.get(event_id)
+        if event is None:
+            raise OrchestratorInboxError(f"{schema} record references an unknown event")
+        if record.get("event_digest") != event_digest(event):
+            raise OrchestratorInboxError(f"{schema} record event digest does not match inbox authority")
+        prior = validated.get(event_id)
+        if prior is not None and prior != record:
+            raise OrchestratorInboxError(f"{schema} has conflicting duplicate event evidence")
+        validated[event_id] = record
+    return validated
+
+
+def _pending_projection(
+    directory: Path,
+    orchestrator_id: str,
+    inbox_records: list[dict[str, Any]],
+) -> dict[str, Any]:
+    acknowledgements = _read_optional_journal(directory / ACKNOWLEDGEMENTS_NAME, ACKNOWLEDGEMENT_SCHEMA)
+    actions = _read_optional_journal(directory / ACTIONS_NAME, ACTION_SCHEMA)
+    acknowledged = _validate_event_projection(
+        acknowledgements, inbox_records, orchestrator_id=orchestrator_id, schema=ACKNOWLEDGEMENT_SCHEMA
+    )
+    actioned = _validate_event_projection(
+        actions, inbox_records, orchestrator_id=orchestrator_id, schema=ACTION_SCHEMA
+    )
+    pending_acknowledgements = [item["event_id"] for item in inbox_records if item["event_id"] not in acknowledged]
+    pending_actions = [
+        item["event_id"]
+        for item in inbox_records
+        if item["event_id"] in acknowledged and item["event_id"] not in actioned
+    ]
+    return {
+        "pending_acknowledgements": pending_acknowledgements,
+        "pending_acknowledgement_digests": {
+            item["event_id"]: event_digest(item)
+            for item in inbox_records
+            if item["event_id"] in pending_acknowledgements
+        },
+        "pending_actions": pending_actions,
+        "pending_action_digests": {
+            item["event_id"]: event_digest(item)
+            for item in inbox_records
+            if item["event_id"] in pending_actions
+        },
+    }
+
+
+def _event_for_projection(settings: Settings, orchestrator_id: str, event_id: str) -> tuple[Path, dict[str, Any]]:
+    event_id = _uuid(event_id, "event ID")
+    directory = orchestrator_dir(settings, orchestrator_id)
+    path = directory / INBOX_NAME
+    events = _read_jsonl(path, schema=EVENT_SCHEMA, max_records=MAX_SOURCE_RECORDS)
+    event = next((item for item in events if item["event_id"] == event_id), None)
+    if event is None:
+        raise OrchestratorInboxError("projection record references an unknown event")
+    return directory, event
+
+
+def acknowledge_event(
+    settings: Settings,
+    orchestrator_id: str,
+    event_id: str,
+    *,
+    actor_principal: str,
+    disposition: str = "accepted",
+    reason: str,
+) -> dict[str, Any]:
+    """Append one idempotent acknowledgement bound to inbox event bytes."""
+    if not actor_principal or len(actor_principal) > 256 or not reason or len(reason) > 4096:
+        raise OrchestratorInboxError("acknowledgement metadata is outside bounded limits")
+    directory, event = _event_for_projection(settings, orchestrator_id, event_id)
+    record = {
+        "schema": ACKNOWLEDGEMENT_SCHEMA,
+        "schema_version": 1,
+        "acknowledgement_id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"agent-workflow/ack/{event_id}/{actor_principal}")),
+        "event_id": event["event_id"],
+        "event_digest": event_digest(event),
+        "orchestrator_id": orchestrator_id,
+        "actor_principal": actor_principal,
+        "disposition": disposition,
+        "created_at": utc_now(),
+        "reason": reason,
+    }
+    existing = _read_optional_journal(directory / ACKNOWLEDGEMENTS_NAME, ACKNOWLEDGEMENT_SCHEMA)
+    prior = next((item for item in existing if item["event_id"] == event["event_id"]), None)
+    if prior is not None:
+        if {key: prior[key] for key in record if key != "created_at"} != {
+            key: record[key] for key in record if key != "created_at"
+        }:
+            raise OrchestratorInboxError("acknowledgement event identity has conflicting bytes")
+        return {"acknowledgement": prior, "duplicate": True}
+    _append_records(directory / ACKNOWLEDGEMENTS_NAME, [record], expected_schema=ACKNOWLEDGEMENT_SCHEMA)
+    return {"acknowledgement": record, "duplicate": False}
+
+
+def record_action(
+    settings: Settings,
+    orchestrator_id: str,
+    event_id: str,
+    *,
+    action: str,
+    target_session_id: str | None,
+    evidence_refs: list[str],
+) -> dict[str, Any]:
+    """Append one idempotent action after a durable acknowledgement."""
+    directory, event = _event_for_projection(settings, orchestrator_id, event_id)
+    inbox_records = _read_jsonl(directory / INBOX_NAME, schema=EVENT_SCHEMA, max_records=MAX_SOURCE_RECORDS)
+    acknowledgements = _read_optional_journal(directory / ACKNOWLEDGEMENTS_NAME, ACKNOWLEDGEMENT_SCHEMA)
+    acknowledged = _validate_event_projection(
+        acknowledgements, inbox_records, orchestrator_id=orchestrator_id, schema=ACKNOWLEDGEMENT_SCHEMA
+    )
+    if event["event_id"] not in acknowledged:
+        raise OrchestratorInboxError("action requires a validated acknowledgement")
+    if target_session_id is not None:
+        validate_id(target_session_id, "action target session ID")
+    if len(evidence_refs) > 64 or any(not isinstance(item, str) or not item or len(item) > 512 for item in evidence_refs):
+        raise OrchestratorInboxError("action evidence references are outside bounded limits")
+    record = {
+        "schema": ACTION_SCHEMA,
+        "schema_version": 1,
+        "action_id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"agent-workflow/action/{event_id}/{action}/{target_session_id}")),
+        "event_id": event["event_id"],
+        "event_digest": event_digest(event),
+        "orchestrator_id": orchestrator_id,
+        "action": action,
+        "target_session_id": target_session_id,
+        "created_at": utc_now(),
+        "evidence_refs": list(evidence_refs),
+    }
+    existing = _read_optional_journal(directory / ACTIONS_NAME, ACTION_SCHEMA)
+    prior = next((item for item in existing if item["event_id"] == event["event_id"]), None)
+    if prior is not None:
+        if {key: prior[key] for key in record if key != "created_at"} != {
+            key: record[key] for key in record if key != "created_at"
+        }:
+            raise OrchestratorInboxError("action event identity has conflicting bytes")
+        return {"action": prior, "duplicate": True}
+    _append_records(directory / ACTIONS_NAME, [record], expected_schema=ACTION_SCHEMA)
+    return {"action": record, "duplicate": False}
 
 
 def replay_registered(
@@ -582,10 +837,41 @@ def replay_registered(
     registry = _read_registry(settings, orchestrator_id)
     children = [item for item in registry["children"] if item["state"] == "active"]
     directory = orchestrator_dir(settings, orchestrator_id)
-    cursors = {child["session_id"]: _read_source_cursor(_cursor_path(directory, child), child) for child in children}
     records_by_child = {child["session_id"]: _source_records(Path(child["source_journal_path"])) for child in children}
-    if any(cursors[child["session_id"]] > len(records_by_child[child["session_id"]]) for child in children):
-        raise OrchestratorInboxError("orchestrator source cursor is ahead of its journal")
+    inbox_path = directory / INBOX_NAME
+    if not inbox_path.exists():
+        _append_records(inbox_path, [], expected_schema=EVENT_SCHEMA)
+    inbox_records = _read_jsonl(inbox_path, schema=EVENT_SCHEMA, max_records=MAX_SOURCE_RECORDS)
+    cursors: dict[str, int] = {}
+    reconstructed = False
+    for child in children:
+        sid = child["session_id"]
+        cursor_path = _cursor_path(directory, child)
+        rebuilt_sequence, rebuilt_message = _reconstruct_source_cursor(child, records_by_child[sid], inbox_records)
+        projection_repaired = False
+        try:
+            current = _read_source_cursor(cursor_path, child)
+            if not cursor_path.exists():
+                projection_repaired = True
+            if current["last_source_sequence"] > len(records_by_child[sid]):
+                raise OrchestratorInboxError("orchestrator source cursor is ahead of its journal")
+            current_message = (
+                records_by_child[sid][current["last_source_sequence"] - 1]
+                if current["last_source_sequence"]
+                else None
+            )
+            if current["last_source_message_id"] != (current_message["message_id"] if current_message else None):
+                raise OrchestratorInboxError("orchestrator source cursor message evidence is inconsistent")
+            if current["last_source_sequence"] != rebuilt_sequence:
+                projection_repaired = True
+        except OrchestratorInboxError as exc:
+            if cursor_path.exists() or cursor_path.is_symlink():
+                _quarantine_cursor(cursor_path, str(exc))
+            projection_repaired = True
+        if projection_repaired:
+            _write_source_cursor(cursor_path, child, rebuilt_sequence, rebuilt_message)
+            reconstructed = True
+        cursors[sid] = rebuilt_sequence if projection_repaired else current["last_source_sequence"]
     # Rotate the starting child from durable source progress. This preserves
     # bounded round-robin fairness even when a batch is smaller than the child
     # count, and it reconstructs identically after supervisor restart.
@@ -611,7 +897,10 @@ def replay_registered(
             source = records[sequence]
             if source["kind"] in _EVENT_KINDS:
                 result = import_message(settings, orchestrator_id, sid, source)
-                imported.append(_metadata(result["event"], include_content=False) | {"duplicate": result["duplicate"]})
+                imported.append(
+                    _metadata(result["event"], include_content=False)
+                    | {"duplicate": result["duplicate"], "event_digest": event_digest(result["event"])}
+                )
             _write_source_cursor(_cursor_path(directory, child), child, source["sequence"], source)
             cursors[sid] = source["sequence"]
             position += 1
@@ -620,6 +909,11 @@ def replay_registered(
             made_progress = True
         if not made_progress:
             break
+    # Re-read after imports.  A crash after an acknowledgement/action append
+    # or notification attempt must reconstruct from durable authority, not the
+    # pre-cycle inbox snapshot.
+    inbox_records = _read_jsonl(inbox_path, schema=EVENT_SCHEMA, max_records=MAX_SOURCE_RECORDS)
+    pending = _pending_projection(directory, orchestrator_id, inbox_records)
     return {
         "orchestrator_id": orchestrator_id,
         "children": len(children),
@@ -627,6 +921,8 @@ def replay_registered(
         "count": len(imported),
         "imported": imported,
         "remaining": sum(max(0, len(records_by_child[c["session_id"]]) - cursors[c["session_id"]]) for c in children),
+        "reconstructed": reconstructed,
+        **pending,
     }
 
 
