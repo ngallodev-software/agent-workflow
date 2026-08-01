@@ -36,6 +36,7 @@ The determinism and security work below is derived from the [feature determinism
 | [`hierarchical-multi-team-orchestration`](../prompt-packs/hierarchical-multi-team-orchestration/) | HIER-001 through HIER-008 | Proposed design package; blocked on maintainer approval of DEC-005 and the ticket-specific accepted messaging, delegation, steering, and pane-identity prerequisites listed below. |
 | [`bounded-self-healing-supervisor`](../prompt-packs/bounded-self-healing-supervisor/) | SUP-001 through SUP-008 | SUP-001 and SUP-002 are implemented and in review. Security enforcement, authenticated authority, live compatibility, hierarchy integration, and performance control remain sequenced behind their declared gates. |
 | [`sqlite-evidence-index`](../prompt-packs/sqlite-evidence-index/) | IDX-001 through IDX-007 | IDX-001 through IDX-005 are implemented and in review. Privacy-governed analytical export and measured-scale checkpoint work remain explicitly gated. |
+| [`release-installers`](../prompt-packs/release-installers/) | REL-008 | Ready: add signed/checksummed release bootstrap and Linux, WSL2, and macOS installer bundles without claiming native Windows support or publishing an unreviewed release. |
 
 ## Bounded self-healing supervision
 
@@ -206,6 +207,7 @@ These items remain tracked separately from the hardening ownership above; they a
 | REL-005 | P1 | completed | Added schema-validated release policy and direct dependency lock, JUnit evidence, CycloneDX SBOM, source/build provenance, artifact digests, and an enforceable blocker summary. | [Release evidence](RELEASE_EVIDENCE.md) |
 | REL-006 | P1 | ready | Configure the local Jenkins job to trigger from commits to the local repository and verify that the trigger builds the matching master revision; the pipeline itself is already green. | [Release check audit](RELEASE_CHECK_AUDIT.md#jenkins-verification) |
 | REL-007 | P1 | ready | Run and record clean-machine install/uninstall evidence and a controlled real workflow/provider cohort before describing the project as publicly supported. | [Public release readiness](PUBLIC_RELEASE_READINESS.md#governance-and-compatibility-blockers) |
+| REL-008 | P1 | ready | Add immutable-release curl bootstrap, deterministic Linux/WSL2/macOS installer bundles, checksums, tag-only GitHub release publishing, and installed-product validation. Native Windows is explicitly out of scope. | [`release-installers`](../prompt-packs/release-installers/phase-0/tickets/P0-00-baseline-and-preflight.md) |
 | CHATGPT-EVAL-001 | P1 | High | completed | Added evidence-first exported-run assessment, truthful ledger evaluation state, and focused invariant coverage. | [Sealed foundation evidence](EVIDENCE_SEALED_FOUNDATION_RUNS_20260726.md) |
 
 ## Integrated pending phase gate

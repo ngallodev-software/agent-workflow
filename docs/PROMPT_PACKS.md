@@ -103,6 +103,7 @@ Do not embed host-specific absolute paths, credentials, private project names, m
 | [`hierarchical-multi-team-orchestration`](../prompt-packs/hierarchical-multi-team-orchestration/) | HIER-001 through HIER-008 | Proposed; `DEC-005` and ticket-specific accepted messaging, delegation, steering, and pane-identity foundations gate execution. The external-terminal adapter is a separately reviewed optional branch. |
 | [`bounded-self-healing-supervisor`](../prompt-packs/bounded-self-healing-supervisor/) | SUP-001 through SUP-008 | SUP-001 and SUP-002 are implemented and in review; security/resource/principal, compatibility, hierarchy, and performance phases remain gated. |
 | [`sqlite-evidence-index`](../prompt-packs/sqlite-evidence-index/) | IDX-001 through IDX-007 | IDX-001 through IDX-005 are implemented and in review; governed analytical export and measured-scale optimization remain gated. |
+| [`release-installers`](../prompt-packs/release-installers/) | REL-008 | Ready: immutable curl bootstrap and checksummed Linux, WSL2, and macOS release bundles. Native Windows is not claimed. |
 
 The dependency/collision rationale is in [Determinism and security hardening plan](DETERMINISM_SECURITY_HARDENING_PLAN.md). The local two-way messaging architecture and its collision-free implementation sequence are in [Durable two-way messaging](ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md). The source findings are in [Feature determinism and security assessment](FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md).
 
