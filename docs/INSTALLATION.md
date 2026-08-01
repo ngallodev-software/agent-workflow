@@ -40,6 +40,44 @@ user-level Codex and Claude Code configuration on every normal install.
 Existing entries with that name are preserved. The `mcp` extra remains
 available as a compatibility alias.
 
+## Install a tagged release
+
+Linux and macOS users can install a published wheel through the POSIX
+bootstrap. Windows is intentionally unsupported; use WSL2, which selects the
+Linux/WSL2 release bundle after explicit detection.
+
+Pass the same immutable tag named by the raw GitHub URL. The bootstrap rejects
+missing or non-semantic release references, downloads only from that tag's
+release assets, and verifies `SHA256SUMS` before extracting or invoking pip:
+
+```sh
+curl -fsSL https://github.com/ngallodev-software/agent-workflow/raw/v0.7.5/install.sh \
+  | sh -s -- --version v0.7.5
+```
+
+The release contract requires Python 3.11+, `curl`, a SHA-256 tool, and `tar`.
+The bootstrap recognizes Linux `x86_64`/`arm64`, WSL2 `x86_64`/`arm64`, and
+macOS `x86_64`/`arm64`; unsupported hosts stop before download. A checksum
+failure stops before extraction and installation. The trust boundary is the
+immutable Git tag plus the separately published checksum manifest; checksum
+verification detects transfer corruption but does not replace signed release
+attestation, which remains a future release gate.
+
+For an already downloaded platform bundle, extract it and run its bundled
+installer, then use the matching `uninstall.sh` to remove the wheel and owned
+assets:
+
+```sh
+tar -xzf agent-workflow-0.7.5-linux.tar.gz
+cd agent-workflow-0.7.5-linux
+./install.sh --wheel agent_workflow-0.7.5-py3-none-any.whl
+./uninstall.sh
+```
+
+Bundles are labelled `linux`, `wsl2`, or `macos`; native Windows bundles are
+not published. The release installer preserves unrelated user configuration,
+skill links, and locally modified man pages.
+
 The MCP release is stdio-only. It exposes bounded run resources and
 prompt-pack validation; it does not expose shell execution, raw tmux control,
 destructive lifecycle tools, or HTTP transport.

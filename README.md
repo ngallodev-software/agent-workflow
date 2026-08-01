@@ -95,6 +95,10 @@ agent-workflow doctor
 
 The installer creates an editable local installation, links repository skills into supported discovery roots, and writes a starter XDG configuration without replacing unrelated files. See [`docs/INSTALLATION.md`](docs/INSTALLATION.md).
 
+For a released Linux, WSL2, or macOS wheel, use the immutable-tag bootstrap
+documented in [`docs/INSTALLATION.md`](docs/INSTALLATION.md). Native Windows is
+out of scope.
+
 ### Launch and inspect a run
 
 ```bash
