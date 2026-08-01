@@ -11,10 +11,10 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import selectors
 import shutil
 import signal
 import subprocess
-import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -83,6 +83,7 @@ class ProcessRequest:
     probe_version: bool = False
     digest_executable: bool = False
     interactive: bool = False
+    stdin_data: bytes | None = None
 
 
 @dataclass(frozen=True)
@@ -433,7 +434,11 @@ class _BoundedReader:
     def _read_raw(self, size: int = 65536) -> bytes:
         if self._drained:
             return b""
-        data = self._stream.read(size)
+        try:
+            data = os.read(self._stream.fileno(), size)
+        except (OSError, ValueError):
+            self._drained = True
+            return b""
         if not data:
             self._drained = True
             return b""
@@ -465,9 +470,23 @@ class _BoundedReader:
                 break
         return bytes(pieces)
 
+    def force_close_stream(self) -> None:
+        """Close the pipe descriptor without waiting on another thread's buffered read lock."""
+        try:
+            descriptor = self._stream.fileno()
+        except (AttributeError, OSError, ValueError):
+            return
+        try:
+            os.close(descriptor)
+        except OSError:
+            pass
+
     def close(self) -> None:
         try:
-            self._stream.close()
+            try:
+                self._stream.close()
+            except OSError:
+                pass
         finally:
             if self._spool_stream is not None:
                 self._spool_stream.close()
@@ -495,6 +514,7 @@ class ManagedProcess:
                 stdout=subprocess.PIPE if not request.interactive else None,
                 stderr=subprocess.PIPE if not request.interactive else None,
                 shell=False,
+                bufsize=0,
                 start_new_session=request.create_process_group and not request.interactive,
             )
         except OSError as exc:
@@ -680,43 +700,191 @@ def _run_request(
             error_category=category,
             environment_policy="controlled",
         )
-    if process.process.stdin is not None:
-        process.process.stdin.close()
-    stdout_data: list[bytes] = []
-    stderr_data: list[bytes] = []
 
-    def drain(reader: _BoundedReader | None, target: list[bytes]) -> None:
+    # Drain all pipes from the owning thread. Closing a pipe descriptor from a
+    # separate reader thread is unsafe: the operating system can immediately
+    # reuse that descriptor for a later child, leaving the old reader attached
+    # to the new process. A selector keeps reads, writes, timeout handling, and
+    # descriptor closure in one deterministic lifecycle.
+    selector = selectors.DefaultSelector()
+    stdin_view = memoryview(request.stdin_data or b"")
+    stdin_offset = 0
+    read_streams: dict[int, _BoundedReader] = {}
+    exit_observed_at: float | None = None
+    descendants_terminated = False
+    descendants_killed = False
+
+    def register_reader(reader: _BoundedReader | None) -> None:
         if reader is None:
             return
-        try:
-            for chunk in iter(reader.read, b""):
-                target.append(chunk)
-        finally:
-            reader.close()
+        descriptor = reader._stream.fileno()
+        os.set_blocking(descriptor, False)
+        read_streams[descriptor] = reader
+        selector.register(descriptor, selectors.EVENT_READ, ("read", reader))
 
-    threads = [
-        threading.Thread(target=drain, args=(process.stdout, stdout_data), daemon=True),
-        threading.Thread(target=drain, args=(process.stderr, stderr_data), daemon=True),
-    ]
-    for thread in threads:
-        thread.start()
+    def close_stdin() -> None:
+        stream = process.process.stdin
+        if stream is None:
+            return
+        descriptor = stream.fileno()
+        try:
+            selector.unregister(descriptor)
+        except (KeyError, ValueError):
+            pass
+        try:
+            stream.close()
+        except OSError:
+            pass
+
+    def signal_group(signum: int) -> None:
+        if not request.create_process_group or request.interactive:
+            return
+        try:
+            os.killpg(process.pid, signum)
+        except ProcessLookupError:
+            pass
+        except PermissionError:
+            pass
+
     try:
-        if request.timeout_seconds is None:
-            code = process.wait()
-        else:
-            try:
-                code = process.process.wait(timeout=request.timeout_seconds)
-            except subprocess.TimeoutExpired:
-                code = process.cancel(timed_out=True)
+        if not request.interactive:
+            register_reader(process.stdout)
+            register_reader(process.stderr)
+            if process.process.stdin is not None:
+                descriptor = process.process.stdin.fileno()
+                if stdin_view:
+                    os.set_blocking(descriptor, False)
+                    selector.register(descriptor, selectors.EVENT_WRITE, ("write", None))
+                else:
+                    close_stdin()
+
+        deadline = (
+            None
+            if request.timeout_seconds is None
+            else process.started + request.timeout_seconds
+        )
+        while True:
+            now = time.monotonic()
+            code = process.poll()
+            if code is not None and exit_observed_at is None:
+                exit_observed_at = now
+
+            if code is None and deadline is not None and now >= deadline:
+                process.timed_out = True
+                signal_group(signal.SIGTERM)
+                try:
+                    process.process.terminate()
+                except ProcessLookupError:
+                    pass
+                try:
+                    process.process.wait(timeout=request.grace_seconds)
+                except subprocess.TimeoutExpired:
+                    signal_group(signal.SIGKILL)
+                    try:
+                        process.process.kill()
+                    except ProcessLookupError:
+                        pass
+                    process.process.wait()
+                code = process.process.returncode
+                exit_observed_at = time.monotonic()
+
+            # A direct child can exit while descendants retain its output
+            # descriptors. Terminate only that child's isolated process group,
+            # then drain the resulting EOF. This avoids both indefinite waits
+            # and cross-process descriptor reuse.
+            if exit_observed_at is not None and read_streams:
+                elapsed = now - exit_observed_at
+                if elapsed >= 0.2 and not descendants_terminated:
+                    signal_group(signal.SIGTERM)
+                    descendants_terminated = True
+                if elapsed >= max(0.2, request.grace_seconds) and not descendants_killed:
+                    signal_group(signal.SIGKILL)
+                    descendants_killed = True
+                if elapsed >= max(1.0, request.grace_seconds + 0.5):
+                    for descriptor, reader in list(read_streams.items()):
+                        try:
+                            selector.unregister(descriptor)
+                        except (KeyError, ValueError):
+                            pass
+                        reader._drained = True
+                        read_streams.pop(descriptor, None)
+
+            stdin_registered = False
+            if process.process.stdin is not None:
+                try:
+                    selector.get_key(process.process.stdin.fileno())
+                    stdin_registered = True
+                except (KeyError, ValueError, OSError):
+                    pass
+            if code is not None and not read_streams and not stdin_registered:
+                break
+
+            timeout = 0.1
+            if deadline is not None and code is None:
+                timeout = max(0.0, min(timeout, deadline - now))
+            events = selector.select(timeout)
+            for key, _mask in events:
+                kind, reader = key.data
+                descriptor = key.fd
+                if kind == "write":
+                    try:
+                        written = os.write(descriptor, stdin_view[stdin_offset:])
+                        stdin_offset += written
+                    except (BrokenPipeError, OSError):
+                        stdin_offset = len(stdin_view)
+                    if stdin_offset >= len(stdin_view):
+                        close_stdin()
+                    continue
+
+                assert reader is not None
+                try:
+                    raw = os.read(descriptor, 65536)
+                except BlockingIOError:
+                    continue
+                except OSError:
+                    raw = b""
+                if raw:
+                    reader._retain(raw)
+                else:
+                    reader._drained = True
+                    try:
+                        selector.unregister(descriptor)
+                    except (KeyError, ValueError):
+                        pass
+                    read_streams.pop(descriptor, None)
+
+        code = process.process.returncode
+        if code is None:
+            code = process.process.wait()
     except KeyboardInterrupt:
-        code = process.cancel()
+        process.cancelled = True
+        signal_group(signal.SIGTERM)
+        try:
+            process.process.terminate()
+        except ProcessLookupError:
+            pass
+        try:
+            process.process.wait(timeout=request.grace_seconds)
+        except subprocess.TimeoutExpired:
+            signal_group(signal.SIGKILL)
+            try:
+                process.process.kill()
+            except ProcessLookupError:
+                pass
+            process.process.wait()
         raise
     finally:
-        for thread in threads:
-            thread.join(timeout=max(1.0, request.grace_seconds + 1.0))
-        process.close_streams()
+        try:
+            selector.close()
+        finally:
+            if process.process.stdin is not None and not process.process.stdin.closed:
+                try:
+                    process.process.stdin.close()
+                except OSError:
+                    pass
+            process.close_streams()
+
     result = process.result(code)
-    output_type = str if text else bytes
     if text:
         result = ProcessResult(
             **{
@@ -754,6 +922,7 @@ def run(
     secret_argv_positions: Iterable[int] = (),
     probe_version: bool = False,
     digest_executable: bool = False,
+    input_text: str | None = None,
 ) -> ProcessResult:
     return _run_request(
         ProcessRequest(
@@ -767,6 +936,7 @@ def run(
             secret_argv_positions=tuple(secret_argv_positions),
             probe_version=probe_version,
             digest_executable=digest_executable,
+            stdin_data=input_text.encode("utf-8") if input_text is not None else None,
         ),
         text=True,
         check=check,
@@ -786,6 +956,7 @@ def run_bytes(
     secret_argv_positions: Iterable[int] = (),
     probe_version: bool = False,
     digest_executable: bool = False,
+    input_bytes: bytes | None = None,
 ) -> ProcessResult:
     return _run_request(
         ProcessRequest(
@@ -799,6 +970,7 @@ def run_bytes(
             secret_argv_positions=tuple(secret_argv_positions),
             probe_version=probe_version,
             digest_executable=digest_executable,
+            stdin_data=input_bytes,
         ),
         text=False,
         check=check,

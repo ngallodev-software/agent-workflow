@@ -83,4 +83,16 @@ Use `agent-workflow eval template KIND --output PATH`. Template output is canoni
 
 Baseline and candidate cohorts must contain matching task/repetition identities and compatible evidence semantics. Comparisons report descriptive rates and paired outcomes. They do not declare a winner when sample size or configured evidence is insufficient.
 
-Real paid-provider comparisons remain an operator-run gate. Before publishing a claim, pin executor version, model, environment, tool policy, prompt/fixture revision, repetitions, exclusions, billing meaning, and cache policy. Track that work under `BKL-004` in [BACKLOG.md](BACKLOG.md).
+Real-provider comparisons remain an operator-run gate. Subscription-backed CLI sessions are the default; API credentials are optional explicit cohorts. Before publishing a claim, pin executor version, model, authentication/billing mode, environment, tool policy, prompt/fixture revision, repetitions, exclusions, cost semantics, and cache policy. Track external execution evidence under `BKL-004` in [BACKLOG.md](BACKLOG.md).
+
+## Adopted paired comparative benchmark
+
+The initial comparative benchmark design is defined in [Comparative benchmark specification](COMPARATIVE_BENCHMARK_SPEC.md) and governed by [DEC-008](DECISIONS/DEC-008-INITIAL-COMPARATIVE-BENCHMARK.md). Each repetition runs the same canonical multiphase task concurrently in isolated `control_raw/v1` and `workflow_full/v1` worktrees. Pair identity binds the canonical task and environment while separately recording the intentionally different constraint wrapper and effective prompt.
+
+The first fixture is the synthetic visual priority picker. Its initial composite is 70% deterministic machine score and 30% blinded human visual score; both components remain visible and incomplete human review cannot produce a final composite. The canonical task, hidden tests, 100-point allocation, visual captures, rubric, phase prompts, and writable scope are frozen in the suite requirement-to-evaluation matrix.
+
+The modular `agent_workflow.benchmarking` implementation creates the coordinator and paired arm worktrees, synchronizes each phase, records phase/arm/pair/run metrics, captures desktop/tablet/mobile evidence, runs command-owned scorers, creates neutral left/right reviewer bundles, consolidates digests, verifies the final run, and removes only verified arm worktrees. Installed packages can materialize the suite with `agent-workflow benchmark suite-export`. See [Comparative benchmark implementation](COMPARATIVE_BENCHMARK_IMPLEMENTATION.md).
+
+[DEC-002](DECISIONS/DEC-002-COMPARATIVE-BENCHMARK-OPERATING-POLICY.md) makes subscription-backed CLI sessions the default and API credentials optional explicit adapters. Authentication status, operating policy, retry attempts, cache treatment, assistance cohort, runtime attestation, and cost semantics are sealed into each run. Subscription use normally has no attributable provider-billed per-run amount; reports preserve a separate API-equivalent estimate and optional subscription allocation instead of treating it as zero cost. Winner-enabled cohorts use paired bootstrap intervals and minimum effect/regression thresholds.
+
+The included browser path supports development evidence. Publication runtime sealing and browser/font digest enforcement are implemented; `BKL-010` retains the operator-built immutable image evidence. Real subscription/API cohorts remain gated by `BKL-004` plus the existing isolation, privacy, and compatibility prerequisites.

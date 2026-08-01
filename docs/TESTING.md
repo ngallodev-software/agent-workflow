@@ -21,6 +21,7 @@ The acceptance layer covers:
 - workflow validation, scheduling, restart/resume, approval, idempotency, sealing, and verification;
 - authorized template expansion through the installed CLI;
 - deterministic evaluation/benchmark template rendering, plan and manifest validation, sealed scoring/collection, benchmark reports, evidence-ledger rows, archive plans, and matched baseline/candidate comparison.
+- the comparative benchmark source-level journey: frozen fixture identity, subscription/API authentication boundaries, operating-policy validation, isolated coordinator/arm and retry worktrees, synchronized paired phases, usage/cost/timing evidence, visual runtime attestation, deterministic scoring/statistics, treatment-blinded review, composite reporting, digest verification, and cleanup;
 
 The deterministic fake executor and tmux shim are external executables, not mocked Python functions. They make process boundaries reproducible without requiring paid provider calls in the default suite.
 

@@ -275,6 +275,28 @@ The root will create and reconcile team windows, while each team lead coordinate
 
 Public distribution remains blocked on release-governance and security decisions in [`docs/PUBLIC_RELEASE_READINESS.md`](docs/PUBLIC_RELEASE_READINESS.md).
 
+## Paired comparative benchmark
+
+The built-in `priority-picker-v1` benchmark runs the same canonical three-phase task concurrently through isolated `control_raw/v1` and `workflow_full/v1` worktrees. It records phase, arm, pair, and run timing; tokens and truthful billed/estimated/subscription-allocation cost; deterministic machine scores; and blinded human visual review before producing the adopted 70/30 composite.
+
+Subscription-backed Codex or Claude CLI sessions are the default real-executor path. API-key and access-token adapters are optional explicit cohort profiles and never silent fallbacks. A synthetic executor remains available only for development validation.
+
+```bash
+agent-workflow benchmark suite-export /tmp/priority-picker-v1
+agent-workflow benchmark readiness /tmp/priority-picker-v1/benchmark-spec.json \
+  --executor /tmp/priority-picker-v1/executors/codex-subscription.json \
+  --policy /tmp/priority-picker-v1/policies/development.json
+agent-workflow benchmark fixture-create /tmp/priority-picker-v1/benchmark-spec.json /tmp/priority-picker-fixture
+agent-workflow benchmark plan /tmp/priority-picker-v1/benchmark-spec.json \
+  --executor /tmp/priority-picker-v1/executors/codex-subscription.json \
+  --policy /tmp/priority-picker-v1/policies/development.json \
+  --repo /tmp/priority-picker-fixture \
+  --run-id priority-picker-smoke
+agent-workflow benchmark run priority-picker-smoke
+```
+
+The automated pipeline stops for blinded human review, then preserves digest-verified evidence in the coordinator worktree under `benchmarks/runs/<run-id>`. See the [implementation](docs/COMPARATIVE_BENCHMARK_IMPLEMENTATION.md) and [operations guide](docs/COMPARATIVE_BENCHMARK_OPERATIONS.md).
+
 ## Development
 
 ```bash
@@ -298,6 +320,11 @@ The suite is acceptance-first: build a wheel, install it, and exercise public co
 | Operations and recovery | [`docs/OPERATIONS.md`](docs/OPERATIONS.md) |
 | Security | [`docs/SECURITY.md`](docs/SECURITY.md) |
 | Evidence and evaluation | [`docs/EVIDENCE_AND_EVALUATION.md`](docs/EVIDENCE_AND_EVALUATION.md) |
+| Comparative benchmark design | [`docs/COMPARATIVE_BENCHMARK_SPEC.md`](docs/COMPARATIVE_BENCHMARK_SPEC.md) |
+| Comparative benchmark implementation | [`docs/COMPARATIVE_BENCHMARK_IMPLEMENTATION.md`](docs/COMPARATIVE_BENCHMARK_IMPLEMENTATION.md) |
+| Comparative benchmark operations | [`docs/COMPARATIVE_BENCHMARK_OPERATIONS.md`](docs/COMPARATIVE_BENCHMARK_OPERATIONS.md) |
+| Comparative benchmark initial verification | [`docs/COMPARATIVE_BENCHMARK_IMPLEMENTATION_VERIFICATION_20260801.md`](docs/COMPARATIVE_BENCHMARK_IMPLEMENTATION_VERIFICATION_20260801.md) |
+| Comparative benchmark operating-policy verification | [`docs/COMPARATIVE_BENCHMARK_OPERATING_POLICY_VERIFICATION_20260801.md`](docs/COMPARATIVE_BENCHMARK_OPERATING_POLICY_VERIFICATION_20260801.md) |
 | Prompt packs | [`docs/PROMPT_PACKS.md`](docs/PROMPT_PACKS.md) |
 | MCP server | [`docs/MCP_SERVER.md`](docs/MCP_SERVER.md) |
 | Testing | [`docs/TESTING.md`](docs/TESTING.md) |

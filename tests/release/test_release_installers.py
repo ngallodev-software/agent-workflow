@@ -17,9 +17,9 @@ def _sha256(path: Path) -> str:
 def _write_fake_release(root: Path, *, bad_checksum: bool = False) -> tuple[Path, Path]:
     release = root / "release"
     release.mkdir()
-    bundle_name = "agent-workflow-0.7.5-linux.tar.gz"
-    wheel_name = "agent_workflow-0.7.5-py3-none-any.whl"
-    staging = root / "agent-workflow-0.7.5-linux"
+    bundle_name = "agent-workflow-0.7.6-linux.tar.gz"
+    wheel_name = "agent_workflow-0.7.6-py3-none-any.whl"
+    staging = root / "agent-workflow-0.7.6-linux"
     staging.mkdir()
     (staging / "install.sh").write_text(
         "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$AGENT_WORKFLOW_BOOTSTRAP_TEST_MARKER\"\n",
@@ -61,17 +61,17 @@ def _run_bootstrap(release: Path, *args: str, marker: Path) -> subprocess.Comple
 def test_bootstrap_selects_tagged_bundle_and_verifies_checksum_offline(tmp_path: Path) -> None:
     release, _ = _write_fake_release(tmp_path)
     marker = tmp_path / "marker"
-    result = _run_bootstrap(release, "--version", "v0.7.5", "--python", sys.executable, marker=marker)
+    result = _run_bootstrap(release, "--version", "v0.7.6", "--python", sys.executable, marker=marker)
     assert result.returncode == 0, result.stdout + result.stderr
     marker_args = marker.read_text(encoding="utf-8").splitlines()
     assert marker_args[-2] == "--wheel"
-    assert Path(marker_args[-1]).name == "agent_workflow-0.7.5-py3-none-any.whl"
+    assert Path(marker_args[-1]).name == "agent_workflow-0.7.6-py3-none-any.whl"
 
 
 def test_bootstrap_stops_before_install_on_checksum_failure(tmp_path: Path) -> None:
     release, _ = _write_fake_release(tmp_path, bad_checksum=True)
     marker = tmp_path / "marker"
-    result = _run_bootstrap(release, "--version", "v0.7.5", "--python", sys.executable, marker=marker)
+    result = _run_bootstrap(release, "--version", "v0.7.6", "--python", sys.executable, marker=marker)
     assert result.returncode != 0
     assert "checksum" in result.stderr.lower()
     assert not marker.exists()
@@ -89,7 +89,7 @@ def test_bootstrap_rejects_unsupported_host_before_download(tmp_path: Path) -> N
     env = os.environ.copy()
     env.update({"PATH": f"{fake_bin}:/usr/bin:/bin", "AGENT_WORKFLOW_RELEASE_BASE_URL": release.as_uri()})
     result = subprocess.run(
-        ["/bin/sh", "-s", "--", "--version", "v0.7.5"],
+        ["/bin/sh", "-s", "--", "--version", "v0.7.6"],
         cwd=REPO_ROOT,
         env=env,
         input=(REPO_ROOT / "install.sh").read_text(encoding="utf-8"),
@@ -108,8 +108,8 @@ def test_release_workflow_is_tag_only_and_bundle_builder_is_reproducible(tmp_pat
     assert 'tags:' in workflow
     assert "gh release create \"$RELEASE_TAG\"" in workflow
 
-    wheel = tmp_path / "agent_workflow-0.7.5-py3-none-any.whl"
-    sdist = tmp_path / "agent_workflow-0.7.5.tar.gz"
+    wheel = tmp_path / "agent_workflow-0.7.6-py3-none-any.whl"
+    sdist = tmp_path / "agent_workflow-0.7.6.tar.gz"
     wheel.write_bytes(b"wheel")
     sdist.write_bytes(b"sdist")
     output = tmp_path / "dist"
@@ -119,7 +119,7 @@ def test_release_workflow_is_tag_only_and_bundle_builder_is_reproducible(tmp_pat
         "--root",
         str(REPO_ROOT),
         "--version",
-        "v0.7.5",
+        "v0.7.6",
         "--wheel",
         str(wheel),
         "--sdist",
@@ -133,12 +133,12 @@ def test_release_workflow_is_tag_only_and_bundle_builder_is_reproducible(tmp_pat
     second = {path.name: path.read_bytes() for path in output.glob("agent-workflow-*.tar.gz")}
     assert first == second
     assert set(first) == {
-        "agent-workflow-0.7.5-linux.tar.gz",
-        "agent-workflow-0.7.5-wsl2.tar.gz",
-        "agent-workflow-0.7.5-macos.tar.gz",
+        "agent-workflow-0.7.6-linux.tar.gz",
+        "agent-workflow-0.7.6-wsl2.tar.gz",
+        "agent-workflow-0.7.6-macos.tar.gz",
     }
-    with tarfile.open(output / "agent-workflow-0.7.5-macos.tar.gz", "r:gz") as archive:
+    with tarfile.open(output / "agent-workflow-0.7.6-macos.tar.gz", "r:gz") as archive:
         names = set(archive.getnames())
-    assert "agent-workflow-0.7.5-macos/install.sh" in names
-    assert "agent-workflow-0.7.5-macos/uninstall.sh" in names
-    assert "agent-workflow-0.7.5-macos/agent_workflow-0.7.5-py3-none-any.whl" in names
+    assert "agent-workflow-0.7.6-macos/install.sh" in names
+    assert "agent-workflow-0.7.6-macos/uninstall.sh" in names
+    assert "agent-workflow-0.7.6-macos/agent_workflow-0.7.6-py3-none-any.whl" in names

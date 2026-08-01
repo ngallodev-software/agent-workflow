@@ -1,6 +1,13 @@
 
 # Changelog
 
+## 0.7.6 — 2026-08-01
+
+- Decide and implement the comparative benchmark operating policy with subscription-backed Codex and Claude CLI sessions as the default authentication path and API keys/access tokens as optional explicit adapters.
+- Add development, internal, and publication policy profiles with sealed repetitions, cache treatment, assistance cohorts, fresh-pair infrastructure retries, interruption handling, paired-bootstrap confidence intervals, effect thresholds, regression limits, and reviewer requirements.
+- Add authentication and readiness preflight, truthful provider-billed/API-equivalent/subscription-allocation cost semantics, real-executor stdin prompt delivery, retry-attempt retention, publication browser/font runtime attestation and content-addressed sealing, and operator guidance.
+- Harden subprocess stdin/stdout/stderr ownership with selector-based bounded I/O and deterministic descendant cleanup.
+
 ## 0.3.0 — 2026-07-30
 
 - Add the sandbox-safe child control bridge, exact launcher binding, and an
@@ -20,6 +27,10 @@
 
 ## Unreleased
 
+- Implement the adopted `priority-picker-v1` paired comparative benchmark under the modular `agent_workflow.benchmarking` boundary: packaged suite export, frozen three-phase fixture, coordinator and arm worktrees, synchronized paired execution, phase/arm/pair/run timing, token/cache/cost evidence, deterministic 100-point scoring, blinded visual review, 70/30 composite reporting, digest-verified consolidation, verification, and safe arm-worktree cleanup.
+- Add versioned comparative benchmark run, arm, pair, phase-event, machine-score, human-review, consolidation, executor, and report contracts plus a full development acceptance journey. Development visual evidence is operational; subscription-first real-executor policy and publication runtime sealing are implemented, while actual external cohort/image acceptance evidence remains gated.
+- Add a dated implementation-verification record covering source and installed-wheel journeys, package inventory, expected synthetic scores, evidence verification, and the remaining publication/real-provider gates.
+- Adopt `DEC-008`: compare the same canonical task through paired `control_raw/v1` and `workflow_full/v1` worktrees, use the synthetic visual priority picker as the first benchmark fixture, and weight the initial composite 70% machine / 30% blinded human visual. Add the comparative benchmark design baseline and sequence `BKL-011` to freeze its requirement-to-evaluation matrix before implementation.
 - Add `DEC-007` and a host-local, fully rebuildable SQLite evidence projection while preserving JSON/JSONL, snapshots, and sealed receipts as execution authority.
 - Add `agent-workflow index status|sync|rebuild|verify|query`, versioned migrations, WAL/foreign-key configuration, exclusive writer locking, source provenance, corrupt-run quarantine, freshness-bearing query envelopes, and curated read-only run/workflow/incident/permission/performance views. Mixed-currency cost groups return null averages and currencies rather than misleading aggregates.
 - Synchronize the index after foreground-supervisor cycles by default, without allowing projection failure to interrupt health supervision.

@@ -184,6 +184,35 @@ agent-workflow ledger PACK [--runs-root PATH] [--output PATH]
 
 `eval collect` accepts only sealed runs with complete provider evidence. `validate-benchmark` enforces stable case IDs, unique task/repetition identities, normalized writable scopes, and explicit unavailable-data reasons. `benchmark-report` verifies declared source, optional pack-checksum, model, executor, executor-version, prompt/input, fixture, oracle, and reference identity before combining cohorts; unmatched trials are reported rather than ignored. Provider-billed and locally estimated cost remain separate, and cost comparisons are omitted when currency or local price-catalog identity differs. `archive-plan` excludes transient lock and checksum-transfer files; transfer checksums are generated beside archives, not tracked in the repository.
 
+## Paired comparative benchmarks
+
+```text
+agent-workflow benchmark suite-export DEST [--benchmark-id priority-picker-v1] [--force]
+agent-workflow benchmark validate SPEC [--executor CONFIG]
+agent-workflow benchmark auth-check CONFIG
+agent-workflow benchmark readiness SPEC --executor CONFIG [--policy FILE] [--runtime-lock FILE]
+agent-workflow benchmark runtime-attest LOCK [--claim-level development|internal|publication]
+agent-workflow benchmark runtime-seal BASE_LOCK OUTPUT --container-image IMAGE@sha256:DIGEST
+agent-workflow benchmark fixture-create SPEC DEST [--force]
+agent-workflow benchmark plan SPEC --executor CONFIG --repo REPO
+  [--base-ref REF] [--run-id ID] [--repetitions N]
+  [--worktree-root PATH] [--allow-dirty]
+  [--policy FILE] [--runtime-lock FILE]
+  [--assistance-cohort unassisted|assisted]
+agent-workflow benchmark run RUN
+agent-workflow benchmark resume RUN
+agent-workflow benchmark status RUN
+agent-workflow benchmark visual-capture RUN
+agent-workflow benchmark score RUN
+agent-workflow benchmark consolidate RUN
+agent-workflow benchmark review RUN --reviewer ID [--input FILE]
+agent-workflow benchmark report RUN
+agent-workflow benchmark verify RUN
+agent-workflow benchmark cleanup RUN
+```
+
+The built-in `priority-picker-v1` suite compares identical canonical phases through concurrent `control_raw/v1` and `workflow_full/v1` worktrees. Subscription-backed Codex/Claude CLI sessions are the default real-executor authentication; API credentials are optional explicit profiles. `readiness` checks authentication, policy thresholds, retry isolation, and visual runtime without creating worktrees. `run` performs execution, visual capture, machine scoring, consolidation, and reporting, then waits for blinded human review. Reports preserve tokens, provider-billed cost, API-equivalent/local estimates, optional subscription allocation, phase and process timing, pair wall/critical-path/start-skew timing, visual and verification timing, human active-review time, separate machine/human scores, paired confidence intervals, and the adopted 70/30 composite. `cleanup` requires valid consolidated evidence and preserves the coordinator. See the [implementation](COMPARATIVE_BENCHMARK_IMPLEMENTATION.md) and [operations guide](COMPARATIVE_BENCHMARK_OPERATIONS.md).
+
 ## Prompt packs
 
 ```text

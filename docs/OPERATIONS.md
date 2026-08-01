@@ -233,6 +233,12 @@ Workflow snapshots are immutable and event journals append-only. To recover afte
 
 Never edit `workflow-status.json` to repair state. It is a projection.
 
+## Comparative benchmark operations
+
+Use `agent-workflow benchmark suite-export` to materialize the installed frozen suite. A planned run creates a coordinator and two sibling arm worktrees per case/repetition; the original repository is never a benchmark output target. `benchmark run` performs the automated pipeline and normally stops at `awaiting_human_review`. Use `benchmark review` to create a neutral left/right assignment and submit a completed rubric, then run `benchmark verify`.
+
+Do not manually remove arm worktrees before consolidation. `benchmark cleanup` verifies the receipt and manifest, removes only the arm worktrees and branches, writes `cleanup.json`, and preserves the coordinator plus `benchmarks/runs/<run-id>`. A failed verification is a hard cleanup stop. Real-provider configurations should inherit only explicitly allowlisted credentials and must emit the complete usage contract when `provider_usage` is a required guardrail.
+
 ## Worktree and evidence cleanup
 
 Do not delete a failed worktree or run directory automatically. Review the patch and receipts first. Removing a worktree does not remove the authoritative XDG run evidence.

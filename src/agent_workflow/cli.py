@@ -7,6 +7,26 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from .benchmarking import (
+    attest_benchmark_runtime,
+    benchmark_readiness,
+    check_benchmark_auth,
+    cleanup_benchmark,
+    consolidate_benchmark,
+    create_fixture as create_benchmark_fixture,
+    create_plan as create_benchmark_plan,
+    export_builtin_suite as export_benchmark_suite,
+    prepare_or_submit_review as benchmark_review,
+    render_benchmark_report as render_comparative_benchmark_report,
+    resume_benchmark,
+    run_benchmark,
+    score_benchmark,
+    seal_benchmark_runtime,
+    status_benchmark,
+    validate_benchmark as validate_comparative_benchmark,
+    verify_benchmark,
+    visual_capture_benchmark,
+)
 from .command_catalog import (
     COMMAND_ROLES,
     filter_catalog,
@@ -111,7 +131,7 @@ def _print_table(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="agent-workflow")
-    parser.add_argument("--version", action="version", version="%(prog)s 0.7.5")
+    parser.add_argument("--version", action="version", version="%(prog)s 0.7.6")
     parser.add_argument("--config", type=Path, help="override config.toml path")
     parser.add_argument(
         "--json",
@@ -608,6 +628,64 @@ def build_parser() -> argparse.ArgumentParser:
     eval_compare.add_argument("candidate", type=Path)
     eval_compare.add_argument("--output", type=Path, required=True)
 
+
+    benchmark = commands.add_parser("benchmark", help="paired comparative benchmark commands")
+    benchmark_commands = benchmark.add_subparsers(dest="benchmark_command", required=True)
+    benchmark_validate = benchmark_commands.add_parser("validate", help="validate a comparative benchmark suite")
+    benchmark_validate.add_argument("spec", type=Path)
+    benchmark_validate.add_argument("--executor", type=Path)
+    benchmark_auth = benchmark_commands.add_parser("auth-check", help="verify a subscription session or optional API credential without exposing secrets")
+    benchmark_auth.add_argument("executor", type=Path)
+    benchmark_ready = benchmark_commands.add_parser("readiness", help="validate policy, authentication, repetition thresholds, and visual runtime without creating worktrees")
+    benchmark_ready.add_argument("spec", type=Path)
+    benchmark_ready.add_argument("--executor", type=Path, required=True)
+    benchmark_ready.add_argument("--policy", type=Path)
+    benchmark_ready.add_argument("--runtime-lock", type=Path)
+    benchmark_runtime = benchmark_commands.add_parser("runtime-attest", help="attest browser, Playwright, font, and container runtime identity")
+    benchmark_runtime.add_argument("runtime_lock", type=Path)
+    benchmark_runtime.add_argument("--claim-level", choices=("development", "internal", "publication"), default="development")
+    benchmark_runtime_seal = benchmark_commands.add_parser("runtime-seal", help="seal a publication runtime lock inside a content-addressed browser container")
+    benchmark_runtime_seal.add_argument("base_lock", type=Path)
+    benchmark_runtime_seal.add_argument("output", type=Path)
+    benchmark_runtime_seal.add_argument("--container-image", required=True)
+    benchmark_export = benchmark_commands.add_parser("suite-export", help="export a packaged comparative benchmark suite")
+    benchmark_export.add_argument("destination", type=Path)
+    benchmark_export.add_argument("--benchmark-id", default="priority-picker-v1")
+    benchmark_export.add_argument("--force", action="store_true")
+    benchmark_fixture = benchmark_commands.add_parser("fixture-create", help="materialize the benchmark starter fixture as a Git repository")
+    benchmark_fixture.add_argument("spec", type=Path)
+    benchmark_fixture.add_argument("destination", type=Path)
+    benchmark_fixture.add_argument("--force", action="store_true")
+    benchmark_plan = benchmark_commands.add_parser("plan", help="create coordinator and paired arm worktrees and seal a run plan")
+    benchmark_plan.add_argument("spec", type=Path)
+    benchmark_plan.add_argument("--executor", type=Path, required=True)
+    benchmark_plan.add_argument("--repo", type=Path, required=True)
+    benchmark_plan.add_argument("--base-ref", default="HEAD")
+    benchmark_plan.add_argument("--run-id")
+    benchmark_plan.add_argument("--repetitions", type=int)
+    benchmark_plan.add_argument("--worktree-root", type=Path)
+    benchmark_plan.add_argument("--allow-dirty", action="store_true")
+    benchmark_plan.add_argument("--assistance-cohort", choices=("unassisted", "assisted"))
+    benchmark_plan.add_argument("--policy", type=Path)
+    benchmark_plan.add_argument("--runtime-lock", type=Path)
+    for name, help_text in (
+        ("run", "execute, capture, score, consolidate, and report a benchmark run"),
+        ("resume", "resume an idempotent benchmark pipeline"),
+        ("status", "show benchmark state and evidence availability"),
+        ("visual-capture", "capture pinned visual evidence for all arms"),
+        ("score", "run deterministic machine scorers"),
+        ("consolidate", "copy and digest-verify arm evidence into the coordinator"),
+        ("report", "render JSON and Markdown comparative reports"),
+        ("verify", "verify the consolidated evidence manifest and receipt"),
+        ("cleanup", "remove verified arm worktrees while preserving the coordinator"),
+    ):
+        command = benchmark_commands.add_parser(name, help=help_text)
+        command.add_argument("run")
+    benchmark_human = benchmark_commands.add_parser("review", help="create a blinded review assignment or submit a completed review")
+    benchmark_human.add_argument("run")
+    benchmark_human.add_argument("--reviewer", required=True)
+    benchmark_human.add_argument("--input", type=Path)
+
     pack = commands.add_parser("pack", help="prompt-pack commands")
     pack_commands = pack.add_subparsers(dest="pack_command", required=True)
 
@@ -773,6 +851,7 @@ def main(argv: list[str] | None = None) -> int:
                     destination=args.dest,
                     branch=args.branch,
                     allow_dirty=args.allow_dirty,
+                    assistance_cohort=args.assistance_cohort,
                 )
             elif args.worktree_command == "remove":
                 data = remove_worktree(
@@ -1332,6 +1411,70 @@ def main(argv: list[str] | None = None) -> int:
                 data = compare_trials(baseline, candidate)
                 atomic_write_json(output, data)
                 data = {"output": str(output), **data}
+        elif args.command == "benchmark":
+            if args.benchmark_command == "validate":
+                data = validate_comparative_benchmark(args.spec, args.executor)
+            elif args.benchmark_command == "auth-check":
+                data = check_benchmark_auth(args.executor)
+            elif args.benchmark_command == "readiness":
+                data = benchmark_readiness(
+                    args.spec,
+                    args.executor,
+                    policy=args.policy,
+                    runtime_lock=args.runtime_lock,
+                )
+            elif args.benchmark_command == "runtime-attest":
+                data = attest_benchmark_runtime(args.runtime_lock, claim_level=args.claim_level)
+            elif args.benchmark_command == "runtime-seal":
+                data = seal_benchmark_runtime(args.base_lock, args.output, container_image=args.container_image)
+            elif args.benchmark_command == "suite-export":
+                data = export_benchmark_suite(
+                    args.destination,
+                    benchmark_id=args.benchmark_id,
+                    force=args.force,
+                )
+            elif args.benchmark_command == "fixture-create":
+                data = create_benchmark_fixture(args.spec, args.destination, force=args.force)
+            elif args.benchmark_command == "plan":
+                data = create_benchmark_plan(
+                    settings,
+                    spec=args.spec,
+                    executor=args.executor,
+                    repo=args.repo,
+                    base_ref=args.base_ref,
+                    run_id=args.run_id,
+                    repetitions=args.repetitions,
+                    worktree_root=args.worktree_root,
+                    allow_dirty=args.allow_dirty,
+                    assistance_cohort=args.assistance_cohort,
+                    policy=args.policy,
+                    runtime_lock=args.runtime_lock,
+                )
+            elif args.benchmark_command == "run":
+                data = run_benchmark(settings, args.run)
+            elif args.benchmark_command == "resume":
+                data = resume_benchmark(settings, args.run)
+            elif args.benchmark_command == "status":
+                data = status_benchmark(settings, args.run)
+            elif args.benchmark_command == "visual-capture":
+                data = visual_capture_benchmark(settings, args.run)
+            elif args.benchmark_command == "score":
+                data = score_benchmark(settings, args.run)
+            elif args.benchmark_command == "consolidate":
+                data = consolidate_benchmark(settings, args.run)
+            elif args.benchmark_command == "review":
+                data = benchmark_review(
+                    settings,
+                    args.run,
+                    reviewer=args.reviewer,
+                    input_path=args.input,
+                )
+            elif args.benchmark_command == "report":
+                data = render_comparative_benchmark_report(settings, args.run)
+            elif args.benchmark_command == "verify":
+                data = verify_benchmark(settings, args.run)
+            else:
+                data = cleanup_benchmark(settings, args.run)
         elif args.command == "pack":
             if args.pack_command == "scaffold":
                 data = scaffold_pack(args.destination, args.phases, args.name)

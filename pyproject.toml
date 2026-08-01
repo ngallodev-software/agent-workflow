@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-workflow"
-version = "0.7.5"
+version = "0.7.6"
 description = "Terminal-first, observable workflow for bounded coding-agent delegation"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -39,6 +39,7 @@ otel = [
 ]
 mlflow = ["mlflow>=3,<4"]
 completion = ["shtab>=1.7,<2"]
+benchmark-visual = ["playwright==1.57.0"]
 # Kept as a compatibility alias for callers that explicitly request [mcp].
 mcp = ["mcp==1.28.1"]
 
