@@ -11,6 +11,7 @@ from ..index_store import (
     index_status,
     query_index_report,
     rebuild_index,
+    record_integrity_disposition,
     sync_index,
     verify_index,
 )
@@ -42,7 +43,17 @@ def handle_index_command(
             False,
         )
     if args.index_command == "verify":
-        return verify_index(settings, full=args.full), False
+        return verify_index(
+            settings, full=args.full, review_session_id=args.review_session_id
+        ), False
+    if args.index_command == "disposition":
+        return record_integrity_disposition(
+            settings,
+            incident_id=args.incident_id,
+            actor=args.actor,
+            decision=args.decision,
+            reason=args.reason,
+        ), False
 
     report = query_index_report(
         settings,
