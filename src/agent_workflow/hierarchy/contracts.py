@@ -79,6 +79,25 @@ def _team_map(hierarchy: Mapping[str, Any]) -> dict[str, str]:
     return result
 
 
+def _validate_unique_authority_identities(
+    hierarchy: Mapping[str, Any],
+    teams: Mapping[str, str],
+) -> None:
+    seen: dict[str, str] = {hierarchy["root_orchestrator_id"]: "root orchestrator"}
+    for team_id, lead_id in teams.items():
+        for identity, label in (
+            (team_id, f"team {team_id}"),
+            (lead_id, f"team lead for {team_id}"),
+        ):
+            previous = seen.get(identity)
+            if previous is not None:
+                raise WorkflowError(
+                    f"duplicate hierarchy authority identity {identity!r}: "
+                    f"used by {previous} and {label}"
+                )
+            seen[identity] = label
+
+
 def seal_hierarchy_contract(value: Mapping[str, Any]) -> dict[str, Any]:
     """Return a validated hierarchy contract with its canonical identity digest."""
     result = copy.deepcopy(dict(value))
@@ -99,6 +118,7 @@ def validate_hierarchy_contract(value: Mapping[str, Any]) -> None:
     validate_id(contract["workflow_id"], "workflow id")
     validate_id(contract["tmux_session_name"], "tmux session name")
     teams = _team_map(contract)
+    _validate_unique_authority_identities(contract, teams)
     budgets = contract["budgets"]
     if len(teams) > budgets["max_teams"]:
         raise WorkflowError("hierarchy declares more teams than max_teams")

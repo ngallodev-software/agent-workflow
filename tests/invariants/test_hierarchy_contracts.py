@@ -167,6 +167,22 @@ def test_fixed_depth_and_declared_team_identity_are_enforced() -> None:
         seal_team_delegation_contract(team_input("other", "lead-other"), hierarchy)
 
 
+def test_duplicate_team_lead_identity_is_rejected() -> None:
+    source = hierarchy_input()
+    source["teams"][1]["team_lead_session_id"] = source["teams"][0]["team_lead_session_id"]
+
+    with pytest.raises(WorkflowError, match="duplicate hierarchy authority identity"):
+        seal_hierarchy_contract(source)
+
+
+def test_root_and_team_authority_identity_collision_is_rejected() -> None:
+    source = hierarchy_input()
+    source["teams"][0]["team_id"] = source["root_orchestrator_id"]
+
+    with pytest.raises(WorkflowError, match="duplicate hierarchy authority identity"):
+        seal_hierarchy_contract(source)
+
+
 def test_scope_traversal_and_digest_tamper_fail_closed() -> None:
     hierarchy = seal_hierarchy_contract(hierarchy_input())
     candidate = team_input("implementation", "lead-implementation")
