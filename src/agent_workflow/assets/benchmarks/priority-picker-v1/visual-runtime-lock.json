@@ -1,9 +1,9 @@
 {
   "schema": "agent-workflow/visual-runtime-lock/v1",
   "reproducibility_state": "local-pinned-development",
-  "playwright_version": "1.57.0",
+  "playwright_version": "1.60.0",
   "browser_product": "Chromium",
-  "browser_version": "144.0.7559.96",
+  "browser_version": "151.0.7922.71",
   "browser_executable_candidates": [
     "/usr/bin/chromium",
     "/usr/bin/chromium-browser",
@@ -20,7 +20,6 @@
     {"id": "mobile", "width": 390, "height": 844}
   ],
   "font_manifest": [
-    {"family": "Arimo", "resolved_file": "Arimo-Regular.ttf"},
     {"family": "DejaVu Sans", "resolved_file": "DejaVuSans.ttf"}
   ],
   "container_image": null,

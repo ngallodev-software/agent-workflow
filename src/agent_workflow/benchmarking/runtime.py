@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import hashlib
 import importlib.metadata
-import json
+import re
 import shutil
 from pathlib import Path
 from typing import Any, Mapping
@@ -13,6 +12,7 @@ from ..util import atomic_write_json, sha256_file, utc_now
 from .common import read_object
 
 VISUAL_EVIDENCE_SCHEMA = "agent-workflow/benchmark-visual-evidence/v1"
+_BROWSER_VERSION_RE = re.compile(r"\b\d+(?:\.\d+){3}\b")
 
 
 def _find_font(filename: str) -> Path | None:
@@ -29,6 +29,15 @@ def _find_font(filename: str) -> Path | None:
             if candidate.is_file():
                 return candidate.resolve()
     return None
+
+
+def _browser_version(executable: Path | None) -> str | None:
+    if executable is None:
+        return None
+    result = run([str(executable), "--version"], check=False, timeout_seconds=30)
+    text = str(result.stdout or result.stderr or "")
+    match = _BROWSER_VERSION_RE.search(text)
+    return match.group(0) if result.returncode == 0 and match else None
 
 
 def validate_runtime_lock(lock: Mapping[str, Any], *, claim_level: str) -> None:
@@ -70,6 +79,7 @@ def attest_runtime(lock_path: Path, *, claim_level: str) -> dict[str, Any]:
                 executable = Path(found).resolve()
                 break
     browser_digest = sha256_file(executable) if executable and executable.is_file() else None
+    browser_version = _browser_version(executable)
     fonts: list[dict[str, Any]] = []
     for item in lock.get("font_manifest", []):
         filename = str(item.get("resolved_file", ""))
@@ -90,6 +100,7 @@ def attest_runtime(lock_path: Path, *, claim_level: str) -> dict[str, Any]:
     checks = {
         "playwright_version": playwright_version == lock.get("playwright_version"),
         "browser_executable_present": executable is not None,
+        "browser_version": browser_version == lock.get("browser_version"),
         "browser_executable_sha256": (
             not lock.get("browser_executable_sha256")
             or browser_digest == lock.get("browser_executable_sha256")
@@ -104,7 +115,7 @@ def attest_runtime(lock_path: Path, *, claim_level: str) -> dict[str, Any]:
     }
     development_verified = all(
         checks[key]
-        for key in ("playwright_version", "browser_executable_present", "font_manifest")
+        for key in ("playwright_version", "browser_executable_present", "browser_version", "font_manifest")
     )
     publication_verified = development_verified and all(checks.values())
     state = (
@@ -120,6 +131,7 @@ def attest_runtime(lock_path: Path, *, claim_level: str) -> dict[str, Any]:
         "runtime_lock_sha256": sha256_file(lock_path),
         "playwright_version": playwright_version,
         "browser_executable": str(executable) if executable else None,
+        "browser_version": browser_version,
         "browser_executable_sha256": browser_digest,
         "fonts": fonts,
         "container_image": lock.get("container_image"),

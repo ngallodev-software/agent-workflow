@@ -273,20 +273,30 @@ def verify_benchmark(settings: Settings, run: str | Path) -> dict[str, Any]:
 
 
 
-def cleanup_benchmark(settings: Settings, run: str | Path) -> dict[str, Any]:
+def cleanup_benchmark(
+    settings: Settings, run: str | Path, *, remove_worktrees: bool = False
+) -> dict[str, Any]:
     plan_path = _resolve_plan(settings, run)
     plan = read_object(plan_path)
     run_dir = Path(plan["coordinator"]["run_dir"])
     verification = verify_consolidated_run(run_dir)
-    if not verification["valid"]:
+    if remove_worktrees and not verification["valid"]:
         raise WorkflowError("benchmark evidence must verify before arm worktrees are removed")
     repository = Path(plan["source"]["repository"])
     removed: list[dict[str, Any]] = []
+    preserved: list[dict[str, Any]] = []
     for pair in plan["pairs"]:
         for attempt in attempts_for(pair):
             for arm_name in ("control_raw", "workflow_full"):
                 arm = attempt["arms"][arm_name]
                 worktree = Path(arm["worktree"])
+                if not remove_worktrees:
+                    preserved.append({
+                        "pair_id": pair["pair_id"], "attempt": attempt["attempt"], "arm": arm_name,
+                        "worktree": str(worktree), "worktree_present": worktree.is_dir(),
+                        "branch": arm["branch"],
+                    })
+                    continue
                 result = run_process(
                     ["git", "-C", str(repository), "worktree", "remove", "--force", str(worktree)],
                     check=False,
@@ -307,6 +317,7 @@ def cleanup_benchmark(settings: Settings, run: str | Path) -> dict[str, Any]:
     cleanup_value = {
         "schema": "agent-workflow/benchmark-cleanup/v1", "run_id": plan["run_id"],
         "completed_at": utc_now(), "verification": verification, "removed": removed,
+        "preserved": preserved, "remove_worktrees": remove_worktrees,
         "coordinator_preserved": plan["coordinator"]["worktree"],
     }
     atomic_write_json(run_dir / "cleanup.json", cleanup_value)
@@ -370,6 +381,11 @@ def benchmark_readiness(
         runtime = {"runtime_state": "not-verified", "detail": str(exc)}
         checks.append({"id": "visual-runtime", "passed": False, "detail": str(exc)})
     checks.extend([
+        {
+            "id": "interactive-tmux",
+            "passed": shutil.which("tmux") is not None,
+            "detail": "benchmark agents launch in dedicated interactive tmux panes",
+        },
         {
             "id": "paired-repetitions",
             "passed": int(operating_policy["repetitions"]) >= int(operating_policy["winner_policy"]["minimum_eligible_pairs"])

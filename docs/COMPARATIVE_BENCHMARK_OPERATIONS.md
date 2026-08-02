@@ -90,9 +90,12 @@ Internal claims require two completed blinded reviews. Publication claims requir
 agent-workflow benchmark report codex-priority-picker-internal
 agent-workflow benchmark verify codex-priority-picker-internal
 agent-workflow benchmark cleanup codex-priority-picker-internal
+# Add --remove-worktrees only when the arm source trees are no longer needed.
 ```
 
-Cleanup removes only verified arm worktrees and preserves the coordinator worktree and `benchmarks/runs/<run-id>` evidence.
+Cleanup preserves arm worktrees by default, keeping the built apps viewable. Use
+`--remove-worktrees` for explicit removal after verified consolidation; the
+coordinator worktree and `benchmarks/runs/<run-id>` evidence remain preserved.
 
 ## Optional API authentication
 

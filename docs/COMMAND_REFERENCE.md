@@ -224,10 +224,10 @@ agent-workflow benchmark consolidate RUN
 agent-workflow benchmark review RUN --reviewer ID [--input FILE]
 agent-workflow benchmark report RUN
 agent-workflow benchmark verify RUN
-agent-workflow benchmark cleanup RUN
+agent-workflow benchmark cleanup RUN [--remove-worktrees]
 ```
 
-The built-in `priority-picker-v1` suite compares identical canonical phases through concurrent `control_raw/v1` and `workflow_full/v1` worktrees. Subscription-backed Codex/Claude CLI sessions are the default real-executor authentication; API credentials are optional explicit profiles. `readiness` checks authentication, policy thresholds, retry isolation, and visual runtime without creating worktrees. `run` performs execution, visual capture, machine scoring, consolidation, and reporting, then waits for blinded human review. Reports preserve tokens, provider-billed cost, API-equivalent/local estimates, optional subscription allocation, phase and process timing, pair wall/critical-path/start-skew timing, visual and verification timing, human active-review time, separate machine/human scores, paired confidence intervals, and the adopted 70/30 composite. `cleanup` requires valid consolidated evidence and preserves the coordinator. See the [implementation](COMPARATIVE_BENCHMARK_IMPLEMENTATION.md) and [operations guide](COMPARATIVE_BENCHMARK_OPERATIONS.md).
+The built-in `priority-picker-v1` suite compares identical canonical phases through concurrent `control_raw/v1` and `workflow_full/v1` worktrees. Subscription-backed Codex/Claude CLI sessions are the default real-executor authentication; API credentials are optional explicit profiles. `readiness` checks authentication, policy thresholds, retry isolation, tmux availability, and visual runtime without creating worktrees. `run` performs execution, visual capture, machine scoring, consolidation, and reporting, then waits for blinded human review. Reports preserve tokens, provider-billed cost, API-equivalent/local estimates, optional subscription allocation, phase and process timing, pair wall/critical-path/start-skew timing, visual and verification timing, human active-review time, separate observed/eligible machine scores, paired confidence intervals, and the adopted 70/30 composite. `cleanup` preserves arm worktrees by default so built apps remain viewable; `--remove-worktrees` is explicit and requires valid consolidated evidence. See the [implementation](COMPARATIVE_BENCHMARK_IMPLEMENTATION.md) and [operations guide](COMPARATIVE_BENCHMARK_OPERATIONS.md).
 
 ## Prompt packs
 

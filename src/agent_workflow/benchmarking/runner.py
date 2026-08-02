@@ -3,6 +3,8 @@ from __future__ import annotations
 import concurrent.futures
 import hashlib
 import os
+import shutil
+import sys
 import threading
 import time
 from pathlib import Path
@@ -81,8 +83,9 @@ def _run_phase_arm(
     release: dict[str, float],
 ) -> dict[str, Any]:
     run_dir = Path(plan["coordinator"]["run_dir"])
-    argv, environment, phase_dir, prompt_text = _render_command(plan, pair, attempt, arm, phase)
+    argv, environment, phase_dir, _ = _render_command(plan, pair, attempt, arm, phase)
     stdout_path, stderr_path = phase_dir / "stdout.log", phase_dir / "stderr.log"
+    result_path = phase_dir / "tmux-result.json"
     barrier.wait()
     actual_start_monotonic = time.monotonic()
     actual_start_utc = utc_now()
@@ -92,27 +95,85 @@ def _run_phase_arm(
         pair_id=str(pair["pair_id"]), arm=str(arm["arm"]), phase_id=str(phase["id"]),
         payload={"slot": arm["slot"], "attempt": attempt["attempt"]},
     )
-    result = run(
-        argv, cwd=Path(arm["worktree"]), check=False,
-        timeout_seconds=float(phase["timeout_seconds"]),
-        max_stdout_bytes=int(plan["executor"]["max_stdout_bytes"]),
-        max_stderr_bytes=int(plan["executor"]["max_stderr_bytes"]),
-        environment=EnvironmentPolicy(
-            allowlist=tuple(plan["executor"].get("environment_allowlist", [])),
-            values=environment,
-            unsafe_inherit=bool(plan["executor"].get("unsafe_inherit_environment", False)),
-        ),
-        probe_version=True, digest_executable=True, input_text=prompt_text,
-        secret_values=tuple(
-            os.environ[name]
-            for name in plan["executor"].get("authentication", {}).get("credential_environment", [])
-            if os.environ.get(name)
-        ),
+    if shutil.which("tmux") is None:
+        raise WorkflowError("benchmark agents require tmux; no interactive pane backend is available")
+    session_id = "aw-bench-" + hashlib.sha256(
+        f"{plan['run_id']}:{pair['pair_id']}:{attempt['attempt']}:{arm['arm']}:{phase['id']}".encode()
+    ).hexdigest()[:20]
+    credential_names = tuple(
+        str(name)
+        for name in plan["executor"].get("authentication", {}).get("credential_environment", [])
     )
+    provider_executable = shutil.which(argv[0], path=os.environ.get("PATH", ""))
+    if provider_executable:
+        environment["PATH"] = f"{Path(provider_executable).parent}:/usr/local/bin:/usr/bin:/bin"
+    allowlist = tuple(dict.fromkeys(
+        [str(name) for name in plan["executor"].get("environment_allowlist", [])]
+        + list(credential_names)
+    ))
+    tmux_environment = EnvironmentPolicy(
+        allowlist=allowlist,
+        values=environment,
+        unsafe_inherit=bool(plan["executor"].get("unsafe_inherit_environment", False)),
+    )
+    helper = Path(__file__).with_name("tmux_runner.py")
+    helper_argv = [
+        sys.executable, str(helper), "--cwd", str(arm["worktree"]),
+        "--prompt", str(_prompt_for(arm, str(phase["id"]))),
+        "--stdout", str(stdout_path), "--stderr", str(stderr_path),
+        "--result", str(result_path), "--timeout", str(float(phase["timeout_seconds"])),
+        "--max-stdout", str(int(plan["executor"]["max_stdout_bytes"])),
+        "--max-stderr", str(int(plan["executor"]["max_stderr_bytes"])),
+    ]
+    helper_argv.extend(item for name in allowlist for item in ("--allow-env", name))
+    helper_argv.extend(item for key, value in environment.items() for item in ("--set-env", f"{key}={value}"))
+    helper_argv.extend(["--", *argv])
+    launch = run(
+        ["tmux", "new-session", "-d", "-P", "-F", "#{pane_id}", "-s", session_id,
+         "-c", str(arm["worktree"]), *helper_argv],
+        check=False,
+        timeout_seconds=30,
+        max_stdout_bytes=4096,
+        max_stderr_bytes=4096,
+        environment=tmux_environment,
+        secret_values=tuple(os.environ[name] for name in credential_names if os.environ.get(name)),
+    )
+    if launch.returncode != 0:
+        raise WorkflowError(f"failed to launch benchmark agent tmux pane: {launch.stderr or launch.stdout}")
+    deadline = time.monotonic() + float(phase["timeout_seconds"]) + 15.0
+    while not result_path.is_file() and time.monotonic() < deadline:
+        time.sleep(0.1)
+    if result_path.is_file():
+        result_value = read_object(result_path)
+    else:
+        result_value = {
+            "returncode": 124, "timed_out": True,
+            "error_category": "timeout", "duration_seconds": float(phase["timeout_seconds"]),
+        }
+    run(["tmux", "kill-session", "-t", session_id], check=False, timeout_seconds=10)
+
+    class _TmuxResult:
+        returncode = int(result_value.get("returncode", 127))
+        timed_out = bool(result_value.get("timed_out"))
+        error_category = result_value.get("error_category")
+        duration_seconds = float(result_value.get("duration_seconds", 0.0))
+
+        def as_dict(self, *, include_output: bool = False) -> dict[str, Any]:
+            return {
+                "argv": [str(item) for item in argv],
+                "returncode": self.returncode,
+                "timed_out": self.timed_out,
+                "error_category": self.error_category or ("completed" if self.returncode == 0 else "task_failed"),
+                "duration_seconds": self.duration_seconds,
+                "tmux_session": session_id,
+                "stdout": str(stdout_path),
+                "stderr": str(stderr_path),
+                "include_output": include_output,
+            }
+
+    result = _TmuxResult()
     wall = round(time.monotonic() - actual_start_monotonic, 6)
-    stdout_text, stderr_text = str(result.stdout), str(result.stderr)
-    stdout_path.write_text(stdout_text, encoding="utf-8")
-    stderr_path.write_text(stderr_text, encoding="utf-8")
+    stdout_text = stdout_path.read_text(encoding="utf-8", errors="replace") if stdout_path.is_file() else ""
     usage = load_usage(
         phase_dir / "usage.json", stdout_text,
         currency=plan["executor"].get("currency"),

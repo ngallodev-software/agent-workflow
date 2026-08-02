@@ -65,8 +65,8 @@ def build_report(plan_path: Path) -> dict[str, Any]:
     minimum_reviewers = int(spec["visual"]["minimum_reviewers"][plan["claim_level"]])
     pair_reports: list[dict[str, Any]] = []
     arm_aggregates: dict[str, dict[str, list[float]]] = {
-        "control_raw": {"machine": [], "human": [], "composite": [], "wall": [], "measured": [], "active": [], "visual": [], "verification": [], "tokens": [], "provider_cost": [], "local_cost": [], "subscription_cost": []},
-        "workflow_full": {"machine": [], "human": [], "composite": [], "wall": [], "measured": [], "active": [], "visual": [], "verification": [], "tokens": [], "provider_cost": [], "local_cost": [], "subscription_cost": []},
+        "control_raw": {"machine": [], "eligible_machine": [], "human": [], "composite": [], "wall": [], "measured": [], "active": [], "visual": [], "verification": [], "tokens": [], "provider_cost": [], "local_cost": [], "subscription_cost": []},
+        "workflow_full": {"machine": [], "eligible_machine": [], "human": [], "composite": [], "wall": [], "measured": [], "active": [], "visual": [], "verification": [], "tokens": [], "provider_cost": [], "local_cost": [], "subscription_cost": []},
     }
     eligible_pairs = 0
     complete_human_pairs = 0
@@ -152,6 +152,7 @@ def build_report(plan_path: Path) -> dict[str, Any]:
             arm_results[arm] = {
                 "eligibility": score["eligibility"],
                 "machine_score": machine,
+                "eligible_machine_score": machine if machine_eligible else None,
                 "human_visual_score": human,
                 "reviewers": len(pair_reviews),
                 "blocking_visual_defects": blocking,
@@ -176,6 +177,8 @@ def build_report(plan_path: Path) -> dict[str, Any]:
             aggregate = arm_aggregates[arm]
             if machine is not None:
                 aggregate["machine"].append(float(machine))
+            if machine_eligible:
+                aggregate["eligible_machine"].append(float(machine))
             if human is not None:
                 aggregate["human"].append(human)
             if composite is not None:
@@ -230,6 +233,7 @@ def build_report(plan_path: Path) -> dict[str, Any]:
     for arm, values in arm_aggregates.items():
         aggregates[arm] = {
             "mean_machine_score": _mean(values["machine"]),
+            "mean_eligible_machine_score": _mean(values["eligible_machine"]),
             "mean_human_visual_score": _mean(values["human"]),
             "mean_composite_score": _mean(values["composite"]),
             "mean_wall_seconds": _mean(values["wall"]),
@@ -241,7 +245,7 @@ def build_report(plan_path: Path) -> dict[str, Any]:
             "mean_provider_billed_cost": _mean(values["provider_cost"]),
             "mean_local_estimated_cost": _mean(values["local_cost"]),
             "mean_subscription_allocated_cost": _mean(values["subscription_cost"]),
-            "eligible_machine_results": len(values["machine"]),
+            "eligible_machine_results": len(values["eligible_machine"]),
             "complete_composites": len(values["composite"]),
         }
     delta_fields = {
@@ -348,6 +352,7 @@ def build_report(plan_path: Path) -> dict[str, Any]:
         "limitations": [
             "Efficiency metrics are descriptive and do not add machine-quality points.",
             "A winner is not declared unless the frozen winner policy is enabled and its sample threshold is met.",
+            "Observed machine scores remain reportable when a guardrail fails; only eligible machine scores may contribute to composites or winner claims.",
             "Publication eligibility additionally requires verified filesystem/oracle isolation and publication-verified visual runtime evidence.",
             "Subscription runs report provider-billed cost as unavailable; API-equivalent estimates and optional subscription allocations are separate fields.",
         ],

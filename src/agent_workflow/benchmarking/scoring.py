@@ -7,7 +7,7 @@ from typing import Any, Mapping
 from ..errors import WorkflowError
 from ..process import EnvironmentPolicy, run
 from ..util import atomic_write_json, sha256_file, utc_now
-from .common import child, format_argv, read_object
+from .common import format_argv, read_object
 from .contracts import BENCHMARK_MACHINE_SCORE_SCHEMA, validate_spec, validate_value
 from .events import append_event
 from .pairing import selected_arms
@@ -198,6 +198,11 @@ def _run_scorer(
     }
 
 
+def _observed_machine_score(components: list[Mapping[str, Any]]) -> float:
+    """Sum completed scorer observations without applying eligibility policy."""
+    return round(sum(float(item["earned_points"]) for item in components), 4)
+
+
 def score_run(plan_path: Path) -> dict[str, Any]:
     plan = read_object(plan_path.resolve())
     run_dir = Path(plan["coordinator"]["run_dir"])
@@ -229,7 +234,11 @@ def score_run(plan_path: Path) -> dict[str, Any]:
             ]
             scorer_harness_failures = [item["id"] for item in components if item["state"] == "harness_failure"]
             eligible = not required_failures and not scorer_harness_failures
-            score = round(sum(float(item["earned_points"]) for item in components), 4) if eligible else None
+            # A guardrail determines whether a result may qualify for a winner;
+            # it must not erase the score produced by completed scorers.  Keep
+            # the observed score for diagnostics and reporting, while the
+            # eligibility projection remains the authority for composites.
+            score = _observed_machine_score(components)
             value = {
                 "schema": BENCHMARK_MACHINE_SCORE_SCHEMA,
                 "run_id": plan["run_id"],

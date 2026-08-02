@@ -155,7 +155,7 @@ def test_paired_benchmark_runs_scores_blinds_reviews_and_consolidates(tmp_path: 
 
     verified = verify_benchmark(settings, plan_path)
     assert verified["valid"] is True
-    cleanup = cleanup_benchmark(settings, plan_path)
+    cleanup = cleanup_benchmark(settings, plan_path, remove_worktrees=True)
     assert all(item["worktree_removed"] for item in cleanup["removed"])
     assert Path(cleanup["coordinator_preserved"]).is_dir()
     assert verify_benchmark(settings, plan_path)["valid"] is True

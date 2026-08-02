@@ -233,7 +233,10 @@ def create_run_plan(
         if not fixture_input.is_file():
             raise WorkflowError(f"fixture target input not found: {fixture_input}")
         run_dir = coordinator / "benchmarks" / "runs" / run_id
-        suite_dir = coordinator / ".agent-workflow-benchmark" / run_id / "suite"
+        # The coordinator and worktree root already carry run_id.  Repeating
+        # it inside every stage made otherwise valid runs exceed filesystem
+        # path limits after agents had spent their token budget.
+        suite_dir = coordinator / ".agent-workflow-benchmark" / "suite"
         _copy_suite(spec_path, suite_dir)
         suite_spec = suite_dir / spec_path.name
         runtime_lock_name = "visual-runtime-lock.effective.json"
@@ -305,7 +308,7 @@ def create_run_plan(
                             base_ref=base_revision, destination=destination, branch=branch, allow_dirty=allow_dirty,
                         )
                         created_worktrees.append(info)
-                        stage = destination / ".agent-workflow-benchmark" / run_id / str(case["id"]) / f"r{repetition:02d}" / f"attempt-{attempt_number:02d}" / arm
+                        stage = destination / ".agent-workflow-benchmark" / str(case["id"]) / f"r{repetition:02d}" / f"attempt-{attempt_number:02d}" / arm
                         prompts_dir = stage / "prompts"
                         prompts_dir.mkdir(parents=True, exist_ok=True)
                         shutil.copy2(input_path, stage / "case-input.json")

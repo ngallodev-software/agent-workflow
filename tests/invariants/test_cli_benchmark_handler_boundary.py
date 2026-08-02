@@ -35,6 +35,7 @@ def _args(command: str, **values: object) -> argparse.Namespace:
         "run": "run-1",
         "reviewer": "reviewer",
         "input": Path("review.json"),
+        "remove_worktrees": False,
     }
     base.update(values)
     return argparse.Namespace(**base)
@@ -89,7 +90,7 @@ def test_cleanup_is_explicit_not_fallback(tmp_path: Path) -> None:
         return_value={"removed": 3},
     ) as call:
         assert handle_benchmark_command(settings, _args("cleanup")) == {"removed": 3}
-    call.assert_called_once_with(settings, "run-1")
+    call.assert_called_once_with(settings, "run-1", remove_worktrees=False)
 
     with pytest.raises(WorkflowError, match="unhandled benchmark command"):
         handle_benchmark_command(settings, _args("unknown"))

@@ -105,5 +105,5 @@ def handle_benchmark_command(
     if command == "verify":
         return verify_benchmark(settings, args.run)
     if command == "cleanup":
-        return cleanup_benchmark(settings, args.run)
+        return cleanup_benchmark(settings, args.run, remove_worktrees=args.remove_worktrees)
     raise WorkflowError(f"unhandled benchmark command: {command}")

@@ -398,14 +398,18 @@ A high raw machine score is not sufficient to make a benchmark trial valid. Requ
 
 Sandbox isolation is also recorded. It is required for publication eligibility when the publication policy and runtime demand it.
 
-If a required guardrail fails, or if a scorer itself experiences a harness failure:
+If a required guardrail fails, or if a scorer itself experiences a harness failure,
+the completed scorer observations are still retained:
 
 ```text
-machine_score = null
+machine_score = observed sum of earned points
+eligible_machine_score = null
 eligibility = invalid
 ```
 
-The system does not convert an invalid experiment into a lower numerical score. This separation is essential: quality points describe the submitted solution; eligibility describes whether the experiment can support a comparative claim.
+The observed score is descriptive only. It cannot contribute to a composite or
+winner claim unless eligibility is `eligible`. This separation preserves useful
+results without presenting an invalid experiment as a qualified comparison.
 
 ---
 

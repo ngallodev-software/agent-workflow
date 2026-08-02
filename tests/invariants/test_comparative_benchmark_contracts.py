@@ -4,6 +4,7 @@ import json
 import subprocess
 from dataclasses import replace
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -14,7 +15,8 @@ from agent_workflow.benchmarking.review import (
     _require_exact_pair_ids,
     _unblind_blocking_defects,
 )
-from agent_workflow.benchmarking.service import export_builtin_suite
+from agent_workflow.benchmarking.scoring import _observed_machine_score
+from agent_workflow.benchmarking.service import cleanup_benchmark, export_builtin_suite
 from agent_workflow.config import defaults
 from agent_workflow.errors import WorkflowError
 
@@ -99,6 +101,40 @@ def test_usage_unknowns_remain_null_instead_of_becoming_zero() -> None:
     assert aggregate["input_tokens"] == 10
     assert aggregate["provider_billed_cost"] is None
     assert aggregate["complete"] is False
+
+
+def test_observed_machine_score_survives_invalid_eligibility() -> None:
+    components = [{"earned_points": 37.5}, {"earned_points": 12.25}]
+    assert _observed_machine_score(components) == 49.75
+
+
+def test_cleanup_retains_arm_worktrees_by_default(tmp_path: Path) -> None:
+    run_dir = tmp_path / "coordinator" / "benchmarks" / "runs" / "run-1"
+    coordinator = run_dir.parents[2]
+    coordinator.mkdir(parents=True)
+    arms = {}
+    for name in ("control_raw", "workflow_full"):
+        worktree = tmp_path / name
+        worktree.mkdir()
+        arms[name] = {"worktree": str(worktree), "branch": f"benchmark/run-1/{name}"}
+    plan = {
+        "run_id": "run-1",
+        "coordinator": {"run_dir": str(run_dir), "worktree": str(coordinator)},
+        "source": {"repository": str(tmp_path / "source")},
+        "pairs": [{"pair_id": "pair-1", "attempts": [{"attempt": 1, "arms": arms}]}],
+    }
+    run_dir.mkdir(parents=True)
+    plan_path = run_dir / "run-plan.json"
+    plan_path.write_text(json.dumps(plan), encoding="utf-8")
+    with (
+        patch("agent_workflow.benchmarking.service.verify_consolidated_run", return_value={"valid": False}),
+        patch("agent_workflow.benchmarking.service.write_manifest"),
+    ):
+        result = cleanup_benchmark(_settings(tmp_path), plan_path)
+    assert result["remove_worktrees"] is False
+    assert result["removed"] == []
+    assert len(result["preserved"]) == 2
+    assert all(item["worktree_present"] for item in result["preserved"])
 
 
 def test_packaged_suite_exports_the_frozen_source_suite(tmp_path: Path) -> None:

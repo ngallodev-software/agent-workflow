@@ -593,10 +593,12 @@ def build_parser(plugin_registry: PluginRegistry | None = None) -> argparse.Argu
         ("consolidate", "copy and digest-verify arm evidence into the coordinator"),
         ("report", "render JSON and Markdown comparative reports"),
         ("verify", "verify the consolidated evidence manifest and receipt"),
-        ("cleanup", "remove verified arm worktrees while preserving the coordinator"),
+        ("cleanup", "retain benchmark arms by default; optionally remove verified arm worktrees"),
     ):
         command = benchmark_commands.add_parser(name, help=help_text)
         command.add_argument("run")
+        if name == "cleanup":
+            command.add_argument("--remove-worktrees", action="store_true")
     benchmark_human = benchmark_commands.add_parser("review", help="create a blinded review assignment or submit a completed review")
     benchmark_human.add_argument("run")
     benchmark_human.add_argument("--reviewer", required=True)
