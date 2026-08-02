@@ -44,7 +44,7 @@ def handle_index_command(
             False,
         )
     if args.index_command == "verify":
-        return verify_index(settings, full=args.full), False
+        return verify_index(settings, full=args.full, review_session_id=args.review_session_id), False
     if args.index_command == "integrity":
         if args.integrity_command == "migrate":
             return migrate_integrity_authority(settings), False

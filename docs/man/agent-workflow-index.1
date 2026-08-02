@@ -14,6 +14,7 @@ agent-workflow-index \- rebuild and query the host-local SQLite evidence project
 .br
 .B agent-workflow index verify
 .RI [ --full ]
+.RI [ --review " SESSION" ]
 .br
 .B agent-workflow index query
 .I KIND
@@ -41,6 +42,13 @@ Remove and recreate the selected projection from authoritative source evidence. 
 Run SQLite integrity and foreign-key checks. With
 .B --full,
 rehash every indexed source artifact and report missing, changed, or mismatched evidence.
+With
+.B --review,
+also verify one named sealed reviewed run and its direct completion and lifecycle gate evidence; this adds
+.B review_valid
+without changing the global
+.B valid
+result.
 .TP
 .B query
 Query one curated read-only view. JSON output is an agent-workflow/index-query/v1 envelope containing projection freshness, stale/error counts, and rows. Human output prints the freshness summary before the table. Supported kinds are

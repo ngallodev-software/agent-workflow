@@ -40,8 +40,9 @@ from .index_schema import (
     validate_database_header as _validated_database_header,
 )
 from .path import require_directory
-from .receipts import verify_legacy_seal_details, verify_seal_details
-from .state import runs_root
+from .receipts import read_sealed_contract, verify_legacy_seal_details, verify_seal_details
+from .lifecycle import lifecycle_receipts
+from .state import run_dir, runs_root
 from .util import utc_now, validate_id
 
 MAX_EVENT_SUMMARY = 2048
@@ -1198,9 +1199,72 @@ def index_status(settings: Settings) -> dict[str, Any]:
     return report
 
 
-def verify_index(settings: Settings, *, full: bool = False) -> dict[str, Any]:
+def _review_verification(settings: Settings, connection: sqlite3.Connection, session_id: str) -> dict[str, Any]:
+    """Verify one reviewed run without changing the global index verdict."""
+    result: dict[str, Any] = {
+        "review_scope": session_id,
+        "review_valid": False,
+        "review_errors": [],
+        "review_evidence": None,
+    }
+    try:
+        row = connection.execute(
+            "SELECT source_dir FROM runs WHERE session_id=?", (session_id,)
+        ).fetchone()
+        if row is None:
+            raise WorkflowError("review target is not indexed")
+        indexed = Path(str(row["source_dir"]))
+        allowed = (run_dir(settings, session_id), settings.state_root / "archive" / session_id)
+        target = next((candidate for candidate in allowed if candidate == indexed), None)
+        if target is None or target.is_symlink() or not target.is_dir():
+            raise WorkflowError("review target is outside trusted active/archive evidence")
+        final_receipt, final_digest = verify_seal_details(target)
+        if final_receipt.get("session_id") != session_id:
+            raise WorkflowError("review final receipt belongs to another run")
+        final_status, final_status_digest = read_sealed_contract(
+            target, final_receipt, "final-status.json", "agent-workflow/session-status/v2"
+        )
+        if final_status.get("session_id") != session_id or final_status.get("status") != "completed":
+            raise WorkflowError("review target is not a completed run")
+        completion, completion_digest = read_sealed_contract(
+            target, final_receipt, "completion.json", "agent-workflow/completion/v1"
+        )
+        collection, collection_digest = read_sealed_contract(
+            target, final_receipt, "collections/completion.json", "agent-workflow/completion-collection/v1"
+        )
+        if completion.get("result") != "completed" or completion.get("unresolved"):
+            raise WorkflowError("review completion is not a successful direct gate")
+        if any(item.get("result") != "pass" for item in completion.get("criteria", [])):
+            raise WorkflowError("review completion contains a failed direct gate")
+        if any(item.get("exit_code") != 0 for item in completion.get("commands", [])):
+            raise WorkflowError("review completion contains a failed command gate")
+        if collection.get("validation_status") != "valid":
+            raise WorkflowError("review completion collection is not valid")
+        chain = lifecycle_receipts(target, expected_final_receipt_sha256=final_digest)
+        if not chain or chain[-1]["receipt"].get("action") != "reviewed":
+            raise WorkflowError("review target has no current reviewed lifecycle gate")
+        reviewed = chain[-1]
+        result["review_valid"] = True
+        result["review_evidence"] = {
+            "source_dir": str(target),
+            "final_receipt_sha256": final_digest,
+            "final_status_sha256": final_status_digest,
+            "completion_sha256": completion_digest,
+            "completion_collection_sha256": collection_digest,
+            "review_receipt_sha256": reviewed["sha256"],
+            "review_receipt_path": str(reviewed["path"]),
+        }
+    except (OSError, WorkflowError, KeyError, TypeError, ValueError) as exc:
+        result["review_errors"] = [str(exc)]
+    return result
+
+
+def verify_index(
+    settings: Settings, *, full: bool = False, review_session_id: str | None = None
+) -> dict[str, Any]:
     connection = _connect(settings, readonly=True)
     mismatches: list[dict[str, Any]] = []
+    review_result: dict[str, Any] | None = None
     try:
         _, version = _validated_database_header(connection)
         integrity = [str(row[0]) for row in connection.execute("PRAGMA integrity_check")]
@@ -1241,6 +1305,8 @@ def verify_index(settings: Settings, *, full: bool = False) -> dict[str, Any]:
                     "detail": row["index_error"],
                 }
             )
+        if review_session_id is not None:
+            review_result = _review_verification(settings, connection, review_session_id)
     finally:
         connection.close()
     blocking_mismatches = [
@@ -1261,6 +1327,10 @@ def verify_index(settings: Settings, *, full: bool = False) -> dict[str, Any]:
             item for item in mismatches if item.get("classification") == "quarantined"
         ],
     }
+    if review_result is not None:
+        report.update(review_result)
+    else:
+        report.update({"review_scope": None, "review_valid": None, "review_errors": [], "review_evidence": None})
     validate_instance(report, report["schema"], artifact="SQLite index verification")
     return report
 

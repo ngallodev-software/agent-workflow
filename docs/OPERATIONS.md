@@ -149,6 +149,11 @@ agent-workflow index verify --full
 
 `--full` rehashes every indexed source artifact in addition to SQLite integrity and foreign-key checks. A mismatch indicates stale or altered current source evidence; it does not rewrite the source file. Obsolete non-authoritative legacy runs are reported as preserved quarantines and do not become valid/current evidence. Unsafe paths and current-schema failures remain blocking.
 
+To verify one named reviewed run and its direct gate evidence without changing
+the global result, use `agent-workflow index verify --full --review SESSION`.
+The report exposes this separately as `review_valid`; global `valid` still
+reflects every unresolved host integrity blocker.
+
 ### Rebuild and corruption recovery
 
 If the database is missing, corrupt, on an unsupported schema, or suspected of drift:

@@ -103,13 +103,13 @@ agent-workflow supervisor run
 agent-workflow index status
 agent-workflow index sync [--run SESSION] [--active-only]
 agent-workflow index rebuild [--run SESSION] [--active-only]
-agent-workflow index verify [--full]
+agent-workflow index verify [--full] [--review SESSION]
 agent-workflow index query runs|incidents|permissions|performance|workflows|workflow-nodes|errors
   [--session SESSION] [--state STATE] [--category CATEGORY]
   [--executor NAME] [--model MODEL] [--pack PACK] [--limit N]
 ```
 
-`status` reports the database path, schema/application versions, source and indexed run counts, freshness, journal mode, historical quarantines, and blocking index errors. `sync` reconciles only changed source directories; `rebuild` replaces the projection from authoritative JSON/JSONL and sealed receipts. `verify` always runs SQLite integrity and foreign-key checks; `--full` additionally rehashes indexed source files and reports preserved legacy artifacts separately from blocking current mismatches. Unsafe paths, malformed current schemas, and changed current evidence remain failures.
+`status` reports the database path, schema/application versions, source and indexed run counts, freshness, journal mode, historical quarantines, and blocking index errors. `sync` reconciles only changed source directories; `rebuild` replaces the projection from authoritative JSON/JSONL and sealed receipts. `verify` always runs SQLite integrity and foreign-key checks; `--full` additionally rehashes indexed source files and reports preserved legacy artifacts separately from blocking current mismatches. `--review SESSION` adds a separately named `review_valid` result for that indexed sealed run and its direct completion/lifecycle gate; it never changes global `valid`. Unsafe paths, malformed current schemas, and changed current evidence remain failures.
 
 `query` exposes fixed, parameterized operational views rather than arbitrary SQL. JSON output uses an `agent-workflow/index-query/v1` envelope containing freshness, stale/error counts, and `rows`; human output prints the same freshness summary before the table. Rows include source provenance. The index is disposable: lifecycle, permission, workflow, remediation, review, and acceptance authority remains in source artifacts and sealed receipts. Raw prompts, terminal/message bodies, and large logs are not copied into SQLite. See [SQLite evidence index architecture](SQLITE_EVIDENCE_INDEX_ARCHITECTURE.md).
 

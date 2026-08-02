@@ -5,12 +5,68 @@ from pathlib import Path
 
 import pytest
 
-from tests.conftest import InstalledProduct
+from tests.conftest import InstalledProduct, git_repo, wait_for_status
 
 
 def _write_json(path: Path, value: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def test_installed_review_scoped_verify_preserves_global_blockers_and_legacy_ledger(
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+    fake_agent_path: Path,
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "review-repo"
+    git_repo(repo)
+    prompt = tmp_path / "review.md"
+    prompt.write_text("Review the sealed evidence.\n", encoding="utf-8")
+    installed_product.json(
+        "launch", "review-index-target", repo, prompt, "--agent-class", "review",
+        "--tier", "low", "--no-interactive", "--", fake_agent_path, env=product_env,
+    )
+    assert wait_for_status(product_env, "review-index-target")["status"] == "completed"
+    installed_product.json(
+        "review", "review-index-target", "--actor", "reviewer", "--reason", "gate checked",
+        env=product_env,
+    )
+    state = Path(product_env["XDG_STATE_HOME"]) / "agent-workflow"
+    installed_product.json("index", "rebuild", env=product_env)
+    legacy_ledger = state / "index" / "integrity-incidents.jsonl"
+    legacy_ledger.write_text('{"legacy":"sentinel"}\n', encoding="utf-8")
+    unrelated = state / "runs" / "unrelated-integrity-incident"
+    unrelated.mkdir(parents=True)
+    (unrelated / "status.json").write_text("{not-json\n", encoding="utf-8")
+    installed_product.json("index", "rebuild", env=product_env)
+
+    verified = installed_product.json(
+        "index", "verify", "--full", "--review", "review-index-target", env=product_env
+    )
+    assert verified["valid"] is False
+    assert verified["review_scope"] == "review-index-target"
+    assert verified["review_valid"] is True
+    assert verified["review_evidence"]["review_receipt_sha256"]
+    assert legacy_ledger.read_text(encoding="utf-8") == '{"legacy":"sentinel"}\n'
+
+    run = state / "runs" / "review-index-target"
+    completion = run / "completion.json"
+    completion.chmod(0o600)
+    completion.write_text(completion.read_text(encoding="utf-8").replace("completed", "partial", 1), encoding="utf-8")
+    completion.chmod(0o444)
+    tampered = installed_product.json(
+        "index", "verify", "--full", "--review", "review-index-target", env=product_env
+    )
+    assert tampered["valid"] is False
+    assert tampered["review_valid"] is False
+    completion.unlink()
+    missing = installed_product.json(
+        "index", "verify", "--review", "review-index-target", env=product_env
+    )
+    assert missing["valid"] is False
+    assert missing["review_valid"] is False
+    assert legacy_ledger.read_text(encoding="utf-8") == '{"legacy":"sentinel"}\n'
 
 
 def test_installed_index_rebuilds_and_preserves_query_results_after_database_loss(
