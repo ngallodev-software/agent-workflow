@@ -279,6 +279,35 @@ def _validate_budget_usage(
     return result
 
 
+def _validate_aggregate_budget_usage(
+    usages: Iterable[Mapping[str, Any]],
+    hierarchy: Mapping[str, Any],
+) -> None:
+    """Reject team receipts whose combined usage exceeds root budgets."""
+    aggregate = {key: 0 for key in _BUDGET_USAGE_KEYS}
+    for usage in usages:
+        for key in aggregate:
+            value = usage.get(key)
+            if type(value) is not int or value < 0:
+                raise WorkflowError("team receipt budget_usage has invalid aggregate fields")
+            aggregate[key] += value
+
+    limits = hierarchy["budgets"]
+    comparisons = {
+        "workers_started": limits["max_total_workers"],
+        "peak_concurrent_workers": limits["max_concurrent_workers"],
+        "peak_interactive_panes": limits["max_interactive_panes"],
+        "wall_seconds": limits["max_wall_seconds"],
+        "retries": limits["max_total_workers"] * limits["max_retries_per_worker"],
+    }
+    for used_key, limit in comparisons.items():
+        if aggregate[used_key] > limit:
+            raise WorkflowError(
+                f"aggregate hierarchy budget usage exceeds {used_key}: "
+                f"{aggregate[used_key]} > {limit}"
+            )
+
+
 def _validate_worker_evidence(
     workers: Iterable[Mapping[str, Any]],
     team_contract: Mapping[str, Any],
@@ -363,6 +392,7 @@ def create_team_receipt(
         for item in journals
     ]
     _unique_descriptors(journal_rows, keys=("label",), label="team journal label")
+    _unique_descriptors(journal_rows, keys=("journal_id",), label="team journal id")
     _unique_descriptors(journal_rows, keys=("path",), label="team journal path")
 
     worker_rows: list[dict[str, Any]] = []
@@ -476,6 +506,7 @@ def verify_team_receipt(
         raise WorkflowError("team receipt delegation contract digest mismatch")
 
     _unique_descriptors(receipt["journals"], keys=("label",), label="team journal label")
+    _unique_descriptors(receipt["journals"], keys=("journal_id",), label="team journal id")
     _unique_descriptors(receipt["journals"], keys=("path",), label="team journal path")
     for descriptor in receipt["journals"]:
         validate_id(descriptor["label"], "journal label")
@@ -551,13 +582,16 @@ def create_root_receipt(
         for item in root_journals
     ]
     _unique_descriptors(journal_rows, keys=("label",), label="root journal label")
+    _unique_descriptors(journal_rows, keys=("journal_id",), label="root journal id")
     _unique_descriptors(journal_rows, keys=("path",), label="root journal path")
 
     team_rows: list[dict[str, Any]] = []
+    team_usages: list[Mapping[str, Any]] = []
     sealed_team_evidence_paths: set[str] = set()
     for team_id in sorted(team_by_id):
         contract = team_by_id[team_id]
         verified = verify_team_receipt(root, evidence_root, hierarchy, contract)
+        team_usages.append(verified["budget_usage"])
         contract_relative = f"teams/{team_id}/delegation-contract.json"
         _, contract_file_digest, contract_size = _read_readonly_file(
             root, contract_relative, label="team delegation contract"
@@ -594,6 +628,8 @@ def create_root_receipt(
                 "evidence path is sealed by more than one team receipt: " + ", ".join(overlap)
             )
         sealed_team_evidence_paths.update(team_evidence_paths)
+
+    _validate_aggregate_budget_usage(team_usages, hierarchy)
 
     binding_rows = [_artifact_descriptor(evidence_root, item) for item in cross_team_bindings]
     approval_rows = [_artifact_descriptor(evidence_root, item) for item in approval_evidence]
@@ -690,6 +726,7 @@ def verify_root_receipt(
             raise WorkflowError(f"root receipt {key} digest mismatch")
 
     _unique_descriptors(receipt["root_journals"], keys=("label",), label="root journal label")
+    _unique_descriptors(receipt["root_journals"], keys=("journal_id",), label="root journal id")
     _unique_descriptors(receipt["root_journals"], keys=("path",), label="root journal path")
     for descriptor in receipt["root_journals"]:
         validate_id(descriptor["label"], "journal label")
@@ -702,6 +739,7 @@ def verify_root_receipt(
 
     seen_teams: set[str] = set()
     sealed_team_evidence_paths: set[str] = set()
+    team_usages: list[Mapping[str, Any]] = []
     for entry in receipt["teams"]:
         team_id = entry["team_id"]
         if team_id in seen_teams or team_id not in team_by_id:
@@ -731,6 +769,7 @@ def verify_root_receipt(
             contract,
             receipt_path=entry["team_receipt"]["path"],
         )
+        team_usages.append(verified["budget_usage"])
         _, receipt_file_digest, receipt_size = _read_readonly_file(
             root, entry["team_receipt"]["path"], label="team receipt"
         )
@@ -753,6 +792,7 @@ def verify_root_receipt(
         sealed_team_evidence_paths.update(team_evidence_paths)
     if seen_teams != set(team_by_id):
         raise WorkflowError("root receipt does not contain the exact declared team set")
+    _validate_aggregate_budget_usage(team_usages, hierarchy)
 
     for descriptor in receipt["cross_team_bindings"]:
         _verify_artifact_descriptor(evidence_root, descriptor, label="cross-team binding")

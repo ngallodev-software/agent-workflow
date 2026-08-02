@@ -18,7 +18,13 @@ from agent_workflow.hierarchy import (
     verify_root_receipt,
     verify_team_receipt,
 )
-from tests.invariants.test_hierarchy_contracts import valid_contracts
+from tests.invariants.test_hierarchy_contracts import (
+    hierarchy_input,
+    seal_hierarchy_contract,
+    seal_team_delegation_contract,
+    team_input,
+    valid_contracts,
+)
 
 
 def _write_readonly(root: Path, relative: str, value: object) -> Path:
@@ -193,6 +199,83 @@ def test_later_team_or_root_journal_append_invalidates_receipts(tmp_path: Path) 
     )
     with pytest.raises(WorkflowError, match="changed after receipt sealing"):
         verify_root_receipt(fresh_root, fresh_evidence)
+
+
+def test_root_journal_identity_cannot_be_reused(tmp_path: Path) -> None:
+    root, evidence, _, _ = _prepared_authority(tmp_path)
+    append_journal_record(
+        root / "root-events-copy.jsonl",
+        journal_id="root-events",
+        record_type="lifecycle",
+        actor="orchestrator-001",
+        message_id="root-event-copy",
+        payload={"state": "completed"},
+    )
+    with pytest.raises(WorkflowError, match="duplicate root journal id"):
+        create_root_receipt(
+            root,
+            evidence,
+            root_journals=(
+                JournalReference("events", "root-events", "root-events.jsonl"),
+                JournalReference("events-copy", "root-events", "root-events-copy.jsonl"),
+            ),
+            cross_team_bindings=(
+                EvidenceReference("cross-team-summary", "bindings/cross-team-summary.json"),
+            ),
+            approval_evidence=(EvidenceReference("root-final", "approvals/root-final.json"),),
+            outcome="completed",
+        )
+
+
+def test_root_rejects_aggregate_team_budget_overrun(tmp_path: Path) -> None:
+    hierarchy_value = hierarchy_input()
+    hierarchy_value["budgets"].update(
+        {
+            "max_total_workers": 1,
+            "max_concurrent_workers": 1,
+            "max_interactive_panes": 4,
+            "max_retries_per_worker": 1,
+            "max_wall_seconds": 7200,
+        }
+    )
+    hierarchy = seal_hierarchy_contract(hierarchy_value)
+    teams = tuple(
+        seal_team_delegation_contract(
+            {
+                **team_input(team_id, lead_id),
+                "budgets": {
+                    "max_workers": 1,
+                    "max_concurrent_workers": 1,
+                    "max_interactive_panes": 2,
+                    "max_retries": 1,
+                    "max_wall_seconds": 3600,
+                },
+            },
+            hierarchy,
+        )
+        for team_id, lead_id in (
+            ("implementation", "lead-implementation"),
+            ("review", "lead-review"),
+        )
+    )
+    root = tmp_path / "orchestration"
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+    install_contract_set(root, hierarchy, teams)
+    for contract in teams:
+        _create_team(root, evidence, hierarchy, contract)
+    append_journal_record(
+        root / "root-events.jsonl",
+        journal_id="root-events",
+        record_type="lifecycle",
+        actor="orchestrator-001",
+        message_id="root-event-1",
+        payload={"state": "completed"},
+    )
+    _write_readonly(evidence, "bindings/cross-team-summary.json", {"bound": True})
+    _write_readonly(evidence, "approvals/root-final.json", {"approved": True})
+    with pytest.raises(WorkflowError, match="aggregate hierarchy budget usage exceeds workers_started"):
+        _create_root(root, evidence)
 
 
 def test_artifact_and_receipt_tamper_invalidate_verification(tmp_path: Path) -> None:
