@@ -335,6 +335,13 @@ def _write_launch_contract(
             "created_at": created_at,
         },
         "ticket": ticket_id,
+        # Completion identity is explicit in the immutable contract.  Review
+        # launches that omit a ticket deliberately require the child to omit
+        # it too; this is different from accepting an arbitrary child ticket.
+        "ticket_identity": {
+            "mode": "explicit" if ticket_id is not None else "omitted",
+            "value": ticket_id,
+        },
         "pack": {
             "id": pack_id,
             "root": str(pack_root) if pack_root is not None else None,

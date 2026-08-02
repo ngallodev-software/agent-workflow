@@ -93,6 +93,13 @@ Do not add tests for line coverage, private parser shape, mock-call choreography
 
 ## 7. Completion evidence
 
+Launch contracts carry an immutable `ticket_identity` rule. An explicitly
+launched ticket must match the child completion exactly. When a review launch
+omits a ticket, the contract records `mode: omitted` and the child must omit
+`ticket_id` as well; an arbitrary supplied review ticket is not accepted. This
+keeps host omission from fabricating review identity while preserving the
+ordinary implementation and review mismatch checks.
+
 Use `templates/TICKET_COMPLETION.md`. Claims without command output and exit status are not verified. Failed and skipped commands remain visible. Preserve unresolved contradictions rather than inventing certainty.
 
 Completion evidence must identify:

@@ -116,6 +116,57 @@ def test_external_executor_completes_with_sealed_user_visible_evidence(
     assert all(item.get("session_id") != "success-run" for item in listed)
 
 
+def test_installed_review_without_ticket_seals_completion_and_receipt(
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+    fake_agent_path: Path,
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    git_repo(repo)
+    prompt = tmp_path / "review.md"
+    prompt.write_text("Review the committed change and report evidence.\n", encoding="utf-8")
+
+    installed_product.json(
+        "launch", "review-omitted-ticket", repo, prompt,
+        "--agent-class", "review", "--tier", "low", "--no-interactive", "--",
+        fake_agent_path, env=product_env,
+    )
+    status = wait_for_status(product_env, "review-omitted-ticket")
+    assert status["status"] == "completed"
+    assert status["completion_validation_status"] == "valid"
+    run = _run_dir(product_env, "review-omitted-ticket")
+    contract = json.loads((run / "launch-contract.json").read_text())
+    assert contract["ticket_identity"] == {"mode": "omitted", "value": None}
+    collection = json.loads((run / "collections" / "completion.json").read_text())
+    assert collection["validation_status"] == "valid"
+    assert (run / "final-receipt.json").is_file()
+
+
+def test_installed_mismatched_ticket_still_fails_review_collection(
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+    fake_agent_path: Path,
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    git_repo(repo)
+    prompt = tmp_path / "review.md"
+    prompt.write_text("Review the implementation ticket.\n", encoding="utf-8")
+    env = dict(product_env)
+    env["FAKE_AGENT_RESULT_JSON"] = json.dumps({"ticket_id": "FORGED-REVIEW"})
+    installed_product.json(
+        "launch", "review-mismatched-ticket", repo, prompt,
+        "--ticket", "IMPL-1", "--agent-class", "review", "--tier", "low",
+        "--no-interactive", "--", fake_agent_path, env=env,
+    )
+    status = wait_for_status(env, "review-mismatched-ticket")
+    assert status["status"] == "failed"
+    assert status["completion_validation_status"] == "invalid"
+    collection = json.loads((_run_dir(env, "review-mismatched-ticket") / "collections" / "completion.json").read_text())
+    assert "completion ticket_id does not match launch contract" in collection["validation_errors"]
+
+
 def test_interactive_child_task_complete_uses_bound_cli_and_bridge(
     installed_product: InstalledProduct,
     product_env: dict[str, str],

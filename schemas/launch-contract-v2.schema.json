@@ -346,6 +346,28 @@
         "null"
       ]
     },
+    "ticket_identity": {
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "enum": [
+            "explicit",
+            "omitted"
+          ]
+        },
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "mode",
+        "value"
+      ],
+      "type": "object"
+    },
     "version": {
       "const": 2
     },
@@ -388,6 +410,7 @@
     "version",
     "session",
     "ticket",
+    "ticket_identity",
     "pack",
     "worktree",
     "prompt",

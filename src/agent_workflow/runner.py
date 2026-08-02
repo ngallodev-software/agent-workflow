@@ -379,10 +379,14 @@ def _collect_completion(
                 raise WorkflowError("completion handoff session_id does not match run")
             from .contracts import validate_instance
             validate_instance(value, "agent-workflow/completion/v1", artifact=str(source))
+            ticket_identity = launch.get("ticket_identity")
+            expected_ticket = launch.get("ticket")
+            if isinstance(ticket_identity, dict):
+                expected_ticket = ticket_identity.get("value")
             semantic_errors = substantive_completion_errors(
                 value,
                 session_id=session_id,
-                ticket_id=launch.get("ticket"),
+                ticket_id=expected_ticket,
                 pack_id=(
                     launch.get("pack", {}).get("id")
                     if isinstance(launch.get("pack"), dict)

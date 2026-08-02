@@ -8,6 +8,15 @@
     "version": {"const": 1},
     "session": {"type": "object", "required": ["id", "agent_name", "agent_class", "tier", "retry_of", "created_at"], "properties": {"id": {"type": "string"}, "agent_name": {"type": ["string", "null"]}, "agent_class": {"type": ["string", "null"]}, "tier": {"type": ["string", "null"]}, "retry_of": {"type": ["string", "null"]}, "created_at": {"type": "string"}}, "additionalProperties": false},
     "ticket": {"type": ["string", "null"]},
+    "ticket_identity": {
+      "additionalProperties": false,
+      "properties": {
+        "mode": {"enum": ["explicit", "omitted"]},
+        "value": {"type": ["string", "null"]}
+      },
+      "required": ["mode", "value"],
+      "type": "object"
+    },
     "pack": {"type": "object", "required": ["id", "root", "manifest_sha256"], "properties": {"id": {"type": ["string", "null"]}, "root": {"type": ["string", "null"]}, "manifest_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}}, "additionalProperties": false},
     "worktree": {"type": "object", "required": ["path", "source_revision", "branch", "dirty_at_launch"], "properties": {"path": {"type": "string"}, "source_revision": {"type": ["string", "null"]}, "branch": {"type": ["string", "null"]}, "dirty_at_launch": {"type": ["boolean", "null"]}}, "additionalProperties": false},
     "prompt": {"type": "object", "required": ["source", "stored", "sha256", "launch_stored", "launch_sha256"], "properties": {"source": {"type": "string"}, "stored": {"const": "prompt.md"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "launch_stored": {"const": "launch-prompt.md"}, "launch_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}, "additionalProperties": false},

@@ -435,10 +435,17 @@ try:
 except subprocess.CalledProcessError:
     head = None
 result = "failed" if mode == "fail" else "completed"
+result_json = os.environ.get("FAKE_AGENT_RESULT_JSON")
+ticket_override = None
+if result_json:
+    try:
+        ticket_override = json.loads(result_json).get("ticket_id")
+    except (TypeError, json.JSONDecodeError):
+        ticket_override = None
 completion = {
     "schema": "agent-workflow/completion/v1",
     "session_id": os.environ["AGENT_WORKFLOW_SESSION_ID"],
-    "ticket_id": os.environ.get("AGENT_WORKFLOW_TICKET_ID"),
+    "ticket_id": ticket_override or os.environ.get("FAKE_AGENT_TICKET_ID", os.environ.get("AGENT_WORKFLOW_TICKET_ID")),
     "pack_id": os.environ.get("AGENT_WORKFLOW_PACK_ID"),
     "result": result,
     "base_revision": head,
@@ -474,7 +481,6 @@ if os.environ.get("FAKE_AGENT_EMPTY_COMPLETION") == "1":
         }
     )
 (handoff / "completion.json").write_text(json.dumps(completion), encoding="utf-8")
-result_json = os.environ.get("FAKE_AGENT_RESULT_JSON")
 if result_json:
     (handoff / "result.json").write_text(result_json, encoding="utf-8")
 if mode in {"task-complete", "task-complete-terminate"}:
@@ -590,7 +596,7 @@ def write_config(env: dict[str, str], *, fake_agent: Path, structured_executor: 
                 'model_arg = ["--model"]',
                 'interactive_permission_args = []',
                 'non_interactive_permission_args = []',
-                'environment_allowlist = ["FAKE_AGENT_MODE", "FAKE_AGENT_DELAY", "FAKE_AGENT_RESULT_JSON", "FAKE_AGENT_AUTO_STEER", "FAKE_AGENT_EMPTY_COMPLETION", "FAKE_AGENT_STEER_OUTCOME"]',
+                'environment_allowlist = ["FAKE_AGENT_MODE", "FAKE_AGENT_DELAY", "FAKE_AGENT_RESULT_JSON", "FAKE_AGENT_AUTO_STEER", "FAKE_AGENT_EMPTY_COMPLETION", "FAKE_AGENT_STEER_OUTCOME", "FAKE_AGENT_TICKET_ID"]',
                 'steering_adapter = "control-file-v1"',
                 "",
                 "[git]",

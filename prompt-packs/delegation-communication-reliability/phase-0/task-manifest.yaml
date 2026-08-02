@@ -22,3 +22,8 @@ tasks:
     session: "delegation-completion-validation"
     prompt: "tickets/PROC-004-completion-validation.md"
     backlog_id: "PROC-004"
+  - id: "MAINT-004"
+    tier: A
+    session: "delegation-review-completion-collection"
+    prompt: "tickets/MAINT-004-review-completion-collection.md"
+    backlog_id: "MAINT-004"

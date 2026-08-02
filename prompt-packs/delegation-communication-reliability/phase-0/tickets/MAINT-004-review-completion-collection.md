@@ -27,3 +27,15 @@ mismatch. This blocked HIER-001, IDX-002, SUP-002, and PROC-004 phase evidence.
 Completion collection/launch validation, review launch handling, focused tests,
 and directly related protocol/reference documentation only. No acceptance-policy
 or implementation-run bypasses.
+
+## Writable paths
+
+`src/agent_workflow/runner.py`, `src/agent_workflow/sessions.py`, the launch
+contract schemas, focused tests/fixtures, the Phase 0 manifest, and directly
+related execution-protocol copies only.
+
+## Stop conditions
+
+Stop and reject the repair if it requires accepting a child-selected ticket,
+weakening immutable session/pack/revision binding, or bypassing the ordinary
+completion collector for review runs.

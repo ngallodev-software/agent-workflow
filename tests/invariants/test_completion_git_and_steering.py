@@ -56,6 +56,17 @@ def test_substantive_completion_rejects_empty_schema_valid_success() -> None:
     assert "completed result requires at least one command receipt" in errors
 
 
+def test_review_ticket_identity_requires_explicit_match_or_omission() -> None:
+    omitted = _completion(ticket_id=None)
+    assert substantive_completion_errors(
+        omitted, session_id="run-1", ticket_id=None, pack_id="pack-1"
+    ) == []
+    mismatch = _completion(ticket_id="REVIEW-FORGED")
+    assert substantive_completion_errors(
+        mismatch, session_id="run-1", ticket_id=None, pack_id="pack-1"
+    ) == ["completion ticket_id does not match launch contract"]
+
+
 def test_substantive_completion_accepts_failure_with_real_unresolved_evidence() -> None:
     value = _completion(
         result="failed",
