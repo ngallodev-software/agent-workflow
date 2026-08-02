@@ -40,7 +40,7 @@ The arrow points toward the dependency. Authority-bearing writes remain in share
 ## Decomposition sequence
 
 1. Complete `process.py` policy extraction without changing its public imports.
-2. CLI construction and several dispatch domains are now separated: authoritative argparse tree construction lives in `cli_parser.py`, shared renderers live in `cli_output.py`, and `index`, `workflow`, `worktree`, `pack`, `orchestrator`, and reusable-agent context/reuse dispatch live in dedicated `cli_handlers` modules, all behind unchanged public CLI behavior. Continue one command domain at a time while preserving parser-derived catalogs, completions, plugin registration, and installed help.
+2. CLI construction and several dispatch domains are now separated: authoritative argparse tree construction lives in `cli_parser.py`, shared renderers live in `cli_output.py`, and `index`, `workflow`, `worktree`, `pack`, `orchestrator`, reusable-agent context/reuse, evaluation, comparative-benchmark, session/lifecycle, and supervisor dispatch live in dedicated `cli_handlers` modules, all behind unchanged public CLI behavior. Continue one command domain at a time while preserving parser-derived catalogs, completions, plugin registration, and installed help.
 3. Split session launch, observation, control, and recovery behind a facade.
 4. The first SQLite slice is complete: `index_schema.py` owns database identity, migration SQL, and header validation. Continue by separating discovery, reconciliation/indexing, and query/report services behind `index_store` compatibility imports.
 5. Split runner stream control, control bridge, completion collection, and sealing.

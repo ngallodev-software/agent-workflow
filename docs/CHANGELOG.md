@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Extract one-shot and loop supervisor dispatch into `agent_workflow.cli_handlers.supervisor`, preserving remediation policy construction, session filtering, and loop report schemas.
+- Extract session launch, observation, archival, operator messaging/control, restart, lifecycle review, acceptance, and force-accept dispatch into `agent_workflow.cli_handlers.session`, preserving pane-cap fallback and durable authority semantics.
+- Extract the complete `benchmark` command domain into `agent_workflow.cli_handlers.benchmark`, preserving comparative-benchmark validation, readiness, runtime attestation/sealing, suite export, planning, execution, review, reporting, verification, and explicit cleanup behavior.
+- Extract the complete `eval` command domain into `agent_workflow.cli_handlers.eval`, preserving validation, templating, scoring, reporting, trial comparison, Inspect, and SWE-bench behavior while keeping direct report rendering explicit.
 - Extract the complete `agent` reusable-context command domain into `agent_workflow.cli_handlers.agent`, preserving durable assignment, completion, candidate-ranking, and reassignment semantics.
 
 - Extract the complete `orchestrator` registry/inbox/watch command domain into `agent_workflow.cli_handlers.orchestrator`, preserving durable messaging services, bounds, and output schemas.
