@@ -28,6 +28,15 @@ accepted terminal default (`closed`). They fail with missing current
 Registry/inbox reconciliation and cursor code, focused tests/fixtures, and
 directly related protocol documentation only.
 
+## Acceptance evidence
+
+- The installed inbox journey proves terminal completion imports and replays
+  exactly once without an `idle_reusable` state.
+- The installed keep-alive journey proves explicit reuse remains
+  `idle_reusable`.
+- Invariants reject missing sealed-receipt and stale assignment evidence.
+- Pack validation and release-drift audit pass from the source checkout.
+
 ## Stop conditions
 
 Do not restore implicit reuse, accept mutable status in place of durable

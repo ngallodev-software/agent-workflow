@@ -27,3 +27,13 @@ tasks:
     session: "delegation-review-completion-collection"
     prompt: "tickets/MAINT-004-review-completion-collection.md"
     backlog_id: "MAINT-004"
+  - id: "MAINT-003"
+    tier: B
+    session: "delegation-terminal-inbox-reconciliation"
+    prompt: "tickets/MAINT-003-terminal-inbox-reconciliation.md"
+    backlog_id: "MAINT-003"
+  - id: "MAINT-005"
+    tier: A
+    session: "delegation-review-lifecycle-enforcement"
+    prompt: "tickets/MAINT-005-review-lifecycle-enforcement.md"
+    backlog_id: "MAINT-005"
