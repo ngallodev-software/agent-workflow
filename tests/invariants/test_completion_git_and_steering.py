@@ -72,6 +72,21 @@ def test_completion_schema_requires_criterion_evidence() -> None:
         validate_instance(value, "agent-workflow/completion/v1")
 
 
+def test_completion_schema_rejects_command_evidence_instead_of_receipt() -> None:
+    value = _completion(
+        commands=[
+            {
+                "argv": ["pytest", "-q"],
+                "cwd": "/worktree",
+                "exit_code": 0,
+                "evidence": "1 passed",
+            }
+        ]
+    )
+    with pytest.raises(WorkflowError, match="invalid artifact"):
+        validate_instance(value, "agent-workflow/completion/v1")
+
+
 def test_review_ticket_identity_requires_explicit_match_or_omission() -> None:
     omitted = _completion(ticket_id=None)
     assert substantive_completion_errors(

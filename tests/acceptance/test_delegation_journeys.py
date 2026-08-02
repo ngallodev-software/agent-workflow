@@ -168,6 +168,14 @@ def test_installed_review_without_ticket_seals_completion_and_receipt(
     assert template["criteria"] == [
         {"id": "<criterion-id>", "result": "not_verified", "evidence": ["<evidence>"]}
     ]
+    assert template["commands"] == [
+        {
+            "argv": ["<command>"],
+            "cwd": "/absolute/worktree",
+            "exit_code": 0,
+            "receipt": "<receipt>",
+        }
+    ]
 
     reviewed = installed_product.json(
         "review", "review-omitted-ticket", "--actor", "reviewer", "--reason", "evidence checked",

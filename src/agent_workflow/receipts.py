@@ -290,6 +290,14 @@ def completion_template(
             "evidence": ["<evidence>"],
         }
     ]
+    value["commands"] = [
+        {
+            "argv": ["<command>"],
+            "cwd": "/absolute/worktree",
+            "exit_code": 0,
+            "receipt": "<receipt>",
+        }
+    ]
     return value
 
 

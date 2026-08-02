@@ -90,7 +90,9 @@ the exact post-commit `git rev-parse HEAD`; every command has an absolute `cwd`
 and an exit code. Structured non-interactive runs do not invoke
 `agent task-complete`; they write the sidecar and exit for collection. Review
 runs follow the same schema-valid sidecar contract and report independently
-collected commands and evidence.
+collected command receipts and criterion evidence. In `completion.json`, each
+command object must use `argv`, absolute `cwd`, integer `exit_code`, and string
+`receipt`; `commands[].evidence` is invalid.
 
 Sandboxed reviewers report a disposition recommendation only. The host
 orchestrator records `review`, `accept`, or `reject` after inspecting evidence;

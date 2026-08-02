@@ -43,4 +43,6 @@ written. Bind `base_revision` to the launch revision and `head_revision` to the
 exact post-commit Git HEAD; use absolute command working directories and exact
 exit codes. Structured non-interactive runs write the sidecar and exit without
 `agent task-complete`. Independent reviewers provide their own schema-valid
-sidecar with independently collected commands and evidence.
+sidecar with independently collected command receipts and criterion evidence.
+In `completion.json`, each command object must use `argv`, absolute `cwd`,
+integer `exit_code`, and string `receipt`; `commands[].evidence` is invalid.
