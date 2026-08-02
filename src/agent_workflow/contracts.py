@@ -128,12 +128,27 @@ LAUNCH_CONTRACT_SCHEMAS = {
 }
 
 
+def validate_ticket_identity(value: dict[str, Any]) -> None:
+    """Ensure the immutable identity projection agrees with the launch ticket."""
+    ticket_identity = value.get("ticket_identity")
+    if not isinstance(ticket_identity, dict):
+        return
+    ticket = value.get("ticket")
+    expected_mode = "explicit" if ticket is not None else "omitted"
+    if (
+        ticket_identity.get("mode") != expected_mode
+        or ticket_identity.get("value") != ticket
+    ):
+        raise WorkflowError("launch contract ticket identity does not match ticket")
+
+
 def validate_launch_contract_value(value: dict[str, Any], *, artifact: str) -> str:
     schema_id = value.get("schema")
     if schema_id not in LAUNCH_CONTRACT_SCHEMAS:
         raise WorkflowError(f"unexpected launch contract schema in {artifact}: {schema_id}")
     assert isinstance(schema_id, str)
     validate_instance(value, schema_id, artifact=artifact)
+    validate_ticket_identity(value)
     return schema_id
 
 

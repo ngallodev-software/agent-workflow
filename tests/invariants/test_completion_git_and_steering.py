@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from agent_workflow.completion import completion_revision_errors, substantive_completion_errors
-from agent_workflow.contracts import validate_instance
+from agent_workflow.contracts import validate_instance, validate_ticket_identity
 from agent_workflow.errors import WorkflowError
 from agent_workflow.git import snapshot
 from agent_workflow.steering import append_delivery_event, replay_delivery_events
@@ -81,6 +81,18 @@ def test_review_ticket_identity_requires_explicit_match_or_omission() -> None:
     assert substantive_completion_errors(
         mismatch, session_id="run-1", ticket_id=None, pack_id="pack-1"
     ) == ["completion ticket_id does not match launch contract"]
+
+
+def test_launch_ticket_identity_is_bound_to_top_level_ticket() -> None:
+    valid = {
+        "schema": "agent-workflow/launch-contract/v2",
+        "ticket": "REVIEW-1",
+        "ticket_identity": {"mode": "explicit", "value": "REVIEW-1"},
+    }
+    with pytest.raises(WorkflowError, match="ticket identity does not match"):
+        validate_ticket_identity(
+            {**valid, "ticket_identity": {"mode": "omitted", "value": None}}
+        )
 
 
 def test_substantive_completion_accepts_failure_with_real_unresolved_evidence() -> None:
