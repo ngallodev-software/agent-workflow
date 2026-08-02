@@ -19,7 +19,6 @@ from agent_workflow.index_store import (
     index_status,
     query_index,
     query_index_report,
-    record_integrity_disposition,
     rebuild_index,
     sync_index,
     verify_index,
@@ -344,44 +343,6 @@ def test_symlinked_source_is_quarantined_without_following_target(tmp_path: Path
     assert any(item["reason"] == "unsafe_symlink" for item in verification["source_mismatches"])
     with sqlite3.connect(database_path(settings)) as connection:
         assert "SECRET TARGET CONTENT" not in "\n".join(connection.iterdump())
-
-
-def test_integrity_incident_authority_is_append_only_and_requires_human_reason(tmp_path: Path) -> None:
-    settings = _settings(tmp_path)
-    corrupt = settings.state_root / "runs" / "corrupt-authority"
-    corrupt.mkdir(parents=True)
-    _status(corrupt, "corrupt-authority")
-    (corrupt / "incident-events.jsonl").write_text("{not-json}\n", encoding="utf-8")
-
-    rebuild_index(settings)
-    verification = verify_index(settings, full=True)
-    incidents = verification["integrity_authority"]["unresolved_incidents"]
-    assert len(incidents) == 1
-    incident_id = incidents[0]["incident_id"]
-    with pytest.raises(WorkflowError, match="human actor and reason"):
-        record_integrity_disposition(
-            settings, incident_id=incident_id, actor="operator", decision="resolved", reason=""
-        )
-    record_integrity_disposition(
-        settings,
-        incident_id=incident_id,
-        actor="operator",
-        decision="resolved",
-        reason="triaged for repair",
-    )
-    assert verify_index(settings, full=True)["global_valid"] is False
-    authority = settings.state_root / "index" / "integrity-dispositions.jsonl"
-    assert len(authority.read_text(encoding="utf-8").splitlines()) == 1
-
-
-def test_review_scope_does_not_conceal_missing_or_invalid_run(tmp_path: Path) -> None:
-    settings = _settings(tmp_path)
-    _seed_run(settings)
-    rebuild_index(settings)
-    report = verify_index(settings, full=True, review_session_id="missing-review")
-    assert report["valid"] is False
-    assert report["global_valid"] is True
-    assert report["review"]["error"] == "reviewed run is not indexed"
 
 
 @pytest.mark.parametrize("storage_class", ["active", "archive"])

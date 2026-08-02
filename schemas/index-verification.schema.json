@@ -2,41 +2,18 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "agent-workflow/index-verification/v1",
   "type": "object",
-  "required": ["schema", "database", "valid", "global_valid", "schema_version", "expected_schema_version", "integrity_check", "foreign_key_errors", "source_verification", "source_mismatches", "historical_artifacts", "integrity_authority", "integrity_incident_count", "unresolved_integrity_incident_count", "review"],
+  "required": ["schema", "database", "valid", "schema_version", "expected_schema_version", "integrity_check", "foreign_key_errors", "source_verification", "source_mismatches", "historical_artifacts"],
   "properties": {
     "schema": {"const": "agent-workflow/index-verification/v1"},
-    "database": {"type": "string"},
+    "database": {"type": "string", "minLength": 1},
     "valid": {"type": "boolean"},
-    "global_valid": {"type": "boolean"},
-    "integrity_incident_count": {"type": "integer", "minimum": 0},
-    "unresolved_integrity_incident_count": {"type": "integer", "minimum": 0},
-    "schema_version": {"type": "integer"},
-    "expected_schema_version": {"type": "integer"},
+    "schema_version": {"type": "integer", "minimum": 1},
+    "expected_schema_version": {"type": "integer", "minimum": 1},
     "integrity_check": {"type": "array", "items": {"type": "string"}},
     "foreign_key_errors": {"type": "array", "items": {"type": "object"}},
     "source_verification": {"enum": ["full", "not-requested"]},
-    "source_mismatches": {"type": "array", "items": {"type": "object"}},
-    "historical_artifacts": {"type": "array", "items": {"type": "object"}},
-    "integrity_authority": {
-      "type": "object",
-      "required": ["incidents", "unresolved_incidents"],
-      "properties": {
-        "incidents": {"type": "array", "items": {"type": "object"}},
-        "unresolved_incidents": {"type": "array", "items": {"type": "object"}}
-      },
-      "additionalProperties": false
-    },
-    "review": {
-      "type": ["object", "null"],
-      "properties": {
-        "session_id": {"type": "string"},
-        "direct_gate_evidence": {"type": "string"},
-        "valid": {"type": "boolean"},
-        "error": {"type": ["string", "null"]}
-      },
-      "required": ["session_id", "direct_gate_evidence", "valid", "error"],
-      "additionalProperties": false
-    }
+    "source_mismatches": {"type": "array", "items": {"type": "object"}}
+    ,"historical_artifacts": {"type": "array", "items": {"type": "object"}}
   },
   "additionalProperties": false
 }

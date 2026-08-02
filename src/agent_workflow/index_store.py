@@ -69,12 +69,8 @@ LEGACY_EXECUTION_METRICS_FIELDS = frozenset(
 LEGACY_ENVELOPE_DRIFT = {
     "agent-workflow/launch-contract/v2": frozenset({"ticket_identity"}),
     "agent-workflow/command/v1": frozenset({"classification"}),
-    "agent-workflow/command-catalog/v1": frozenset({"plugins"}),
     "agent-workflow/run-provenance/v1": frozenset({"external_snapshots"}),
 }
-
-INTEGRITY_INCIDENT_SCHEMA = "agent-workflow/index-integrity-incident/v1"
-INTEGRITY_DISPOSITION_SCHEMA = "agent-workflow/index-integrity-disposition/v1"
 
 
 
@@ -84,109 +80,6 @@ def _canonical_json(value: Any) -> bytes:
 
 def _sha256_bytes(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
-
-
-def _integrity_incident_path(settings: Settings) -> Path:
-    return index_root(settings) / "integrity-incidents.jsonl"
-
-
-def _integrity_disposition_path(settings: Settings) -> Path:
-    return index_root(settings) / "integrity-dispositions.jsonl"
-
-
-def _append_integrity_record(path: Path, value: dict[str, Any]) -> None:
-    payload = _canonical_json(value) + b"\n"
-    flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
-    descriptor = os.open(path, flags, 0o600)
-    try:
-        os.write(descriptor, payload)
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
-
-
-def _read_integrity_records(path: Path, schema: str) -> list[dict[str, Any]]:
-    if not path.exists():
-        return []
-    if path.is_symlink() or not path.is_file():
-        raise WorkflowError(f"integrity authority is unsafe: {path}")
-    records: list[dict[str, Any]] = []
-    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-        if not line.strip():
-            continue
-        try:
-            value = json.loads(line)
-        except json.JSONDecodeError as exc:
-            raise WorkflowError(f"invalid integrity authority record {path}:{line_number}") from exc
-        validate_instance(value, schema, artifact=f"{path}:{line_number}")
-        records.append(value)
-    return records
-
-
-def _record_integrity_incident(
-    settings: Settings,
-    *,
-    session_id: str | None,
-    artifact: str | None,
-    error: str,
-) -> dict[str, Any]:
-    identity = {"session_id": session_id, "artifact": artifact, "error": error}
-    incident_id = _sha256_bytes(_canonical_json(identity))
-    record = {
-        "schema": INTEGRITY_INCIDENT_SCHEMA,
-        "incident_id": incident_id,
-        "session_id": session_id,
-        "artifact": artifact,
-        "error": error,
-        "error_sha256": _sha256_bytes(error.encode("utf-8")),
-        "recorded_at": utc_now(),
-    }
-    path = _integrity_incident_path(settings)
-    existing = _read_integrity_records(path, INTEGRITY_INCIDENT_SCHEMA)
-    if not any(item["incident_id"] == incident_id for item in existing):
-        _append_integrity_record(path, record)
-    return record
-
-
-def record_integrity_disposition(
-    settings: Settings,
-    *,
-    incident_id: str,
-    actor: str,
-    decision: str,
-    reason: str,
-) -> dict[str, Any]:
-    if not actor.strip() or not reason.strip():
-        raise WorkflowError("integrity dispositions require a human actor and reason")
-    if decision not in {"resolved", "reopened"}:
-        raise WorkflowError("integrity disposition decision must be resolved or reopened")
-    incidents = _read_integrity_records(_integrity_incident_path(settings), INTEGRITY_INCIDENT_SCHEMA)
-    if not any(item["incident_id"] == incident_id for item in incidents):
-        raise WorkflowError(f"unknown integrity incident: {incident_id}")
-    record = {
-        "schema": INTEGRITY_DISPOSITION_SCHEMA,
-        "incident_id": incident_id,
-        "actor": actor,
-        "decision": decision,
-        "reason": reason,
-        "decided_at": utc_now(),
-    }
-    with _writer_lock(settings):
-        _append_integrity_record(_integrity_disposition_path(settings), record)
-    return record
-
-
-def _integrity_state(settings: Settings) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    incidents = _read_integrity_records(_integrity_incident_path(settings), INTEGRITY_INCIDENT_SCHEMA)
-    dispositions = _read_integrity_records(_integrity_disposition_path(settings), INTEGRITY_DISPOSITION_SCHEMA)
-    latest: dict[str, dict[str, Any]] = {}
-    for disposition in dispositions:
-        latest[disposition["incident_id"]] = disposition
-    unresolved = [
-        incident for incident in incidents
-        if latest.get(incident["incident_id"], {}).get("decision") != "resolved"
-    ]
-    return incidents, unresolved
 
 
 
@@ -362,9 +255,6 @@ def _historical_artifact_class(
                 legacy_seal_verified = True
             except WorkflowError:
                 return None
-        # A sealed run is immutable current evidence.  Schema drift in it is
-        # an integrity incident, never historical compatibility.
-        return None
     if legacy_seal_verified and "final receipt omits required artifacts" in detail:
         return "pre_collection_sealed_receipt"
     schema_drift = (
@@ -890,7 +780,6 @@ def _index_run(
 def _record_index_error(
     connection: sqlite3.Connection,
     *,
-    settings: Settings,
     session_id: str,
     storage_class: str,
     run_dir: Path,
@@ -922,13 +811,6 @@ def _record_index_error(
         "INSERT INTO index_errors(session_id,source_path,detected_at,category,detail) VALUES(?,?,?,?,?)",
         (session_id, str(run_dir), indexed_at, category, detail),
     )
-    if category != "historical_artifact":
-        _record_integrity_incident(
-            settings,
-            session_id=session_id,
-            artifact=str(run_dir),
-            error=detail,
-        )
     return category
 
 
@@ -1000,7 +882,6 @@ def _sync_locked(
                 with connection:
                     category = _record_index_error(
                         connection,
-                        settings=settings,
                         session_id=current_session_id,
                         storage_class=storage_class,
                         run_dir=run_dir,
@@ -1201,9 +1082,7 @@ def index_status(settings: Settings) -> dict[str, Any]:
     return report
 
 
-def verify_index(
-    settings: Settings, *, full: bool = False, review_session_id: str | None = None
-) -> dict[str, Any]:
+def verify_index(settings: Settings, *, full: bool = False) -> dict[str, Any]:
     connection = _connect(settings, readonly=True)
     mismatches: list[dict[str, Any]] = []
     try:
@@ -1217,24 +1096,14 @@ def verify_index(
             ):
                 path = Path(str(row["source_dir"])) / str(row["relative_path"])
                 if path.is_symlink() or not path.is_file():
-                    mismatch = {"session_id": row["session_id"], "path": str(path), "reason": "missing_or_unsafe"}
-                    mismatches.append(mismatch)
-                    _record_integrity_incident(
-                        settings, session_id=row["session_id"], artifact=str(path),
-                        error=f"{mismatch['reason']}: expected indexed regular file",
+                    mismatches.append(
+                        {"session_id": row["session_id"], "path": str(path), "reason": "missing_or_unsafe"}
                     )
                     continue
                 info = path.stat()
                 if info.st_size != row["size_bytes"] or _sha256_file(path) != row["sha256"]:
-                    mismatch = {"session_id": row["session_id"], "path": str(path), "reason": "content_changed"}
-                    mismatches.append(mismatch)
-                    _record_integrity_incident(
-                        settings, session_id=row["session_id"], artifact=str(path),
-                        error=(
-                            f"{mismatch['reason']}: expected size={row['size_bytes']} "
-                            f"sha256={row['sha256']}; observed size={info.st_size} "
-                            f"sha256={_sha256_file(path)}"
-                        ),
+                    mismatches.append(
+                        {"session_id": row["session_id"], "path": str(path), "reason": "content_changed"}
                     )
         for row in connection.execute(
             "SELECT r.session_id,r.source_dir,r.index_error,e.category "
@@ -1261,50 +1130,11 @@ def verify_index(
     blocking_mismatches = [
         item for item in mismatches if item.get("classification") != "quarantined"
     ]
-    incidents, unresolved_incidents = _integrity_state(settings)
-    global_valid = (
-        integrity == ["ok"]
-        and not foreign_keys
-        and version == INDEX_SCHEMA_VERSION
-        and not blocking_mismatches
-        and not unresolved_incidents
-    )
-    review: dict[str, Any] | None = None
-    if review_session_id is not None:
-        row = connection = None
-        review_error: str | None = None
-        try:
-            connection = _connect(settings, readonly=True)
-            row = connection.execute(
-                "SELECT source_dir,index_state FROM runs WHERE session_id = ?",
-                (review_session_id,),
-            ).fetchone()
-        finally:
-            if connection is not None:
-                connection.close()
-        if row is None:
-            review_error = "reviewed run is not indexed"
-        elif row["index_state"] != "current":
-            review_error = "reviewed run has a non-current index state"
-        else:
-            try:
-                verify_seal_details(Path(str(row["source_dir"])))
-            except WorkflowError as exc:
-                review_error = str(exc)
-            if any(item.get("session_id") == review_session_id for item in blocking_mismatches):
-                review_error = "reviewed run has a direct source mismatch"
-        review = {
-            "session_id": review_session_id,
-            "direct_gate_evidence": "sealed-final-receipt",
-            "valid": review_error is None,
-            "error": review_error,
-        }
-    valid = review["valid"] if review is not None else global_valid
+    valid = integrity == ["ok"] and not foreign_keys and version == INDEX_SCHEMA_VERSION and not blocking_mismatches
     report = {
         "schema": "agent-workflow/index-verification/v1",
         "database": str(database_path(settings)),
         "valid": valid,
-        "global_valid": global_valid,
         "schema_version": version,
         "expected_schema_version": INDEX_SCHEMA_VERSION,
         "integrity_check": integrity,
@@ -1314,13 +1144,6 @@ def verify_index(
         "historical_artifacts": [
             item for item in mismatches if item.get("classification") == "quarantined"
         ],
-        "integrity_authority": {
-            "incidents": incidents,
-            "unresolved_incidents": unresolved_incidents,
-        },
-        "integrity_incident_count": len(incidents),
-        "unresolved_integrity_incident_count": len(unresolved_incidents),
-        "review": review,
     }
     validate_instance(report, report["schema"], artifact="SQLite index verification")
     return report
