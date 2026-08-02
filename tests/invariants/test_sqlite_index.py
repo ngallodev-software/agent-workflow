@@ -345,14 +345,23 @@ def test_symlinked_source_is_quarantined_without_following_target(tmp_path: Path
         assert "SECRET TARGET CONTENT" not in "\n".join(connection.iterdump())
 
 
-def test_legacy_archive_is_quarantined_but_does_not_block_full_verification(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("status_schema", "metrics_schema"),
+    [
+        ("agent-workflow/session-status/v2", "agent-workflow/execution-metrics/v1"),
+        ("agent-workflow/session-status/retired-v2", "agent-workflow/execution-metrics/retired-v1"),
+    ],
+)
+def test_legacy_archive_is_quarantined_but_does_not_block_full_verification(
+    tmp_path: Path, status_schema: str, metrics_schema: str
+) -> None:
     settings = _settings(tmp_path)
     run = settings.state_root / "archive" / "legacy-run"
     run.mkdir(parents=True)
     _write(
         run / "status.json",
         {
-            "schema": "agent-workflow/session-status/v1",
+            "schema": status_schema,
             "session_id": "legacy-run",
             "status": "completed",
             "created_at": "2025-01-01T00:00:00+00:00",
@@ -361,7 +370,9 @@ def test_legacy_archive_is_quarantined_but_does_not_block_full_verification(tmp_
             "log_path": str(run / "output.log"),
         },
     )
-    (run / "execution-metrics.json").write_text("{\"schema\": \"agent-workflow/execution-metrics/v1\"}\n")
+    (run / "execution-metrics.json").write_text(
+        json.dumps({"schema": metrics_schema}) + "\n", encoding="utf-8"
+    )
 
     report = rebuild_index(settings)
     assert report["error_count"] == 0
@@ -374,6 +385,36 @@ def test_legacy_archive_is_quarantined_but_does_not_block_full_verification(tmp_
     verification = verify_index(settings, full=True)
     assert verification["valid"] is True
     assert verification["historical_artifacts"][0]["outcome"] == "preserved_excluded"
+
+
+@pytest.mark.parametrize("storage_class", ["active", "archive"])
+@pytest.mark.parametrize("disposition", ["reviewed", "accepted"])
+def test_legacy_schema_drift_with_active_or_dispositioned_evidence_blocks(
+    tmp_path: Path, storage_class: str, disposition: str
+) -> None:
+    settings = _settings(tmp_path)
+    root = settings.state_root / ("runs" if storage_class == "active" else "archive")
+    run = root / f"legacy-{storage_class}-{disposition}"
+    run.mkdir(parents=True)
+    _write(
+        run / "status.json",
+        {
+            "schema": "agent-workflow/session-status/v2",
+            "session_id": run.name,
+            "status": "running" if storage_class == "active" else "completed",
+            "created_at": "2026-07-30T00:00:00+00:00",
+            "workdir": "/tmp/legacy",
+            "prompt_path": str(run / "prompt.md"),
+            "log_path": str(run / "output.log"),
+            "disposition": disposition,
+        },
+    )
+    _write(run / "execution-metrics.json", {"schema": "agent-workflow/execution-metrics/v1"})
+
+    report = rebuild_index(settings)
+    assert report["error_count"] == 1
+    assert report["quarantined_count"] == 0
+    assert verify_index(settings, full=True)["valid"] is False
 
 
 def test_workflow_projection_materializes_nodes_and_edges(tmp_path: Path) -> None:

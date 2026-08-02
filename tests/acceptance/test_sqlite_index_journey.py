@@ -122,7 +122,7 @@ def test_installed_full_verify_classifies_legacy_archive_without_accepting_it(
     _write_json(
         legacy / "status.json",
         {
-            "schema": "agent-workflow/session-status/v1",
+            "schema": "agent-workflow/session-status/v2",
             "session_id": "legacy-installed",
             "status": "completed",
             "created_at": "2025-01-01T00:00:00+00:00",
@@ -133,7 +133,7 @@ def test_installed_full_verify_classifies_legacy_archive_without_accepting_it(
     )
     _write_json(
         legacy / "execution-metrics.json",
-        {"schema": "agent-workflow/execution-metrics/v1"},
+        {"schema": "agent-workflow/execution-metrics/retired-v1"},
     )
 
     rebuilt = installed_product.json("index", "rebuild", env=product_env)
