@@ -137,7 +137,7 @@ def test_interactive_child_task_complete_uses_bound_cli_and_bridge(
     status = wait_for_status(env, "bridge-child")
     assert status["status"] == "completed"
     context = installed_product.json("agent", "context", "bridge-child", env=env)
-    assert context["state"] == "idle_reusable"
+    assert context["state"] == "closed"
 
     run = _run_dir(env, "bridge-child")
     handoff = repo / ".agent-workflow-handoff" / "bridge-child"
@@ -405,6 +405,7 @@ def test_interactive_agent_reuse_requires_completion_selection_and_correlated_ac
         "acceptance-worker",
         "--summary",
         "First assignment complete",
+        "--keep-alive",
         "--tag",
         "acceptance",
         env=env,
@@ -477,7 +478,7 @@ def test_pending_reuse_cannot_seal_as_completed(
     prompt.write_text("Remain available briefly.\n", encoding="utf-8")
     env = dict(product_env)
     env["FAKE_AGENT_MODE"] = "slow"
-    env["FAKE_AGENT_DELAY"] = "1.0"
+    env["FAKE_AGENT_DELAY"] = "4.0"
     installed_product.json("launch", "pending-reuse", repo, prompt, "--ticket", "REUSE-PENDING", "--tier", "low", "--agent-class", "implementation", "--interactive", "--", fake_agent_path, env=env)
     handoff = repo / ".agent-workflow-handoff" / "pending-reuse"
     (handoff / "completion.json").write_text(json.dumps({
@@ -485,7 +486,7 @@ def test_pending_reuse_cannot_seal_as_completed(
         "criteria": [{"id": "fixture", "result": "pass", "evidence": ["fixture handoff"]}],
         "commands": [{"argv": ["fake-agent", "slow"], "cwd": str(repo), "exit_code": 0, "receipt": "fixture completion"}], "unresolved": [], "usage": None,
     }), encoding="utf-8")
-    installed_product.json("agent", "task-complete", "pending-reuse", "--actor", "acceptance-worker", "--summary", "First assignment complete", env=env)
+    installed_product.json("agent", "task-complete", "pending-reuse", "--actor", "acceptance-worker", "--summary", "First assignment complete", "--keep-alive", env=env)
     second_prompt = tmp_path / "second.md"
     second_prompt.write_text("No acknowledgement.\n", encoding="utf-8")
     requested = installed_product.json("agent", "reuse", "pending-reuse", second_prompt, "--actor", "orchestrator", "--ticket", "REUSE-PENDING-2", env=env)
@@ -493,6 +494,9 @@ def test_pending_reuse_cannot_seal_as_completed(
     status = wait_for_status(env, "pending-reuse")
     assert status["status"] == "failed"
     assert any("pending assignment" in item for item in status["pump_errors"])
+    final_status = json.loads((_run_dir(env, "pending-reuse") / "final-status.json").read_text())
+    assert final_status["status"] == "failed"
+    assert (_run_dir(env, "pending-reuse") / "final-receipt.json").is_file()
 
 def test_executor_failure_is_terminal_sealed_and_restartable(
     installed_product: InstalledProduct,
