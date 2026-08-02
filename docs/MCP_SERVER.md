@@ -46,7 +46,7 @@ The catalog is discovery metadata, not authorization. The server must not dynami
 
 ## Planned mutation phase
 
-`MCP-003` is the next authorized implementation phase. It may add only validated tools that wrap existing services:
+`MCP-003` is the planned mutation phase, but it remains blocked on HARD-007 authenticated principals. HARD-004 and HARD-005 are accepted. When authorized, it may add only validated tools that wrap existing services:
 
 - prompt-pack validation;
 - worktree creation;

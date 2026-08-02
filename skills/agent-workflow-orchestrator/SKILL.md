@@ -44,6 +44,8 @@ claim graph-backed analysis.
 
 A host-native subagent is not automatically durable, visible, resumable, or evidenced by this project. It becomes an `agent-workflow` run only when an explicit bridge invokes the CLI and records the required lifecycle evidence.
 
+The hierarchy authority layer can install fixed-depth contracts, validate narrowing, replay append-only journals, and verify sealed team/root receipts. These are reviewable authority artifacts, not proof that hierarchy runtime exists. Do not claim tmux team topology, team-lead scheduling, hierarchy messaging, or automated recovery until the corresponding gated runtime tickets are accepted.
+
 ## Happy path
 
 ```bash

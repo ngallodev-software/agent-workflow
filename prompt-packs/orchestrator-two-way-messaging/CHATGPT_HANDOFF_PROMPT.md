@@ -2,7 +2,7 @@
 
 Treat current source, [`BACKLOG.md`](../../docs/BACKLOG.md), the [messaging design](../../docs/ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md), and this pack’s collision matrix as authoritative.
 
-1. Before starting this pack, use [`CHATGPT_BLOCKER_CLEARANCE_PROMPT.md`](CHATGPT_BLOCKER_CLEARANCE_PROMPT.md) to clear or explicitly disposition the deterministic, identity, content-safety, and executor-trust prerequisites. Then run the deterministic release drift audit and validate this pack.
+1. Before starting this pack, reconcile every ticket prerequisite against the canonical backlog, then run the deterministic release drift audit and validate this pack. Completed foundation tasks must not be reopened from historical blocker artifacts.
 2. Confirm `DEC-001` and every ticket-specific `HARD-*` prerequisite before editing.
 3. Launch dependency-free tickets concurrently only in separate worktrees and durable sessions.
 4. Keep per-session journals and sealed lifecycle evidence authoritative. The aggregate inbox is a delivery record; tmux signals are hints.

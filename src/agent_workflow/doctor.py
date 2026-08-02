@@ -100,7 +100,7 @@ def run_doctor(settings: Settings) -> dict[str, Any]:
     }
     return {
         "ok": all(checks.values()),
-        "version": "0.7.7",
+        "version": "0.7.8",
         "config_path": str(settings.config_path),
         "commands": commands,
         "executors": executors,

@@ -1,5 +1,7 @@
 # Command reference
 
+> The hierarchy contract, journal/replay, and sealed-receipt authority layer is implemented as a review-gated built-in feature API. It does not yet expose team-runtime or tmux-topology commands; this reference lists only supported public CLI behavior.
+
 The parser-derived command catalog is authoritative for agent execution. Run `agent-workflow commands --json` for the full machine-readable contract or `agent-workflow commands --role ROLE --format markdown` for a role-scoped command card. Agents should invoke represented commands directly and use `--help` only after a catalog/version mismatch, an argument error, or when a required command is absent. Global `--json`, `--config PATH`, and `--no-plugins` may appear before or after the subcommand; tokens after launch `--` belong to the delegated command.
 
 ## Top-level

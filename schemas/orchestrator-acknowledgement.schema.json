@@ -2,10 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "agent-workflow/orchestrator-acknowledgement/v1",
   "type": "object", "additionalProperties": false,
-  "required": ["schema", "schema_version", "acknowledgement_id", "event_id", "event_digest", "orchestrator_id", "actor_principal", "disposition", "created_at", "reason"],
+  "required": ["schema", "schema_version", "acknowledgement_id", "event_id", "orchestrator_id", "actor_principal", "disposition", "created_at", "reason"],
   "properties": {
     "schema": {"const": "agent-workflow/orchestrator-acknowledgement/v1"}, "schema_version": {"const": 1},
-    "acknowledgement_id": {"type": "string", "format": "uuid"}, "event_id": {"type": "string", "format": "uuid"}, "event_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "acknowledgement_id": {"type": "string", "format": "uuid"}, "event_id": {"type": "string", "format": "uuid"},
     "orchestrator_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"}, "actor_principal": {"type": "string", "minLength": 1, "maxLength": 256},
     "disposition": {"enum": ["accepted", "rejected", "deferred"]}, "created_at": {"type": "string", "minLength": 1}, "reason": {"type": "string", "minLength": 1, "maxLength": 4096}
   }

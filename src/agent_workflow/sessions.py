@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import base64
 import fcntl
 import hashlib
 import json
 import os
 import platform
 import shlex
-import shutil
 import sys
 import time
 from datetime import datetime
@@ -15,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from . import tmux
-from .agent_context import acknowledge_reuse, idle_interactive_sessions
+from .agent_context import idle_interactive_sessions
 from .agent_context import initialize as initialize_agent_context
 from .assets import asset_path
 from .config import Settings
@@ -37,19 +35,28 @@ from .git import snapshot
 from .health import last_event as last_health_event
 from .health import semantic_progress
 from .native_jobs import ValidatedNativeJob, validate_native_job
-from .messages import (
-    append_message,
-    bridge_available,
-    bridge_required,
-    replay_messages,
-    wait_for_messages,
-    write_control_intent,
-)
 from .preflight import preflight_error, preflight_run_record, resolve_prerequisites
 from .manifests import task_result_contract
 from .process import redact_argv, require_command, run, secret_values_from_argv
 from .receipts import completion_template, initial_completion, initial_provenance, update_provenance
-from .steering import current_delivery, queue_request, record_acknowledgement
+from .session_control import (
+    _child_lifecycle_control,
+    acknowledge,
+    interrupt,
+    kill,
+    messages,
+    progress,
+    steer,
+    terminate,
+    wait_for_message,
+)
+from .session_artifacts import (
+    _create_handoff_dir,
+    _discover_prompt_pack_root,
+    _link_worktree_state,
+    _pack_id,
+    _write_runner,
+)
 from .state import (
     TERMINAL_STATUSES,
     list_statuses,
@@ -69,182 +76,18 @@ from .util import (
 from .path import absolute_path, read_regular_file, require_directory
 
 
-def _ignore_delegations(workdir: Path) -> None:
-    _add_git_exclude(workdir, ".delegations/")
 
 
-def _add_git_exclude(workdir: Path, entry: str) -> None:
-    try:
-        result = run(
-            ["git", "-C", str(workdir), "rev-parse", "--git-path", "info/exclude"]
-        )
-    except WorkflowError:
-        return
-    exclude = Path(result.stdout.strip())
-    if not exclude.is_absolute():
-        exclude = workdir / exclude
-    exclude.parent.mkdir(parents=True, exist_ok=True)
-    existing = exclude.read_text(encoding="utf-8") if exclude.exists() else ""
-    if entry not in {line.strip() for line in existing.splitlines()}:
-        with exclude.open("a", encoding="utf-8") as stream:
-            if existing and not existing.endswith("\n"):
-                stream.write("\n")
-            stream.write(entry + "\n")
 
 
-def _create_handoff_dir(workdir: Path, session_id: str) -> Path:
-    """Create the executor-writable completion boundary in the worktree."""
-    _add_git_exclude(workdir, ".agent-workflow-handoff/")
-    handoff = workdir / ".agent-workflow-handoff" / session_id
-    if handoff.exists() or handoff.is_symlink():
-        raise WorkflowError(f"completion handoff already exists: {handoff}")
-    handoff.mkdir(parents=True, mode=0o700)
-    return handoff.resolve()
 
 
-def _link_worktree_state(
-    workdir: Path,
-    session_id: str,
-    state_dir: Path,
-) -> None:
-    _ignore_delegations(workdir)
-    delegations = workdir / ".delegations"
-    delegations.mkdir(parents=True, exist_ok=True)
-    link = delegations / session_id
-    if link.exists() or link.is_symlink():
-        try:
-            if link.resolve() == state_dir.resolve():
-                return
-        except OSError:
-            pass
-        raise WorkflowError(f"delegation link already exists: {link}")
-    link.symlink_to(state_dir, target_is_directory=True)
 
 
-def _write_runner(
-    state_dir: Path,
-    workdir: Path,
-    command: list[str],
-    *,
-    python_executable: str,
-    session_id: str = "unknown-session",
-    prompt_source: Path | None = None,
-    prompt_pack_root: Path | None = None,
-    handoff_dir: Path | None = None,
-    completion_template_path: Path | None = None,
-    command_artifacts: dict[str, Any] | None = None,
-    stream_format: str = "text",
-    interactive: bool = False,
-    close_tmux_on_exit: bool = False,
-) -> Path:
-    prompt = state_dir / "prompt.md"
-    launch_prompt = state_dir / "launch-prompt.md"
-    if not launch_prompt.exists() and prompt.exists():
-        shutil.copy2(prompt, launch_prompt)
-    prompt_source = prompt_source or prompt
-    runner = state_dir / "run.sh"
-    source_root = Path(__file__).resolve().parents[1]
-    command_blob = base64.b64encode(
-        json.dumps(command, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    ).decode("ascii")
-    runner_invocation = (
-        f"{shlex.quote(python_executable)} -m agent_workflow.runner "
-        f"--run-dir {shlex.quote(str(state_dir))} "
-        f"--command-b64 {shlex.quote(command_blob)} "
-        f"{'--interactive ' if interactive else ''}"
-    )
-    if interactive and not close_tmux_on_exit:
-        runner_command = (
-            "if [[ -t 0 ]]; then\n"
-            f"    exec {runner_invocation}\n"
-            "else\n"
-            f"    exec {runner_invocation.replace('--interactive ', '', 1)}\n"
-            "fi"
-        )
-    elif close_tmux_on_exit:
-        fallback_invocation = runner_invocation.replace("--interactive ", "", 1)
-        runner_command = (
-            "if [[ -t 0 ]]; then\n"
-            "    set +e\n"
-            f"    {runner_invocation}\n"
-            "    runner_status=$?\n"
-            "    set -e\n"
-            "    if [[ -n \"${AGENT_WORKFLOW_TMUX_SESSION:-}\" ]]; then\n"
-            "        tmux kill-session -t \"$AGENT_WORKFLOW_TMUX_SESSION\" >/dev/null 2>&1 || true\n"
-            "    fi\n"
-            "    exit \"$runner_status\"\n"
-            "else\n"
-            f"    exec {fallback_invocation}\n"
-            "fi\n"
-        )
-    else:
-        runner_command = f"exec {runner_invocation}"
-    runner_text = (
-        "#!/usr/bin/env bash\n"
-        "set -Eeuo pipefail\n"
-        f"readonly AGENT_WORKFLOW_SESSION_ID={shlex.quote(session_id)}\n"
-        f"readonly AGENT_WORKFLOW_PROMPT_SOURCE={shlex.quote(str(prompt_source))}\n"
-        f"readonly AGENT_WORKFLOW_HANDOFF_DIR={shlex.quote(str(handoff_dir or ''))}\n"
-        f"readonly AGENT_WORKFLOW_CONTROL_BRIDGE={shlex.quote(str((handoff_dir / 'control-intents') if handoff_dir else ''))}\n"
-        f"readonly AGENT_WORKFLOW_COMPLETION_TEMPLATE={shlex.quote(str(completion_template_path or ''))}\n"
-        f"readonly AGENT_WORKFLOW_PROMPT_PACK_ROOT={shlex.quote(str(prompt_pack_root or ''))}\n"
-        f"readonly AGENT_WORKFLOW_COMMAND_CATALOG={shlex.quote(str(state_dir / str((command_artifacts or {}).get('catalog_path', 'command-catalog.json'))))}\n"
-        f"readonly AGENT_WORKFLOW_COMMAND_CARD={shlex.quote(str(state_dir / str((command_artifacts or {}).get('card_path', 'command-card.md'))))}\n"
-        f"readonly AGENT_WORKFLOW_CLI={shlex.quote(str(((command_artifacts or {}).get('cli_invocation') or ['agent-workflow'])[0]))}\n"
-    )
-    if close_tmux_on_exit:
-        runner_text += (
-            f"readonly AGENT_WORKFLOW_TMUX_SESSION={shlex.quote(session_id)}\n"
-        )
-    runner_text += (
-        "export AGENT_WORKFLOW_SESSION_ID AGENT_WORKFLOW_PROMPT_SOURCE "
-        "AGENT_WORKFLOW_HANDOFF_DIR AGENT_WORKFLOW_PROMPT_PACK_ROOT "
-        "AGENT_WORKFLOW_CONTROL_BRIDGE "
-        "AGENT_WORKFLOW_COMPLETION_TEMPLATE AGENT_WORKFLOW_COMMAND_CATALOG "
-        "AGENT_WORKFLOW_COMMAND_CARD AGENT_WORKFLOW_CLI"
-        + (" AGENT_WORKFLOW_TMUX_SESSION\n" if close_tmux_on_exit else "\n")
-        + f"export PYTHONPATH={shlex.quote(str(source_root))}${{PYTHONPATH:+:$PYTHONPATH}}\n"
-        + runner_command
-        + "\n"
-    )
-    runner.write_text(runner_text, encoding="utf-8")
-    runner.chmod(0o755)
-    syntax = run(
-        ["bash", "-n", str(runner)],
-        check=False,
-        timeout_seconds=10,
-        max_stdout_bytes=64 * 1024,
-        max_stderr_bytes=64 * 1024,
-    )
-    if syntax.returncode:
-        raise WorkflowError(
-            f"generated runner failed syntax check: {syntax.stderr.strip()}"
-        )
-    return runner
 
 
-def _discover_prompt_pack_root(prompt_source: Path) -> Path | None:
-    for candidate in prompt_source.parents:
-        try:
-            read_regular_file(candidate / "pack.yaml")
-        except WorkflowError:
-            continue
-        else:
-            return candidate
-    return None
 
 
-def _pack_id(pack_root: Path) -> str:
-    """Read the deliberately small, stable identity field from pack.yaml."""
-    pack_file = pack_root / "pack.yaml"
-    try:
-        for line in read_regular_file(pack_file).data.decode("utf-8").splitlines():
-            key, separator, value = line.partition(":")
-            if key.strip() == "pack_id" and separator and value.strip():
-                return value.strip().strip("\"'")
-    except OSError as exc:
-        raise WorkflowError(f"cannot read selected pack: {pack_file}: {exc}") from exc
-    raise WorkflowError(f"selected pack has no pack_id: {pack_file}")
 
 
 def _bind_native_job(
@@ -1645,260 +1488,26 @@ def observe(
     return result
 
 
-def _active_run(settings: Settings, session_id: str) -> dict[str, Any]:
-    status = read_status(settings, session_id)
-    if str(status.get("status")) in TERMINAL_STATUSES:
-        raise WorkflowError("cannot send a control message to a terminal session")
-    return status
 
 
-def _child_lifecycle_control(session_id: str) -> dict[str, Any] | None:
-    """Keep sandboxed children from mutating host-owned lifecycle state.
-
-    The runner owns tmux and the canonical state root.  A child completes by
-    writing its handoff and exiting; the host collects and seals that exit.
-    """
-    if bridge_available(session_id) or bridge_required(session_id):
-        return {
-            "outcome": "unavailable",
-            "reason": "lifecycle controls are host-owned; exit the child normally",
-        }
-    return None
 
 
-def _append_control_message(
-    settings: Settings,
-    session_id: str,
-    **kwargs: Any,
-) -> dict[str, Any]:
-    """Persist first, then issue a best-effort tmux wake hint."""
-    state_dir = run_dir(settings, session_id)
-    channel = tmux.wakeup_channel(state_dir)
-    return append_message(
-        state_dir,
-        session_id=session_id,
-        after_commit=lambda _message: tmux.signal_waiters(channel),
-        **kwargs,
-    )
 
 
-def steer(
-    settings: Settings,
-    session_id: str,
-    *,
-    actor: str,
-    content: str,
-) -> dict[str, Any]:
-    """Persist a parent steering request and queue bounded adapter delivery."""
-    _active_run(settings, session_id)
-    message = _append_control_message(
-        settings,
-        session_id,
-        direction="parent_to_child",
-        kind="steer",
-        actor=actor,
-        content=content,
-    )
-    delivery = queue_request(run_dir(settings, session_id), message)
-    return {**message, "delivery_outcome": delivery["outcome"], "delivery_event_id": delivery["event_id"]}
 
 
-def progress(
-    settings: Settings,
-    session_id: str,
-    *,
-    actor: str,
-    content: str,
-) -> dict[str, Any]:
-    """Persist an explicit child progress update for its parent."""
-    if bridge_available(session_id):
-        return write_control_intent(
-            session_id=session_id, kind="progress", actor=actor, content=content
-        )
-    if bridge_required(session_id):
-        return {"outcome": "unavailable", "reason": "control bridge unavailable"}
-    _active_run(settings, session_id)
-    return _append_control_message(
-        settings,
-        session_id,
-        direction="child_to_parent",
-        kind="progress",
-        actor=actor,
-        content=content,
-    )
 
 
-def acknowledge(
-    settings: Settings,
-    session_id: str,
-    *,
-    actor: str,
-    content: str,
-    correlation_id: str,
-    outcome: str = "applied",
-) -> dict[str, Any]:
-    """Record a correlated applied or rejected steering acknowledgement."""
-    if outcome not in {"applied", "rejected"}:
-        raise WorkflowError("acknowledgement outcome must be applied or rejected")
-    if bridge_available(session_id):
-        return write_control_intent(
-            session_id=session_id, kind="ack", actor=actor, content=content,
-            correlation_id=correlation_id, outcome=outcome,
-        )
-    if bridge_required(session_id):
-        return {"outcome": "unavailable", "reason": "control bridge unavailable"}
-    _active_run(settings, session_id)
-    state_dir = run_dir(settings, session_id)
-    existing_delivery = current_delivery(state_dir, correlation_id)
-    if existing_delivery is not None and existing_delivery["outcome"] in {
-        "applied", "rejected", "expired",
-    }:
-        prior = str(existing_delivery["outcome"])
-        if prior == "expired":
-            raise WorkflowError("steering request already expired")
-        if prior != outcome:
-            raise WorkflowError(
-                f"steering request already has terminal outcome {prior}"
-            )
-        existing_ack = next(
-            (
-                item for item in reversed(replay_messages(state_dir))
-                if item.get("kind") == "ack"
-                and item.get("correlation_id") == correlation_id
-            ),
-            None,
-        )
-        if existing_ack is None:
-            raise WorkflowError(
-                "terminal steering evidence has no correlated acknowledgement"
-            )
-        return {
-            **existing_ack,
-            "delivery_outcome": prior,
-            "duplicate": True,
-        }
-    message = _append_control_message(
-        settings,
-        session_id,
-        direction="child_to_parent",
-        kind="ack",
-        actor=actor,
-        content=content,
-        correlation_id=correlation_id,
-    )
-    record_acknowledgement(
-        state_dir,
-        correlation_id=correlation_id,
-        outcome=outcome,
-        reason=content,
-    )
-    acknowledge_reuse(settings, session_id, correlation_id, actor)
-    return {**message, "delivery_outcome": outcome}
 
 
-def messages(settings: Settings, session_id: str, *, after_sequence: int = 0) -> list[dict[str, Any]]:
-    read_status(settings, session_id)
-    return replay_messages(run_dir(settings, session_id), after_sequence=after_sequence)
 
 
-def wait_for_message(
-    settings: Settings,
-    session_id: str,
-    *,
-    after_sequence: int = 0,
-    timeout_seconds: float | None = None,
-) -> list[dict[str, Any]]:
-    read_status(settings, session_id)
-    state_dir = run_dir(settings, session_id)
-    return wait_for_messages(
-        state_dir,
-        after_sequence=after_sequence,
-        timeout_seconds=timeout_seconds,
-        wakeup_channel=tmux.wakeup_channel(state_dir),
-        wait_for_wakeup=tmux.wait_for_wakeup,
-    )
 
 
-def interrupt(settings: Settings, session_id: str) -> dict[str, Any]:
-    child_control = _child_lifecycle_control(session_id)
-    if child_control is not None:
-        return child_control
-    prior = read_status(settings, session_id)
-    host_session = str(prior.get("tmux_session", session_id))
-    if not tmux.session_exists(host_session):
-        raise WorkflowError(f"session is not running: {session_id}")
-    pane = tmux.resolve_status_pane(prior)
-    if pane is None or pane.pane_id is None:
-        raise WorkflowError(f"agent pane is unavailable or not bound to session: {session_id}")
-    tmux.interrupt(pane.pane_id)
-    return update_status(
-        settings,
-        session_id,
-        status="interruption_requested",
-        prior_status=prior.get("status"),
-        interruption_requested_at=utc_now(),
-    )
 
 
-def terminate(
-    settings: Settings,
-    session_id: str,
-    grace_seconds: int,
-) -> dict[str, Any]:
-    child_control = _child_lifecycle_control(session_id)
-    if child_control is not None:
-        return child_control
-    prior = read_status(settings, session_id)
-    host_session = str(prior.get("tmux_session", session_id))
-    if tmux.session_exists(host_session):
-        pane = tmux.resolve_status_pane(prior)
-        if pane is not None and pane.pane_id is not None:
-            tmux.interrupt(pane.pane_id)
-        deadline = time.time() + max(0, grace_seconds)
-        while time.time() < deadline and tmux.resolve_status_pane(prior) is not None:
-            time.sleep(0.25)
-        if tmux.resolve_status_pane(prior) is not None:
-            if prior.get("tmux_mode") == "shared_window":
-                pane = tmux.resolve_status_pane(prior)
-                if pane is not None and pane.pane_id is not None:
-                    tmux.kill_pane(pane.pane_id)
-            else:
-                tmux.kill(session_id)
-    current = read_status(settings, session_id)
-    if str(current.get("status")) not in TERMINAL_STATUSES:
-        current = update_status(
-            settings,
-            session_id,
-            status="interrupted",
-            finished_at=utc_now(),
-            terminated_by_operator=True,
-        )
-    return current
 
 
-def kill(settings: Settings, session_id: str) -> dict[str, Any]:
-    child_control = _child_lifecycle_control(session_id)
-    if child_control is not None:
-        return child_control
-    prior = read_status(settings, session_id)
-    host_session = str(prior.get("tmux_session", session_id))
-    if tmux.session_exists(host_session):
-        if prior.get("tmux_mode") == "shared_window":
-            pane = tmux.resolve_status_pane(prior)
-            if pane is not None and pane.pane_id is not None:
-                tmux.kill_pane(pane.pane_id)
-        else:
-            tmux.kill(session_id)
-    current = read_status(settings, session_id)
-    if str(current.get("status")) in TERMINAL_STATUSES:
-        return current
-    return update_status(
-        settings,
-        session_id,
-        status="killed",
-        finished_at=utc_now(),
-        killed_by_operator=True,
-    )
 
 
 def next_retry_id(settings: Settings, original: str) -> str:

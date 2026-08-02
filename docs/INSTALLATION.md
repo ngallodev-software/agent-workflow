@@ -29,24 +29,25 @@ MCP configuration is registered only when the `mcp` extra is requested. Jenkins 
 
 This installs the package and its core Python dependencies in editable user
 mode, then wires the launcher, skills, man pages, schemas, evaluation assets,
-and active prompt packs. The core package includes the pinned MCP SDK because
-the installed `agent-workflow-mcp` entry point requires it. To install optional
-integrations, use `./install.sh --extras eval,stats` or
-`./install.sh --extras all`.
+and active prompt packs. Optional integrations install only through named
+extras. Use `./install.sh --extras eval,stats`, `./install.sh --extras mcp`, or
+`./install.sh --extras all` as appropriate for the host.
 
 The installer does not require an activated virtual environment. It uses the
 selected `python3` interpreter, bootstraps pip with `ensurepip` when available,
 and otherwise reports the exact interpreter that needs pip. To select another
 host Python, use `./install.sh --python /path/to/python3`.
 
+When the MCP profile is requested, the installer verifies the exact supported
+SDK before changing client configuration, installs the `agent-workflow-mcp`
+entry point, and registers the local stdio server as `agent-workflow` in the
+user-level Codex and Claude Code configuration. Existing entries with that name
+are preserved. Base installations neither require the MCP SDK nor edit MCP
+client configuration.
+
 ```bash
 agent-workflow-mcp --help
 ```
-
-The installer registers the local stdio server as `agent-workflow` in the
-user-level Codex and Claude Code configuration on every normal install.
-Existing entries with that name are preserved. The `mcp` extra remains
-available as a compatibility alias.
 
 ## Install a tagged release
 
@@ -59,8 +60,8 @@ missing or non-semantic release references, downloads only from that tag's
 release assets, and verifies `SHA256SUMS` before extracting or invoking pip:
 
 ```sh
-curl -fsSL https://github.com/ngallodev-software/agent-workflow/raw/v0.7.7/install.sh \
-  | sh -s -- --version v0.7.7
+curl -fsSL https://github.com/ngallodev-software/agent-workflow/raw/v0.7.8/install.sh \
+  | sh -s -- --version v0.7.8
 ```
 
 The release contract requires Python 3.11+, `curl`, a SHA-256 tool, and `tar`.
@@ -76,9 +77,9 @@ installer, then use the matching `uninstall.sh` to remove the wheel and owned
 assets:
 
 ```sh
-tar -xzf agent-workflow-0.7.7-linux.tar.gz
-cd agent-workflow-0.7.7-linux
-./install.sh --wheel agent_workflow-0.7.7-py3-none-any.whl
+tar -xzf agent-workflow-0.7.8-linux.tar.gz
+cd agent-workflow-0.7.8-linux
+./install.sh --wheel agent_workflow-0.7.8-py3-none-any.whl
 ./uninstall.sh
 ```
 
@@ -86,7 +87,7 @@ Bundles are labelled `linux`, `wsl2`, or `macos`; native Windows bundles are
 not published. The release installer preserves unrelated user configuration,
 skill links, and locally modified man pages.
 
-The MCP release is stdio-only. It exposes bounded run resources and
+When installed, the MCP adapter is stdio-only. It exposes bounded run resources and
 prompt-pack validation; it does not expose shell execution, raw tmux control,
 destructive lifecycle tools, or HTTP transport.
 
@@ -96,6 +97,7 @@ The searchable evidence index uses Python's standard-library SQLite support; it 
 
 ```text
 ~/.local/bin/agent-workflow
+~/.local/bin/agent-workflow-mcp  # only with the mcp extra
 ~/.config/agent-workflow/config.toml
 ~/.local/share/agent-workflow/schemas/
 ~/.local/share/agent-workflow/evals/
@@ -133,8 +135,10 @@ builds a wheel, then calls this installer in wheel mode against the host account
 account, configure narrowly scoped passwordless sudo for this deployment or
 run the job under the target host account. The pipeline fails if the target is
 not configured; it never silently installs only into Jenkins's private home.
-The pipeline uses the core MCP dependency; use `--extras eval` only when the
-host is intentionally dedicated to the optional evaluator stack.
+The repository pipeline tests the base installed product by default. A Jenkins
+job may request `--extras mcp`, `--extras eval`, or another named profile only
+when that host is intentionally configured for the corresponding optional
+acceptance coverage.
 
 
 ## Repository-only CI/CD assets

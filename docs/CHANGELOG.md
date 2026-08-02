@@ -2,27 +2,33 @@
 
 ## Unreleased
 
-- Extract one-shot and loop supervisor dispatch into `agent_workflow.cli_handlers.supervisor`, preserving remediation policy construction, session filtering, and loop report schemas.
-- Extract session launch, observation, archival, operator messaging/control, restart, lifecycle review, acceptance, and force-accept dispatch into `agent_workflow.cli_handlers.session`, preserving pane-cap fallback and durable authority semantics.
-- Extract the complete `benchmark` command domain into `agent_workflow.cli_handlers.benchmark`, preserving comparative-benchmark validation, readiness, runtime attestation/sealing, suite export, planning, execution, review, reporting, verification, and explicit cleanup behavior.
-- Extract the complete `eval` command domain into `agent_workflow.cli_handlers.eval`, preserving validation, templating, scoring, reporting, trial comparison, Inspect, and SWE-bench behavior while keeping direct report rendering explicit.
-- Extract the complete `agent` reusable-context command domain into `agent_workflow.cli_handlers.agent`, preserving durable assignment, completion, candidate-ranking, and reassignment semantics.
+No unreleased changes are recorded.
 
-- Extract the complete `orchestrator` registry/inbox/watch command domain into `agent_workflow.cli_handlers.orchestrator`, preserving durable messaging services, bounds, and output schemas.
+## 0.7.8 — 2026-08-01
 
-- Extract the complete `pack` command domain into `agent_workflow.cli_handlers.pack`, preserving scaffold/checksum/archive behavior plus validation rendering and exit status.
-
-- Extract the complete `worktree` command domain into `agent_workflow.cli_handlers.worktree`, preserving create/list/remove arguments, structured results, parser behavior, and installed Git worktree journeys.
-
-- Extract the complete `workflow` command domain into `agent_workflow.cli_handlers.workflow`, preserving template rendering, scheduler/service construction, parser behavior, JSON output, and installed workflow journeys.
-
-- Extract shared terminal renderers into `agent_workflow.cli_output` and the complete `index` command domain into `agent_workflow.cli_handlers.index`, preserving public parser/catalog behavior, exact index schemas, JSON/table output, and installed CLI journeys.
-
-- Extract SQLite application identity, schema version, migration SQL, and database-header validation into `agent_workflow.index_schema` while preserving `index_store` imports, exact migration records, rebuild behavior, and installed index journeys.
-
-- Extract authoritative argparse command-tree construction from the monolithic CLI dispatcher into `agent_workflow.cli_parser` while preserving the `agent_workflow.cli.build_parser` facade, parser-derived catalogs/completions, plugin registration, help, and installed CLI behavior.
-
-- Complete the HIER-002 durable-authority slice with strict team/root receipt schemas, read-only digest sealing, declared journal and evidence verification, required output/review/approval enforcement, budget accounting, later-append/tamper invalidation, and installed-wheel coverage.
+- Completed digest-bound installed plugin schema/asset activation with traversal, collision, missing-file, tamper, and atomic-registration protections plus an installed fixture-plugin journey.
+- Implemented the HIER-001/HIER-002 authority layer: fixed-depth immutable contracts, capability and budget narrowing, append-only journals, idempotent imports, deterministic replay, and digest-sealed team/root receipts. Runtime topology remains separately gated.
+- Synchronized version, README, installation, help/man, skills, prompt-pack steering, architecture, testing, restore, and release documentation; added regression checks for optional MCP and repository-only Jenkins boundaries.
+- Extracted core command-catalog, plugin inventory, doctor, shell-completion, and configuration dispatch from the monolithic CLI dispatcher without changing output behavior.
+- Extracted sealed-run assessment and evaluation-ledger reporting dispatch from the monolithic CLI facade while preserving JSON, Markdown, file-output, and row-count behavior.
+- Isolated CLI global-option normalization, explicit launch-command parsing, version-safe configuration bootstrap, and plugin loading/suppression in `cli_runtime.py`.
+- Isolated SQLite projection source discovery, no-follow stable artifact reads, artifact inventory, and source fingerprinting in `index_sources.py` while preserving `index_store` compatibility imports.
+- Isolated bounded parameterized SQLite query construction and freshness-bound query report shaping in `index_queries.py` while preserving the `index_store` public facade.
+- Isolated delegated-session filesystem artifact construction in `session_artifacts.py`: Git excludes, completion handoffs, durable state links, generated runner scripts, and prompt-pack discovery/identity.
+- Isolated durable operator steer/progress/ack messaging, replay/wait cursors, child lifecycle denial, and interrupt/terminate/kill controls in `session_control.py` while preserving the `sessions` facade.
+- Extracted one-shot and loop supervisor dispatch into `agent_workflow.cli_handlers.supervisor`, preserving remediation policy construction, session filtering, and loop report schemas.
+- Extracted session launch, observation, archival, operator messaging/control, restart, lifecycle review, acceptance, and force-accept dispatch into `agent_workflow.cli_handlers.session`, preserving pane-cap fallback and durable authority semantics.
+- Extracted the complete `benchmark` command domain into `agent_workflow.cli_handlers.benchmark`, preserving comparative-benchmark validation, readiness, runtime attestation/sealing, suite export, planning, execution, review, reporting, verification, and explicit cleanup behavior.
+- Extracted the complete `eval` command domain into `agent_workflow.cli_handlers.eval`, preserving validation, templating, scoring, reporting, trial comparison, Inspect, and SWE-bench behavior while keeping direct report rendering explicit.
+- Extracted the complete `agent` reusable-context command domain into `agent_workflow.cli_handlers.agent`, preserving durable assignment, completion, candidate-ranking, and reassignment semantics.
+- Extracted the complete `orchestrator` registry/inbox/watch command domain into `agent_workflow.cli_handlers.orchestrator`, preserving durable messaging services, bounds, and output schemas.
+- Extracted the complete `pack` command domain into `agent_workflow.cli_handlers.pack`, preserving scaffold/checksum/archive behavior plus validation rendering and exit status.
+- Extracted the complete `worktree` command domain into `agent_workflow.cli_handlers.worktree`, preserving create/list/remove arguments, structured results, parser behavior, and installed Git worktree journeys.
+- Extracted the complete `workflow` command domain into `agent_workflow.cli_handlers.workflow`, preserving template rendering, scheduler/service construction, parser behavior, JSON output, and installed workflow journeys.
+- Extracted shared terminal renderers into `agent_workflow.cli_output` and the complete `index` command domain into `agent_workflow.cli_handlers.index`, preserving public parser/catalog behavior, exact index schemas, JSON/table output, and installed CLI journeys.
+- Extracted SQLite application identity, schema version, migration SQL, and database-header validation into `agent_workflow.index_schema` while preserving `index_store` imports, exact migration records, rebuild behavior, and installed index journeys.
+- Extracted authoritative argparse command-tree construction from the monolithic CLI dispatcher into `agent_workflow.cli_parser` while preserving the `agent_workflow.cli.build_parser` facade, parser-derived catalogs/completions, plugin registration, help, and installed CLI behavior.
+- Completed the HIER-002 durable-authority slice with strict team/root receipt schemas, read-only digest sealing, declared journal and evidence verification, required output/review/approval enforcement, budget accounting, later-append/tamper invalidation, and installed-wheel coverage.
 
 ## 0.7.7 — 2026-08-01
 

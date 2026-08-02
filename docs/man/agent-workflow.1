@@ -1,4 +1,4 @@
-.TH AGENT-WORKFLOW 1 "2026-08-01" "agent-workflow 0.7.7" "User Commands"
+.TH AGENT-WORKFLOW 1 "2026-08-01" "agent-workflow 0.7.8" "User Commands"
 .SH NAME
 agent-workflow \- terminal-first delegated execution, workflow, evidence, and review CLI
 .SH SYNOPSIS
@@ -70,6 +70,8 @@ Print the release version.
 Run evidence is normally stored below ~/.local/state/agent-workflow/runs/SESSION. final-receipt.json seals required and optional artifacts. Review dispositions are separate read-only receipts. Structured provider evidence is bounded and sealed before trial extraction. The host-local SQLite index stores normalized searchable fields and source provenance but excludes raw prompt, terminal, message, and log bodies.
 .SH PLUGINS
 Trusted plugins are separate Python distributions discovered through the agent_workflow.plugins entry-point group and imported only when listed in [plugins].enabled. They are executable code, not a sandbox or authority grant. Use plugins list for inventory and --no-plugins for recovery.
+.SH HIERARCHY
+The built-in hierarchy authority package implements fixed-depth immutable contracts, capability and budget narrowing, append-only journals, deterministic replay, and digest-sealed team/root receipts. Team runtime, tmux topology, hierarchy messaging, scheduling, and recovery commands are not yet public or implemented.
 .SH MCP
 The optional local stdio server is a separate executable, agent-workflow-mcp(1). It is currently bounded/read-only plus pack validation; planned mutation tools are not present.
 .SH FILES

@@ -121,6 +121,17 @@ The default suite uses synthetic custom executors in local mode. Live compatibil
 checks should run `doctor` and a read-only launch on the supported provider
 executors; no paid provider task is part of the default suite.
 
+## Current implementation boundaries
+
+Focused invariant and installed-wheel journeys cover:
+
+- trusted-plugin import suppression, atomic registration, collision handling, digest-bound package resources, traversal/tamper rejection, and a separately installed fixture plugin;
+- hierarchy contracts, capability/budget narrowing, append-only journals, idempotent imports, deterministic replay, and mutation-sensitive team/root receipts;
+- behavior-preserving CLI handler, SQLite schema/source/query, session artifact, and session-control decomposition behind stable public facades;
+- distribution exclusion of Jenkins/GitHub CI assets and fail-safe optional MCP installation.
+
+A passing hierarchy authority test does not claim team runtime, tmux topology, scheduling, or recovery. Those remain future/gated journeys.
+
 ## Current shape
 
 The suite is organized by product journeys and invariant matrices rather than test-count targets. Deleted implementation-coupled tests are preserved in Git history and should not be restored merely to recover coverage numbers. Restore a behavior only by expressing it through the test layers above. Implemented future specifications, such as HARD-004, must graduate into acceptance/invariant coverage instead of remaining strict expected failures.

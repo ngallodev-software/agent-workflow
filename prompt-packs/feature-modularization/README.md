@@ -4,7 +4,7 @@ Implement DEC-009 without changing authority semantics: split oversized modules 
 
 ## Current implementation state
 
-0.7.7 contains the process-policy decomposition slice and the complete PLUG-001 implementation: trusted command registration plus digest-bound installed schema/asset resources. PLUG-001 is in review; agents must run MOD-GATE-1 against the existing host rather than add another registry, loader, or hook framework.
+0.7.8 contains the process-policy decomposition, the complete PLUG-001 implementation, and behavior-preserving CLI, SQLite, and session-service splits behind stable facades. PLUG-001 is in review; agents must run MOD-GATE-1 against the existing host rather than add another registry, loader, or hook framework. MAINT-001 remains open only for the explicitly listed session, index reconciliation, and runner slices; do not repeat completed extractions.
 
 ## Critical path
 

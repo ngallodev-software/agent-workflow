@@ -17,11 +17,19 @@ import sqlite3
 import stat
 from urllib.parse import quote
 from pathlib import Path
-from typing import Any, Iterable, Iterator, Sequence
+from typing import Any, Iterable, Iterator
 
 from .config import Settings, enforce_trust
 from .contracts import validate_instance
 from .errors import WorkflowError
+from .index_sources import (
+    artifact_paths as _artifact_paths,
+    discover_runs as _discover_runs,
+    read_stable_bytes as _read_stable_bytes,
+    sha256_file as _sha256_file,
+    source_fingerprint as _source_fingerprint,
+)
+from .index_queries import build_query as _build_query, build_query_report as _build_query_report
 from .index_schema import (
     INDEX_APPLICATION_ID,
     INDEX_SCHEMA_VERSION,
@@ -33,12 +41,7 @@ from .receipts import verify_seal_details
 from .state import runs_root
 from .util import utc_now, validate_id
 
-MAX_INDEXED_FILE_BYTES = 64 * 1024 * 1024
 MAX_EVENT_SUMMARY = 2048
-
-JSON_ARTIFACT_SUFFIXES = {".json", ".jsonl"}
-TEXT_METADATA_SUFFIXES: set[str] = set()
-IGNORED_FILENAMES = {"workflow.lock", "supervisor.lock", "index.lock"}
 
 
 
@@ -50,37 +53,8 @@ def _sha256_bytes(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
 
 
-def _read_stable_bytes(path: Path, *, shared_lock: bool = False) -> bytes:
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
-    try:
-        descriptor = os.open(path, flags)
-    except OSError as exc:
-        raise WorkflowError(f"cannot open indexed artifact {path}: {exc}") from exc
-    try:
-        info = os.fstat(descriptor)
-        if not stat.S_ISREG(info.st_mode):
-            raise WorkflowError(f"indexed artifact must be a regular file: {path}")
-        if info.st_size > MAX_INDEXED_FILE_BYTES:
-            raise WorkflowError(f"artifact exceeds index safety limit: {path}")
-        if shared_lock:
-            fcntl.flock(descriptor, fcntl.LOCK_SH)
-        try:
-            chunks: list[bytes] = []
-            while True:
-                chunk = os.read(descriptor, 1024 * 1024)
-                if not chunk:
-                    break
-                chunks.append(chunk)
-            return b"".join(chunks)
-        finally:
-            if shared_lock:
-                fcntl.flock(descriptor, fcntl.LOCK_UN)
-    finally:
-        os.close(descriptor)
 
 
-def _sha256_file(path: Path) -> str:
-    return _sha256_bytes(_read_stable_bytes(path, shared_lock=path.suffix.lower() == ".jsonl"))
 
 
 def index_root(settings: Settings) -> Path:
@@ -170,103 +144,12 @@ def initialize(settings: Settings) -> dict[str, Any]:
     return index_status(settings)
 
 
-def _run_roots(settings: Settings, *, include_archived: bool) -> list[tuple[str, Path]]:
-    roots = [("active", runs_root(settings))]
-    if include_archived:
-        archive = settings.state_root / "archive"
-        if archive.exists() or archive.is_symlink():
-            if archive.is_symlink() or not archive.is_dir():
-                raise WorkflowError(f"archive root is unsafe: {archive}")
-            roots.append(("archive", archive))
-    return roots
 
 
-def _discover_runs(
-    settings: Settings,
-    *,
-    include_archived: bool,
-    session_id: str | None,
-) -> list[tuple[str, str, Path]]:
-    if session_id is not None:
-        validate_id(session_id, "session ID")
-    discovered: dict[str, tuple[str, str, Path]] = {}
-    for storage_class, root in _run_roots(settings, include_archived=include_archived):
-        for path in sorted(root.iterdir() if root.is_dir() else []):
-            if session_id is not None and path.name != session_id:
-                continue
-            if path.is_symlink() or not path.is_dir():
-                continue
-            validate_id(path.name, "session ID")
-            # Active state wins if a hostile/malformed state root contains both.
-            candidate = (path.name, storage_class, path)
-            if path.name not in discovered or storage_class == "active":
-                discovered[path.name] = candidate
-    return [discovered[key] for key in sorted(discovered)]
 
 
-def _scan_artifact_paths(run_dir: Path) -> tuple[list[Path], list[str]]:
-    paths: list[Path] = []
-    unsafe: list[str] = []
-    for path in sorted(run_dir.rglob("*")):
-        if path.name in IGNORED_FILENAMES:
-            continue
-        if path.suffix.lower() not in JSON_ARTIFACT_SUFFIXES | TEXT_METADATA_SUFFIXES:
-            continue
-        relative = path.relative_to(run_dir).as_posix()
-        if path.is_symlink():
-            unsafe.append(relative)
-        elif path.is_file():
-            paths.append(path)
-    return paths, unsafe
 
 
-def _unsafe_artifact_paths(run_dir: Path) -> list[str]:
-    return _scan_artifact_paths(run_dir)[1]
-
-
-def _artifact_paths(run_dir: Path) -> list[Path]:
-    paths, unsafe = _scan_artifact_paths(run_dir)
-    if unsafe:
-        details = ", ".join(unsafe[:8])
-        if len(unsafe) > 8:
-            details += ", ..."
-        raise WorkflowError(f"unsafe symlink artifact(s): {details[:512]}")
-    return paths
-
-
-def _error_source_fingerprint(run_dir: Path, session_id: str) -> str:
-    digest = hashlib.sha256()
-    unsafe = _unsafe_artifact_paths(run_dir)
-    if unsafe:
-        for relative in unsafe:
-            digest.update(relative.encode("utf-8"))
-            digest.update(b"\0unsafe-symlink\n")
-    else:
-        digest.update(session_id.encode("utf-8"))
-        digest.update(b"\0index-error\n")
-    return f"error-{digest.hexdigest()}"
-
-
-def _source_fingerprint(run_dir: Path) -> str:
-    digest = hashlib.sha256()
-    for path in _artifact_paths(run_dir):
-        info = path.stat()
-        relative = path.relative_to(run_dir).as_posix()
-        digest.update(relative.encode("utf-8"))
-        digest.update(b"\0")
-        digest.update(str(info.st_size).encode("ascii"))
-        digest.update(b"\0")
-        digest.update(str(info.st_mtime_ns).encode("ascii"))
-        digest.update(b"\0")
-        digest.update(str(info.st_ctime_ns).encode("ascii"))
-        digest.update(b"\0")
-        digest.update(str(info.st_dev).encode("ascii"))
-        digest.update(b"\0")
-        digest.update(str(info.st_ino).encode("ascii"))
-        digest.update(b"\0")
-        digest.update(str(stat.S_IMODE(info.st_mode)).encode("ascii"))
-        digest.update(b"\n")
-    return digest.hexdigest()
 
 
 def _parse_json_object(data: bytes, path: Path) -> dict[str, Any]:
@@ -766,21 +649,7 @@ def _sync_locked(
         )
         discovered_ids = {item[0] for item in discovered}
         for current_session_id, storage_class, run_dir in discovered:
-            try:
-                fingerprint = _source_fingerprint(run_dir)
-            except Exception as exc:  # preserve a bounded run-level authority error
-                fingerprint = _error_source_fingerprint(run_dir, current_session_id)
-                with connection:
-                    _record_index_error(
-                        connection,
-                        session_id=current_session_id,
-                        storage_class=storage_class,
-                        run_dir=run_dir,
-                        source_fingerprint=fingerprint,
-                        error=exc,
-                    )
-                errors.append({"session_id": current_session_id, "error": str(exc)[:4096]})
-                continue
+            fingerprint = _source_fingerprint(run_dir)
             current = connection.execute(
                 "SELECT source_fingerprint, source_dir, storage_class, index_state FROM runs WHERE session_id = ?",
                 (current_session_id,),
@@ -996,17 +865,6 @@ def verify_index(settings: Settings, *, full: bool = False) -> dict[str, Any]:
         integrity = [str(row[0]) for row in connection.execute("PRAGMA integrity_check")]
         foreign_keys = [dict(row) for row in connection.execute("PRAGMA foreign_key_check")]
         if full:
-            for session_id, _, run_dir in _discover_runs(
-                settings, include_archived=True, session_id=None
-            ):
-                for relative in _unsafe_artifact_paths(run_dir):
-                    mismatches.append(
-                        {
-                            "session_id": session_id,
-                            "path": relative,
-                            "reason": "unsafe_symlink",
-                        }
-                    )
             for row in connection.execute(
                 "SELECT r.source_dir, f.session_id, f.relative_path, f.sha256, f.size_bytes "
                 "FROM source_files f JOIN runs r ON r.session_id=f.session_id ORDER BY f.session_id,f.relative_path"
@@ -1040,36 +898,6 @@ def verify_index(settings: Settings, *, full: bool = False) -> dict[str, Any]:
     return report
 
 
-_QUERY_COLUMNS: dict[str, tuple[str, Sequence[str]]] = {
-    "runs": (
-        "SELECT session_id,source_dir,storage_class,ticket_id,pack_id,executor,model,durable_status,disposition,index_state,index_error,started_at,finished_at,final_receipt_sha256,evidence_complete,indexed_at,open_incident_count,pending_permission_count FROM run_overview",
-        ("session_id", "source_dir", "storage_class", "ticket_id", "pack_id", "executor", "model", "durable_status", "disposition", "index_state", "index_error", "started_at", "finished_at", "final_receipt_sha256", "evidence_complete", "indexed_at", "open_incident_count", "pending_permission_count"),
-    ),
-    "incidents": (
-        "SELECT session_id,relative_path,source_sequence,incident_id,recorded_at,category,severity,state,summary,record_sha256 FROM incident_events",
-        ("session_id", "relative_path", "source_sequence", "incident_id", "recorded_at", "category", "severity", "state", "summary", "record_sha256"),
-    ),
-    "permissions": (
-        "SELECT session_id,relative_path,source_sequence,event_id,recorded_at,operation,resource_class,state,source,remediation_class,record_sha256 FROM permission_events",
-        ("session_id", "relative_path", "source_sequence", "event_id", "recorded_at", "operation", "resource_class", "state", "source", "remediation_class", "record_sha256"),
-    ),
-    "performance": (
-        "SELECT executor,model,stage,sample_count,avg_elapsed_seconds,avg_first_output_latency_seconds,avg_input_tokens,avg_output_tokens,provider_billed_sample_count,avg_provider_billed_cost,provider_billed_currency,local_estimated_sample_count,avg_local_estimated_cost,local_estimated_currency FROM performance_summary",
-        ("executor", "model", "stage", "sample_count", "avg_elapsed_seconds", "avg_first_output_latency_seconds", "avg_input_tokens", "avg_output_tokens", "provider_billed_sample_count", "avg_provider_billed_cost", "provider_billed_currency", "local_estimated_sample_count", "avg_local_estimated_cost", "local_estimated_currency"),
-    ),
-    "workflows": (
-        "SELECT workflow_id,owner_run_id,pack_id,workflow_state,event_count,indexed_at FROM workflows",
-        ("workflow_id", "owner_run_id", "pack_id", "workflow_state", "event_count", "indexed_at"),
-    ),
-    "workflow-nodes": (
-        "SELECT workflow_id,node_id,kind,ticket_id,bound_run_id,state,attempt,executor,model,terminal_reason FROM workflow_nodes",
-        ("workflow_id", "node_id", "kind", "ticket_id", "bound_run_id", "state", "attempt", "executor", "model", "terminal_reason"),
-    ),
-    "errors": (
-        "SELECT error_id,session_id,source_path,detected_at,category,detail FROM index_errors",
-        ("error_id", "session_id", "source_path", "detected_at", "category", "detail"),
-    ),
-}
 
 
 def query_index_report(
@@ -1082,19 +910,7 @@ def query_index_report(
     if not status["exists"]:
         raise WorkflowError("SQLite index does not exist; run: agent-workflow index rebuild")
     rows = query_index(settings, kind, **filters)
-    report = {
-        "schema": "agent-workflow/index-query/v1",
-        "database": status["database"],
-        "authority": status["authority"],
-        "freshness": status["freshness"],
-        "current_run_count": status["current_run_count"],
-        "stale_run_count": status["stale_run_count"],
-        "error_count": status["error_count"],
-        "kind": kind,
-        "rows": rows,
-    }
-    validate_instance(report, report["schema"], artifact="SQLite index query")
-    return report
+    return _build_query_report(status, kind, rows)
 
 
 def query_index(
@@ -1109,44 +925,16 @@ def query_index(
     pack_id: str | None = None,
     limit: int = 100,
 ) -> list[dict[str, Any]]:
-    if kind not in _QUERY_COLUMNS:
-        raise WorkflowError(f"unsupported index query: {kind}")
-    if not 1 <= limit <= 10000:
-        raise WorkflowError("index query limit must be between 1 and 10000")
-    if session_id is not None:
-        validate_id(session_id, "session ID")
-    base, columns = _QUERY_COLUMNS[kind]
-    clauses: list[str] = []
-    parameters: list[Any] = []
-    supported = set(columns)
-    state_column = {
-        "runs": "durable_status",
-        "workflows": "workflow_state",
-        "workflow-nodes": "state",
-        "incidents": "state",
-        "permissions": "state",
-    }.get(kind)
-    filters = [
-        ("session_id", session_id),
-        (state_column, state),
-        ("category", category),
-        ("executor", executor),
-        ("model", model),
-        ("pack_id", pack_id),
-    ]
-    for column, value in filters:
-        if value is None or column is None:
-            continue
-        if column not in supported:
-            raise WorkflowError(f"filter {column!r} is not supported for index query {kind!r}")
-        clauses.append(f"{column} = ?")
-        parameters.append(value)
-    sql = f"SELECT * FROM ({base})"
-    if clauses:
-        sql += " WHERE " + " AND ".join(clauses)
-    order_column = "recorded_at" if "recorded_at" in supported else ("started_at" if "started_at" in supported else columns[0])
-    sql += f" ORDER BY {order_column} DESC LIMIT ?"
-    parameters.append(limit)
+    sql, parameters = _build_query(
+        kind,
+        session_id=session_id,
+        state=state,
+        category=category,
+        executor=executor,
+        model=model,
+        pack_id=pack_id,
+        limit=limit,
+    )
     connection = _connect(settings, readonly=True)
     try:
         _validated_database_header(connection)

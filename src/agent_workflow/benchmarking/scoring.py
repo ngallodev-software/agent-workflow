@@ -7,7 +7,7 @@ from typing import Any, Mapping
 from ..errors import WorkflowError
 from ..process import EnvironmentPolicy, run
 from ..util import atomic_write_json, sha256_file, utc_now
-from .common import format_argv, read_object
+from .common import child, format_argv, read_object
 from .contracts import BENCHMARK_MACHINE_SCORE_SCHEMA, validate_spec, validate_value
 from .events import append_event
 from .pairing import selected_arms

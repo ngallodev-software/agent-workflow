@@ -19,7 +19,7 @@
   <a href="docs/BACKLOG.md">Roadmap</a>
 </div>
 
-> **Status:** pre-public-release. The single-host execution, evidence, workflow, messaging, evaluation, trusted plugin-command host, optional MCP-read, and foreground supervision foundations are implemented. Bounded root-orchestrator → team-lead → worker orchestration is approved as an explicitly enabled feature. Its immutable contract/capability layer, append-only local journals, idempotent imports, and deterministic replay are implemented; receipts, tmux topology, team runtime, messaging, scheduling, and recovery remain independently gated by [`docs/BACKLOG.md`](docs/BACKLOG.md).
+> **Status:** pre-public-release. The single-host execution, evidence, workflow, messaging, evaluation, trusted plugin host, optional MCP-read, and foreground supervision foundations are implemented. Bounded root-orchestrator → team-lead → worker orchestration is approved as an explicitly enabled feature. Its immutable contracts, append-only journals, deterministic replay, and digest-sealed team/root receipts are implemented and awaiting independent review; tmux topology, team runtime, hierarchy messaging, scheduling, and recovery remain separately gated by [`docs/BACKLOG.md`](docs/BACKLOG.md).
 
 ## Why agent-workflow exists
 
@@ -47,7 +47,8 @@ The application favors **deterministic control code around probabilistic agents*
 | Searchable evidence | Rebuildable SQLite projection for cross-run, workflow, incident, permission, and performance queries |
 | Evaluation | Deterministic templates, provider-neutral usage evidence, cohort comparison, sealed-run assessment and ledgers |
 | Optional MCP feature | Bounded read-only local stdio adapter for command and run context; installed with the `mcp` extra |
-| Trusted plugin host | Explicit entry-point enablement, atomic top-level command registration, installed provenance, and `--no-plugins` recovery |
+| Trusted plugin host | Explicit entry-point enablement, atomic top-level command registration, digest-bound installed schema/asset resources, installed provenance, and `--no-plugins` recovery |
+| Hierarchy authority layer | Fixed-depth immutable contracts, capability/budget narrowing, append-only journals, deterministic replay, and digest-sealed team/root receipts; runtime topology remains gated |
 
 The application does **not** merge branches, approve permissions, expand filesystem/network authority, accept work automatically, or silently retry without preserved lineage.
 

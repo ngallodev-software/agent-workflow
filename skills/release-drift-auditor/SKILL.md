@@ -34,6 +34,8 @@ Compare the live implementation with:
 - chart-pack authority, trust-boundary, test, and release diagrams;
 - strict future tests and their referenced backlog IDs;
 - release manifest, dependency metadata, source/wheel contents, and generated artifacts.
+- active version authorities and current release examples across package metadata, CLI/doctor output, man pages, installers, release policy, prompt-pack minimum versions, and tests;
+- optional MCP claims and repository-only Jenkins claims across README/install/help/man/wheel/runtime-bundle surfaces.
 
 ## Drift classes
 
@@ -55,6 +57,7 @@ Classify every finding:
 - Search for stale ticket IDs and removed prompt-pack names across all tracked text.
 - Confirm every active pack is listed once in `docs/PROMPT_PACKS.md` and owns only backlog items declared in `BACKLOG.md`.
 - Confirm blocked packs cannot be mistaken for executable-ready work.
+- Confirm base installs do not require MCP or edit MCP client configuration, and confirm Jenkins/GitHub workflow assets cannot enter wheels or runtime bundles.
 - Confirm each new security statement names whether it is enforced, detected post-run, or guidance-only.
 - Reject broad cleanup that is unrelated to a concrete drift finding.
 - Record unresolved drift explicitly in the phase-gate report; do not rewrite history to make it disappear.

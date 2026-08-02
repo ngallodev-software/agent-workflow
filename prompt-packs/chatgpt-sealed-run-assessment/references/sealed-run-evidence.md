@@ -1,3 +1,5 @@
+> **Historical evidence snapshot (2026-07-26).** Gate and backlog statements below describe that run only. Use [`docs/BACKLOG.md`](../../../docs/BACKLOG.md) for current status; the deterministic foundation gate and HARD-004/HARD-005 were accepted later.
+
 # Sealed foundation-run evidence — 2026-07-26
 
 This report records the authoritative agent-workflow lifecycle evidence used for the 0.2.3 integration. Terminal output is not treated as proof. Every listed run has a valid completion collection, exit code 0, a sealed final receipt, and no live tmux pane.

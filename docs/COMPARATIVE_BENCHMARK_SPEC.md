@@ -1,8 +1,8 @@
 # Agent-Workflow Comparative Benchmark Prompt Pack Specification
 
-**Version:** 1.0 implemented development baseline  
-**Target source:** `agent-workflow` 0.7.6  
-**Status:** paired runner, frozen priority-picker fixture, deterministic scoring, blinded visual review, consolidation, reporting, and cleanup implemented; publication operating policy and hardened browser isolation remain gated  
+**Version:** 1.0 implemented development baseline
+**Target source:** `agent-workflow` 0.7.8
+**Status:** paired runner, frozen priority-picker fixture, deterministic scoring, blinded visual review, consolidation, reporting, and cleanup implemented; publication operating policy and hardened browser isolation remain gated
 **Primary objective:** measure whether the full `agent-workflow` execution discipline improves task quality, reliability, and auditability enough to justify its token, dollar, and elapsed-time overhead.
 
 ## 1. Executive design decisions

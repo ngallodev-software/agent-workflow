@@ -31,3 +31,7 @@ The gate reviewer must not merely summarize implementer reports or accept an uns
 For workflow phases, verify the stored snapshot, contiguous event journal, exact node set, approval receipt chains, input-binding digests, child final receipts, retry lineage, and aggregate workflow receipt. Mutating `status.json` must not create approval or change sealed evidence.
 
 For benchmark phases, inspect bounded raw events and `provider-evidence.json`; confirm delta/cumulative/terminal semantics, cached/reasoning subset handling, cost/currency/catalog rules, and incomplete-trial rejection. Validate the benchmark manifest and verify source, optional pack checksum, model, executor, and executor-version identity against each trial collection. Review per-case missingness/regressions, the evidence-ledger row, and archive plan; record unavailable paid/external cohorts rather than simulating them or inventing scores.
+
+## Hierarchy authority gates
+
+For HIER-001/HIER-002 review, independently verify fixed depth, identity uniqueness, capability and budget narrowing, read-only contract installation, contiguous append-only journals, imported-message idempotency, deterministic replay, declared evidence completeness, and digest-sealed team/root receipts. Attempt path traversal, symlink/hardlink substitution, writable evidence, later journal append, budget mismatch, missing approval/review/output evidence, and receipt tampering. Do not approve tmux topology or team runtime based only on authority-layer evidence.

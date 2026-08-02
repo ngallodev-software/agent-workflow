@@ -19,7 +19,7 @@ from .workflow_templates import AUTHORIZED_TEMPLATES
 
 def build_parser(plugin_registry: PluginRegistry | None = None) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="agent-workflow")
-    parser.add_argument("--version", action="version", version="%(prog)s 0.7.7")
+    parser.add_argument("--version", action="version", version="%(prog)s 0.7.8")
     parser.add_argument("--config", type=Path, help="override config.toml path")
     parser.add_argument(
         "--json",
