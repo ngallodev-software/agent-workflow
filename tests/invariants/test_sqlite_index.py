@@ -349,8 +349,7 @@ def test_symlinked_source_is_quarantined_without_following_target(tmp_path: Path
 @pytest.mark.parametrize(
     ("status_schema", "metrics_schema"),
     [
-        ("agent-workflow/session-status/v2", "agent-workflow/execution-metrics/v1"),
-        ("agent-workflow/session-status/retired-v2", "agent-workflow/execution-metrics/retired-v1"),
+            ("agent-workflow/session-status/v2", "agent-workflow/execution-metrics/retired-v1"),
     ],
 )
 def test_legacy_archive_is_quarantined_but_does_not_block_full_verification(
@@ -387,6 +386,85 @@ def test_legacy_archive_is_quarantined_but_does_not_block_full_verification(
     verification = verify_index(settings, full=True)
     assert verification["valid"] is True
     assert verification["historical_artifacts"][0]["outcome"] == "preserved_excluded"
+
+
+@pytest.mark.parametrize(
+    ("filename", "payload", "expected_reason"),
+    [
+        (
+            "command-collection.json",
+            {"schema": "agent-workflow/command-collection-set/v1"},
+            "retired_schema_id:agent-workflow/command-collection-set/v1",
+        ),
+        (
+            "lifecycle-events.jsonl",
+            {"schema": "agent-workflow/lifecycle-event/v1"},
+            "retired_schema_id:agent-workflow/lifecycle-event/v1",
+        ),
+    ],
+)
+def test_host_validation_error_binds_retired_candidate_path_without_schema_text(
+    tmp_path: Path,
+    filename: str,
+    payload: dict[str, str],
+    expected_reason: str,
+) -> None:
+    settings = _settings(tmp_path)
+    run = settings.state_root / "runs" / "host-shaped"
+    run.mkdir(parents=True)
+    _write(
+        run / "status.json",
+        {
+            "schema": "agent-workflow/session-status/v2",
+            "session_id": "host-shaped",
+            "status": "completed",
+            "created_at": "2025-01-01T00:00:00+00:00",
+            "workdir": "/tmp/legacy",
+            "prompt_path": str(run / "prompt.md"),
+            "log_path": str(run / "output.log"),
+        },
+    )
+    if filename.endswith(".jsonl"):
+        (run / filename).write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    else:
+        _write(run / filename, payload)
+
+    rebuilt = rebuild_index(settings)
+    assert rebuilt["quarantined_count"] == 1
+    error = query_index(settings, "errors", session_id="host-shaped")[0]["detail"]
+    assert str(run / filename) in error
+    assert error.count(expected_reason.split(":", 1)[1]) == 2
+    assert verify_index(settings, full=True)["valid"] is True
+
+
+def test_execution_metrics_requires_all_five_known_additive_fields(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    run = _seed_run(settings, "metrics-legacy")
+    metrics_path = run / "execution-metrics.json"
+    metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
+    for stage in metrics["stages"]:
+        for field in (
+            "cache_write_input_tokens",
+            "reasoning_output_tokens",
+            "provider_billed_cost",
+            "local_estimated_cost",
+            "price_catalog_id",
+        ):
+            stage.pop(field, None)
+    _write(metrics_path, metrics)
+    status_path = run / "status.json"
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    status["status"] = "completed"
+    _write(status_path, status)
+
+    rebuilt = rebuild_index(settings)
+    assert rebuilt["quarantined_count"] == 1
+    assert verify_index(settings, full=True)["valid"] is True
+
+    metrics["stages"][0]["price_catalog_id"] = "unexpectedly-present"
+    _write(metrics_path, metrics)
+    rebuild_index(settings)
+    assert verify_index(settings, full=True)["valid"] is False
 
 
 @pytest.mark.parametrize("storage_class", ["active", "archive"])
