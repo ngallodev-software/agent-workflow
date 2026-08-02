@@ -240,6 +240,7 @@ def _historical_artifact_class(
     }:
         return None
     receipt_path = run_dir / "final-receipt.json"
+    legacy_seal_verified = False
     if receipt_path.is_file():
         # A sealed historical record is compatible only when its immutable receipt
         # still verifies every listed artifact.  Receipt omissions and digest/size
@@ -251,8 +252,11 @@ def _historical_artifact_class(
             # receipt. It still verifies every receipt-listed artifact.
             try:
                 verify_legacy_seal_details(run_dir)
+                legacy_seal_verified = True
             except WorkflowError:
                 return None
+    if legacy_seal_verified and "final receipt omits required artifacts" in detail:
+        return "pre_collection_sealed_receipt"
     schema_drift = (
         "unknown contract schema:" in detail
         or "required property" in detail
