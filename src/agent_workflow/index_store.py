@@ -186,16 +186,18 @@ def _raw_json(path: Path) -> dict[str, Any] | None:
 def _historical_artifact_class(
     run_dir: Path, storage_class: str, error: Exception
 ) -> str | None:
-    """Classify only obsolete archive schema drift as preserved evidence.
+    """Classify only obsolete retired schema drift as preserved evidence.
 
     Historical artifacts may predate fields added to otherwise familiar
     schemas, or refer to schema IDs retired by the installed release.  That
-    compatibility exception is deliberately narrower than "any archive
-    error": active/current evidence, sealed evidence, dispositions, unsafe
-    paths, malformed JSON, and operational/indexing failures remain blocking.
+    compatibility exception is deliberately narrower than "any historical
+    path error": active/current evidence, sealed evidence, dispositions,
+    unsafe paths, malformed JSON, and operational/indexing failures remain
+    blocking.  A completed run may still be below the active ``runs`` root;
+    storage location is provenance, not proof that the evidence is current.
     """
     detail = str(error)
-    if storage_class != "archive" or "unsafe source artifact" in detail:
+    if storage_class not in {"active", "archive"} or "unsafe source artifact" in detail:
         return None
     status = _raw_json(run_dir / "final-status.json") or _raw_json(run_dir / "status.json")
     if not status or not str(status.get("schema", "")).startswith("agent-workflow/"):

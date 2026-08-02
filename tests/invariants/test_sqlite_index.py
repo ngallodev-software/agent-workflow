@@ -345,6 +345,7 @@ def test_symlinked_source_is_quarantined_without_following_target(tmp_path: Path
         assert "SECRET TARGET CONTENT" not in "\n".join(connection.iterdump())
 
 
+@pytest.mark.parametrize("storage_class", ["active", "archive"])
 @pytest.mark.parametrize(
     ("status_schema", "metrics_schema"),
     [
@@ -353,10 +354,11 @@ def test_symlinked_source_is_quarantined_without_following_target(tmp_path: Path
     ],
 )
 def test_legacy_archive_is_quarantined_but_does_not_block_full_verification(
-    tmp_path: Path, status_schema: str, metrics_schema: str
+    tmp_path: Path, storage_class: str, status_schema: str, metrics_schema: str
 ) -> None:
     settings = _settings(tmp_path)
-    run = settings.state_root / "archive" / "legacy-run"
+    root = settings.state_root / ("runs" if storage_class == "active" else "archive")
+    run = root / "legacy-run"
     run.mkdir(parents=True)
     _write(
         run / "status.json",
