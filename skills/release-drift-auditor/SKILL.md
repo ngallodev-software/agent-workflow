@@ -16,7 +16,7 @@ python3 scripts/audit-release-assets.py
 for pack in prompt-packs/*/pack.yaml; do
   agent-workflow pack validate "$(dirname "$pack")"
 done
-agent-workflow index verify --full
+agent-workflow index verify --full [--review SESSION]
 ```
 
 Treat a failing audit as a release blocker. Do not waive duplicate task IDs, unknown `backlog_id` values, cross-pack ownership, broken links, stale mirrors, invalid checksums, or missing active-pack documentation through prose.

@@ -82,7 +82,7 @@ agent-workflow index sync
 agent-workflow index query runs --state possibly_stalled
 agent-workflow index query incidents --category permission_wait
 agent-workflow index query workflows --pack PACK_ID
-agent-workflow index verify --full
+agent-workflow index verify --full [--review SESSION]
 ```
 
 A query result is a locator and summary. Reopen and verify the original run artifacts and receipts before interrupting, restarting, reviewing, accepting, merging, or changing policy. If index freshness or verification is not current, rebuild it; do not edit SQLite to repair source evidence.
