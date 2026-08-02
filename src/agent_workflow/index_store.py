@@ -186,26 +186,36 @@ def _raw_json(path: Path) -> dict[str, Any] | None:
 def _historical_artifact_class(
     run_dir: Path, storage_class: str, error: Exception
 ) -> str | None:
-    """Classify obsolete, non-authoritative runs without weakening fail-closed checks."""
+    """Classify only obsolete archive schema drift as preserved evidence.
+
+    Historical artifacts may predate fields added to otherwise familiar
+    schemas, or refer to schema IDs retired by the installed release.  That
+    compatibility exception is deliberately narrower than "any archive
+    error": active/current evidence, sealed evidence, dispositions, unsafe
+    paths, malformed JSON, and operational/indexing failures remain blocking.
+    """
     detail = str(error)
-    if "unsafe source artifact" in detail:
+    if storage_class != "archive" or "unsafe source artifact" in detail:
         return None
     status = _raw_json(run_dir / "final-status.json") or _raw_json(run_dir / "status.json")
-    launch = _raw_json(run_dir / "launch-contract.json")
-    if status and (
-        status.get("disposition") in {"reviewed", "accepted"}
-        or status.get("schema") == "agent-workflow/session-status/v2"
-    ):
+    if not status or not str(status.get("schema", "")).startswith("agent-workflow/"):
         return None
-    if launch and launch.get("schema") == "agent-workflow/launch-contract/v2":
+    if status.get("disposition") is not None:
+        return None
+    if status.get("status") in {
+        "prepared", "launched", "running", "interruption_requested"
+    }:
         return None
     if (run_dir / "final-receipt.json").is_file():
         return None
-    if storage_class == "archive" or (
-        status and str(status.get("schema", "")).startswith("agent-workflow/")
-    ):
-        return "historical_obsolete_schema"
-    return None
+    schema_drift = (
+        "unknown contract schema:" in detail
+        or "required property" in detail
+        or "invalid " in detail and "artifact" in detail
+    )
+    if not schema_drift:
+        return None
+    return "historical_obsolete_schema"
 
 
 def _parse_jsonl_records(
