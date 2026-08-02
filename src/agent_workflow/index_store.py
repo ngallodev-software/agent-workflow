@@ -172,6 +172,42 @@ def _read_json(path: Path) -> dict[str, Any] | None:
     return _parse_json_object(_read_stable_bytes(path), path)
 
 
+def _raw_json(path: Path) -> dict[str, Any] | None:
+    """Read only enough metadata to classify a failed historical projection."""
+    if not path.is_file() or path.is_symlink():
+        return None
+    try:
+        value = json.loads(_read_stable_bytes(path).decode("utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _historical_artifact_class(
+    run_dir: Path, storage_class: str, error: Exception
+) -> str | None:
+    """Classify obsolete, non-authoritative runs without weakening fail-closed checks."""
+    detail = str(error)
+    if "unsafe source artifact" in detail:
+        return None
+    status = _raw_json(run_dir / "final-status.json") or _raw_json(run_dir / "status.json")
+    launch = _raw_json(run_dir / "launch-contract.json")
+    if status and (
+        status.get("disposition") in {"reviewed", "accepted"}
+        or status.get("schema") == "agent-workflow/session-status/v2"
+    ):
+        return None
+    if launch and launch.get("schema") == "agent-workflow/launch-contract/v2":
+        return None
+    if (run_dir / "final-receipt.json").is_file():
+        return None
+    if storage_class == "archive" or (
+        status and str(status.get("schema", "")).startswith("agent-workflow/")
+    ):
+        return "historical_obsolete_schema"
+    return None
+
+
 def _parse_jsonl_records(
     data: bytes, path: Path
 ) -> list[tuple[int, dict[str, Any], str]]:
@@ -618,7 +654,7 @@ def _record_index_error(
     run_dir: Path,
     source_fingerprint: str,
     error: Exception,
-) -> None:
+) -> str:
     indexed_at = utc_now()
     _delete_run_projection(connection, session_id)
     detail = str(error)[:4096]
@@ -629,11 +665,22 @@ def _record_index_error(
         ) VALUES(?,?,?,?,?,?,?,?)""",
         (session_id, str(run_dir), storage_class, "error", detail, source_fingerprint, 0, indexed_at),
     )
-    category = "unsafe_source" if "unsafe source artifact" in detail else "run_index_failed"
+    historical_class = _historical_artifact_class(run_dir, storage_class, error)
+    category = (
+        "historical_artifact"
+        if historical_class is not None
+        else ("unsafe_source" if "unsafe source artifact" in detail else "run_index_failed")
+    )
+    if historical_class is not None:
+        detail = f"{historical_class}: preserved and excluded from current evidence; {detail}"
+        connection.execute(
+            "UPDATE runs SET index_error = ? WHERE session_id = ?", (detail, session_id)
+        )
     connection.execute(
         "INSERT INTO index_errors(session_id,source_path,detected_at,category,detail) VALUES(?,?,?,?,?)",
         (session_id, str(run_dir), indexed_at, category, detail),
     )
+    return category
 
 
 def _sync_locked(
@@ -647,6 +694,7 @@ def _sync_locked(
     indexed: list[dict[str, Any]] = []
     skipped: list[str] = []
     errors: list[dict[str, str]] = []
+    quarantined: list[dict[str, str]] = []
     pruned: list[str] = []
     try:
         _migrate(connection)
@@ -660,6 +708,10 @@ def _sync_locked(
                 "SELECT source_fingerprint, source_dir, storage_class, index_state FROM runs WHERE session_id = ?",
                 (current_session_id,),
             ).fetchone()
+            current_category = connection.execute(
+                "SELECT category FROM index_errors WHERE session_id = ? ORDER BY detected_at DESC LIMIT 1",
+                (current_session_id,),
+            ).fetchone()
             if (
                 not force
                 and current is not None
@@ -669,6 +721,20 @@ def _sync_locked(
                 and current["index_state"] == "current"
             ):
                 skipped.append(current_session_id)
+                continue
+            if (
+                not force
+                and current is not None
+                and current["source_fingerprint"] == fingerprint
+                and current["source_dir"] == str(run_dir)
+                and current["storage_class"] == storage_class
+                and current["index_state"] == "error"
+                and current_category is not None
+                and current_category["category"] == "historical_artifact"
+            ):
+                quarantined.append(
+                    {"session_id": current_session_id, "classification": "historical_artifact"}
+                )
                 continue
             try:
                 with connection:
@@ -683,7 +749,7 @@ def _sync_locked(
                     )
             except Exception as exc:  # preserve other healthy projections
                 with connection:
-                    _record_index_error(
+                    category = _record_index_error(
                         connection,
                         session_id=current_session_id,
                         storage_class=storage_class,
@@ -691,7 +757,12 @@ def _sync_locked(
                         source_fingerprint=fingerprint,
                         error=exc,
                     )
-                errors.append({"session_id": current_session_id, "error": str(exc)})
+                if category == "historical_artifact":
+                    quarantined.append(
+                        {"session_id": current_session_id, "classification": category}
+                    )
+                else:
+                    errors.append({"session_id": current_session_id, "error": str(exc)})
         if session_id is None:
             existing = {
                 str(row[0])
@@ -723,6 +794,8 @@ def _sync_locked(
         "pruned": pruned,
         "error_count": len(errors),
         "errors": errors,
+        "quarantined": quarantined,
+        "quarantined_count": len(quarantined),
     }
     validate_instance(report, report["schema"], artifact="SQLite index sync report")
     return report
@@ -803,7 +876,19 @@ def index_status(settings: Settings) -> dict[str, Any]:
                 "SELECT session_id,source_dir,storage_class,index_state,source_fingerprint FROM runs"
             )
         }
-        error_count = sum(1 for row in rows.values() if row["index_state"] == "error")
+        historical_ids = {
+            str(row[0])
+            for row in connection.execute(
+                "SELECT r.session_id FROM runs r JOIN index_errors e ON e.session_id=r.session_id "
+                "WHERE r.index_state='error' AND e.category='historical_artifact' "
+                "AND e.detected_at=(SELECT MAX(e2.detected_at) FROM index_errors e2 WHERE e2.session_id=r.session_id)"
+            )
+        }
+        error_count = sum(
+            1
+            for row in rows.values()
+            if row["index_state"] == "error" and row["session_id"] not in historical_ids
+        )
         metadata = {
             str(row[0]): str(row[1])
             for row in connection.execute("SELECT key,value FROM index_metadata")
@@ -816,6 +901,8 @@ def index_status(settings: Settings) -> dict[str, Any]:
     stale_run_count = 0
     for session_id, storage_class, run_dir in discovered:
         row = rows.get(session_id)
+        if session_id in historical_ids:
+            continue
         if row is None:
             stale_run_count += 1
             continue
@@ -855,6 +942,7 @@ def index_status(settings: Settings) -> dict[str, Any]:
         "stale_run_count": stale_run_count,
         "freshness": freshness,
         "error_count": error_count,
+        "historical_run_count": len(historical_ids),
         "last_sync_at": metadata.get("last_sync_at"),
         "last_sync_scope": metadata.get("last_sync_scope"),
         "size_bytes": size,
@@ -887,19 +975,31 @@ def verify_index(settings: Settings, *, full: bool = False) -> dict[str, Any]:
                         {"session_id": row["session_id"], "path": str(path), "reason": "content_changed"}
                     )
         for row in connection.execute(
-            "SELECT session_id,source_dir,index_error FROM runs WHERE index_state != 'current' ORDER BY session_id"
+            "SELECT r.session_id,r.source_dir,r.index_error,e.category "
+            "FROM runs r LEFT JOIN index_errors e ON e.session_id=r.session_id "
+            "AND e.detected_at=(SELECT MAX(e2.detected_at) FROM index_errors e2 WHERE e2.session_id=r.session_id) "
+            "WHERE r.index_state != 'current' ORDER BY r.session_id"
         ):
             mismatches.append(
                 {
                     "session_id": row["session_id"],
                     "path": row["source_dir"],
-                    "reason": "unsafe_symlink" if "unsafe source artifact" in (row["index_error"] or "") else "index_error",
+                    "reason": (
+                        "historical_artifact"
+                        if row["category"] == "historical_artifact"
+                        else ("unsafe_symlink" if "unsafe source artifact" in (row["index_error"] or "") else "index_error")
+                    ),
+                    "classification": "quarantined" if row["category"] == "historical_artifact" else "blocking",
+                    "outcome": "preserved_excluded" if row["category"] == "historical_artifact" else "verification_failed",
                     "detail": row["index_error"],
                 }
             )
     finally:
         connection.close()
-    valid = integrity == ["ok"] and not foreign_keys and version == INDEX_SCHEMA_VERSION and not mismatches
+    blocking_mismatches = [
+        item for item in mismatches if item.get("classification") != "quarantined"
+    ]
+    valid = integrity == ["ok"] and not foreign_keys and version == INDEX_SCHEMA_VERSION and not blocking_mismatches
     report = {
         "schema": "agent-workflow/index-verification/v1",
         "database": str(database_path(settings)),
@@ -910,6 +1010,9 @@ def verify_index(settings: Settings, *, full: bool = False) -> dict[str, Any]:
         "foreign_key_errors": foreign_keys,
         "source_verification": "full" if full else "not-requested",
         "source_mismatches": mismatches,
+        "historical_artifacts": [
+            item for item in mismatches if item.get("classification") == "quarantined"
+        ],
     }
     validate_instance(report, report["schema"], artifact="SQLite index verification")
     return report
