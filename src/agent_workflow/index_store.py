@@ -362,9 +362,6 @@ def _historical_artifact_class(
                 legacy_seal_verified = True
             except WorkflowError:
                 return None
-        # A sealed run is immutable current evidence.  Schema drift in it is
-        # an integrity incident, never historical compatibility.
-        return None
     if legacy_seal_verified and "final receipt omits required artifacts" in detail:
         return "pre_collection_sealed_receipt"
     schema_drift = (
