@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/index-integrity-incident/v1",
+  "type": "object",
+  "required": ["schema", "incident_id", "session_id", "artifact", "error", "error_sha256", "recorded_at"],
+  "properties": {
+    "schema": {"const": "agent-workflow/index-integrity-incident/v1"},
+    "incident_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "session_id": {"type": ["string", "null"]},
+    "artifact": {"type": ["string", "null"]},
+    "error": {"type": "string", "minLength": 1},
+    "error_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "recorded_at": {"type": "string", "minLength": 1}
+  },
+  "additionalProperties": false
+}

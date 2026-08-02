@@ -146,3 +146,17 @@ def test_installed_full_verify_classifies_legacy_retired_record_without_acceptin
     verification = installed_product.json("index", "verify", "--full", env=product_env)
     assert verification["valid"] is True
     assert verification["historical_artifacts"][0]["classification"] == "quarantined"
+
+
+def test_installed_review_verify_reports_scope_without_global_incident_masking(
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+) -> None:
+    rebuilt = installed_product.json("index", "rebuild", env=product_env)
+    assert rebuilt["error_count"] == 0
+    report = installed_product.json(
+        "index", "verify", "--full", "--review-run", "missing-review", env=product_env
+    )
+    assert report["valid"] is False
+    assert report["global_valid"] is True
+    assert report["review"]["direct_gate_evidence"] == "sealed-final-receipt"
