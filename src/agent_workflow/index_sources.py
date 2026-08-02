@@ -101,11 +101,22 @@ def artifact_paths(run_dir: Path) -> list[Path]:
     return paths
 
 
+def unsafe_artifact_paths(run_dir: Path) -> list[Path]:
+    """Return indexable symlinks without following their targets."""
+    return [
+        path
+        for path in sorted(run_dir.rglob("*"))
+        if path.is_symlink()
+        and path.name not in IGNORED_FILENAMES
+        and path.suffix.lower() in JSON_ARTIFACT_SUFFIXES | TEXT_METADATA_SUFFIXES
+    ]
+
+
 def source_fingerprint(run_dir: Path) -> str:
     """Fingerprint source identity and metadata without trusting path names alone."""
     digest = hashlib.sha256()
-    for path in artifact_paths(run_dir):
-        info = path.stat()
+    for path in sorted(artifact_paths(run_dir) + unsafe_artifact_paths(run_dir)):
+        info = path.lstat()
         relative = path.relative_to(run_dir).as_posix()
         digest.update(relative.encode("utf-8"))
         digest.update(b"\0")
@@ -120,5 +131,8 @@ def source_fingerprint(run_dir: Path) -> str:
         digest.update(str(info.st_ino).encode("ascii"))
         digest.update(b"\0")
         digest.update(str(stat.S_IMODE(info.st_mode)).encode("ascii"))
+        if stat.S_ISLNK(info.st_mode):
+            digest.update(b"\0symlink\0")
+            digest.update(os.readlink(path).encode("utf-8", errors="surrogateescape"))
         digest.update(b"\n")
     return digest.hexdigest()

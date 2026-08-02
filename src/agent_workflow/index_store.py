@@ -28,6 +28,7 @@ from .index_sources import (
     read_stable_bytes as _read_stable_bytes,
     sha256_file as _sha256_file,
     source_fingerprint as _source_fingerprint,
+    unsafe_artifact_paths as _unsafe_artifact_paths,
 )
 from .index_queries import build_query as _build_query, build_query_report as _build_query_report
 from .index_schema import (
@@ -372,6 +373,10 @@ def _index_run(
     source_fingerprint: str,
 ) -> dict[str, Any]:
     indexed_at = utc_now()
+    unsafe = _unsafe_artifact_paths(run_dir)
+    if unsafe:
+        relative = ", ".join(path.relative_to(run_dir).as_posix() for path in unsafe)
+        raise WorkflowError(f"unsafe source artifact symlink(s): {relative}")
     launch = _read_json(run_dir / "launch-contract.json") or {}
     provenance = _read_json(run_dir / "run-provenance.json") or {}
     status = _read_json(run_dir / "final-status.json") or _read_json(run_dir / "status.json") or {}
@@ -624,9 +629,10 @@ def _record_index_error(
         ) VALUES(?,?,?,?,?,?,?,?)""",
         (session_id, str(run_dir), storage_class, "error", detail, source_fingerprint, 0, indexed_at),
     )
+    category = "unsafe_source" if "unsafe source artifact" in detail else "run_index_failed"
     connection.execute(
         "INSERT INTO index_errors(session_id,source_path,detected_at,category,detail) VALUES(?,?,?,?,?)",
-        (session_id, str(run_dir), indexed_at, "run_index_failed", detail),
+        (session_id, str(run_dir), indexed_at, category, detail),
     )
 
 
@@ -880,6 +886,17 @@ def verify_index(settings: Settings, *, full: bool = False) -> dict[str, Any]:
                     mismatches.append(
                         {"session_id": row["session_id"], "path": str(path), "reason": "content_changed"}
                     )
+        for row in connection.execute(
+            "SELECT session_id,source_dir,index_error FROM runs WHERE index_state != 'current' ORDER BY session_id"
+        ):
+            mismatches.append(
+                {
+                    "session_id": row["session_id"],
+                    "path": row["source_dir"],
+                    "reason": "unsafe_symlink" if "unsafe source artifact" in (row["index_error"] or "") else "index_error",
+                    "detail": row["index_error"],
+                }
+            )
     finally:
         connection.close()
     valid = integrity == ["ok"] and not foreign_keys and version == INDEX_SCHEMA_VERSION and not mismatches

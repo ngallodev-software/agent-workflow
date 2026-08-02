@@ -320,6 +320,31 @@ def test_corrupt_run_is_quarantined_without_losing_other_runs(tmp_path: Path) ->
     assert query_index(settings, "errors", session_id="corrupt")
 
 
+def test_symlinked_source_is_quarantined_without_following_target(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    run = settings.state_root / "runs" / "unsafe"
+    run.mkdir(parents=True)
+    _status(run, "unsafe")
+    target = tmp_path / "external-incident.jsonl"
+    target.write_text("SECRET TARGET CONTENT\n", encoding="utf-8")
+    (run / "incident-events.jsonl").symlink_to(target)
+
+    report = rebuild_index(settings)
+    assert report["indexed_count"] == 0
+    assert report["error_count"] == 1
+    row = query_index(settings, "runs", session_id="unsafe")[0]
+    assert row["index_state"] == "error"
+    assert "incident-events.jsonl" in row["index_error"]
+    error = query_index(settings, "errors", session_id="unsafe")[0]
+    assert error["category"] == "unsafe_source"
+    assert index_status(settings)["freshness"] == "incomplete"
+    verification = verify_index(settings, full=True)
+    assert verification["valid"] is False
+    assert any(item["reason"] == "unsafe_symlink" for item in verification["source_mismatches"])
+    with sqlite3.connect(database_path(settings)) as connection:
+        assert "SECRET TARGET CONTENT" not in "\n".join(connection.iterdump())
+
+
 def test_workflow_projection_materializes_nodes_and_edges(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     run = _seed_run(settings, "workflow-owner")
