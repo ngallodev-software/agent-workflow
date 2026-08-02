@@ -28,7 +28,7 @@ sealed evidence or falsely classifying corruption as historical compatibility.
 Index verification/disposition source, focused fixtures/tests, this ticket,
 and directly related operator documentation only.
 
-## Evidence
+## Acceptance evidence
 
 - Focused corruption/disposition invariants and an installed review journey.
 - Host rebuild and full verification report exact unresolved incident counts.
