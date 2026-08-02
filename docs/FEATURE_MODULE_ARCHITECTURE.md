@@ -19,6 +19,7 @@ This document applies DEC-009 to the current repository.
 - Hierarchy is a built-in optional feature and must live in a dedicated package rather than expanding `sessions.py`, `scheduler.py`, or `cli.py` directly.
 - Tmux operator UI, host routing, external-terminal attachment, and collaborative specification authoring remain retained capabilities, but each receives a separate feature or plugin boundary.
 - The benchmark package is the current reference for a modular built-in subsystem.
+- The benchmark scoring-correction program remains inside the built-in `agent_workflow.benchmarking` package. Task-specific suites live under `benchmarks/specs/` and are mirrored into `src/agent_workflow/assets/benchmarks/` for installed export. Corrected contracts/evaluator interpretation should be separable from worktree, process, receipt, and review authority, but 0.7.8 does not expose plugin scorer hooks and this work must not create them. Any distribution extraction remains a later ARC-004 decision after real first-party plugin evidence.
 
 ## Dependency direction
 

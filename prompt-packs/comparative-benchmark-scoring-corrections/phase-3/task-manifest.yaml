@@ -1,0 +1,16 @@
+phase: "3"
+name: "version-migration-and-independent-gate"
+mandatory_order: ["BENCH-CORR-009", "BENCH-CORR-GATE"]
+tasks:
+  - id: "BENCH-CORR-009"
+    tier: B
+    session: "benchmark-corrections-version-migration"
+    prompt: "tickets/BENCH-CORR-009-version-migration.md"
+    backlog_id: "BENCH-CORR-009"
+    dependencies: ["BENCH-CORR-007", "BENCH-CORR-008"]
+  - id: "BENCH-CORR-GATE"
+    tier: C
+    session: "benchmark-corrections-independent-gate"
+    prompt: "tickets/BENCH-CORR-GATE-independent-review.md"
+    dependencies: ["BENCH-CORR-006", "BENCH-CORR-009", "BENCH-CORR-010"]
+    task_type: gate

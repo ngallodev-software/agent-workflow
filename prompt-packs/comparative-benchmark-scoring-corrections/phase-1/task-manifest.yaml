@@ -1,0 +1,27 @@
+phase: "1"
+name: "corrected-machine-and-browser-evaluation"
+tasks:
+  - id: "BENCH-CORR-002"
+    tier: C
+    session: "benchmark-corrections-weighted-scorer"
+    prompt: "tickets/BENCH-CORR-002-weighted-scorer.md"
+    backlog_id: "BENCH-CORR-002"
+    dependencies: ["BENCH-CORR-001"]
+  - id: "BENCH-CORR-003"
+    tier: C
+    session: "benchmark-corrections-functional-evals"
+    prompt: "tickets/BENCH-CORR-003-functional-validation-evals.md"
+    backlog_id: "BENCH-CORR-003"
+    dependencies: ["BENCH-CORR-002"]
+  - id: "BENCH-CORR-004"
+    tier: C
+    session: "benchmark-corrections-browser-evals"
+    prompt: "tickets/BENCH-CORR-004-browser-accessibility-evals.md"
+    backlog_id: "BENCH-CORR-004"
+    dependencies: ["BENCH-CORR-002"]
+  - id: "BENCH-CORR-005"
+    tier: B
+    session: "benchmark-corrections-public-scoring"
+    prompt: "tickets/BENCH-CORR-005-public-scoring.md"
+    backlog_id: "BENCH-CORR-005"
+    dependencies: ["BENCH-CORR-002"]

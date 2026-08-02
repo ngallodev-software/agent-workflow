@@ -1,0 +1,13 @@
+phase: "0"
+name: "benchmark-contract-and-efficiency-policy"
+tasks:
+  - id: "BENCH-CORR-001"
+    tier: C
+    session: "benchmark-corrections-contract"
+    prompt: "tickets/BENCH-CORR-001-scoring-contract.md"
+    backlog_id: "BENCH-CORR-001"
+  - id: "BENCH-CORR-010"
+    tier: B
+    session: "benchmark-corrections-efficiency"
+    prompt: "tickets/BENCH-CORR-010-efficiency-policy.md"
+    backlog_id: "BENCH-CORR-010"

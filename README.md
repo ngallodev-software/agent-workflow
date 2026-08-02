@@ -297,7 +297,7 @@ agent-workflow benchmark plan /tmp/priority-picker-v1/benchmark-spec.json \
 agent-workflow benchmark run priority-picker-smoke
 ```
 
-The automated pipeline stops for blinded human review, then preserves digest-verified evidence in the coordinator worktree under `benchmarks/runs/<run-id>`. See the [implementation](docs/COMPARATIVE_BENCHMARK_IMPLEMENTATION.md) and [operations guide](docs/COMPARATIVE_BENCHMARK_OPERATIONS.md).
+The automated pipeline stops for blinded human review, then preserves digest-verified evidence in the coordinator worktree under `benchmarks/runs/<run-id>`. See the [implementation](docs/COMPARATIVE_BENCHMARK_IMPLEMENTATION.md), [operations guide](docs/COMPARATIVE_BENCHMARK_OPERATIONS.md), and [exhaustive task/evaluation/scoring explanation](docs/COMPARATIVE_BENCHMARK_EXPLAINED.md). The current v1 scorer remains authoritative for historical reports; its documented scoring-contract discrepancies and the 0.7.8 correction sequence are tracked in the [correction backlog](docs/COMPARATIVE_BENCHMARK_CORRECTION_BACKLOG.md) and [owned prompt pack](prompt-packs/comparative-benchmark-scoring-corrections/).
 
 ## Development
 
@@ -325,6 +325,8 @@ The suite is acceptance-first: build a wheel, install it, and exercise public co
 | Comparative benchmark design | [`docs/COMPARATIVE_BENCHMARK_SPEC.md`](docs/COMPARATIVE_BENCHMARK_SPEC.md) |
 | Comparative benchmark implementation | [`docs/COMPARATIVE_BENCHMARK_IMPLEMENTATION.md`](docs/COMPARATIVE_BENCHMARK_IMPLEMENTATION.md) |
 | Comparative benchmark operations | [`docs/COMPARATIVE_BENCHMARK_OPERATIONS.md`](docs/COMPARATIVE_BENCHMARK_OPERATIONS.md) |
+| Comparative benchmark task/evals/scoring | [`docs/COMPARATIVE_BENCHMARK_EXPLAINED.md`](docs/COMPARATIVE_BENCHMARK_EXPLAINED.md) |
+| Comparative benchmark correction backlog | [`docs/COMPARATIVE_BENCHMARK_CORRECTION_BACKLOG.md`](docs/COMPARATIVE_BENCHMARK_CORRECTION_BACKLOG.md) |
 | Comparative benchmark initial verification | [`docs/COMPARATIVE_BENCHMARK_IMPLEMENTATION_VERIFICATION_20260801.md`](docs/COMPARATIVE_BENCHMARK_IMPLEMENTATION_VERIFICATION_20260801.md) |
 | Comparative benchmark operating-policy verification | [`docs/COMPARATIVE_BENCHMARK_OPERATING_POLICY_VERIFICATION_20260801.md`](docs/COMPARATIVE_BENCHMARK_OPERATING_POLICY_VERIFICATION_20260801.md) |
 | Prompt packs | [`docs/PROMPT_PACKS.md`](docs/PROMPT_PACKS.md) |

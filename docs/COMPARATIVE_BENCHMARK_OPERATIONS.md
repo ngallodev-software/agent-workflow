@@ -1,5 +1,10 @@
 # Comparative benchmark operations
 
+
+## Scoring interpretation
+
+The commands in this guide operate the currently shipped v1 suite. Existing v1 reports must be interpreted according to the shipped evaluator, including equal-share check weighting within dimensions. For the exact task, checks, points, human rubric, guardrails, and known discrepancies, read [COMPARATIVE_BENCHMARK_EXPLAINED.md](COMPARATIVE_BENCHMARK_EXPLAINED.md). The corrected major-version work is tracked in [COMPARATIVE_BENCHMARK_CORRECTION_BACKLOG.md](COMPARATIVE_BENCHMARK_CORRECTION_BACKLOG.md). Do not compare v1 and corrected-version cohorts as though their scores have identical meaning.
+
 This guide runs `priority-picker-v1` with subscription-backed provider CLIs by default. API-key profiles are optional and must be selected explicitly.
 
 ## Export and inspect the suite

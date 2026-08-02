@@ -66,6 +66,124 @@ Suppress all configured plugin imports and expose the core-only command parser f
 .TP
 .B --version
 Print the release version.
+.SH COMPARATIVE BENCHMARK
+The benchmark subsystem runs a paired experiment that compares the same software task under two prompt treatments. Both arms use the same frozen source revision, fixture, canonical task, executor/model configuration, and benchmark-neutral safety envelope. They run in separate Git worktrees and their evidence is consolidated without writing to the original checkout.
+.SS 0.7.8 ownership and plugin boundary
+The comparative benchmark is a built-in feature. CLI grammar is owned by src/agent_workflow/cli_parser.py, dispatch by src/agent_workflow/cli_handlers/benchmark.py, and behavior by src/agent_workflow/benchmarking. The repository suite is authored under benchmarks/specs/priority-picker-v1 and mirrored under src/agent_workflow/assets/benchmarks/priority-picker-v1 for installed export. Versioned evidence schemas remain under schemas.
+.PP
+The trusted plugin API registers explicitly enabled top-level commands and digest-bound package schema/asset resources. It does not expose benchmark scorer or evaluator hooks. Scoring corrections must remain in the built-in feature, must not create a second plugin registry, and must defer any distribution extraction to the separately gated ARC-004 program.
+.SS Experimental arms
+.TP
+.B control_raw
+The agent uses its normal coding approach. No agent-workflow planning format, traceability protocol, drift review, phase-gate procedure, completion template, or evidence narrative is required beyond the canonical phase deliverable.
+.TP
+.B workflow_full
+The same task is wrapped with requirements traceability, plan-before-edit discipline, writable-scope and non-target checks, acceptance-first verification, contradiction/drift review, and concise completion evidence. The arm must not claim checks it did not run.
+.PP
+The paired experiment asks whether the workflow treatment improves correctness, completeness, robustness, accessibility, and visual quality, and separately records the time, token, and cost effect of that treatment.
+.SS Reference task: Priority Picker
+The reference benchmark asks each arm to implement a dependency-free Python and browser application named Priority Picker. It reads six supplied backlog items, validates their schema, calculates a frozen score, ranks them deterministically, and presents them as a polished responsive dashboard.
+.PP
+The frozen score is:
+.PP
+.nf
+score = round(
+    (2*impact + 1.5*urgency + confidence + 0.5*risk)
+    / max(effort, 1),
+    4
+)
+.fi
+.PP
+Default ordering is score descending, urgency descending, impact descending, then ID ascending. Duplicate IDs and malformed records must be rejected. Empty input is valid. Ranking 1,000 valid records must complete within two seconds on the sealed benchmark host.
+.PP
+The required logic surface provides calculate_priority, validate_items, rank_items, filter_items, sort_items, export_ordering, and load_backlog. The browser UI provides summary counts, search, status and risk filters, sorting, ranked items, item detail, JSON export, empty and invalid states, keyboard operation, and responsive desktop, tablet, and mobile layouts. Only the Python standard library and browser-native HTML, CSS, and JavaScript are allowed. Dependencies, frameworks, build systems, persistence, authentication, analytics, and unrelated network services are non-targets.
+.SS Benchmark phases
+.TP
+.B Analyze and plan
+Inspect the starter repository and public tests. Write a benchmark plan containing requirements, intended changes, verification commands, visual/accessibility checks, risks, and non-targets. Do not implement in this phase.
+.TP
+.B Implement
+Build the complete application within the allowed writable scope, preserve the supplied fixture, remain dependency-free, and add focused tests and documentation.
+.TP
+.B Verify and repair
+Run public and relevant standard-library checks, exercise browser behavior where tooling permits, repair defects, and leave the worktree in its strongest final state. Requirements and tests may not be weakened to obtain a pass.
+.SS Machine score
+The nominal machine score is 100 points:
+.TP
+.B 45 points: hidden functional behavior
+The current evaluator runs nine checks: one formula example, ID tie-break, score attachment, case-insensitive title search, status filtering, risk filtering, title sort, ranked export, and fixture loading. The implemented equal-share calculation makes each check worth 5 points.
+.TP
+.B 15 points: public regression
+The visible public test suite is executed as one all-or-nothing check. All tests passing earns 15 points; any failure earns zero for this dimension.
+.TP
+.B 10 points: robustness
+Five equal checks cover empty input, duplicate IDs, boolean numeric rejection, malformed root rejection, and 1,000-item execution under two seconds. Each is worth 2 points.
+.TP
+.B 10 points: accessibility and deterministic UI
+Five two-point groups cover runtime/application load, labels/document structure, keyboard detail behavior, no overflow at all three viewports, and console/export-control checks. A group receives zero when any required member fails.
+.TP
+.B 10 points: scope and completeness
+Five two-point checks require the expected source/UI files, a substantive benchmark plan, scoring/operation documentation, preservation of the six-item fixture, and no external dependency surface.
+.TP
+.B 10 points: engineering quality
+Five two-point checks cover compilation, public-test success, absence of TODO/NotImplemented stubs, formula documentation, and plan coverage of verification and non-targets.
+.PP
+The current generic scoring function awards dimension maximum multiplied by passed-check count divided by total-check count. Existing results must therefore be interpreted according to evaluator code, not an assumed requirement-level weighting.
+.SS Browser evidence
+The deterministic browser capture uses Chromium at 1440x1000, 834x1112, and 390x844. It records screenshots, rendered DOM, runtime identity, overflow, persistent labels, one main landmark, keyboard focus movement, Enter-driven item detail, console/page errors, and export-control presence.
+.PP
+These checks have limits. The current focus check proves DOM focus movement, not a visibly rendered focus indicator. Export-control presence does not prove a correct download. Browser-side search, filter, sort, empty/invalid states, and broad accessibility semantics are not yet comprehensively automated.
+.SS Human visual score
+Reviewers receive blinded left/right evidence and score six dimensions:
+.TP
+.B 20 points
+Visual hierarchy and prioritization.
+.TP
+.B 20 points
+Interaction clarity and affordances.
+.TP
+.B 15 points
+Readability and information density.
+.TP
+.B 15 points
+Consistency and design-system coherence.
+.TP
+.B 15 points
+Responsive behavior.
+.TP
+.B 15 points
+Polish and absence of visible defects.
+.PP
+Each dimension is rated from 1 through 5. Earned points are weight multiplied by (rating minus 1) divided by 4. All ratings of 3 produce 50; all ratings of 4 produce 75; all ratings of 5 produce 100. Development, internal, and publication claims require at least 1, 2, and 3 reviewers respectively. Multiple scores are averaged per arm.
+.PP
+Reviewer preference and confidence are descriptive. A blocking defect assigned to an arm prevents that arm from receiving a composite score.
+.SS Eligibility guardrails
+Quality points are accepted only when required experimental guardrails pass. The benchmark checks paired task identity, declared treatment difference, start skew, writable scope, assistance cohort, visual capture, provider-usage completeness, and harness integrity. Sandbox isolation is additionally relevant to publication eligibility.
+.PP
+A required guardrail failure or scorer harness failure produces an invalid trial with a null machine score. Invalid evidence is not converted into a merely lower score.
+.SS Composite and passing status
+The composite is:
+.PP
+.nf
+composite = 0.70 * machine_score
+          + 0.30 * human_visual_score
+.fi
+.PP
+An arm is marked passing only when machine score is at least 70 and human visual score is at least 60. There is no separate minimum composite threshold. A composite is withheld when machine eligibility is invalid, human review is incomplete, a blocking defect exists, or a scorer fails as infrastructure.
+.SS Cohort winner policy
+One development pair is descriptive only. Internal and publication profiles use 10 and 20 paired repetitions. For every complete pair, the benchmark calculates workflow_full minus control_raw and applies a deterministic paired-bootstrap 95-percent confidence interval.
+.PP
+workflow_full wins only when every required pair is eligible and human-complete, the lower composite-delta confidence bound is at least 5 points, and neither the machine nor human confidence interval demonstrates a regression worse than 3 points. The rule is mirrored for control_raw. Otherwise the report declares no winner or descriptive-only evidence.
+.SS Timing, token, and cost evidence
+The benchmark records phase wall time, active process time, provider elapsed time, first-output latency, queue wait, visual-capture time, verification time, pair wall/critical path, tokens, retry counts, provider-billed cost when attributable, API-equivalent estimates, optional subscription allocation, and local estimates.
+.PP
+Subscription-backed CLI sessions are the default real-executor authentication path. API-key adapters are optional and explicit. Missing attributable subscription billing is reported as unavailable, not zero. Efficiency is currently descriptive and does not change the quality score or winner threshold.
+.SS Known scoring-contract drift
+The frozen requirement matrix and implemented evaluator do not fully agree. The named hidden allocations in the matrix total 43 while the dimension declares 45. The matrix also assigns 14 named accessibility points while the accessibility dimension declares 10. The implementation instead equal-weights checks within each dimension. Public tests are all-or-nothing and are also counted as a two-point engineering signal. Validation and browser interaction coverage are narrower than the matrix wording suggests. The 0.7.8 benchmark specification declares version 1.1.0 while the matrix says it is frozen for 1.0.0; corrected runs must seal separate benchmark, scoring-contract, evaluator, fixture, policy, runtime, and report identities.
+.PP
+Do not change the meaning of an existing benchmark version in place. Corrective work must preserve historical v1 scoring, freeze an exact machine-readable per-check contract, use a new major benchmark version for changed semantics, add golden and mutation calibration, reject mixed-version comparisons by default, and generate or validate documentation and packaged assets from the same authoritative contract.
+.PP
+See docs/COMPARATIVE_BENCHMARK_EXPLAINED.md for the complete requirement, evaluation, scoring, and correction analysis, and docs/COMPARATIVE_BENCHMARK_CORRECTION_BACKLOG.md for the 0.7.8-specific correction sequence.
 .SH EVIDENCE
 Run evidence is normally stored below ~/.local/state/agent-workflow/runs/SESSION. final-receipt.json seals required and optional artifacts. Review dispositions are separate read-only receipts. Structured provider evidence is bounded and sealed before trial extraction. The host-local SQLite index stores normalized searchable fields and source provenance but excludes raw prompt, terminal, message, and log bodies.
 .SH PLUGINS
@@ -82,4 +200,4 @@ Default user configuration.
 .I ~/.local/state/agent-workflow/
 Default durable state root. The rebuildable database is normally under the index subdirectory.
 .SH SEE ALSO
-agent-workflow-index(1), agent-workflow-workflow(1), agent-workflow-mcp(1), docs/COMMAND_REFERENCE.md, docs/PLUGIN_API.md, docs/ARCHITECTURE.md
+agent-workflow-index(1), agent-workflow-workflow(1), agent-workflow-mcp(1), docs/COMMAND_REFERENCE.md, docs/COMPARATIVE_BENCHMARK_EXPLAINED.md, docs/COMPARATIVE_BENCHMARK_CORRECTION_BACKLOG.md, docs/PLUGIN_API.md, docs/ARCHITECTURE.md

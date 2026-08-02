@@ -1,0 +1,25 @@
+schema: agent-workflow/pack/v1
+pack_id: "comparative-benchmark-scoring-corrections"
+backlog_items:
+  - "BENCH-CORR-001"
+  - "BENCH-CORR-002"
+  - "BENCH-CORR-003"
+  - "BENCH-CORR-004"
+  - "BENCH-CORR-005"
+  - "BENCH-CORR-006"
+  - "BENCH-CORR-007"
+  - "BENCH-CORR-008"
+  - "BENCH-CORR-009"
+  - "BENCH-CORR-010"
+workflow:
+  name: agent-workflow
+  minimum_version: "0.7.8"
+  terminal_backend: tmux
+  requires:
+    - isolated_worktree
+    - foregroundable_session
+    - persistent_log
+    - source_baseline
+    - completion_report
+    - independent_phase_gate
+    - release_drift_audit

@@ -1,5 +1,12 @@
 # Agent-Workflow Comparative Benchmark Prompt Pack Specification
 
+
+## 0.7.8 interpretation note
+
+The executable `priority-picker-v1` suite is a built-in feature owned by `src/agent_workflow/benchmarking/`, with source assets under `benchmarks/specs/priority-picker-v1/` and an installed/exported mirror under `src/agent_workflow/assets/benchmarks/priority-picker-v1/`. The current evaluator code defines historical v1 score meaning. The frozen matrix and implementation contain known requirement-level weighting, coverage, and version-label discrepancies; see [Comparative benchmark: task, evaluations, scoring, and interpretation](COMPARATIVE_BENCHMARK_EXPLAINED.md). Corrective work is owned by [the benchmark correction backlog](COMPARATIVE_BENCHMARK_CORRECTION_BACKLOG.md) and its prompt pack. It must create a new major benchmark version rather than changing v1 semantics in place.
+
+Under DEC-009, benchmarking remains a built-in feature. The trusted plugin API does not expose scorer/evaluator hooks, and the correction program must not create an ad hoc plugin mechanism or perform feature extraction.
+
 **Version:** 1.0 implemented development baseline
 **Target source:** `agent-workflow` 0.7.8
 **Status:** paired runner, frozen priority-picker fixture, deterministic scoring, blinded visual review, consolidation, reporting, and cleanup implemented; publication operating policy and hardened browser isolation remain gated
