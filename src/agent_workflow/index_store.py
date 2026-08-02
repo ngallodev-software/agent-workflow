@@ -9,6 +9,7 @@ query surface from the JSON/JSONL and sealed-receipt evidence.
 from __future__ import annotations
 
 import contextlib
+import copy
 import fcntl
 import hashlib
 import json
@@ -20,7 +21,7 @@ from pathlib import Path
 from typing import Any, Iterable, Iterator
 
 from .config import Settings, enforce_trust
-from .contracts import validate_instance
+from .contracts import load_schema, validate_instance
 from .errors import WorkflowError
 from .index_sources import (
     artifact_paths as _artifact_paths,
@@ -43,6 +44,28 @@ from .state import runs_root
 from .util import utc_now, validate_id
 
 MAX_EVENT_SUMMARY = 2048
+
+# Compatibility is intentionally data-driven and finite. These are the only
+# historical schemas/field drift that may be preserved outside current
+# evidence; arbitrary retired-looking IDs are not compatibility evidence.
+RETIRED_HISTORICAL_SCHEMA_IDS = frozenset(
+    {
+        "agent-workflow/command-collection-set/v1",
+        "agent-workflow/lifecycle-event/v1",
+    }
+)
+LEGACY_EXECUTION_METRICS_SCHEMA_IDS = frozenset(
+    {"agent-workflow/execution-metrics/retired-v1"}
+)
+LEGACY_EXECUTION_METRICS_FIELDS = frozenset(
+    {
+        "cache_write_input_tokens",
+        "reasoning_output_tokens",
+        "provider_billed_cost",
+        "local_estimated_cost",
+        "price_catalog_id",
+    }
+)
 
 
 
@@ -162,7 +185,10 @@ def _parse_json_object(data: bytes, path: Path) -> dict[str, Any]:
         raise WorkflowError(f"indexed JSON artifact must be an object: {path}")
     schema = value.get("schema")
     if isinstance(schema, str) and schema.startswith("agent-workflow/"):
-        validate_instance(value, schema, artifact=str(path))
+        try:
+            validate_instance(value, schema, artifact=str(path))
+        except WorkflowError as exc:
+            raise WorkflowError(f"invalid {path}: {exc}") from exc
     return value
 
 
@@ -208,8 +234,15 @@ def _historical_artifact_class(
         "prepared", "launched", "running", "interruption_requested"
     }:
         return None
-    if (run_dir / "final-receipt.json").is_file():
-        return None
+    receipt_path = run_dir / "final-receipt.json"
+    if receipt_path.is_file():
+        # A sealed historical record is compatible only when its immutable receipt
+        # still verifies every listed artifact.  Receipt omissions and digest/size
+        # mismatches therefore remain blocking index errors.
+        try:
+            verify_seal_details(run_dir)
+        except WorkflowError:
+            return None
     schema_drift = (
         "unknown contract schema:" in detail
         or "required property" in detail
@@ -217,7 +250,60 @@ def _historical_artifact_class(
     )
     if not schema_drift:
         return None
-    return "historical_obsolete_schema"
+    # Validation errors identify the artifact but may omit its schema ID.
+    # Never scan the run and never infer a candidate from exception text that
+    # merely happens to contain a schema name.
+    candidate = next(
+        (path for path in _artifact_paths(run_dir) if str(path) in detail), None
+    )
+    if candidate is None:
+        return None
+    try:
+        raw = _read_stable_bytes(candidate, shared_lock=candidate.suffix == ".jsonl")
+        values = (
+            [json.loads(line) for line in raw.decode("utf-8").splitlines() if line.strip()]
+            if candidate.suffix == ".jsonl"
+            else [json.loads(raw.decode("utf-8"))]
+        )
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not all(isinstance(value, dict) for value in values):
+        return None
+
+    for value in values:
+        schema_id = value.get("schema")
+        if schema_id in RETIRED_HISTORICAL_SCHEMA_IDS | LEGACY_EXECUTION_METRICS_SCHEMA_IDS:
+            return f"retired_schema_id:{schema_id}"
+        if schema_id != "agent-workflow/execution-metrics/v1":
+            continue
+        stages = value.get("stages")
+        if not isinstance(stages, list) or not stages or not all(
+            isinstance(stage, dict) for stage in stages
+        ):
+            return None
+        compatibility_schema = copy.deepcopy(load_schema(schema_id))
+        required = compatibility_schema["$defs"]["stage"]["required"]
+        compatibility_schema["$defs"]["stage"]["required"] = [
+            field for field in required if field not in LEGACY_EXECUTION_METRICS_FIELDS
+        ]
+        try:
+            import jsonschema
+        except ImportError:
+            return None
+        try:
+            jsonschema.Draft202012Validator(compatibility_schema).validate(value)
+        except jsonschema.exceptions.ValidationError:
+            return None
+        missing_by_stage = [
+            {field for field in LEGACY_EXECUTION_METRICS_FIELDS if field not in stage}
+            for stage in stages
+        ]
+        if all(missing == LEGACY_EXECUTION_METRICS_FIELDS for missing in missing_by_stage):
+            return "execution_metrics_legacy_fields:" + ",".join(
+                sorted(LEGACY_EXECUTION_METRICS_FIELDS)
+            )
+        return None
+    return None
 
 
 def _parse_jsonl_records(
@@ -243,7 +329,10 @@ def _parse_jsonl_records(
             )
         schema = value.get("schema")
         if isinstance(schema, str) and schema.startswith("agent-workflow/"):
-            validate_instance(value, schema, artifact=f"{path}:{source_sequence}")
+            try:
+                validate_instance(value, schema, artifact=f"{path}:{source_sequence}")
+            except WorkflowError as exc:
+                raise WorkflowError(f"invalid {path}:{source_sequence}: {exc}") from exc
         records.append((source_sequence, value, _sha256_bytes(_canonical_json(value))))
     return records
 
