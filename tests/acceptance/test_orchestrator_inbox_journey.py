@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -46,6 +47,7 @@ def test_installed_cli_registers_verified_children_and_deduplicates_inbox(
     )
     assert [event["sequence"] for event in events] == [1, 2]
     assert [event["kind"] for event in events] == ["agent_idle", "agent_idle"]
+    assert all(event["state"] is None for event in events)
     assert all("summary" not in event for event in events)
 
     repeated = installed_product.json(
@@ -99,3 +101,44 @@ def test_installed_orchestrator_watch_replays_once_and_resumes_from_cursor(
     )
     assert second["advanced"] == 0
     assert len(installed_product.json("orchestrator", "inbox", "list", "watcher", env=product_env)) == 1
+
+
+def test_installed_orchestrator_accepts_explicit_keep_alive_child(
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+    fake_agent_path: Path,
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "keep-alive-child"
+    git_repo(repo)
+    prompt = tmp_path / "keep-alive.md"
+    prompt.write_text("keep alive fixture\n", encoding="utf-8")
+    child_env = dict(product_env)
+    child_env.update({"FAKE_AGENT_MODE": "slow", "FAKE_AGENT_DELAY": "4.0"})
+    installed_product.json(
+        "launch", "keep-alive-child", repo, prompt, "--interactive", "--", fake_agent_path,
+        env=child_env,
+    )
+    handoff = repo / ".agent-workflow-handoff" / "keep-alive-child"
+    handoff.mkdir(parents=True, exist_ok=True)
+    head = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True, capture_output=True, check=True).stdout.strip()
+    (handoff / "completion.json").write_text(json.dumps({
+        "schema": "agent-workflow/completion/v1", "session_id": "keep-alive-child", "ticket_id": None,
+        "pack_id": None, "result": "completed", "base_revision": head, "head_revision": head,
+        "changed_files": [], "criteria": [{"id": "fixture", "result": "pass", "evidence": ["keep-alive fixture"]}],
+        "commands": [{"argv": ["fake-agent", "slow"], "cwd": str(repo), "exit_code": 0, "receipt": "fixture completion"}],
+        "unresolved": [], "usage": None,
+    }), encoding="utf-8")
+    installed_product.json(
+        "agent", "task-complete", "keep-alive-child", "--actor", "fixture-child",
+        "--summary", "keep-alive complete", "--keep-alive", env=child_env,
+    )
+    installed_product.json("orchestrator", "registry", "create", "keep-alive-root", env=product_env)
+    installed_product.json(
+        "orchestrator", "registry", "register", "keep-alive-root", "keep-alive-child", env=product_env,
+    )
+    imported = installed_product.json(
+        "orchestrator", "inbox", "import", "keep-alive-root", env=product_env,
+    )
+    assert imported["count"] == 1
+    assert imported["imported"][0]["state"] == "idle_reusable"

@@ -161,6 +161,31 @@ def test_inbox_rejects_unverified_source_claim_and_symlink(tmp_path: Path, monke
         import_registered(settings, "main-orchestrator")
 
 
+def test_terminal_import_rejects_missing_seal_and_stale_assignment_evidence(tmp_path: Path, monkeypatch) -> None:
+    settings = replace(defaults(tmp_path / "config.toml"), state_root=tmp_path / "state")
+    _make_child(tmp_path, settings, "terminal-child", "terminal complete", monkeypatch)
+    create_registry(settings, "terminal-root")
+    register_child(settings, "terminal-root", "terminal-child")
+    run = settings.state_root / "runs" / "terminal-child"
+    context = json.loads((run / "agent-context.json").read_text(encoding="utf-8"))
+    context["state"] = "closed"
+    atomic_write_json(run / "agent-context.json", context)
+    events = json.loads((run / "events.jsonl").read_text(encoding="utf-8").splitlines()[0])
+    events["new"] = "closed"
+    (run / "events.jsonl").write_text(json.dumps(events, sort_keys=True) + "\n", encoding="utf-8")
+    with pytest.raises(WorkflowError, match="sealed receipt"):
+        import_registered(settings, "terminal-root")
+
+    _make_child(tmp_path, settings, "stale-child", "stale complete", monkeypatch)
+    register_child(settings, "terminal-root", "stale-child")
+    stale_run = settings.state_root / "runs" / "stale-child"
+    stale_events = json.loads((stale_run / "events.jsonl").read_text(encoding="utf-8").splitlines()[0])
+    stale_events["new"] = "busy"
+    (stale_run / "events.jsonl").write_text(json.dumps(stale_events, sort_keys=True) + "\n", encoding="utf-8")
+    with pytest.raises(WorkflowError, match="terminal or idle_reusable"):
+        import_registered(settings, "terminal-root", session_id="stale-child")
+
+
 def test_replay_uses_bounded_round_robin_across_small_batches(tmp_path: Path, monkeypatch) -> None:
     settings = replace(defaults(tmp_path / "config.toml"), state_root=tmp_path / "state")
     for session_id in ("child-one", "child-two", "child-three"):
