@@ -234,8 +234,15 @@ def _historical_artifact_class(
         "prepared", "launched", "running", "interruption_requested"
     }:
         return None
-    if (run_dir / "final-receipt.json").is_file():
-        return None
+    receipt_path = run_dir / "final-receipt.json"
+    if receipt_path.is_file():
+        # A sealed historical record is compatible only when its immutable receipt
+        # still verifies every listed artifact.  Receipt omissions and digest/size
+        # mismatches therefore remain blocking index errors.
+        try:
+            verify_seal_details(run_dir)
+        except WorkflowError:
+            return None
     schema_drift = (
         "unknown contract schema:" in detail
         or "required property" in detail
