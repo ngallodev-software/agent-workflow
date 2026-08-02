@@ -586,7 +586,7 @@ def verify_seal_details(
 
 
 def verify_legacy_seal_details(run_dir: Path) -> tuple[dict[str, Any], str]:
-    """Verify the finite pre-collection receipt format for index compatibility.
+    """Verify finite historical receipt formats for index compatibility.
 
     This is deliberately not used by acceptance or lifecycle authority.  It
     accepts only the old required artifact set and still rehashes every listed
@@ -597,8 +597,9 @@ def verify_legacy_seal_details(run_dir: Path) -> tuple[dict[str, Any], str]:
         path = run_dir / "final-receipt.json"
         receipt, actual = _read_final_receipt(path)
         listed = {item.get("path") for item in receipt["artifacts"] if isinstance(item, dict)}
-        if "launch-contract.json" in listed or not set(LEGACY_SEALED_ARTIFACTS).issubset(listed):
-            raise WorkflowError("receipt is not the supported pre-collection seal format")
+        required = SEALED_ARTIFACTS if "launch-contract.json" in listed else LEGACY_SEALED_ARTIFACTS
+        if not set(required).issubset(listed):
+            raise WorkflowError("receipt does not contain its versioned required artifacts")
         for item in receipt["artifacts"]:
             if not isinstance(item, dict) or not isinstance(item.get("path"), str):
                 raise WorkflowError(f"invalid artifact entry in {path}")
