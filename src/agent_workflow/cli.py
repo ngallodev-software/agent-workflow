@@ -35,6 +35,10 @@ from .command_catalog import (
 )
 from .cli_parser import build_parser
 from .cli_handlers.index import handle_index_command
+from .cli_handlers.workflow import handle_workflow_command
+from .cli_handlers.worktree import handle_worktree_command
+from .cli_handlers.pack import handle_pack_command
+from .cli_handlers.orchestrator import handle_orchestrator_command
 from .cli_output import print_json as _print_json
 from .cli_output import print_mapping as _print_mapping
 from .cli_output import print_table as _print_table
@@ -68,20 +72,8 @@ from .lifecycle import record as record_lifecycle
 from .inspect_adapter import build_task as build_inspect_task
 from .inspect_adapter import run_inspect
 from .integrations.swebench import write_prediction
-from .manifests import validate_pack, write_checksum_manifest
-from .orchestrator_inbox import (
-    create_registry,
-    import_registered,
-    read_child_registry,
-    read_inbox,
-    register_child,
-    unregister_child,
-)
-from .path import absolute_path
 from .plugin_api import PluginExecutionContext
 from .plugins import EMPTY_PLUGIN_REGISTRY, PluginRegistry, load_plugin_registry
-from .pack import archive as archive_pack
-from .pack import scaffold as scaffold_pack
 from .receipts import verify_seal_details
 from .sessions import interrupt as interrupt_session
 from .sessions import kill as kill_session
@@ -95,16 +87,8 @@ from .sessions import terminate as terminate_session
 from .sessions import wait_for_message
 from .state import list_statuses, read_status, repair_status, runs_root
 from .supervisor import SupervisorOptions, supervise_loop, supervise_once
-from .orchestrator_supervisor import watch as watch_orchestrator
 from .tmux import attach as attach_tmux
-from .util import atomic_write_bytes, atomic_write_json, expand_path, read_json
-from .scheduler import SchedulerService
-from .workflow import snapshot_sha256
-from .workflow_service import WorkflowService
-from .workflow_templates import expand_workflow_template
-from .worktrees import create as create_worktree
-from .worktrees import list_worktrees
-from .worktrees import remove as remove_worktree
+from .util import atomic_write_bytes, atomic_write_json, expand_path
 
 
 
@@ -235,64 +219,9 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "config":
             data = as_dict(settings)
         elif args.command == "orchestrator":
-            if args.orchestrator_command == "registry":
-                if args.registry_command == "create":
-                    data = create_registry(settings, args.orchestrator_id, workflow_id=args.workflow_id)
-                elif args.registry_command == "inspect":
-                    data = read_child_registry(settings, args.orchestrator_id)
-                elif args.registry_command == "register":
-                    data = register_child(settings, args.orchestrator_id, args.session_id)
-                else:
-                    data = unregister_child(
-                        settings, args.orchestrator_id, args.session_id, state=args.state
-                    )
-            else:
-                if args.orchestrator_command == "watch":
-                    data = watch_orchestrator(
-                        settings,
-                        args.orchestrator_id,
-                        interval_seconds=args.interval_seconds,
-                        poll_seconds=args.poll_seconds,
-                        batch_size=args.batch_size,
-                        max_per_child=args.max_per_child,
-                        max_cycles=args.max_cycles,
-                    )
-                elif args.inbox_command == "import":
-                    data = import_registered(
-                        settings,
-                        args.orchestrator_id,
-                        session_id=args.session_id,
-                        max_per_child=args.max_per_child,
-                    )
-                else:
-                    data = read_inbox(
-                        settings,
-                        args.orchestrator_id,
-                        after_sequence=args.after,
-                        limit=args.limit,
-                        event_id=args.event_id,
-                        include_content=args.include_content,
-                    )
+            data = handle_orchestrator_command(settings, args)
         elif args.command == "worktree":
-            if args.worktree_command == "create":
-                data = create_worktree(
-                    settings,
-                    repo=args.repo,
-                    ticket_id=args.ticket_id,
-                    base_ref=args.base_ref,
-                    destination=args.dest,
-                    branch=args.branch,
-                    allow_dirty=args.allow_dirty,
-                )
-            elif args.worktree_command == "remove":
-                data = remove_worktree(
-                    args.repo,
-                    args.worktree,
-                    force=args.force,
-                    delete_branch=args.delete_branch,
-                )
-            else:
-                data = list_worktrees(args.repo)
+            data = handle_worktree_command(settings, args)
         elif args.command == "launch":
             interactive_override = args.interactive
             structured_override = args.structured
@@ -397,43 +326,9 @@ def main(argv: list[str] | None = None) -> int:
                 reason=args.reason,
             )
         elif args.command == "workflow":
-            if args.workflow_command == "template":
-                spec = read_json(expand_path(args.spec))
-                snapshot = expand_workflow_template(
-                    args.template,
-                    workflow_id=str(spec.get("workflow_id", "")),
-                    pack_id=str(spec.get("pack_id", "")),
-                    pack_manifest_sha256=str(spec.get("pack_manifest_sha256", "")),
-                    parameters=spec.get("parameters", {}),
-                )
-                output = expand_path(args.output)
-                atomic_write_json(output, snapshot)
-                data = {"output": str(output), "snapshot_sha256": snapshot_sha256(snapshot)}
-                if args.json:
-                    _print_json(data)
-                else:
-                    print(output)
+            data, output_complete = handle_workflow_command(settings, args)
+            if output_complete:
                 return 0
-            run_dir = expand_path(getattr(args, "run_dir", Path.cwd()))
-            service = WorkflowService(
-                scheduler=SchedulerService(
-                    settings=settings,
-                    run_dir=run_dir,
-                    workdir=run_dir,
-                )
-            )
-            if args.workflow_command == "validate":
-                data = service.validate(args.snapshot)
-            elif args.workflow_command == "start":
-                data = service.start(args.snapshot)
-            elif args.workflow_command == "status":
-                data = service.status(args.snapshot)
-            elif args.workflow_command == "resume":
-                data = service.resume(args.snapshot)
-            elif args.workflow_command == "seal":
-                data = service.seal(args.snapshot)
-            else:
-                data = service.verify(args.snapshot)
         elif args.command == "assess-sealed-runs":
             data = assess_exported_runs(expand_path(args.root))
             if args.output:
@@ -868,32 +763,9 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 data = cleanup_benchmark(settings, args.run)
         elif args.command == "pack":
-            if args.pack_command == "scaffold":
-                data = scaffold_pack(args.destination, args.phases, args.name)
-            elif args.pack_command == "validate":
-                report = validate_pack(
-                    absolute_path(args.source),
-                    verify_checksums=args.verify_checksums,
-                )
-                data = report.as_dict()
-                if args.json:
-                    _print_json(data)
-                else:
-                    print(f"pack: {report.root}")
-                    print(
-                        f"phases: {report.phases}; tasks: {report.tasks}; "
-                        f"valid: {report.ok}"
-                    )
-                    for warning in report.warnings:
-                        print(f"warning: {warning}")
-                    for error in report.errors:
-                        print(f"error: {error}", file=sys.stderr)
-                return 0 if report.ok else 1
-            elif args.pack_command == "checksum":
-                path = write_checksum_manifest(absolute_path(args.source))
-                data = {"manifest": str(path)}
-            else:
-                data = archive_pack(settings, args.source, args.output)
+            data, exit_code = handle_pack_command(settings, args)
+            if exit_code is not None:
+                return exit_code
         else:
             parser.error("unhandled command")
             return 2

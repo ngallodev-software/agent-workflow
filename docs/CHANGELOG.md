@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Extract the complete `orchestrator` registry/inbox/watch command domain into `agent_workflow.cli_handlers.orchestrator`, preserving durable messaging services, bounds, and output schemas.
+
+- Extract the complete `pack` command domain into `agent_workflow.cli_handlers.pack`, preserving scaffold/checksum/archive behavior plus validation rendering and exit status.
+
+- Extract the complete `worktree` command domain into `agent_workflow.cli_handlers.worktree`, preserving create/list/remove arguments, structured results, parser behavior, and installed Git worktree journeys.
+
+- Extract the complete `workflow` command domain into `agent_workflow.cli_handlers.workflow`, preserving template rendering, scheduler/service construction, parser behavior, JSON output, and installed workflow journeys.
+
 - Extract shared terminal renderers into `agent_workflow.cli_output` and the complete `index` command domain into `agent_workflow.cli_handlers.index`, preserving public parser/catalog behavior, exact index schemas, JSON/table output, and installed CLI journeys.
 
 - Extract SQLite application identity, schema version, migration SQL, and database-header validation into `agent_workflow.index_schema` while preserving `index_store` imports, exact migration records, rebuild behavior, and installed index journeys.
