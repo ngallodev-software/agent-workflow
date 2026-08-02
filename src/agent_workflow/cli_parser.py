@@ -308,17 +308,6 @@ def build_parser(plugin_registry: PluginRegistry | None = None) -> argparse.Argu
     index_verify.add_argument(
         "--full", action="store_true", help="rehash every indexed source artifact"
     )
-    index_verify.add_argument(
-        "--review-run", "--review", dest="review_session_id",
-        help="verify one sealed reviewed run and its direct gate evidence",
-    )
-    index_disposition = index_commands.add_parser(
-        "disposition", help="record a human disposition for an integrity incident"
-    )
-    index_disposition.add_argument("incident_id")
-    index_disposition.add_argument("--actor", required=True)
-    index_disposition.add_argument("--decision", choices=("resolved", "reopened"), required=True)
-    index_disposition.add_argument("--reason", required=True)
     index_query = index_commands.add_parser(
         "query", help="query curated read-only operational views"
     )
