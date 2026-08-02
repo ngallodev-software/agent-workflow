@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from tests.conftest import InstalledProduct
 
 
@@ -113,12 +115,14 @@ def test_installed_index_rebuilds_and_preserves_query_results_after_database_los
     assert incidents_after == incidents_before
 
 
-def test_installed_full_verify_classifies_legacy_archive_without_accepting_it(
+@pytest.mark.parametrize("storage_root", ["runs", "archive"])
+def test_installed_full_verify_classifies_legacy_retired_record_without_accepting_it(
     installed_product: InstalledProduct,
     product_env: dict[str, str],
+    storage_root: str,
 ) -> None:
     state = Path(product_env["XDG_STATE_HOME"]) / "agent-workflow"
-    legacy = state / "archive" / "legacy-installed"
+    legacy = state / storage_root / "legacy-installed"
     _write_json(
         legacy / "status.json",
         {
