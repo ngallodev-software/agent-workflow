@@ -23,8 +23,19 @@ sealed evidence or falsely classifying corruption as historical compatibility.
 - Preserve source safety, receipt digest/size checks, and active/reviewed-gate
   rejection. No deletion or rewrite of host evidence.
 
+## Writable paths
+
+Index verification/disposition source, focused fixtures/tests, this ticket,
+and directly related operator documentation only.
+
 ## Evidence
 
 - Focused corruption/disposition invariants and an installed review journey.
 - Host rebuild and full verification report exact unresolved incident counts.
 - Pack validation and release-drift audit pass.
+
+## Stop conditions
+
+Stop if the proposed path deletes or edits source evidence, allows unresolved
+incidents to pass global verification, or lets review scope conceal an invalid
+reviewed run or its direct gate evidence.
