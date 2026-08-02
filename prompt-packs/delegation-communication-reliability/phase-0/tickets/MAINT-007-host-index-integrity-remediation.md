@@ -12,6 +12,12 @@ sealed evidence or falsely classifying corruption as historical compatibility.
 - two unsealed stale command catalogs missing `plugins`;
 - ten sealed/dispositioned provenance envelopes containing `external_snapshots`.
 
+The existing MAINT-006 finite compatibility result is a regression boundary:
+the installed host currently reports 17 blockers and 206 quarantined verified
+historical artifacts. MAINT-007 must retain those existing classifications;
+sealed legacy schema/metrics artifacts that MAINT-006 already verifies are not
+the subject of this ticket.
+
 ## Required behavior
 
 - Define durable, append-only incident/disposition authority outside source run
@@ -22,6 +28,8 @@ sealed evidence or falsely classifying corruption as historical compatibility.
   its direct gate evidence are valid without silently ignoring global incidents.
 - Preserve source safety, receipt digest/size checks, and active/reviewed-gate
   rejection. No deletion or rewrite of host evidence.
+- A host rebuild that increases blockers above 17 or reduces the existing
+  historical quarantine set is a regression and must be reverted.
 
 ## Writable paths
 
