@@ -1,6 +1,6 @@
 schema: agent-workflow/repository/v1
 name: agent-workflow
-version: 0.7.8
+version: 0.7.9
 terminal_backend: tmux
 python: ">=3.11"
 state_model: xdg-json-files
