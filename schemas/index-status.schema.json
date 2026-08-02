@@ -49,6 +49,10 @@
       "type": "integer",
       "minimum": 0
     },
+    "historical_run_count": {
+      "type": "integer",
+      "minimum": 0
+    },
     "last_sync_at": {
       "type": [
         "string",

@@ -111,3 +111,34 @@ def test_installed_index_rebuilds_and_preserves_query_results_after_database_los
     assert comparable_after == comparable_before
     assert rows_after[0]["indexed_at"] != rows_before[0]["indexed_at"]
     assert incidents_after == incidents_before
+
+
+def test_installed_full_verify_classifies_legacy_archive_without_accepting_it(
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+) -> None:
+    state = Path(product_env["XDG_STATE_HOME"]) / "agent-workflow"
+    legacy = state / "archive" / "legacy-installed"
+    _write_json(
+        legacy / "status.json",
+        {
+            "schema": "agent-workflow/session-status/v1",
+            "session_id": "legacy-installed",
+            "status": "completed",
+            "created_at": "2025-01-01T00:00:00+00:00",
+            "workdir": "/tmp/legacy-installed",
+            "prompt_path": str(legacy / "prompt.md"),
+            "log_path": str(legacy / "output.log"),
+        },
+    )
+    _write_json(
+        legacy / "execution-metrics.json",
+        {"schema": "agent-workflow/execution-metrics/v1"},
+    )
+
+    rebuilt = installed_product.json("index", "rebuild", env=product_env)
+    assert rebuilt["error_count"] == 0
+    assert rebuilt["quarantined_count"] == 1
+    verification = installed_product.json("index", "verify", "--full", env=product_env)
+    assert verification["valid"] is True
+    assert verification["historical_artifacts"][0]["classification"] == "quarantined"

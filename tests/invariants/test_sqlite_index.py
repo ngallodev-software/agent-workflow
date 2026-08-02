@@ -345,6 +345,37 @@ def test_symlinked_source_is_quarantined_without_following_target(tmp_path: Path
         assert "SECRET TARGET CONTENT" not in "\n".join(connection.iterdump())
 
 
+def test_legacy_archive_is_quarantined_but_does_not_block_full_verification(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    run = settings.state_root / "archive" / "legacy-run"
+    run.mkdir(parents=True)
+    _write(
+        run / "status.json",
+        {
+            "schema": "agent-workflow/session-status/v1",
+            "session_id": "legacy-run",
+            "status": "completed",
+            "created_at": "2025-01-01T00:00:00+00:00",
+            "workdir": "/tmp/legacy",
+            "prompt_path": str(run / "prompt.md"),
+            "log_path": str(run / "output.log"),
+        },
+    )
+    (run / "execution-metrics.json").write_text("{\"schema\": \"agent-workflow/execution-metrics/v1\"}\n")
+
+    report = rebuild_index(settings)
+    assert report["error_count"] == 0
+    assert report["quarantined"] == [
+        {"session_id": "legacy-run", "classification": "historical_artifact"}
+    ]
+    status = index_status(settings)
+    assert status["historical_run_count"] == 1
+    assert status["freshness"] == "current"
+    verification = verify_index(settings, full=True)
+    assert verification["valid"] is True
+    assert verification["historical_artifacts"][0]["outcome"] == "preserved_excluded"
+
+
 def test_workflow_projection_materializes_nodes_and_edges(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     run = _seed_run(settings, "workflow-owner")

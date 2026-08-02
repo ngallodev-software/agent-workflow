@@ -197,6 +197,9 @@ The indexer is fail-isolated by run:
 - one corrupt run does not roll back healthy run projections;
 - the bad run is replaced by an `index_state=error` row;
 - details are recorded in `index_errors`;
+- an obsolete, non-authoritative legacy run is classified as
+  `historical_artifact`, preserved in place, and excluded from current
+  evidence; `index verify --full` reports it as quarantined rather than valid;
 - the original evidence is never silently repaired;
 - a later successful sync replaces the error projection;
 - `index verify --full` detects source changes after indexing.

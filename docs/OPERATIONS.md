@@ -147,7 +147,7 @@ Use a full verification before relying on an older index for analysis:
 agent-workflow index verify --full
 ```
 
-`--full` rehashes every indexed source artifact in addition to SQLite integrity and foreign-key checks. A mismatch indicates stale or altered source evidence; it does not rewrite the source file.
+`--full` rehashes every indexed source artifact in addition to SQLite integrity and foreign-key checks. A mismatch indicates stale or altered current source evidence; it does not rewrite the source file. Obsolete non-authoritative legacy runs are reported as preserved quarantines and do not become valid/current evidence. Unsafe paths and current-schema failures remain blocking.
 
 ### Rebuild and corruption recovery
 
