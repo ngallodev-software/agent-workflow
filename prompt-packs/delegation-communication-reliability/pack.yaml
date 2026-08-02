@@ -8,6 +8,7 @@ backlog_items:
   - "PROC-005"
   - "MAINT-004"
   - "MAINT-005"
+  - "MAINT-003"
 workflow:
   name: agent-workflow
   minimum_version: "0.2.4"
