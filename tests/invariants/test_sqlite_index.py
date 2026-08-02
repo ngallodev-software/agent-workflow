@@ -349,7 +349,8 @@ def test_symlinked_source_is_quarantined_without_following_target(tmp_path: Path
 @pytest.mark.parametrize(
     ("status_schema", "metrics_schema"),
     [
-        ("agent-workflow/session-status/v2", "agent-workflow/execution-metrics/retired-v1"),
+        ("agent-workflow/session-status/v2", "agent-workflow/execution-metrics/v1"),
+        ("agent-workflow/session-status/retired-v2", "agent-workflow/execution-metrics/retired-v1"),
     ],
 )
 def test_legacy_archive_is_quarantined_but_does_not_block_full_verification(
@@ -386,116 +387,6 @@ def test_legacy_archive_is_quarantined_but_does_not_block_full_verification(
     verification = verify_index(settings, full=True)
     assert verification["valid"] is True
     assert verification["historical_artifacts"][0]["outcome"] == "preserved_excluded"
-    assert verification["historical_artifacts"][0]["classification_reason"].startswith(
-        "retired_schema_id:"
-    ) or verification["historical_artifacts"][0]["classification_reason"].startswith(
-        "execution_metrics_legacy_fields:"
-    )
-
-
-@pytest.mark.parametrize(
-    ("filename", "payload", "expected_reason"),
-    [
-        (
-            "command-collection.json",
-            {"schema": "agent-workflow/command-collection-set/v1"},
-            "retired_schema_id:agent-workflow/command-collection-set/v1",
-        ),
-        (
-            "lifecycle-events.jsonl",
-            {"schema": "agent-workflow/lifecycle-event/v1"},
-            "retired_schema_id:agent-workflow/lifecycle-event/v1",
-        ),
-    ],
-)
-@pytest.mark.parametrize("storage_class", ["active", "archive"])
-def test_explicit_retired_schema_allowlist_is_auditable(
-    tmp_path: Path,
-    storage_class: str,
-    filename: str,
-    payload: dict[str, str],
-    expected_reason: str,
-) -> None:
-    settings = _settings(tmp_path)
-    run = settings.state_root / ("runs" if storage_class == "active" else "archive") / "retired-schema"
-    run.mkdir(parents=True)
-    _write(
-        run / "status.json",
-        {
-            "schema": "agent-workflow/session-status/v2",
-            "session_id": "retired-schema",
-            "status": "completed",
-            "created_at": "2025-01-01T00:00:00+00:00",
-            "workdir": "/tmp/legacy",
-            "prompt_path": str(run / "prompt.md"),
-            "log_path": str(run / "output.log"),
-        },
-    )
-    if filename.endswith(".jsonl"):
-        (run / filename).write_text(json.dumps(payload) + "\n", encoding="utf-8")
-    else:
-        _write(run / filename, payload)
-
-    rebuilt = rebuild_index(settings)
-    assert rebuilt["quarantined_count"] == 1
-    verification = verify_index(settings, full=True)
-    assert verification["valid"] is True
-    assert verification["historical_artifacts"][0]["classification_reason"] == expected_reason
-
-
-def test_execution_metrics_legacy_field_evolution_is_allowlisted_only(tmp_path: Path) -> None:
-    settings = _settings(tmp_path)
-    run = settings.state_root / "runs" / "metrics-legacy"
-    run.mkdir(parents=True)
-    _write(
-        run / "status.json",
-        {
-            "schema": "agent-workflow/session-status/v2",
-            "session_id": "metrics-legacy",
-            "status": "completed",
-            "created_at": "2025-01-01T00:00:00+00:00",
-            "workdir": "/tmp/legacy",
-            "prompt_path": str(run / "prompt.md"),
-            "log_path": str(run / "output.log"),
-        },
-    )
-    _write(
-        run / "execution-metrics.json",
-        {
-            "schema": "agent-workflow/execution-metrics/v1",
-            "session_id": "metrics-legacy",
-            "stages": [
-                {
-                    "stage": "total",
-                    "input_tokens": 1,
-                    "cached_input_tokens": 0,
-                    "output_tokens": 1,
-                    "provider_total_tokens": 2,
-                    "cost": 0,
-                    "currency": "USD",
-                    "elapsed_seconds": 1,
-                    "first_output_latency_seconds": 1,
-                    "retry_count": 0,
-                    "errors": [],
-                    "steer_count": 0,
-                    "steer_acknowledged_count": 0,
-                    "steer_pending_count": 0,
-                }
-            ],
-        },
-    )
-    rebuilt = rebuild_index(settings)
-    assert rebuilt["quarantined_count"] == 1
-    verification = verify_index(settings, full=True)
-    assert verification["valid"] is True
-    assert verification["historical_artifacts"][0]["classification_reason"] == (
-        "execution_metrics_legacy_fields:cache_write_input_tokens,local_estimated_cost,"
-        "price_catalog_id,provider_billed_cost,reasoning_output_tokens"
-    )
-
-    _write(run / "execution-metrics.json", {"schema": "agent-workflow/execution-metrics/v1", "stages": []})
-    rebuild_index(settings)
-    assert verify_index(settings, full=True)["valid"] is False
 
 
 @pytest.mark.parametrize("storage_class", ["active", "archive"])

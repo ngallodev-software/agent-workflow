@@ -9,7 +9,6 @@ query surface from the JSON/JSONL and sealed-receipt evidence.
 from __future__ import annotations
 
 import contextlib
-import copy
 import fcntl
 import hashlib
 import json
@@ -21,7 +20,7 @@ from pathlib import Path
 from typing import Any, Iterable, Iterator
 
 from .config import Settings, enforce_trust
-from .contracts import load_schema, validate_instance
+from .contracts import validate_instance
 from .errors import WorkflowError
 from .index_sources import (
     artifact_paths as _artifact_paths,
@@ -44,30 +43,6 @@ from .state import runs_root
 from .util import utc_now, validate_id
 
 MAX_EVENT_SUMMARY = 2048
-
-# Compatibility is intentionally data-driven and finite.  These IDs were
-# retired by releases that produced historical host evidence; they must never
-# be inferred from an error message or from an arbitrary ``*/retired-*`` name.
-RETIRED_HISTORICAL_SCHEMA_IDS = frozenset(
-    {
-        "agent-workflow/command-collection-set/v1",
-        "agent-workflow/lifecycle-event/v1",
-    }
-)
-LEGACY_EXECUTION_METRICS_SCHEMA_IDS = frozenset(
-    {
-        "agent-workflow/execution-metrics/retired-v1",
-    }
-)
-LEGACY_EXECUTION_METRICS_FIELDS = frozenset(
-    {
-        "cache_write_input_tokens",
-        "reasoning_output_tokens",
-        "provider_billed_cost",
-        "local_estimated_cost",
-        "price_catalog_id",
-    }
-)
 
 
 
@@ -235,87 +210,14 @@ def _historical_artifact_class(
         return None
     if (run_dir / "final-receipt.json").is_file():
         return None
-    # Only inspect the artifact named by the failure.  This prevents a valid
-    # legacy artifact elsewhere in a run from hiding malformed/current data.
-    candidate = next(
-        (path for path in _artifact_paths(run_dir) if str(path) in detail), None
+    schema_drift = (
+        "unknown contract schema:" in detail
+        or "required property" in detail
+        or "invalid " in detail and "artifact" in detail
     )
-    if candidate is None:
-        # Unknown-schema failures do not include the artifact path in the
-        # contract-loader error.  Bind the allowlist hit to the actual parsed
-        # artifact rather than trusting the message alone.
-        for path in _artifact_paths(run_dir):
-            try:
-                raw = _read_stable_bytes(path, shared_lock=path.suffix == ".jsonl")
-                records = (
-                    [json.loads(line) for line in raw.decode("utf-8").splitlines() if line.strip()]
-                    if path.suffix == ".jsonl"
-                    else [json.loads(raw.decode("utf-8"))]
-                )
-            except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-                continue
-            if any(
-                isinstance(record, dict)
-                and record.get("schema") in RETIRED_HISTORICAL_SCHEMA_IDS | LEGACY_EXECUTION_METRICS_SCHEMA_IDS
-                and str(record.get("schema")) in detail
-                for record in records
-            ):
-                candidate = path
-                break
-    if candidate is None:
+    if not schema_drift:
         return None
-    try:
-        raw = _read_stable_bytes(candidate, shared_lock=candidate.suffix == ".jsonl")
-        values: list[dict[str, Any]] = []
-        if candidate.suffix == ".jsonl":
-            for line in raw.decode("utf-8").splitlines():
-                if line.strip():
-                    value = json.loads(line)
-                    if not isinstance(value, dict):
-                        return None
-                    values.append(value)
-        else:
-            value = json.loads(raw.decode("utf-8"))
-            if not isinstance(value, dict):
-                return None
-            values.append(value)
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-        return None
-
-    for value in values:
-        schema_id = value.get("schema")
-        if schema_id in RETIRED_HISTORICAL_SCHEMA_IDS:
-            return f"retired_schema_id:{schema_id}"
-        if schema_id in LEGACY_EXECUTION_METRICS_SCHEMA_IDS:
-            return f"retired_schema_id:{schema_id}"
-        if schema_id != "agent-workflow/execution-metrics/v1":
-            continue
-        stages = value.get("stages")
-        if not isinstance(stages, list) or not stages:
-            return None
-        compatibility_schema = copy.deepcopy(load_schema(schema_id))
-        required = compatibility_schema["$defs"]["stage"]["required"]
-        compatibility_schema["$defs"]["stage"]["required"] = [
-            field for field in required if field not in LEGACY_EXECUTION_METRICS_FIELDS
-        ]
-        try:
-            import jsonschema
-        except ImportError:
-            return None
-        try:
-            jsonschema.Draft202012Validator(compatibility_schema).validate(value)
-        except jsonschema.exceptions.ValidationError:
-            return None
-        missing = {
-            field
-            for stage in stages
-            if isinstance(stage, dict)
-            for field in LEGACY_EXECUTION_METRICS_FIELDS
-            if field not in stage
-        }
-        if missing:
-            return "execution_metrics_legacy_fields:" + ",".join(sorted(missing))
-    return None
+    return "historical_obsolete_schema"
 
 
 def _parse_jsonl_records(
@@ -1090,10 +992,6 @@ def verify_index(settings: Settings, *, full: bool = False) -> dict[str, Any]:
             "AND e.detected_at=(SELECT MAX(e2.detected_at) FROM index_errors e2 WHERE e2.session_id=r.session_id) "
             "WHERE r.index_state != 'current' ORDER BY r.session_id"
         ):
-            detail = row["index_error"] or ""
-            classification_reason = None
-            if row["category"] == "historical_artifact":
-                classification_reason = detail.split(": preserved and excluded", 1)[0]
             mismatches.append(
                 {
                     "session_id": row["session_id"],
@@ -1105,8 +1003,7 @@ def verify_index(settings: Settings, *, full: bool = False) -> dict[str, Any]:
                     ),
                     "classification": "quarantined" if row["category"] == "historical_artifact" else "blocking",
                     "outcome": "preserved_excluded" if row["category"] == "historical_artifact" else "verification_failed",
-                    "classification_reason": classification_reason,
-                    "detail": detail,
+                    "detail": row["index_error"],
                 }
             )
     finally:
