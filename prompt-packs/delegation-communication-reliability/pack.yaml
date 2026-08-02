@@ -9,6 +9,7 @@ backlog_items:
   - "MAINT-004"
   - "MAINT-005"
   - "MAINT-003"
+  - "MAINT-006"
 workflow:
   name: agent-workflow
   minimum_version: "0.2.4"

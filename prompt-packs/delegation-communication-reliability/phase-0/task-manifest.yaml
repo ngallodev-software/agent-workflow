@@ -37,3 +37,8 @@ tasks:
     session: "delegation-review-lifecycle-enforcement"
     prompt: "tickets/MAINT-005-review-lifecycle-enforcement.md"
     backlog_id: "MAINT-005"
+  - id: "MAINT-006"
+    tier: A
+    session: "delegation-host-index-historical-evidence"
+    prompt: "tickets/MAINT-006-host-index-historical-evidence.md"
+    backlog_id: "MAINT-006"
