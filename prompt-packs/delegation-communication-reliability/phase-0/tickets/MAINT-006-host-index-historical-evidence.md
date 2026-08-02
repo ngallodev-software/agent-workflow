@@ -37,6 +37,16 @@ documentation only.
   classification.
 - An installed product journey proves a host with historical artifacts can
   complete full verification without misreporting them as current valid runs.
+- Reproduce the actual host state before claiming closure: record the
+  `error_count`, `quarantined_count`, and representative errors from
+  `agent-workflow --json index rebuild` followed by
+  `agent-workflow --json index verify --full`. Fixture-only success is not
+  closure while the host verifier remains incomplete.
+- Where a sealed historical receipt predates a current required collection,
+  derive compatibility from the receipt's own immutable format/evidence and
+  repository migration history. Continue to verify every artifact actually
+  listed by that receipt (including path, hash, and size); never use a blanket
+  bypass for missing modern collections or artifact integrity failures.
 - Pack validation and release-drift audit pass.
 
 ## Stop conditions
