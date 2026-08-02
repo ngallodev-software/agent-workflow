@@ -14,6 +14,7 @@
     "signal": {"type": ["integer", "null"], "minimum": 1},
     "timed_out": {"type": "boolean"},
     "cancelled": {"type": "boolean"},
+    "completion_terminated": {"type": "boolean"},
     "stdout_truncated": {"type": "boolean"},
     "stderr_truncated": {"type": "boolean"},
     "stdout_bytes": {"type": "integer", "minimum": 0},

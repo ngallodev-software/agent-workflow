@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from . import __version__
 from .command_catalog import COMMAND_ROLES
 from .errors import WorkflowError
 from .eval.templating import TEMPLATE_KINDS
@@ -19,7 +20,7 @@ from .workflow_templates import AUTHORIZED_TEMPLATES
 
 def build_parser(plugin_registry: PluginRegistry | None = None) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="agent-workflow")
-    parser.add_argument("--version", action="version", version="%(prog)s 0.7.8")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("--config", type=Path, help="override config.toml path")
     parser.add_argument(
         "--json",
@@ -395,6 +396,10 @@ def build_parser(plugin_registry: PluginRegistry | None = None) -> argparse.Argu
     agent_complete.add_argument("--summary", required=True)
     agent_complete.add_argument("--tag", action="append", default=[])
     agent_complete.add_argument("--file", action="append", default=[])
+    agent_complete.add_argument(
+        "--keep-alive", action="store_true",
+        help="keep the interactive executor available for explicit same-worktree reuse",
+    )
     agent_candidates = agent_commands.add_parser(
         "candidates", help="rank reusable agents for a worktree"
     )

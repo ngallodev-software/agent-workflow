@@ -25,6 +25,7 @@ def handle_agent_command(settings: Settings, args: argparse.Namespace) -> Any:
             summary=args.summary,
             tags=args.tag,
             files=args.file,
+            terminal=not getattr(args, "keep_alive", False),
         )
     if args.agent_command == "candidates":
         return reuse_candidates(

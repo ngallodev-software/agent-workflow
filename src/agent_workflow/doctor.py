@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from . import __version__
 from .config import Settings
 from .compatibility import probe_executor
 from .process import redact_argv, run, secret_values_from_argv
@@ -100,7 +101,7 @@ def run_doctor(settings: Settings) -> dict[str, Any]:
     }
     return {
         "ok": all(checks.values()),
-        "version": "0.7.8",
+        "version": __version__,
         "config_path": str(settings.config_path),
         "commands": commands,
         "executors": executors,

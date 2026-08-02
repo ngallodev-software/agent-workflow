@@ -22,6 +22,9 @@
     "actor": {"type": "string", "minLength": 1},
     "content": {"type": "string", "minLength": 1, "maxLength": 16384},
     "correlation_id": {"type": ["string", "null"], "format": "uuid"},
+    "outcome": {"type": ["string", "null"], "enum": [null, "applied", "rejected"]},
+    "completion_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+    "terminal": {"type": ["boolean", "null"]},
     "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
   },
   "additionalProperties": false

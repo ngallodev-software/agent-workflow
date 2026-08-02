@@ -219,9 +219,9 @@ def _write_launch_prompt(
     if interactive:
         context.extend(
             [
-                "- This interactive agent remains open after its assignment.",
-                '- Before becoming reusable, emit structured completion with `"$AGENT_WORKFLOW_CLI" agent task-complete "$AGENT_WORKFLOW_SESSION_ID" --actor <agent-name> --summary <summary>`.',
-                "- For a reused assignment, acknowledge its correlated steer message before starting work.",
+                "- This interactive agent accepts durable steering while its assignment is active.",
+                '- End the assignment with `"$AGENT_WORKFLOW_CLI" agent task-complete "$AGENT_WORKFLOW_SESSION_ID" --actor <agent-name> --summary <summary>`; the host then terminates this executor, seals the run, and closes the pane.',
+                "- `--keep-alive` is only for an explicitly requested same-worktree reuse; in that mode acknowledge its correlated steer message before starting the reused assignment.",
                 "- Write and validate the completion handoff before task-complete; task-complete is interactive-only.",
             ]
         )

@@ -132,13 +132,13 @@ Completed handoffs must contain matching session/ticket/pack identity, substanti
 
 ```text
 agent-workflow agent context SESSION
-agent-workflow agent task-complete SESSION --actor ID --summary TEXT [--tag TAG] [--file PATH]
+agent-workflow agent task-complete SESSION --actor ID --summary TEXT [--tag TAG] [--file PATH] [--keep-alive]
 agent-workflow agent candidates WORKDIR [--ticket ID] [--pack ID] [--retry-of ID] [--agent-class CLASS] [--tag TAG]
 agent-workflow agent reuse SESSION PROMPT --actor ID [--ticket ID] [--pack ID] [--retry-of ID] [--tag TAG]
 agent-workflow agent auto-reuse WORKDIR PROMPT --actor ID [--ticket ID] [--pack ID] [--retry-of ID] [--agent-class CLASS] [--tag TAG]
 ```
 
-`task-complete` is the only `busy -> idle_reusable` transition. Reuse is restricted to the same worktree; automatic reuse requires exact ticket/retry lineage and remains pending until acknowledgement.
+`task-complete` validates the handoff, emits a durable child-to-parent completion, and is terminal by default: the host stops the still-live executor, seals the run, and closes its tmux pane. `--keep-alive` is the explicit exception for a cooperative interactive executor that must remain available for same-worktree reuse. A steer remains pending until its correlated acknowledgement; only an adapter that consumes the immutable steering inbox can claim application.
 
 ## Workflow graphs
 

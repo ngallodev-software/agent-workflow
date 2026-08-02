@@ -428,6 +428,20 @@ class ManagedProcess:
             self.send_signal(signal.SIGKILL)
             return self.process.wait()
 
+    def close_after_completion(self) -> int:
+        """Stop an executor after a host-validated terminal completion.
+
+        This is deliberately distinct from operator cancellation: the raw
+        process result still records the signal, while the runner records the
+        completion-terminated reason that authorized it.
+        """
+        self.send_signal(signal.SIGTERM)
+        try:
+            return self.process.wait(timeout=self.request.grace_seconds)
+        except subprocess.TimeoutExpired:
+            self.send_signal(signal.SIGKILL)
+            return self.process.wait()
+
     def close_streams(self) -> None:
         if self._closed:
             return

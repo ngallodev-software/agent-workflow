@@ -118,7 +118,7 @@ Key evidence:
 | `permission-events.jsonl` | surface observed permission waits, denials, and later clears |
 | `incident-events.jsonl` | stable typed diagnosis with deduplicated fingerprints |
 | `remediation-events.jsonl` | rule, attempt, action, result, and verification history |
-| `process-result.json` | exact exit/signal, timeout/cancel, bytes, and truncation outcome |
+| `process-result.json` | exact exit/signal, timeout/cancel, completion-authorized termination, bytes, and truncation outcome |
 
 ### Incident response order
 
@@ -204,7 +204,7 @@ JSON Schema validation is only the first gate. A `completed` handoff must match 
 
 ## Interactive agent reuse
 
-Interactive agents can retain bounded assignment context. Reuse requires:
+`task-complete` is terminal by default: after the host validates the completion intent it stops the interactive executor, seals the run, and lets tmux close the pane. Interactive agents can retain bounded assignment context only with the explicit `--keep-alive` mode. Reuse then requires:
 
 - explicit prior task completion;
 - an idle, live, unexpired session;
@@ -214,7 +214,7 @@ Interactive agents can retain bounded assignment context. Reuse requires:
 - correlated acknowledgement of the reassignment.
 
 ```bash
-agent-workflow agent task-complete SESSION --actor AGENT --summary "Implemented parser"
+agent-workflow agent task-complete SESSION --actor AGENT --summary "Implemented parser" --keep-alive
 agent-workflow agent candidates /path/to/worktree --ticket TICKET --pack PACK
 agent-workflow agent reuse SESSION ./next-task.md --actor orchestrator --ticket TICKET --pack PACK
 ```

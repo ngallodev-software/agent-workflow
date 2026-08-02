@@ -90,14 +90,14 @@ _RUNTIME_ENVIRONMENT = (
 )
 
 
-def _drain_control_bridge(run_dir: Path, *, active: bool) -> None:
+def _drain_control_bridge(run_dir: Path, *, active: bool) -> bool:
     """Consume bounded child intents using host-owned state and tmux authority."""
     launch = read_launch_contract(run_dir / "launch-contract.json")
     session_id = str(launch["session"]["id"])
     handoff = Path(str(launch["paths"].get("handoff_dir", ""))).resolve()
     bridge = handoff / "control-intents"
     if bridge.parent != handoff or bridge.is_symlink() or not bridge.is_dir():
-        return
+        return False
     evidence_path = run_dir / "control-intents.jsonl"
     processed: set[str] = set()
     processed_requests: set[str] = set()
@@ -130,6 +130,7 @@ def _drain_control_bridge(run_dir: Path, *, active: bool) -> None:
         except (ValueError, IndexError):
             return 2**31
 
+    terminal_completion = False
     for source in sorted(bridge.glob("intent-*.json"), key=source_sequence):
         if source.name in processed:
             continue
@@ -169,6 +170,9 @@ def _drain_control_bridge(run_dir: Path, *, active: bool) -> None:
             if intent_kind != "ack" and value.get("outcome") is not None:
                 raise WorkflowError("only acknowledgement intents may include outcome")
             if intent_kind == "task_complete":
+                terminal = value.get("terminal", False)
+                if not isinstance(terminal, bool):
+                    raise WorkflowError("task completion terminal flag must be boolean")
                 completion_sha256 = value.get("completion_sha256")
                 if (
                     not isinstance(completion_sha256, str)
@@ -189,7 +193,9 @@ def _drain_control_bridge(run_dir: Path, *, active: bool) -> None:
                     session_id,
                     actor=str(value["actor"]),
                     summary=str(value["content"]),
+                    terminal=terminal,
                 )
+                terminal_completion = terminal
             if intent_kind == "ack":
                 correlation_id = str(value["correlation_id"])
                 existing_delivery = current_delivery(run_dir, correlation_id)
@@ -245,6 +251,7 @@ def _drain_control_bridge(run_dir: Path, *, active: bool) -> None:
         record(source.name, request_id, intent.get("sequence") if intent else None, outcome, reason)
         if intent and isinstance(intent.get("sequence"), int):
             processed_sequences.add(intent["sequence"])
+    return terminal_completion
 
 
 def _read_handoff_completion(path: Path) -> bytes:
@@ -962,6 +969,7 @@ def execute(
         thread.start()
     deadline = time.monotonic() + timeout_seconds if timeout_seconds else None
     timed_out = False
+    completed_by_child = False
     last_health_at: float | None = None
     while True:
         now = time.monotonic()
@@ -1012,7 +1020,14 @@ def execute(
             break
         # Control delivery is intentionally more responsive than observability
         # sampling so short-lived cooperative executors can consume steering.
-        _drain_control_bridge(run_dir, active=True)
+        if _drain_control_bridge(run_dir, active=True):
+            # A valid terminal handoff is authoritative completion, not an
+            # operator cancellation. Close the live interactive executor so
+            # the runner can seal the run and tmux can retire its pane.
+            completed_by_child = True
+            process.close_after_completion()
+            return_code = 0
+            break
         deliver_pending(run_dir, active=True)
         wait_seconds = min(max(0.1, heartbeat_seconds), CONTROL_POLL_SECONDS)
         if deadline is not None:
@@ -1053,6 +1068,7 @@ def execute(
         {
             "schema": PROCESS_RESULT_SCHEMA,
             **process_result.as_dict(include_output=False),
+            "completion_terminated": completed_by_child,
             "runner_pid": os.getpid(),
             "executor_pid": process.pid,
             "recorded_at": utc_now(),
@@ -1062,6 +1078,8 @@ def execute(
         pump_errors.append("stdout capture limit exceeded; output truncated")
     if process_result.stderr_truncated:
         pump_errors.append("stderr capture limit exceeded; output truncated")
+    if completed_by_child:
+        return_code = 0
     if pump_errors:
         return_code = return_code or 1
 

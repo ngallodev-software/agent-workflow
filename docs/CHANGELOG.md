@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.7.9 — 2026-08-02
+
+- Make a validated interactive `agent task-complete` terminal by default: emit the durable completion, close the otherwise-idle executor, seal the final receipt, and retire the tmux pane. Preserve same-worktree reuse only through explicit `--keep-alive`, and distinguish completion-authorized shutdown from operator cancellation in process evidence.
+- Derive CLI and doctor version output from the package version so installed release reporting cannot remain stale after a patch bump.
+
 - Add an exhaustive comparative-benchmark task/evaluation/scoring explanation and expand the primary man page with the same operational interpretation.
 - Add a 0.7.8-rebased comparative-benchmark scoring-correction backlog and prompt pack with exact built-in feature, suite mirror, schema, test, release-audit, and plugin-boundary ownership.
 - Preserve the current v1 evaluator as historical authority while documenting the spec/matrix version conflict, point-allocation drift, browser coverage gaps, public-test duplicate credit, and the required new-major-version correction strategy.

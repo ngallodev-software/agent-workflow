@@ -127,10 +127,12 @@ def complete_task(
     summary: str,
     tags: list[str] | None = None,
     files: list[str] | None = None,
+    terminal: bool = True,
 ) -> dict[str, Any]:
     if bridge_available(session_id):
         return write_control_intent(
-            session_id=session_id, kind="task_complete", actor=actor, content=summary
+            session_id=session_id, kind="task_complete", actor=actor, content=summary,
+            terminal=terminal,
         )
     if bridge_required(session_id):
         return {"outcome": "unavailable", "reason": "control bridge unavailable"}
@@ -151,7 +153,7 @@ def complete_task(
     if not alive:
         raise WorkflowError("task completion requires a live agent pane")
     if not context.get("interactive"):
-        raise WorkflowError("only interactive agents can become idle_reusable")
+        raise WorkflowError("only interactive agents can complete assignments")
     if context.get("state") != "busy":
         raise WorkflowError(f"agent is not busy: {context.get('state')}")
     # A task-complete transition is an authority boundary.  Validate and
@@ -187,12 +189,16 @@ def complete_task(
     })
     context["completed_assignments"] = [*context["completed_assignments"], completed]
     context["current_assignment"] = None
-    context["state"] = "idle_reusable"
+    next_state = "closed" if terminal else "idle_reusable"
+    context["state"] = next_state
     context["updated_at"] = event["timestamp"]
     atomic_write_json(state_dir / CONTEXT_NAME, context)
     append_lifecycle_event(
-        state_dir, dimension="assignment", prior="busy", new="idle_reusable",
-        actor=actor, reason="child emitted structured task completion",
+        state_dir, dimension="assignment", prior="busy", new=next_state,
+        actor=actor, reason=(
+            "child emitted terminal structured task completion"
+            if terminal else "child emitted reusable structured task completion"
+        ),
         receipt_refs=[LEDGER_NAME, CONTEXT_NAME],
     )
     append_message(
@@ -209,6 +215,7 @@ def apply_bridged_completion(
     *,
     actor: str,
     summary: str,
+    terminal: bool = True,
 ) -> dict[str, Any]:
     """Apply a validated child completion using host-owned assignment state."""
     validate_id(session_id, "session ID")
@@ -220,7 +227,7 @@ def apply_bridged_completion(
     if context.get("session_id") != session_id:
         raise WorkflowError("bridged completion session identity mismatch")
     if not context.get("interactive"):
-        raise WorkflowError("only interactive agents can become idle_reusable")
+        raise WorkflowError("only interactive agents can complete assignments")
     if context.get("state") != "busy" or not isinstance(context.get("current_assignment"), dict):
         raise WorkflowError("agent is not busy")
     completed = {
@@ -244,12 +251,16 @@ def apply_bridged_completion(
     })
     context["completed_assignments"] = [*context["completed_assignments"], completed]
     context["current_assignment"] = None
-    context["state"] = "idle_reusable"
+    next_state = "closed" if terminal else "idle_reusable"
+    context["state"] = next_state
     context["updated_at"] = event["timestamp"]
     atomic_write_json(state_dir / CONTEXT_NAME, context)
     append_lifecycle_event(
-        state_dir, dimension="assignment", prior="busy", new="idle_reusable",
-        actor=actor, reason="host applied bridged task completion",
+        state_dir, dimension="assignment", prior="busy", new=next_state,
+        actor=actor, reason=(
+            "host applied terminal bridged task completion"
+            if terminal else "host applied reusable bridged task completion"
+        ),
         receipt_refs=[LEDGER_NAME, CONTEXT_NAME],
     )
     return context
