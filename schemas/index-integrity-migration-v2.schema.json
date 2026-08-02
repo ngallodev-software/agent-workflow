@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/index-integrity-migration/v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "record_id", "recorded_at_ns", "supersedes_schema", "legacy_ledger_sha256", "verified_index_input_snapshot_sha256", "generator", "authority", "legacy_trust"],
+  "properties": {
+    "schema": {"const": "agent-workflow/index-integrity-migration/v2"},
+    "record_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "recorded_at_ns": {"type": "integer", "minimum": 1},
+    "supersedes_schema": {"const": "agent-workflow/index-errors/v1"},
+    "legacy_ledger_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "verified_index_input_snapshot_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "generator": {"type": "object", "additionalProperties": false, "required": ["identity", "version"], "properties": {"identity": {"type": "string", "minLength": 1}, "version": {"type": "string", "minLength": 1}}},
+    "authority": {"const": "v2-append-only"},
+    "legacy_trust": {"const": "none"}
+  }
+}

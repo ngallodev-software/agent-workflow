@@ -16,6 +16,7 @@ import json
 import os
 import sqlite3
 import stat
+import time
 from urllib.parse import quote
 from pathlib import Path
 from typing import Any, Iterable, Iterator
@@ -44,6 +45,10 @@ from .state import runs_root
 from .util import utc_now, validate_id
 
 MAX_EVENT_SUMMARY = 2048
+INTEGRITY_AUTHORITY_SCHEMA = "agent-workflow/index-integrity-authority/v2"
+INTEGRITY_MIGRATION_SCHEMA = "agent-workflow/index-integrity-migration/v2"
+INTEGRITY_GENERATOR = "agent-workflow.index-integrity"
+INTEGRITY_GENERATOR_VERSION = "2"
 
 # Compatibility is intentionally data-driven and finite. These are the only
 # historical schemas/field drift that may be preserved outside current
@@ -105,6 +110,117 @@ def database_path(settings: Settings) -> Path:
 
 def _lock_path(settings: Settings) -> Path:
     return index_root(settings) / "index.lock"
+
+
+def integrity_authority_path(settings: Settings) -> Path:
+    """Return the explicit-command-only v2 authority outside run artifacts."""
+    return index_root(settings) / "integrity-authority-v2.jsonl"
+
+
+def _integrity_snapshot(connection: sqlite3.Connection) -> str:
+    """Digest the exact inputs available to the verified index projection."""
+    inputs = []
+    for row in connection.execute(
+        "SELECT session_id,relative_path,file_kind,size_bytes,mtime_ns,sha256,record_count,schema_ids_json "
+        "FROM source_files ORDER BY session_id,relative_path"
+    ):
+        inputs.append({key: row[key] for key in row.keys()})
+    errors = [
+        {key: row[key] for key in row.keys()}
+        for row in connection.execute(
+            "SELECT error_id,session_id,source_path,detected_at,category,detail "
+            "FROM index_errors ORDER BY error_id"
+        )
+    ]
+    return _sha256_bytes(_canonical_json({"source_files": inputs, "index_errors": errors}))
+
+
+def integrity_input_snapshot(settings: Settings) -> str:
+    """Return a deterministic snapshot digest without changing the index."""
+    connection = _connect(settings, readonly=True)
+    try:
+        _validated_database_header(connection)
+        return _integrity_snapshot(connection)
+    finally:
+        connection.close()
+
+
+def _append_integrity_record(settings: Settings, record: dict[str, Any]) -> dict[str, Any]:
+    path = integrity_authority_path(settings)
+    if path.is_symlink() or (path.exists() and not path.is_file()):
+        raise WorkflowError(f"integrity authority path is unsafe: {path}")
+    payload = _canonical_json(record) + b"\n"
+    descriptor = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        os.write(descriptor, payload)
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    return record
+
+
+def record_integrity_authority(
+    settings: Settings,
+    *,
+    session_id: str,
+    artifact_path: str,
+    error_id: int,
+    error_category: str,
+    error_detail: str,
+) -> dict[str, Any]:
+    """Explicitly append one v2 integrity decision/incident binding."""
+    if not session_id or not artifact_path or error_id < 1 or not error_category or not error_detail:
+        raise WorkflowError("integrity authority records require complete error identity")
+    snapshot = integrity_input_snapshot(settings)
+    record = {
+        "schema": INTEGRITY_AUTHORITY_SCHEMA,
+        "record_id": hashlib.sha256(
+            _canonical_json({"session_id": session_id, "artifact_path": artifact_path, "error_id": error_id, "snapshot": snapshot})
+        ).hexdigest(),
+        "recorded_at_ns": time.time_ns(),
+        "session_id": session_id,
+        "artifact_path": artifact_path,
+        "error_id": error_id,
+        "error_category": error_category,
+        "error_detail_sha256": _sha256_bytes(error_detail.encode("utf-8")),
+        "generator": {"identity": INTEGRITY_GENERATOR, "version": INTEGRITY_GENERATOR_VERSION},
+        "verified_index_input_snapshot_sha256": snapshot,
+        "authority": "v2-append-only",
+    }
+    validate_instance(record, INTEGRITY_AUTHORITY_SCHEMA, artifact="integrity authority record")
+    with _writer_lock(settings):
+        return _append_integrity_record(settings, record)
+
+
+def migrate_integrity_authority(settings: Settings) -> dict[str, Any]:
+    """Append a lineage record; never interprets legacy rows as authority."""
+    connection = _connect(settings, readonly=True)
+    try:
+        rows = [
+            {key: row[key] for key in row.keys()}
+            for row in connection.execute(
+                "SELECT error_id,session_id,source_path,detected_at,category,detail "
+                "FROM index_errors ORDER BY error_id"
+            )
+        ]
+        snapshot = _integrity_snapshot(connection)
+    finally:
+        connection.close()
+    legacy_digest = _sha256_bytes(_canonical_json(rows))
+    record = {
+        "schema": INTEGRITY_MIGRATION_SCHEMA,
+        "record_id": hashlib.sha256((legacy_digest + snapshot).encode("ascii")).hexdigest(),
+        "recorded_at_ns": time.time_ns(),
+        "supersedes_schema": "agent-workflow/index-errors/v1",
+        "legacy_ledger_sha256": legacy_digest,
+        "verified_index_input_snapshot_sha256": snapshot,
+        "generator": {"identity": INTEGRITY_GENERATOR, "version": INTEGRITY_GENERATOR_VERSION},
+        "authority": "v2-append-only",
+        "legacy_trust": "none",
+    }
+    validate_instance(record, INTEGRITY_MIGRATION_SCHEMA, artifact="integrity migration record")
+    with _writer_lock(settings):
+        return _append_integrity_record(settings, record)
 
 
 @contextlib.contextmanager

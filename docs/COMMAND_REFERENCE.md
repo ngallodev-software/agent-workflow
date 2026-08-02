@@ -113,6 +113,15 @@ agent-workflow index query runs|incidents|permissions|performance|workflows|work
 
 `query` exposes fixed, parameterized operational views rather than arbitrary SQL. JSON output uses an `agent-workflow/index-query/v1` envelope containing freshness, stale/error counts, and `rows`; human output prints the same freshness summary before the table. Rows include source provenance. The index is disposable: lifecycle, permission, workflow, remediation, review, and acceptance authority remains in source artifacts and sealed receipts. Raw prompts, terminal/message bodies, and large logs are not copied into SQLite. See [SQLite evidence index architecture](SQLITE_EVIDENCE_INDEX_ARCHITECTURE.md).
 
+The explicit-only integrity foundation is separate from run artifacts and the legacy `index_errors` projection:
+
+```text
+agent-workflow index integrity migrate
+agent-workflow index integrity record SESSION ARTIFACT ERROR_ID CATEGORY DETAIL
+```
+
+These commands append versioned v2 records with exact identity, generator identity/version, and a deterministic verified-input snapshot digest. Normal `rebuild`, `sync`, and `verify` never write the authority. Migration records carry the legacy ledger digest for lineage only; legacy contents remain untrusted.
+
 ## Durable messages
 
 ```text

@@ -115,6 +115,45 @@ def test_installed_index_rebuilds_and_preserves_query_results_after_database_los
     assert incidents_after == incidents_before
 
 
+def test_installed_integrity_authority_is_explicit_and_legacy_is_untrusted(
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+) -> None:
+    state = Path(product_env["XDG_STATE_HOME"]) / "agent-workflow"
+    run = state / "runs" / "integrity-product"
+    _write_json(
+        run / "status.json",
+        {
+            "schema": "agent-workflow/session-status/v2",
+            "session_id": "integrity-product",
+            "status": "running",
+            "created_at": "2026-07-30T00:00:00+00:00",
+            "updated_at": "2026-07-30T00:01:00+00:00",
+            "workdir": "/tmp/integrity-product",
+            "prompt_path": str(run / "prompt.md"),
+            "log_path": str(run / "output.log"),
+            "ticket_id": "MAINT-007-A",
+            "pack_id": "delegation-communication-reliability",
+            "disposition": None,
+            "failure_category": None,
+        },
+    )
+    rebuilt = installed_product.json("index", "rebuild", env=product_env)
+    assert rebuilt["error_count"] == 0
+    authority = Path(rebuilt["database"]).parent / "integrity-authority-v2.jsonl"
+    assert not authority.exists()
+    assert installed_product.json("index", "verify", "--full", env=product_env)["valid"] is True
+    assert not authority.exists()
+    migration = installed_product.json("index", "integrity", "migrate", env=product_env)
+    assert migration["legacy_trust"] == "none"
+    record = installed_product.json(
+        "index", "integrity", "record", "integrity-product", "status.json", "1",
+        "run_index_failed", "installed test error", env=product_env
+    )
+    assert record["authority"] == "v2-append-only"
+    assert len(authority.read_text(encoding="utf-8").splitlines()) == 2
+
+
 @pytest.mark.parametrize("storage_root", ["runs", "archive"])
 def test_installed_full_verify_classifies_legacy_retired_record_without_accepting_it(
     installed_product: InstalledProduct,

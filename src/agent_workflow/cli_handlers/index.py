@@ -9,7 +9,9 @@ from ..cli_output import print_json, print_table
 from ..config import Settings
 from ..index_store import (
     index_status,
+    migrate_integrity_authority,
     query_index_report,
+    record_integrity_authority,
     rebuild_index,
     sync_index,
     verify_index,
@@ -43,6 +45,17 @@ def handle_index_command(
         )
     if args.index_command == "verify":
         return verify_index(settings, full=args.full), False
+    if args.index_command == "integrity":
+        if args.integrity_command == "migrate":
+            return migrate_integrity_authority(settings), False
+        return record_integrity_authority(
+            settings,
+            session_id=args.session_id,
+            artifact_path=args.artifact_path,
+            error_id=args.error_id,
+            error_category=args.error_category,
+            error_detail=args.error_detail,
+        ), False
 
     report = query_index_report(
         settings,

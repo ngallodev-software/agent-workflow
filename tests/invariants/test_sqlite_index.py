@@ -16,8 +16,12 @@ from agent_workflow.index_store import (
     INDEX_APPLICATION_ID,
     INDEX_SCHEMA_VERSION,
     database_path,
+    integrity_authority_path,
+    integrity_input_snapshot,
     index_status,
+    migrate_integrity_authority,
     query_index,
+    record_integrity_authority,
     query_index_report,
     rebuild_index,
     sync_index,
@@ -258,6 +262,8 @@ def test_rebuild_query_sync_and_full_verification(tmp_path: Path) -> None:
     assert status["stale_run_count"] == 0
     assert status["freshness"] == "current"
     assert status["journal_mode"] == "wal"
+
+
     run_row = query_index(settings, "runs")[0]
     assert run_row["pending_permission_count"] == 1
     assert run_row["source_dir"] == str(run)
@@ -301,6 +307,35 @@ def test_rebuild_query_sync_and_full_verification(tmp_path: Path) -> None:
 
     (run / "status.json").write_text("{}\n", encoding="utf-8")
     assert verify_index(settings, full=True)["valid"] is False
+
+
+def test_integrity_authority_is_explicit_append_only_and_snapshot_bound(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    _seed_run(settings)
+    rebuilt = rebuild_index(settings)
+    assert rebuilt["error_count"] == 0
+    authority = integrity_authority_path(settings)
+    assert not authority.exists()
+    before = integrity_input_snapshot(settings)
+    assert verify_index(settings, full=True)["valid"] is True
+    assert not authority.exists()
+
+    migration = migrate_integrity_authority(settings)
+    first = record_integrity_authority(
+        settings,
+        session_id="run-one",
+        artifact_path="incident-events.jsonl",
+        error_id=1,
+        error_category="run_index_failed",
+        error_detail="bound test error",
+    )
+    lines = authority.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 2
+    assert json.loads(lines[0])["schema"] == migration["schema"]
+    assert json.loads(lines[1])["schema"] == first["schema"]
+    assert first["verified_index_input_snapshot_sha256"] == before
+    assert migrate_integrity_authority(settings)["legacy_trust"] == "none"
+    assert len(authority.read_text(encoding="utf-8").splitlines()) == 3
 
 
 def test_corrupt_run_is_quarantined_without_losing_other_runs(tmp_path: Path) -> None:

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/index-integrity-authority/v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "record_id", "recorded_at_ns", "session_id", "artifact_path", "error_id", "error_category", "error_detail_sha256", "generator", "verified_index_input_snapshot_sha256", "authority"],
+  "properties": {
+    "schema": {"const": "agent-workflow/index-integrity-authority/v2"},
+    "record_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "recorded_at_ns": {"type": "integer", "minimum": 1},
+    "session_id": {"type": "string", "minLength": 1},
+    "artifact_path": {"type": "string", "minLength": 1},
+    "error_id": {"type": "integer", "minimum": 1},
+    "error_category": {"type": "string", "minLength": 1},
+    "error_detail_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "generator": {"type": "object", "additionalProperties": false, "required": ["identity", "version"], "properties": {"identity": {"type": "string", "minLength": 1}, "version": {"type": "string", "minLength": 1}}},
+    "verified_index_input_snapshot_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "authority": {"const": "v2-append-only"}
+  }
+}
