@@ -15,7 +15,7 @@ AUTHORITIES = (
     (PYPROJECT, PROJECT_VERSION),
     (ROOT / "agent-workflow.yaml", re.compile(r"(?m)^version: (\S+)$")),
     (ROOT / "src/agent_workflow/__init__.py", re.compile(r'__version__ = "([^"]+)"')),
-    (ROOT / "src/agent_workflow/cli.py", re.compile(r'version="%\(prog\)s ([^"]+)"')),
+    (ROOT / "src/agent_workflow/cli_parser.py", re.compile(r'version="%\(prog\)s ([^"]+)"')),
     (ROOT / "src/agent_workflow/doctor.py", re.compile(r'"version": "([^"]+)"')),
     (ROOT / "docs/man/agent-workflow.1", re.compile(r"agent-workflow ([0-9.]+)")),
     (ROOT / "docs/man/agent-workflow-workflow.1", re.compile(r"agent-workflow ([0-9.]+)")),

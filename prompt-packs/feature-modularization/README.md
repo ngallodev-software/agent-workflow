@@ -4,7 +4,7 @@ Implement DEC-009 without changing authority semantics: split oversized modules 
 
 ## Current implementation state
 
-0.7.7 contains the process-policy decomposition slice and the trusted plugin command-host foundation. PLUG-001 remains in progress only for bounded installed package-resource activation and independent MOD-GATE-1 review. Agents must extend the existing host rather than create a competing registry.
+0.7.7 contains the process-policy decomposition slice and the complete PLUG-001 implementation: trusted command registration plus digest-bound installed schema/asset resources. PLUG-001 is in review; agents must run MOD-GATE-1 against the existing host rather than add another registry, loader, or hook framework.
 
 ## Critical path
 

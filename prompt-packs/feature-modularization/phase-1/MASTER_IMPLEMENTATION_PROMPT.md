@@ -1,7 +1,5 @@
-# Phase 1
+# Phase 1 — MOD-GATE-1 independent review
 
-Close and independently prove the minimal trusted first-party entry-point plugin host that is partially implemented in 0.7.7.
+PLUG-001 implementation is complete in the current source. Do not add features during this phase. Independently review the existing `agent_workflow.plugin_api` and `agent_workflow.plugins` boundary, including explicit enablement, disabled-import behavior, atomic registration, recovery, command-catalog provenance, and digest-bound package-resource activation.
 
-Start from the existing `agent_workflow.plugin_api`, `agent_workflow.plugins`, `[plugins].enabled`, `plugins list`, `--no-plugins`, parser/catalog integration, and installed fixture-plugin journey. Do not replace or parallel these mechanisms. Complete only the remaining bounded package-resource resolution and validation for declared schema and asset bundles, reconcile documentation, and run MOD-GATE-1.
-
-Read current source, DEC-009, the feature-module architecture, the canonical backlog, this phase manifest, and every ticket. Run each writable ticket in its own worktree. Preserve public behavior, installed-product evidence, and direct-core defaults. Stop rather than combining refactor and feature semantics or bypassing an external backlog gate.
+Read current source, DEC-009, the feature-module architecture, the canonical backlog, this phase manifest, and every ticket. Re-run focused invariants and the separately installed fixture-wheel journey. Exercise missing files, traversal, digest mismatch, duplicate identifiers, disabled candidates, and transaction rollback. Record findings and either accept MOD-GATE-1 or return narrowly scoped corrective tickets. Do not create a second registry, a generic arbitrary-file loader, or a general hook framework.

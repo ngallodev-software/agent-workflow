@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -11,7 +12,15 @@ from tests.conftest import InstalledProduct
 
 def _build_and_install_fixture(installed_product: InstalledProduct, tmp_path: Path) -> None:
     package = tmp_path / "fixture-plugin"
-    package.mkdir()
+    module = package / "aw_fixture_plugin"
+    resource_dir = module / "resources"
+    resource_dir.mkdir(parents=True)
+    schema_content = (
+        b'{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object"}\n'
+    )
+    asset_content = b"fixture asset\n"
+    (resource_dir / "fixture.schema.json").write_bytes(schema_content)
+    (resource_dir / "fixture.txt").write_bytes(asset_content)
     (package / "pyproject.toml").write_text(
         """[build-system]
 requires = ["setuptools>=77"]
@@ -25,15 +34,14 @@ requires-python = ">=3.11"
 [project.entry-points."agent_workflow.plugins"]
 fixture = "aw_fixture_plugin:plugin"
 
-[tool.setuptools]
-py-modules = ["aw_fixture_plugin"]
+[tool.setuptools.package-data]
+aw_fixture_plugin = ["resources/*"]
 """,
         encoding="utf-8",
     )
-    (package / "aw_fixture_plugin.py").write_text(
-        """import os
+    module_source = """import os
 from pathlib import Path
-from agent_workflow.plugin_api import PluginCommand, PluginDescriptor
+from agent_workflow.plugin_api import PluginCommand, PluginDescriptor, PluginPackageResource
 
 marker = os.environ.get("FIXTURE_PLUGIN_IMPORT_MARKER")
 if marker:
@@ -56,10 +64,29 @@ def plugin():
         version="1.0.0",
         commands=(PluginCommand("fixture-echo", "fixture plugin echo", configure, execute),),
         resources=("fixture://echo",),
+        package_resources=(
+            PluginPackageResource(
+                kind="schema",
+                identifier="fixture.schema",
+                package="aw_fixture_plugin",
+                path="resources/fixture.schema.json",
+                sha256="__SCHEMA_DIGEST__",
+            ),
+            PluginPackageResource(
+                kind="asset",
+                identifier="fixture.asset",
+                package="aw_fixture_plugin",
+                path="resources/fixture.txt",
+                sha256="__ASSET_DIGEST__",
+            ),
+        ),
     )
-""",
-        encoding="utf-8",
-    )
+"""
+    module_source = module_source.replace(
+        "__SCHEMA_DIGEST__", hashlib.sha256(schema_content).hexdigest()
+    ).replace("__ASSET_DIGEST__", hashlib.sha256(asset_content).hexdigest())
+    (module / "__init__.py").write_text(module_source, encoding="utf-8")
+
     wheelhouse = tmp_path / "wheelhouse"
     wheelhouse.mkdir()
     built = subprocess.run(
@@ -137,6 +164,12 @@ def test_installed_trusted_plugin_is_explicit_atomic_and_recoverable(
     catalog_data = json.loads(catalog.stdout)
     assert [item["name"] for item in catalog_data["plugins"]] == ["fixture"]
     assert "fixture-echo" in {item["command"] for item in catalog_data["commands"]}
+    package_resources = catalog_data["plugins"][0]["package_resources"]
+    assert {(item["kind"], item["identifier"]) for item in package_resources} == {
+        ("schema", "fixture.schema"),
+        ("asset", "fixture.asset"),
+    }
+    assert all(item["size"] > 0 for item in package_resources)
 
     marker.unlink()
     suppressed = installed_product.run(
@@ -152,3 +185,20 @@ def test_installed_trusted_plugin_is_explicit_atomic_and_recoverable(
     )
     assert unavailable.returncode == 2
     assert not marker.exists()
+
+    located = subprocess.run(
+        [
+            str(installed_product.python),
+            "-c",
+            "import pathlib, aw_fixture_plugin; "
+            "print(pathlib.Path(aw_fixture_plugin.__file__).parent / 'resources/fixture.txt')",
+        ],
+        text=True,
+        capture_output=True,
+        check=True,
+        timeout=30,
+    )
+    Path(located.stdout.strip()).write_text("tampered\n", encoding="utf-8")
+    tampered = installed_product.run("--config", enabled, "plugins", "list", env=env)
+    assert tampered.returncode != 0
+    assert "package resource digest mismatch" in tampered.stderr

@@ -40,15 +40,15 @@ The arrow points toward the dependency. Authority-bearing writes remain in share
 ## Decomposition sequence
 
 1. Complete `process.py` policy extraction without changing its public imports.
-2. Split CLI parser/dispatch by command group while preserving the parser-derived command catalog.
+2. The first two CLI slices are complete: authoritative argparse tree construction lives in `cli_parser.py`, shared renderers live in `cli_output.py`, and the `index` command domain lives in `cli_handlers/index.py`, all behind unchanged public CLI behavior. Continue one command domain at a time while preserving parser-derived catalogs, completions, plugin registration, and installed help.
 3. Split session launch, observation, control, and recovery behind a facade.
-4. Split SQLite migrations/discovery/reconciliation/query code.
+4. The first SQLite slice is complete: `index_schema.py` owns database identity, migration SQL, and header validation. Continue by separating discovery, reconciliation/indexing, and query/report services behind `index_store` compatibility imports.
 5. Split runner stream control, control bridge, completion collection, and sealing.
-6. Complete PLUG-001 bundle-resource activation and independently gate the implemented entry-point host and installed fixture-plugin journey.
+6. Independently gate the completed PLUG-001 entry-point host, digest-bound package resources, and installed fixture-plugin journey.
 7. Extract only one existing feature after the spec plugin proves the boundary.
 
 Each slice requires focused invariants, installed-wheel evidence, release-asset auditing, and documentation drift review.
 
 ## Implemented plugin foundation
 
-The 0.7.7 host discovers `agent_workflow.plugins` metadata without importing disabled candidates, loads only configured names, validates the complete descriptor set before exposing an immutable registry, registers plugin-owned top-level commands, and records installed-distribution provenance in the parser-derived command catalog. `--no-plugins` provides a core-only recovery route. See [Trusted plugin API](PLUGIN_API.md).
+The 0.7.7 host discovers `agent_workflow.plugins` metadata without importing disabled candidates, loads only configured names, validates the complete descriptor and package-resource set before exposing an immutable registry, registers plugin-owned top-level commands, and records installed-distribution plus digest-bound package-resource provenance in the parser-derived command catalog. `--no-plugins` provides a core-only recovery route. See [Trusted plugin API](PLUGIN_API.md).

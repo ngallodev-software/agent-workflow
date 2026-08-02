@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import re
-from dataclasses import dataclass
-from importlib import metadata
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass, field
+from importlib import metadata, resources
+from pathlib import Path, PurePosixPath
 from types import MappingProxyType
-from typing import Iterable
 
 from . import __version__
 from .errors import WorkflowError
@@ -15,10 +18,15 @@ from .plugin_api import (
     PLUGIN_ENTRY_POINT_GROUP,
     PluginCommand,
     PluginDescriptor,
+    PluginPackageResource,
+    PluginResourceKind,
+    ResolvedPluginPackageResource,
 )
 
 _NAME = re.compile(r"^[a-z][a-z0-9-]*$")
 _IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$")
+_PACKAGE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$")
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
 @dataclass(frozen=True)
@@ -42,6 +50,7 @@ class PluginCandidate:
 class LoadedPlugin:
     descriptor: PluginDescriptor
     candidate: PluginCandidate
+    package_resources: tuple[ResolvedPluginPackageResource, ...] = ()
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -52,6 +61,7 @@ class LoadedPlugin:
             "schemas": list(self.descriptor.schemas),
             "assets": list(self.descriptor.assets),
             "resources": list(self.descriptor.resources),
+            "package_resources": [item.as_dict() for item in self.package_resources],
         }
 
 
@@ -63,6 +73,11 @@ class PluginRegistry:
     candidates: tuple[PluginCandidate, ...]
     configured_enabled: tuple[str, ...]
     suppressed: bool = False
+    _resource_contents: Mapping[tuple[PluginResourceKind, str], bytes] = field(
+        default_factory=dict,
+        repr=False,
+        compare=False,
+    )
 
     @property
     def commands(self) -> tuple[tuple[LoadedPlugin, PluginCommand], ...]:
@@ -71,6 +86,19 @@ class PluginRegistry:
             for plugin in self.loaded
             for command in plugin.descriptor.commands
         )
+
+    @property
+    def package_resources(self) -> tuple[ResolvedPluginPackageResource, ...]:
+        return tuple(item for plugin in self.loaded for item in plugin.package_resources)
+
+    def read_package_resource(self, kind: PluginResourceKind, identifier: str) -> bytes:
+        """Return validated immutable resource bytes by exact logical identifier."""
+        try:
+            return self._resource_contents[(kind, identifier)]
+        except KeyError as exc:
+            raise WorkflowError(
+                f"plugin package resource is not registered: {kind}:{identifier}"
+            ) from exc
 
     def inventory(self) -> list[dict[str, object]]:
         enabled = set(self.configured_enabled)
@@ -151,7 +179,11 @@ def _validate_identifiers(values: Iterable[str], *, label: str) -> tuple[str, ..
 def _load_descriptor(candidate: PluginCandidate) -> PluginDescriptor:
     try:
         exported = candidate.entry_point.load()
-        descriptor = exported() if callable(exported) and not isinstance(exported, PluginDescriptor) else exported
+        descriptor = (
+            exported()
+            if callable(exported) and not isinstance(exported, PluginDescriptor)
+            else exported
+        )
     except Exception as exc:  # plugin import failures must become bounded diagnostics
         raise WorkflowError(
             f"enabled plugin {candidate.name!r} could not be loaded from {candidate.value}: {exc}"
@@ -163,6 +195,92 @@ def _load_descriptor(candidate: PluginCandidate) -> PluginDescriptor:
     return descriptor
 
 
+def _validate_resource_path(value: str) -> tuple[str, ...]:
+    if not isinstance(value, str) or not value or "\\" in value:
+        raise WorkflowError(f"invalid plugin package resource path: {value!r}")
+    path = PurePosixPath(value)
+    if path.is_absolute() or str(path) != value or any(part in {"", ".", ".."} for part in path.parts):
+        raise WorkflowError(f"invalid plugin package resource path: {value!r}")
+    return path.parts
+
+
+def _read_package_resource(
+    plugin_name: str,
+    declaration: PluginPackageResource,
+) -> tuple[ResolvedPluginPackageResource, bytes]:
+    if not isinstance(declaration, PluginPackageResource):
+        raise WorkflowError(
+            f"plugin {plugin_name!r} contains an invalid package resource declaration"
+        )
+    if declaration.kind not in {"schema", "asset"}:
+        raise WorkflowError(
+            f"plugin {plugin_name!r} package resource has invalid kind {declaration.kind!r}"
+        )
+    _validate_identifiers((declaration.identifier,), label=declaration.kind)
+    if not isinstance(declaration.package, str) or not _PACKAGE.fullmatch(declaration.package):
+        raise WorkflowError(
+            f"plugin {plugin_name!r} package resource has invalid package {declaration.package!r}"
+        )
+    parts = _validate_resource_path(declaration.path)
+    if not isinstance(declaration.sha256, str) or not _SHA256.fullmatch(declaration.sha256):
+        raise WorkflowError(
+            f"plugin {plugin_name!r} package resource {declaration.identifier!r} "
+            "must declare a lowercase SHA-256 digest"
+        )
+
+    try:
+        root = resources.files(declaration.package)
+        target = root.joinpath(*parts)
+        if isinstance(root, Path) and isinstance(target, Path):
+            root_resolved = root.resolve(strict=True)
+            target_resolved = target.resolve(strict=True)
+            if not target_resolved.is_relative_to(root_resolved):
+                raise WorkflowError(
+                    f"plugin {plugin_name!r} package resource escapes package root: "
+                    f"{declaration.path!r}"
+                )
+            relative = target.relative_to(root)
+            cursor = root
+            for part in relative.parts:
+                cursor = cursor / part
+                if cursor.is_symlink():
+                    raise WorkflowError(
+                        f"plugin {plugin_name!r} package resource may not traverse symlinks: "
+                        f"{declaration.path!r}"
+                    )
+        if not target.is_file():
+            raise WorkflowError(
+                f"plugin {plugin_name!r} package resource is not a file: {declaration.path!r}"
+            )
+        content = target.read_bytes()
+    except WorkflowError:
+        raise
+    except Exception as exc:
+        raise WorkflowError(
+            f"plugin {plugin_name!r} could not resolve package resource "
+            f"{declaration.package}:{declaration.path}: {exc}"
+        ) from exc
+
+    actual = hashlib.sha256(content).hexdigest()
+    if not hmac.compare_digest(actual, declaration.sha256):
+        raise WorkflowError(
+            f"plugin {plugin_name!r} package resource digest mismatch for "
+            f"{declaration.identifier!r}: expected {declaration.sha256}, got {actual}"
+        )
+    return (
+        ResolvedPluginPackageResource(
+            plugin=plugin_name,
+            kind=declaration.kind,
+            identifier=declaration.identifier,
+            package=declaration.package,
+            path=declaration.path,
+            sha256=actual,
+            size=len(content),
+        ),
+        content,
+    )
+
+
 def _stage_registry(
     candidates: tuple[PluginCandidate, ...],
     enabled: tuple[str, ...],
@@ -172,6 +290,7 @@ def _stage_registry(
         by_name.setdefault(candidate.name, []).append(candidate)
 
     staged: list[LoadedPlugin] = []
+    staged_contents: dict[tuple[PluginResourceKind, str], bytes] = {}
     for name in enabled:
         matches = by_name.get(name, [])
         if not matches:
@@ -205,7 +324,19 @@ def _stage_registry(
         _validate_identifiers(descriptor.schemas, label="schema")
         _validate_identifiers(descriptor.assets, label="asset")
         _validate_identifiers(descriptor.resources, label="resource")
-        staged.append(LoadedPlugin(descriptor, candidate))
+
+        resolved: list[ResolvedPluginPackageResource] = []
+        for declaration in descriptor.package_resources:
+            metadata_record, content = _read_package_resource(name, declaration)
+            key = (metadata_record.kind, metadata_record.identifier)
+            if key in staged_contents:
+                raise WorkflowError(
+                    f"duplicate plugin {metadata_record.kind} registration: "
+                    f"{metadata_record.identifier}"
+                )
+            staged_contents[key] = content
+            resolved.append(metadata_record)
+        staged.append(LoadedPlugin(descriptor, candidate, tuple(resolved)))
 
     # Validate the entire transaction before exposing any registration.
     descriptor_names = [item.descriptor.name for item in staged]
@@ -213,19 +344,37 @@ def _stage_registry(
         raise WorkflowError("duplicate enabled plugin descriptor name")
     for label, values in {
         "command": [command.name for item in staged for command in item.descriptor.commands],
-        "schema": [value for item in staged for value in item.descriptor.schemas],
-        "asset": [value for item in staged for value in item.descriptor.assets],
+        "schema": [
+            *[value for item in staged for value in item.descriptor.schemas],
+            *[
+                resource.identifier
+                for item in staged
+                for resource in item.package_resources
+                if resource.kind == "schema"
+            ],
+        ],
+        "asset": [
+            *[value for item in staged for value in item.descriptor.assets],
+            *[
+                resource.identifier
+                for item in staged
+                for resource in item.package_resources
+                if resource.kind == "asset"
+            ],
+        ],
         "resource": [value for item in staged for value in item.descriptor.resources],
     }.items():
         duplicates = sorted({value for value in values if values.count(value) > 1})
         if duplicates:
             raise WorkflowError(f"duplicate plugin {label} registration: {', '.join(duplicates)}")
 
-    # A proxy is constructed as a final duplicate assertion and documents that
-    # consumers receive immutable lookup semantics even though the public
-    # registry exposes ordered tuples for deterministic rendering.
     MappingProxyType({item.descriptor.name: item for item in staged})
-    return PluginRegistry(tuple(staged), candidates, enabled)
+    return PluginRegistry(
+        tuple(staged),
+        candidates,
+        enabled,
+        _resource_contents=MappingProxyType(dict(staged_contents)),
+    )
 
 
 def load_plugin_registry(

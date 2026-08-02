@@ -1,0 +1,123 @@
+{
+  "$defs": {
+    "id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+      "type": "string"
+    },
+    "principal": {
+      "maxLength": 256,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,255}$",
+      "type": "string"
+    }
+  },
+  "$id": "agent-workflow/hierarchy-journal-record/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "actor": {
+      "$ref": "#/$defs/principal"
+    },
+    "causation_id": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/id"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "correlation_id": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/id"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "journal_id": {
+      "$ref": "#/$defs/id"
+    },
+    "message_id": {
+      "$ref": "#/$defs/id"
+    },
+    "payload": {
+      "maxProperties": 128,
+      "type": "object"
+    },
+    "record_type": {
+      "enum": [
+        "lifecycle",
+        "action",
+        "acknowledgement",
+        "import",
+        "diagnostic"
+      ]
+    },
+    "schema": {
+      "const": "agent-workflow/hierarchy-journal-record/v1"
+    },
+    "sequence": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "source": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "journal_id": {
+              "$ref": "#/$defs/id"
+            },
+            "message_id": {
+              "$ref": "#/$defs/id"
+            }
+          },
+          "required": [
+            "journal_id",
+            "message_id"
+          ],
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "team_id": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/id"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "timestamp": {
+      "maxLength": 64,
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema",
+    "journal_id",
+    "sequence",
+    "message_id",
+    "timestamp",
+    "record_type",
+    "actor",
+    "team_id",
+    "correlation_id",
+    "causation_id",
+    "source",
+    "payload"
+  ],
+  "type": "object"
+}

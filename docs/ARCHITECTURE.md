@@ -29,13 +29,13 @@ target repository/worktree
 
 ## Plugin-first decomposition
 
-The current distribution remains the execution host. Version 0.7.7 implements the first narrow, versioned trusted-plugin command host; bounded package-resource activation and independent gate review remain open under PLUG-001. The first external first-party plugin should be the sibling `agent-workflow-spec` repository, which owns collaborative specification authoring and deterministic compilation into existing prompt packs and evaluation artifacts. Core continues to own tmux/process/session execution, durable state, receipts, lifecycle authority, workflow safety, and prompt-pack validation required at launch.
+The current distribution remains the execution host. Version 0.7.7 implements the first narrow, versioned trusted-plugin host, including digest-bound schema and asset package resources; independent MOD-GATE-1 review remains open under PLUG-001. The first external first-party plugin should be the sibling `agent-workflow-spec` repository, which owns collaborative specification authoring and deterministic compilation into existing prompt packs and evaluation artifacts. Core continues to own tmux/process/session execution, durable state, receipts, lifecycle authority, workflow safety, and prompt-pack validation required at launch.
 
 This is an additive migration, not an immediate rename or broad repository split. Installed plugins are trusted code, must be explicitly enabled and version-compatible, and may register only bounded command namespaces, schemas, assets, read services, and diagnostics. LangGraph may be an optional spec-authoring adapter, but its checkpoints never replace canonical JSON, append-only events, approval receipts, compiler receipts, or sealed execution evidence. See [Trusted plugin API](PLUGIN_API.md) and [Collaborative specification compiler and plugin-first decomposition](SPEC_AUTHORING_PLUGIN_ARCHITECTURE.md).
 
 ## Approved bounded hierarchical orchestration
 
-DEC-005 approves an explicitly enabled later orchestration layer using a bounded three-tier hierarchy: a root orchestrator manages multiple team leads, and each team lead supervises worker sessions in panes within its own tmux window. Durable hierarchy contracts, journals, scoped delegation authority, team receipts, and root receipts remain authoritative; tmux sessions/windows/panes and optional external terminal windows are projections. The design intentionally reuses canonical session, workflow, inbox, receipt, and worktree services rather than introducing another executor or scheduler path. See [Hierarchical multi-team orchestration design](HIERARCHICAL_MULTI_TEAM_ORCHESTRATION_DESIGN.md) and [DEC-005](DECISIONS/DEC-005-HIERARCHICAL-ORCHESTRATION.md).
+DEC-005 approves an explicitly enabled bounded three-tier hierarchy: a root orchestrator manages multiple team leads, and each team lead eventually supervises worker sessions in panes within its own tmux window. The current `agent_workflow.hierarchy` package implements immutable hierarchy/team-delegation contracts, canonical digests, capability narrowing, read-only contract-set installation, append-only fsynced local journals, idempotent imported-message handling, deterministic replay, and digest-sealed team/root receipts that verify exact declared evidence. The authority phase remains in review at HIER-GATE-0; tmux topology, team runtime, messaging, scheduling, and recovery remain gated. Durable hierarchy records remain authoritative; tmux sessions/windows/panes and optional external terminal windows are projections. The design intentionally reuses canonical session, workflow, inbox, receipt, and worktree services rather than introducing another executor or scheduler path. See [Hierarchical multi-team orchestration design](HIERARCHICAL_MULTI_TEAM_ORCHESTRATION_DESIGN.md) and [DEC-005](DECISIONS/DEC-005-HIERARCHICAL-ORCHESTRATION.md).
 
 ## Implemented bounded supervision and self-healing
 
@@ -65,13 +65,14 @@ The database is not lifecycle, permission, acceptance, workflow, or remediation 
 
 | Area | Modules | Responsibility |
 |---|---|---|
-| CLI/config | `cli.py`, `config.py`, `doctor.py` | live parser, configuration, local capability checks |
+| CLI/config | `cli.py`, `cli_parser.py`, `cli_output.py`, `cli_handlers/*`, `config.py`, `doctor.py` | compatibility dispatch facade, authoritative live parser construction, shared output rendering, command-domain handlers, configuration, local capability checks |
 | Sessions/processes | `sessions.py`, `runner.py`, `executors.py`, `tmux.py`, `process.py` | canonical launch, process ownership, structured streams, retry/recovery |
 | Health/supervision | `health.py`, `diagnostics.py`, `supervisor.py` | liveness/progress separation, bounded terminal/resource evidence, incident classification, deterministic remediation |
 | Durable state | `state.py`, `events.py`, `messages.py`, `ledger.py` | status projections, append-only lifecycle/control records, ledgers |
-| Search projection | `index_store.py` | versioned SQLite schema, deterministic rebuild/incremental reconciliation, source provenance, curated read-only queries |
+| Search projection | `index_schema.py`, `index_store.py` | database identity and monotonic migrations; deterministic rebuild/incremental reconciliation, source provenance, curated read-only queries |
 | Evidence | `receipts.py`, `metrics.py`, `provider_evidence.py`, `lifecycle.py` | final seals, metrics, provider usage, review/accept/reject receipts |
 | Workflows | `workflow.py`, `scheduler.py`, `workflow_service.py`, `approval.py`, `bindings.py`, `workflow_receipt.py`, `workflow_templates.py`, `routing.py` | graph validation/replay, scheduling, approvals, result binding, aggregate seals, templates, advice |
+| Hierarchy authority | `hierarchy/contracts.py`, `hierarchy/journals.py`, `hierarchy/receipts.py` | opt-in fixed-depth contracts, capability narrowing, immutable contract sets, append-only journals, deterministic replay, and digest-sealed team/root receipts; no runtime/tmux authority yet |
 | Prompt packs | `pack.py`, `manifests.py`, `native_jobs.py`, `contracts.py`, `path.py` | scaffold, no-follow inventory validation, checksums/archive, structured results |
 | Evaluation | `evaluation.py`, `eval/*`, `inspect_adapter.py`, `integrations/*` | collectors, scoring, immutable trials, cohort comparison, optional adapters |
 | MCP | `mcp/server.py`, `mcp/services.py` | bounded read-only stdio adapter over shared read services |

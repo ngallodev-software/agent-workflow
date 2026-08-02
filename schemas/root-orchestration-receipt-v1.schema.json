@@ -1,0 +1,300 @@
+{
+  "$defs": {
+    "artifact": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "path": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "size": {
+          "maximum": 67108864,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "path",
+        "sha256",
+        "size"
+      ],
+      "type": "object"
+    },
+    "fileDescriptor": {
+      "additionalProperties": false,
+      "properties": {
+        "file_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "path": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "size": {
+          "maximum": 67108864,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "file_sha256",
+        "size"
+      ],
+      "type": "object"
+    },
+    "id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+      "type": "string"
+    },
+    "journal": {
+      "additionalProperties": false,
+      "properties": {
+        "journal_id": {
+          "$ref": "#/$defs/id"
+        },
+        "label": {
+          "$ref": "#/$defs/id"
+        },
+        "last_message_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "path": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "record_count": {
+          "maximum": 10000000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "size": {
+          "maximum": 67108864,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "label",
+        "journal_id",
+        "path",
+        "record_count",
+        "last_message_id",
+        "sha256",
+        "size"
+      ],
+      "type": "object"
+    },
+    "relativePath": {
+      "maxLength": 4096,
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*\\\\).+",
+      "type": "string"
+    },
+    "sha256": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    }
+  },
+  "$id": "agent-workflow/root-orchestration-receipt/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "approval_evidence": {
+      "items": {
+        "$ref": "#/$defs/artifact"
+      },
+      "maxItems": 1024,
+      "type": "array"
+    },
+    "contract_set": {
+      "$ref": "#/$defs/fileDescriptor"
+    },
+    "created_at": {
+      "maxLength": 64,
+      "minLength": 1,
+      "type": "string"
+    },
+    "cross_team_bindings": {
+      "items": {
+        "$ref": "#/$defs/artifact"
+      },
+      "maxItems": 1024,
+      "type": "array"
+    },
+    "hierarchy_contract": {
+      "additionalProperties": false,
+      "properties": {
+        "file_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "path": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "schema": {
+          "const": "agent-workflow/orchestration-hierarchy/v1"
+        },
+        "size": {
+          "maximum": 67108864,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "schema",
+        "file_sha256",
+        "size"
+      ],
+      "type": "object"
+    },
+    "hierarchy_identity_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "orchestration_id": {
+      "$ref": "#/$defs/id"
+    },
+    "outcome": {
+      "enum": [
+        "completed",
+        "failed",
+        "blocked",
+        "cancelled",
+        "partial"
+      ]
+    },
+    "receipt_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "root_journals": {
+      "items": {
+        "$ref": "#/$defs/journal"
+      },
+      "maxItems": 128,
+      "minItems": 1,
+      "type": "array"
+    },
+    "schema": {
+      "const": "agent-workflow/root-orchestration-receipt/v1"
+    },
+    "teams": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "delegation_contract": {
+            "additionalProperties": false,
+            "properties": {
+              "contract_sha256": {
+                "$ref": "#/$defs/sha256"
+              },
+              "file_sha256": {
+                "$ref": "#/$defs/sha256"
+              },
+              "path": {
+                "$ref": "#/$defs/relativePath"
+              },
+              "size": {
+                "maximum": 67108864,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "path",
+              "contract_sha256",
+              "file_sha256",
+              "size"
+            ],
+            "type": "object"
+          },
+          "team_id": {
+            "$ref": "#/$defs/id"
+          },
+          "team_receipt": {
+            "additionalProperties": false,
+            "properties": {
+              "file_sha256": {
+                "$ref": "#/$defs/sha256"
+              },
+              "path": {
+                "$ref": "#/$defs/relativePath"
+              },
+              "receipt_sha256": {
+                "$ref": "#/$defs/sha256"
+              },
+              "size": {
+                "maximum": 67108864,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "path",
+              "receipt_sha256",
+              "file_sha256",
+              "size"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "team_id",
+          "delegation_contract",
+          "team_receipt"
+        ],
+        "type": "object"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "type": "array"
+    },
+    "unresolved_issues": {
+      "items": {
+        "maxLength": 8192,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 1024,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "version": {
+      "const": 1
+    }
+  },
+  "required": [
+    "schema",
+    "version",
+    "orchestration_id",
+    "hierarchy_identity_sha256",
+    "hierarchy_contract",
+    "contract_set",
+    "root_journals",
+    "teams",
+    "cross_team_bindings",
+    "approval_evidence",
+    "unresolved_issues",
+    "outcome",
+    "created_at",
+    "receipt_sha256"
+  ],
+  "type": "object"
+}

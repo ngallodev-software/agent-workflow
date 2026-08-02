@@ -184,6 +184,54 @@
             "minLength": 1,
             "type": "string"
           },
+          "package_resources": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "identifier": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "kind": {
+                  "enum": [
+                    "schema",
+                    "asset"
+                  ]
+                },
+                "package": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "path": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "plugin": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "sha256": {
+                  "pattern": "^[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                "size": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "plugin",
+                "kind",
+                "identifier",
+                "package",
+                "path",
+                "sha256",
+                "size"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
           "resources": {
             "items": {
               "minLength": 1,

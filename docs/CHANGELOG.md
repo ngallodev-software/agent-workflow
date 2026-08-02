@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Extract shared terminal renderers into `agent_workflow.cli_output` and the complete `index` command domain into `agent_workflow.cli_handlers.index`, preserving public parser/catalog behavior, exact index schemas, JSON/table output, and installed CLI journeys.
+
+- Extract SQLite application identity, schema version, migration SQL, and database-header validation into `agent_workflow.index_schema` while preserving `index_store` imports, exact migration records, rebuild behavior, and installed index journeys.
+
+- Extract authoritative argparse command-tree construction from the monolithic CLI dispatcher into `agent_workflow.cli_parser` while preserving the `agent_workflow.cli.build_parser` facade, parser-derived catalogs/completions, plugin registration, help, and installed CLI behavior.
+
+- Complete the HIER-002 durable-authority slice with strict team/root receipt schemas, read-only digest sealing, declared journal and evidence verification, required output/review/approval enforcement, budget accounting, later-append/tamper invalidation, and installed-wheel coverage.
+
 ## 0.7.7 — 2026-08-01
 
 - Adopt Apache-2.0 and select GitHub Private Vulnerability Reporting as the primary disclosure channel, pending repository enablement proof.

@@ -182,18 +182,17 @@ The team lead can narrow this authority for workers but cannot widen it.
 
 `agent-workflow/team-receipt/v1` seals:
 
-- delegation contract digest;
-- team workflow snapshot and complete event journal digest;
-- exact worker run IDs, launch contracts, final receipts, results, and lifecycle receipts;
-- root actions received and team acknowledgements emitted;
-- unresolved issues, scope deviations, budget usage, and terminal disposition;
-- independent review evidence where required.
+- the exact installed delegation contract identity and file digest;
+- every explicitly declared local journal identity, record count, final message, size, and file digest;
+- exact worker run IDs and immutable evidence, including every contract-required output kind;
+- required independent review evidence;
+- unresolved issues, scope deviations, exact bounded budget usage, and terminal disposition.
 
-The root scheduler accepts a team as complete only from a verified team receipt.
+Evidence references are relative to an explicit evidence root and must resolve to read-only, single-link regular files. Duplicate ownership, cross-team journal identities, missing required outputs/reviews, later journal appends, and evidence mutation fail verification. The root scheduler may eventually accept a team as complete only from a verified team receipt; that runtime behavior is not part of HIER-002.
 
 ### 4. Root receipt
 
-`agent-workflow/root-orchestration-receipt/v1` commits to all team contracts and receipts, cross-team bindings, root actions, final approvals, unresolved evidence, and global outcome.
+`agent-workflow/root-orchestration-receipt/v1` commits to the exact hierarchy and contract-set files, complete declared root journals, the exact declared team contract/receipt set, cross-team bindings, contract-required final approvals, unresolved evidence, and global outcome. It independently re-verifies every nested team receipt and rejects later appends, mutation, partial team sets, or ambiguous evidence ownership.
 
 ## Message model
 

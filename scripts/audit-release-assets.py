@@ -379,7 +379,7 @@ def main(argv: list[str] | None = None) -> int:
         ROOT / "pyproject.toml": f'version = "{EXPECTED_VERSION}"',
         ROOT / "agent-workflow.yaml": f"version: {EXPECTED_VERSION}",
         ROOT / "src/agent_workflow/__init__.py": f'__version__ = "{EXPECTED_VERSION}"',
-        ROOT / "src/agent_workflow/cli.py": f'%(prog)s {EXPECTED_VERSION}',
+        ROOT / "src/agent_workflow/cli_parser.py": f'%(prog)s {EXPECTED_VERSION}',
         ROOT / "src/agent_workflow/doctor.py": f'"version": "{EXPECTED_VERSION}"',
         ROOT / "docs/man/agent-workflow.1": f"agent-workflow {EXPECTED_VERSION}",
         ROOT / "docs/man/agent-workflow-workflow.1": f"agent-workflow {EXPECTED_VERSION}",

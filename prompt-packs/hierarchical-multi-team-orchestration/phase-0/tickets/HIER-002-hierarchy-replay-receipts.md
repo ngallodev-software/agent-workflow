@@ -1,41 +1,37 @@
-# HIER-002 — hierarchy journals, replay, and receipts
+# HIER-002 — independent review of journals, replay, and receipts
 
-## Objective
+## Current state
 
-Add append-only fsynced hierarchy lifecycle/action/ack journals, deterministic
-replay, team receipt, and root orchestration receipt construction/verification.
+Implementation is complete and in review. `agent_workflow.hierarchy` provides append-only fsynced journals with contiguous local sequences, exact journal identities, source-journal/message idempotency, no-follow single-link file checks, strict truncation/tamper/duplicate/mixed-identity rejection, and deterministic contract-plus-journal replay. It also provides immutable team and root receipts with strict schemas and installed-wheel evidence.
 
-## Dependencies and lane
+Team receipts bind the exact installed delegation contract, complete explicitly declared journals, every contract-required worker output, required independent review evidence, unresolved issues, scope deviations, exact budget usage, and terminal disposition. Root receipts bind the hierarchy and contract set, root journals, the exact declared team set and team receipts, cross-team bindings, required approvals, unresolved issues, and global outcome. Receipt and evidence files must be single-link, read-only regular files; later journal appends or evidence mutation invalidate verification.
 
-- Depends on `HIER-001`.
-- Critical path; must be accepted by `HIER-GATE-0` before tmux topology work.
+## Review requirements
 
-## Required behavior
+- Verify journal ordering remains local rather than inventing a global sequence.
+- Verify team journals cannot smuggle another team's identity and root journals cannot reference undeclared teams.
+- Verify workers_started equals the exact sealed worker set, usage cannot exceed delegated budgets, and every declared required output is present.
+- Verify required review and approval kinds cannot be omitted.
+- Verify team-owned, review, binding, and approval evidence paths cannot be ambiguously reused.
+- Verify receipt self-digests, exact contract paths, file digests, sizes, immutable modes, and team/root identities.
+- Attack later appends, truncation, receipt/evidence tamper, missing evidence, duplicate descriptors, path traversal, symlinks, hard links, writable files, mixed team identity, and partial team sets.
 
-- Local journal sequences are contiguous; cross-journal ordering uses causation
-  and correlation, not a false global sequence.
-- Imports are idempotent by source journal identity and message ID.
-- Rebuild projections from immutable contract plus journals.
-- Team receipt seals exact worker final/lifecycle/result evidence.
-- Root receipt seals exact team contracts/receipts and global approval evidence.
-- Tamper, truncation, duplicate, mixed-identity, and symlink tests fail closed.
+## Non-targets
 
-## Writable scope
+No tmux mutation, team-lead runtime, hierarchical transport, root scheduler, arbitrary recursion, daemon, or multi-host behavior. Correct demonstrated HIER-002 defects only; do not begin HIER-003.
 
-Limit changes to the modules, schemas, focused tests, command/docs/man/skill surfaces directly required by this ticket. Preserve current direct-orchestrator compatibility and do not update `docs/BACKLOG.md` from the child session.
+## Writable paths
 
-## Required tests and evidence
+Review evidence and, only for a demonstrated HIER-002 defect, `src/agent_workflow/hierarchy/`, hierarchy authority schemas, focused tests, and directly related Phase 0 documentation.
 
-Add focused invariant tests and an installed-product acceptance journey for the required behavior. Run package validation and relevant release audits. Record exact commands, exit codes, durable artifact paths, and receipt references.
+## Tests
+
+Run all hierarchy contract, journal/replay, and receipt invariants; all three installed-product hierarchy journeys; prompt-pack validation; release-asset auditing; and direct-orchestration regression coverage appropriate to any corrective change.
 
 ## Acceptance criteria
 
-All required behavior is proven from immutable contracts, append-only journals, verified receipts, and canonical service paths. Existing supported direct orchestration journeys remain green.
+Accept the HIER-002 portion of HIER-GATE-0 only when deterministic replay remains unchanged, team and root receipts verify all declared evidence from installed-product code, every mutation or later append invalidates the appropriate receipt, and no runtime/tmux authority is introduced early.
 
 ## Stop conditions
 
-Stop and report rather than weakening durable authority, bypassing canonical launch/workflow services, inferring completion from tmux/process state, adding arbitrary recursion or multi-host infrastructure, widening permissions, or introducing shell-derived terminal commands.
-
-## Feature-boundary steering
-
-Implement hierarchy-specific contracts, services, state, and policy in the dedicated built-in hierarchy feature package. Core authority services may be consumed through narrow public interfaces; do not embed hierarchy-only branches throughout generic session, scheduler, CLI, workflow, or tmux modules. Preserve direct orchestration as the default path and require explicit hierarchy enablement.
+Stop and reject the gate rather than weakening immutable authority, accepting mutable or partial evidence, inferring completion from process/tmux state, allowing cross-team identity drift, or implementing later-phase behavior.

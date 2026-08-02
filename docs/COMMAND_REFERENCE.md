@@ -25,7 +25,7 @@ agent-workflow orchestrator inbox read ORCHESTRATOR_ID [--event-id UUID] [--incl
 
 ### Trusted plugins
 
-Plugin candidates are discovered from Python package metadata but imported only when their entry-point names are listed in `[plugins].enabled`. `plugins list` reports discovered, enabled, loaded, and suppressed state. `--no-plugins` suppresses all configured imports and restores the core-only parser for recovery. Plugins are trusted executable code and never gain authority merely by being present. See [Trusted plugin API](PLUGIN_API.md).
+Plugin candidates are discovered from Python package metadata but imported only when their entry-point names are listed in `[plugins].enabled`. `plugins list` reports discovered, enabled, loaded, suppressed, and validated package-resource state. Enabled plugins may declare digest-bound schema and asset files beneath installed Python packages; traversal, missing files, collisions, and digest mismatches fail before registry activation. `--no-plugins` suppresses all configured imports and restores the core-only parser for recovery. Plugins are trusted executable code and never gain authority merely by being present. See [Trusted plugin API](PLUGIN_API.md).
 
 ## Worktrees and sessions
 

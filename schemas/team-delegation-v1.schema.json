@@ -1,0 +1,107 @@
+{
+  "$id": "agent-workflow/team-delegation/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+    },
+    "boundedText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192
+    },
+    "boundedStringList": {
+      "type": "array",
+      "maxItems": 256,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024
+      }
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "version",
+    "orchestration_id",
+    "root_orchestrator_id",
+    "team_id",
+    "team_lead_session_id",
+    "objective",
+    "deliverables",
+    "writable_scope",
+    "no_go_scope",
+    "stop_conditions",
+    "dependencies",
+    "required_outputs",
+    "budgets",
+    "allowed",
+    "message_routes",
+    "required_reviews",
+    "required_approvals",
+    "parent_action_cursor",
+    "hierarchy_identity_sha256",
+    "contract_sha256"
+  ],
+  "properties": {
+    "schema": {"const": "agent-workflow/team-delegation/v1"},
+    "version": {"const": 1},
+    "orchestration_id": {"$ref": "#/$defs/id"},
+    "root_orchestrator_id": {"$ref": "#/$defs/id"},
+    "team_id": {"$ref": "#/$defs/id"},
+    "team_lead_session_id": {"$ref": "#/$defs/id"},
+    "objective": {"$ref": "#/$defs/boundedText"},
+    "deliverables": {"$ref": "#/$defs/boundedStringList"},
+    "writable_scope": {"$ref": "#/$defs/boundedStringList"},
+    "no_go_scope": {"$ref": "#/$defs/boundedStringList"},
+    "stop_conditions": {"$ref": "#/$defs/boundedStringList"},
+    "dependencies": {"$ref": "#/$defs/boundedStringList"},
+    "required_outputs": {"$ref": "#/$defs/boundedStringList"},
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_workers",
+        "max_concurrent_workers",
+        "max_interactive_panes",
+        "max_retries",
+        "max_wall_seconds"
+      ],
+      "properties": {
+        "max_workers": {"type": "integer", "minimum": 1, "maximum": 4096},
+        "max_concurrent_workers": {"type": "integer", "minimum": 1, "maximum": 1024},
+        "max_interactive_panes": {"type": "integer", "minimum": 1, "maximum": 4096},
+        "max_retries": {"type": "integer", "minimum": 0, "maximum": 32},
+        "max_wall_seconds": {"type": "integer", "minimum": 1, "maximum": 31536000}
+      }
+    },
+    "allowed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["executors", "models", "agent_classes", "permissions", "commands"],
+      "properties": {
+        "executors": {"$ref": "#/$defs/boundedStringList"},
+        "models": {"$ref": "#/$defs/boundedStringList"},
+        "agent_classes": {"$ref": "#/$defs/boundedStringList"},
+        "permissions": {"$ref": "#/$defs/boundedStringList"},
+        "commands": {"$ref": "#/$defs/boundedStringList"}
+      }
+    },
+    "message_routes": {"$ref": "#/$defs/boundedStringList"},
+    "required_reviews": {"$ref": "#/$defs/boundedStringList"},
+    "required_approvals": {"$ref": "#/$defs/boundedStringList"},
+    "parent_action_cursor": {"type": "integer", "minimum": 0},
+    "hierarchy_identity_sha256": {"$ref": "#/$defs/sha256"},
+    "contract_sha256": {"$ref": "#/$defs/sha256"}
+  }
+}

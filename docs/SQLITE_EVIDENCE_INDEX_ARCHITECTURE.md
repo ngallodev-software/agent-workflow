@@ -234,7 +234,7 @@ Index results and errors appear in `index_sync` within the supervisor report and
 
 ## Migrations
 
-Migrations are ordered and monotonic. The database records both `PRAGMA user_version` and a `schema_migrations` row. The application:
+Migrations are ordered and monotonic. `agent_workflow.index_schema` owns the application ID, supported schema version, migration SQL, and database-header validation; `agent_workflow.index_store` remains the compatibility facade for initialization, rebuild, reconciliation, verification, and queries. The database records both `PRAGMA user_version` and a `schema_migrations` row. The application:
 
 - upgrades older supported projections;
 - refuses a database newer than the running binary;

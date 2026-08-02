@@ -19,7 +19,7 @@
   <a href="docs/BACKLOG.md">Roadmap</a>
 </div>
 
-> **Status:** pre-public-release. The single-host execution, evidence, workflow, messaging, evaluation, trusted plugin-command host, optional MCP-read, and foreground supervision foundations are implemented. Bounded root-orchestrator → team-lead → worker orchestration is approved as an explicitly enabled feature and remains implementation-gated by [`docs/BACKLOG.md`](docs/BACKLOG.md).
+> **Status:** pre-public-release. The single-host execution, evidence, workflow, messaging, evaluation, trusted plugin-command host, optional MCP-read, and foreground supervision foundations are implemented. Bounded root-orchestrator → team-lead → worker orchestration is approved as an explicitly enabled feature. Its immutable contract/capability layer, append-only local journals, idempotent imports, and deterministic replay are implemented; receipts, tmux topology, team runtime, messaging, scheduling, and recovery remain independently gated by [`docs/BACKLOG.md`](docs/BACKLOG.md).
 
 ## Why agent-workflow exists
 
@@ -260,7 +260,7 @@ The remaining governed-sandbox and authenticated-principal work is tracked under
 
 ## Project state and roadmap
 
-The searchable evidence projection and bounded supervisor foundations are implemented and in review. A bounded hierarchical orchestration layer is approved as an explicitly enabled built-in feature; implementation remains gated by its ticket-specific prerequisites:
+The searchable evidence projection and bounded supervisor foundations are implemented and in review. The bounded hierarchy durable-authority layer—contracts, journals, replay, and sealed team/root receipts—is also implemented and awaiting HIER-GATE-0; hierarchy runtime remains gated by its ticket-specific prerequisites:
 
 ```text
 root orchestrator

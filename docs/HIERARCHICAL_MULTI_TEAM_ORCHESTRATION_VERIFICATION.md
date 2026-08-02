@@ -1,8 +1,8 @@
-# Hierarchical multi-team orchestration overlay verification
+# Historical hierarchical design-overlay verification
 
 - **Date:** 2026-07-30
 - **Baseline:** `agent-workflow-0.3.0-e9e5b95-source.tar.gz`
-- **Scope:** corrected design-only overlay; no runtime source implementation
+- **Scope:** historical corrected design-only overlay; superseded for current implementation status by `docs/BACKLOG.md` and `HIERARCHICAL_MULTI_TEAM_ORCHESTRATION_PACKAGE.md`
 
 ## Corrections made
 
