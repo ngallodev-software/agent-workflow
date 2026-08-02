@@ -146,3 +146,99 @@ def test_installed_full_verify_classifies_legacy_retired_record_without_acceptin
     verification = installed_product.json("index", "verify", "--full", env=product_env)
     assert verification["valid"] is True
     assert verification["historical_artifacts"][0]["classification"] == "quarantined"
+
+
+@pytest.mark.parametrize("storage_root", ["runs", "archive"])
+@pytest.mark.parametrize(
+    ("filename", "schema"),
+    [
+        ("command-collection.json", "agent-workflow/command-collection-set/v1"),
+        ("lifecycle-events.jsonl", "agent-workflow/lifecycle-event/v1"),
+    ],
+)
+def test_installed_full_verify_reports_explicit_retired_schema_reason(
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+    storage_root: str,
+    filename: str,
+    schema: str,
+) -> None:
+    state = Path(product_env["XDG_STATE_HOME"]) / "agent-workflow"
+    legacy = state / storage_root / "legacy-retired-schema"
+    _write_json(
+        legacy / "status.json",
+        {
+            "schema": "agent-workflow/session-status/v2",
+            "session_id": "legacy-retired-schema",
+            "status": "completed",
+            "created_at": "2025-01-01T00:00:00+00:00",
+            "workdir": "/tmp/legacy-installed",
+            "prompt_path": str(legacy / "prompt.md"),
+            "log_path": str(legacy / "output.log"),
+        },
+    )
+    artifact = legacy / filename
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    artifact.write_text(json.dumps({"schema": schema}) + "\n", encoding="utf-8")
+
+    rebuilt = installed_product.json("index", "rebuild", env=product_env)
+    assert rebuilt["quarantined_count"] == 1
+    verification = installed_product.json("index", "verify", "--full", env=product_env)
+    assert verification["valid"] is True
+    assert verification["historical_artifacts"][0]["classification_reason"] == (
+        f"retired_schema_id:{schema}"
+    )
+
+
+@pytest.mark.parametrize("storage_root", ["runs", "archive"])
+def test_installed_full_verify_reports_execution_metrics_field_evolution(
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+    storage_root: str,
+) -> None:
+    state = Path(product_env["XDG_STATE_HOME"]) / "agent-workflow"
+    legacy = state / storage_root / "legacy-metrics-fields"
+    _write_json(
+        legacy / "status.json",
+        {
+            "schema": "agent-workflow/session-status/v2",
+            "session_id": "legacy-metrics-fields",
+            "status": "completed",
+            "created_at": "2025-01-01T00:00:00+00:00",
+            "workdir": "/tmp/legacy-installed",
+            "prompt_path": str(legacy / "prompt.md"),
+            "log_path": str(legacy / "output.log"),
+        },
+    )
+    _write_json(
+        legacy / "execution-metrics.json",
+        {
+            "schema": "agent-workflow/execution-metrics/v1",
+            "session_id": "legacy-metrics-fields",
+            "stages": [
+                {
+                    "stage": "total",
+                    "input_tokens": 1,
+                    "cached_input_tokens": 0,
+                    "output_tokens": 1,
+                    "provider_total_tokens": 2,
+                    "cost": 0,
+                    "currency": "USD",
+                    "elapsed_seconds": 1,
+                    "first_output_latency_seconds": 1,
+                    "retry_count": 0,
+                    "errors": [],
+                    "steer_count": 0,
+                    "steer_acknowledged_count": 0,
+                    "steer_pending_count": 0,
+                }
+            ],
+        },
+    )
+    rebuilt = installed_product.json("index", "rebuild", env=product_env)
+    assert rebuilt["quarantined_count"] == 1
+    verification = installed_product.json("index", "verify", "--full", env=product_env)
+    assert verification["valid"] is True
+    assert verification["historical_artifacts"][0]["classification_reason"].startswith(
+        "execution_metrics_legacy_fields:"
+    )
