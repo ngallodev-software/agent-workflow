@@ -21,6 +21,7 @@ from .contracts import read_contract, read_launch_contract, validate_instance
 from .errors import WorkflowError
 from .messages import message_digest, validate_message
 from .path import read_regular_file
+from .receipts import verify_seal_details
 from .state import run_dir
 from .util import atomic_write_json, fsync_directory, utc_now, validate_id
 from . import tmux
@@ -290,9 +291,19 @@ def _assignment_evidence(run: Path, session_id: str, assignment_id: str) -> tupl
     lifecycle_path = run / "events.jsonl"
     lifecycle = _read_jsonl(lifecycle_path, schema="agent-workflow/lifecycle-event/v1", max_records=MAX_SOURCE_RECORDS)
     assignment_events = [item for item in lifecycle if item.get("dimension") == "assignment"]
-    if not assignment_events or assignment_events[-1].get("new") != "idle_reusable":
-        raise OrchestratorInboxError("child completion lacks current idle_reusable lifecycle evidence")
-    return completed[-1], assignment_events[-1]
+    if not assignment_events:
+        raise OrchestratorInboxError("child completion lacks current assignment lifecycle evidence")
+    current = assignment_events[-1]
+    if current.get("new") == "closed":
+        try:
+            receipt, _digest = verify_seal_details(run)
+        except WorkflowError as exc:
+            raise OrchestratorInboxError("terminal child completion lacks a valid sealed receipt") from exc
+        if receipt.get("session_id") != session_id:
+            raise OrchestratorInboxError("terminal child receipt belongs to another session")
+    elif current.get("new") != "idle_reusable":
+        raise OrchestratorInboxError("child completion lacks current terminal or idle_reusable lifecycle evidence")
+    return completed[-1], current
 
 
 def _child_evidence(settings: Settings, child: dict[str, Any]) -> tuple[dict[str, Any], Path, dict[str, Any]]:
@@ -392,8 +403,8 @@ def unregister_child(settings: Settings, orchestrator_id: str, session_id: str, 
         raise OrchestratorInboxError("child session has a conflicting terminal registration state")
     if state == "completed":
         _contract, run, context = _child_evidence(settings, child)
-        if context.get("state") != "idle_reusable":
-            raise OrchestratorInboxError("completed child unregister requires idle_reusable evidence")
+        if context.get("state") not in {"closed", "idle_reusable"}:
+            raise OrchestratorInboxError("completed child unregister requires terminal or idle_reusable evidence")
         _assignment_evidence(run, session_id, child["assignment_id"])
     child["state"] = state
     child["unregistered_at"] = child.get("unregistered_at") or utc_now()
@@ -406,7 +417,7 @@ def _source_records(path: Path) -> list[dict[str, Any]]:
     return _read_jsonl(path, schema="agent-workflow/session-message/v1", max_records=MAX_SOURCE_RECORDS)
 
 
-def _verify_source(child: dict[str, Any], record: Mapping[str, Any], settings: Settings) -> tuple[dict[str, Any], Path, dict[str, Any], dict[str, Any] | None]:
+def _verify_source(child: dict[str, Any], record: Mapping[str, Any], settings: Settings) -> tuple[dict[str, Any], Path, dict[str, Any], dict[str, Any] | None, str | None]:
     source = dict(record)
     validate_message(source)
     if source["session_id"] != child["session_id"]:
@@ -424,14 +435,16 @@ def _verify_source(child: dict[str, Any], record: Mapping[str, Any], settings: S
     if source["sequence"] != exact[0]["sequence"]:
         raise OrchestratorInboxError("source sequence is not authoritative")
     assignment_evidence = None
+    completion_state = None
     if source["kind"] == "task_complete":
-        if context.get("state") != "idle_reusable" or context.get("current_assignment") is not None:
-            raise OrchestratorInboxError("agent_idle source lacks current idle_reusable assignment evidence")
-        completed, _lifecycle = _assignment_evidence(run, child["session_id"], child["assignment_id"])
+        if context.get("state") not in {"closed", "idle_reusable"} or context.get("current_assignment") is not None:
+            raise OrchestratorInboxError("agent_idle source lacks current terminal or idle_reusable assignment evidence")
+        completed, lifecycle = _assignment_evidence(run, child["session_id"], child["assignment_id"])
         if completed.get("summary") != source["content"]:
             raise OrchestratorInboxError("completion summary does not match assignment evidence")
+        completion_state = lifecycle["new"]
         assignment_evidence = completed
-    return source, run, contract, assignment_evidence
+    return source, run, contract, assignment_evidence, completion_state
 
 
 def _event_id(orchestrator_id: str, session_id: str, message_id: str) -> str:
@@ -451,7 +464,7 @@ def import_message(settings: Settings, orchestrator_id: str, session_id: str, so
     child = next((item for item in registry["children"] if item["session_id"] == session_id), None)
     if child is None or child["state"] != "active":
         raise OrchestratorInboxError("child session is not an active registered source")
-    source, _run, contract, assignment = _verify_source(child, source_message, settings)
+    source, _run, contract, assignment, completion_state = _verify_source(child, source_message, settings)
     source_digest = message_digest(source)
     source_identity = f"{source['session_id']}:{source['message_id']}"
     event = {
@@ -470,7 +483,7 @@ def import_message(settings: Settings, orchestrator_id: str, session_id: str, so
         "source_identity": source_identity,
         "source_message_id": source["message_id"],
         "source_sequence": source["sequence"],
-        "state": "idle_reusable" if source["kind"] == "task_complete" else None,
+        "state": "idle_reusable" if completion_state == "idle_reusable" else None,
         "summary": _bounded_text(source["content"], "event summary"),
         "created_at": source["timestamp"],
         "source_digest": source_digest,
