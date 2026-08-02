@@ -17,6 +17,27 @@ def _run_dir(env: dict[str, str], session_id: str) -> Path:
     return Path(env["XDG_STATE_HOME"]) / "agent-workflow" / "runs" / session_id
 
 
+def test_installed_acceptance_capable_review_requires_launch_tier(
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+    fake_agent_path: Path,
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    git_repo(repo)
+    prompt = tmp_path / "review.md"
+    prompt.write_text("Review the committed change and report evidence.\n", encoding="utf-8")
+
+    result = installed_product.run(
+        "launch", "review-missing-tier", repo, prompt,
+        "--agent-class", "review", "--no-interactive", "--", fake_agent_path,
+        env=product_env,
+    )
+    assert result.returncode != 0
+    assert "requires a recorded launch tier" in result.stderr
+    assert not _run_dir(product_env, "review-missing-tier").exists()
+
+
 def test_external_executor_completes_with_sealed_user_visible_evidence(
     installed_product: InstalledProduct,
     product_env: dict[str, str],
@@ -123,7 +144,7 @@ def test_installed_review_without_ticket_seals_completion_and_receipt(
     tmp_path: Path,
 ) -> None:
     repo = tmp_path / "repo"
-    git_repo(repo)
+    head = git_repo(repo)
     prompt = tmp_path / "review.md"
     prompt.write_text("Review the committed change and report evidence.\n", encoding="utf-8")
 
@@ -141,6 +162,23 @@ def test_installed_review_without_ticket_seals_completion_and_receipt(
     collection = json.loads((run / "collections" / "completion.json").read_text())
     assert collection["validation_status"] == "valid"
     assert (run / "final-receipt.json").is_file()
+    template = json.loads(
+        (repo / ".agent-workflow-handoff" / "review-omitted-ticket" / "completion-template.json").read_text()
+    )
+    assert template["criteria"] == [
+        {"id": "<criterion-id>", "result": "not_verified", "evidence": ["<evidence>"]}
+    ]
+
+    reviewed = installed_product.json(
+        "review", "review-omitted-ticket", "--actor", "reviewer", "--reason", "evidence checked",
+        env=product_env,
+    )
+    assert reviewed["disposition"] == "reviewed"
+    accepted = installed_product.json(
+        "accept", "review-omitted-ticket", "--actor", "reviewer", "--reason", "meets criteria",
+        "--revision", head, env=product_env,
+    )
+    assert accepted["disposition"] == "accepted"
 
 
 def test_installed_mismatched_ticket_still_fails_review_collection(

@@ -650,6 +650,15 @@ def launch(
         interactive=interactive,
         allow_active_name=allow_active_agent_name,
     )
+    # Review runs may be sent through the host acceptance gate.  Bind their
+    # risk tier before any mutable child-controlled state exists; accepting a
+    # review with a missing tier would otherwise fail only after inspection.
+    if agent_class == "review" and tier is None:
+        raise WorkflowError(
+            "acceptance-capable review requires a recorded launch tier; use --tier"
+        )
+    if tier is not None and tier not in {"low", "medium", "high", "critical"}:
+        raise WorkflowError(f"unsupported launch tier: {tier!r}")
     # `interactive` describes user-visible/reusable assignment semantics.
     # Structured and non-interactive runs always use the deterministic executor
     # command. Only interactive implementation agents retain a steerable

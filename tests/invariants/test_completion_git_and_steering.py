@@ -4,7 +4,11 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from agent_workflow.completion import completion_revision_errors, substantive_completion_errors
+from agent_workflow.contracts import validate_instance
+from agent_workflow.errors import WorkflowError
 from agent_workflow.git import snapshot
 from agent_workflow.steering import append_delivery_event, replay_delivery_events
 
@@ -54,6 +58,18 @@ def test_substantive_completion_rejects_empty_schema_valid_success() -> None:
     assert "completed result requires substantive head_revision" in errors
     assert "completed result requires at least one acceptance criterion" in errors
     assert "completed result requires at least one command receipt" in errors
+
+
+def test_completion_schema_rejects_string_criteria_before_collection() -> None:
+    value = _completion(criteria=["criterion text"])
+    with pytest.raises(WorkflowError, match="invalid artifact"):
+        validate_instance(value, "agent-workflow/completion/v1")
+
+
+def test_completion_schema_requires_criterion_evidence() -> None:
+    value = _completion(criteria=[{"id": "criterion-1", "result": "pass"}])
+    with pytest.raises(WorkflowError, match="invalid artifact"):
+        validate_instance(value, "agent-workflow/completion/v1")
 
 
 def test_review_ticket_identity_requires_explicit_match_or_omission() -> None:

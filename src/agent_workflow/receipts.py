@@ -280,6 +280,13 @@ def completion_template(
     )
     value["result"] = "completed"
     value["unresolved"] = []
+    value["criteria"] = [
+        {
+            "id": "<criterion-id>",
+            "result": "not_verified",
+            "evidence": ["<evidence>"],
+        }
+    ]
     return value
 
 
