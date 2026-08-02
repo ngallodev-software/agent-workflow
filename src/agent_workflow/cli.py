@@ -39,16 +39,12 @@ from .cli_handlers.workflow import handle_workflow_command
 from .cli_handlers.worktree import handle_worktree_command
 from .cli_handlers.pack import handle_pack_command
 from .cli_handlers.orchestrator import handle_orchestrator_command
+from .cli_handlers.agent import handle_agent_command
 from .cli_output import print_json as _print_json
 from .cli_output import print_mapping as _print_mapping
 from .cli_output import print_table as _print_table
 from .archive import archive_runs
 from .config import as_dict, defaults, load_settings
-from .agent_context import auto_reuse as auto_reuse_agent
-from .agent_context import candidates as reuse_candidates
-from .agent_context import complete_task as complete_agent_task
-from .agent_context import read as read_agent_context
-from .agent_context import request_reuse as reuse_agent
 from .doctor import run_doctor
 from .evaluation import validate_evaluation
 from .eval.reporting import build_report, render_markdown
@@ -432,32 +428,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "restart":
             data = restart_session(settings, args.session_id, args.new_session)
         elif args.command == "agent":
-            if args.agent_command == "context":
-                data = read_agent_context(settings, args.session_id)
-            elif args.agent_command == "task-complete":
-                data = complete_agent_task(
-                    settings, args.session_id, actor=args.actor,
-                    summary=args.summary, tags=args.tag, files=args.file,
-                )
-            elif args.agent_command == "candidates":
-                data = reuse_candidates(
-                    settings, workdir=args.workdir, ticket_id=args.ticket,
-                    pack_id=args.pack, retry_of=args.retry_of,
-                    agent_class=args.agent_class, tags=args.tag,
-                )
-            elif args.agent_command == "reuse":
-                data = reuse_agent(
-                    settings, args.session_id, prompt_path=args.prompt,
-                    actor=args.actor, ticket_id=args.ticket, pack_id=args.pack,
-                    retry_of=args.retry_of, tags=args.tag,
-                )
-            else:
-                data = auto_reuse_agent(
-                    settings, workdir=args.workdir, prompt_path=args.prompt,
-                    actor=args.actor, ticket_id=args.ticket, pack_id=args.pack,
-                    retry_of=args.retry_of, agent_class=args.agent_class,
-                    tags=args.tag,
-                )
+            data = handle_agent_command(settings, args)
         elif args.command in {"review", "accept", "reject"}:
             action = "reviewed" if args.command == "review" else (
                 "accepted" if args.command == "accept" else "rejected"

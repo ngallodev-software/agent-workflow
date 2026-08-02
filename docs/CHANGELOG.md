@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Extract the complete `agent` reusable-context command domain into `agent_workflow.cli_handlers.agent`, preserving durable assignment, completion, candidate-ranking, and reassignment semantics.
+
 - Extract the complete `orchestrator` registry/inbox/watch command domain into `agent_workflow.cli_handlers.orchestrator`, preserving durable messaging services, bounds, and output schemas.
 
 - Extract the complete `pack` command domain into `agent_workflow.cli_handlers.pack`, preserving scaffold/checksum/archive behavior plus validation rendering and exit status.

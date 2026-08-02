@@ -15,7 +15,7 @@ Split `sessions.py`, `cli.py`, `index_store.py`, `runner.py`, and the remaining 
 - Keep authority records, evidence bytes, parser-derived command metadata, error categories, and CLI behavior unchanged.
 - Record module-size and dependency direction before/after each slice.
 
-Completed slices moved process environment and redaction policy into `agent_workflow.runtime`, the argparse command-tree builder into `agent_workflow.cli_parser`, shared output rendering into `agent_workflow.cli_output`, the complete `index`, `workflow`, `worktree`, `pack`, and `orchestrator` command domains into `agent_workflow.cli_handlers`, and SQLite identity/migration ownership into `agent_workflow.index_schema`, each behind unchanged behavior or compatibility facades. Continue with one additional CLI dispatch domain at a time, sessions launch/observation/control/recovery, runner execution/stream/control/sealing, and index discovery/reconciliation/query.
+Completed slices moved process environment and redaction policy into `agent_workflow.runtime`, the argparse command-tree builder into `agent_workflow.cli_parser`, shared output rendering into `agent_workflow.cli_output`, the complete `index`, `workflow`, `worktree`, `pack`, `orchestrator`, and reusable-agent command domains into `agent_workflow.cli_handlers`, and SQLite identity/migration ownership into `agent_workflow.index_schema`, each behind unchanged behavior or compatibility facades. Continue with one additional CLI dispatch domain at a time, sessions launch/observation/control/recovery, runner execution/stream/control/sealing, and index discovery/reconciliation/query.
 
 ## Non-targets
 
