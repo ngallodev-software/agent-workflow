@@ -59,6 +59,9 @@ where = ["src"]
 [tool.setuptools.package-data]
 agent_workflow = ["assets/**/*"]
 
+[tool.setuptools.exclude-package-data]
+"*" = ["__pycache__/*", "*.pyc"]
+
 [tool.setuptools.data-files]
 "share/agent-workflow/schemas" = ["schemas/*.json"]
 "share/agent-workflow/release" = ["release/*.json"]

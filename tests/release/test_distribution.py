@@ -85,6 +85,7 @@ def test_built_wheel_excludes_repository_only_ci_assets(tmp_path: Path) -> None:
         names = archive.namelist()
     forbidden = ("Jenkinsfile", "jenkins-local-job", ".github/workflows")
     assert not any(any(token in name for token in forbidden) for name in names)
+    assert not any("__pycache__/" in name or name.endswith(".pyc") for name in names)
 
 
 def test_optional_mcp_profile_rejects_missing_pinned_sdk_before_client_registration(
