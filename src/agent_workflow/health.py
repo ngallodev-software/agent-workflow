@@ -515,5 +515,5 @@ def remediation_count(run_dir: Path, rule_id: str) -> int:
     return sum(
         1
         for event in read_events(run_dir / "remediation-events.jsonl")
-        if event.get("rule_id") == rule_id and event.get("outcome") in {"applied", "requested"}
+        if event.get("rule_id") == rule_id
     )

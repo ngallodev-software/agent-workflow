@@ -102,6 +102,16 @@ def test_installed_supervisor_detects_no_progress_and_probes_once(
     assert first["run_count"] == 1
     assert first["runs"][0]["observed_state"] == "possibly_stalled"
     assert first["runs"][0]["remediations"][0]["rule_id"] == "SAFE-PROBE-STALL-v1"
+    assert (
+        first["runs"][0]["remediations"][0]["details"]["verification"]
+        == "authoritative_post_action_observation"
+    )
+    assert (
+        first["runs"][0]["remediations"][0]["details"]["post_action_observation"][
+            "observed_state"
+        ]
+        == "running"
+    )
     assert second["runs"][0]["remediations"] == []
     remediation = [
         json.loads(line)

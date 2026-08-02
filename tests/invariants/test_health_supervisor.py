@@ -130,6 +130,109 @@ def test_supervisor_sends_only_one_bounded_stall_probe(
     events = read_events(run / "remediation-events.jsonl")
     assert [event["rule_id"] for event in events] == ["SAFE-PROBE-STALL-v1"]
 
+
+def test_failed_stall_probe_consumes_its_bounded_attempt(tmp_path: Path, monkeypatch) -> None:
+    from agent_workflow import supervisor
+
+    settings = replace(
+        defaults(tmp_path / "missing-config.toml"),
+        state_root=tmp_path / "state",
+        supervisor_max_remediation_attempts=1,
+    )
+    run = settings.state_root / "runs" / "run-1"
+    run.mkdir(parents=True)
+    atomic_write_json(
+        run / "status.json",
+        {
+            "schema": "agent-workflow/session-status/v2",
+            "session_id": "run-1",
+            "status": "running",
+            "log_path": str(run / "output.log"),
+            "interactive": False,
+            "executor_interactive": False,
+        },
+    )
+    monkeypatch.setattr(supervisor, "record_health_sample", lambda *args, **kwargs: {})
+    monkeypatch.setattr(
+        supervisor,
+        "observe",
+        lambda *_args, **_kwargs: {
+            "observed_state": "possibly_stalled",
+            "failure_category": "stalled",
+            "seconds_since_semantic_progress": 999,
+            "tmux_alive": True,
+            "latest_health": {"executor": {"alive": True}},
+        },
+    )
+    calls = 0
+
+    def failing_steer(*_args, **_kwargs):
+        nonlocal calls
+        calls += 1
+        raise WorkflowError("delivery unavailable")
+
+    monkeypatch.setattr(supervisor, "steer", failing_steer)
+    options = SupervisorOptions.from_settings(settings, capture_interactive=False)
+
+    first = supervise_once(settings, options=options)
+    second = supervise_once(settings, options=options)
+
+    assert first["runs"][0]["remediations"][0]["outcome"] == "failed"
+    assert second["runs"][0]["remediations"] == []
+    assert calls == 1
+
+
+def test_successful_stall_probe_records_authoritative_post_action_observation(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from agent_workflow import supervisor
+
+    settings = replace(
+        defaults(tmp_path / "missing-config.toml"),
+        state_root=tmp_path / "state",
+        supervisor_max_remediation_attempts=1,
+    )
+    run = settings.state_root / "runs" / "run-1"
+    run.mkdir(parents=True)
+    atomic_write_json(
+        run / "status.json",
+        {
+            "schema": "agent-workflow/session-status/v2",
+            "session_id": "run-1",
+            "status": "running",
+            "log_path": str(run / "output.log"),
+            "interactive": False,
+            "executor_interactive": False,
+        },
+    )
+    monkeypatch.setattr(supervisor, "record_health_sample", lambda *args, **kwargs: {})
+    observation = {
+        "observed_state": "possibly_stalled",
+        "failure_category": "stalled",
+        "seconds_since_semantic_progress": 999,
+        "tmux_alive": True,
+        "status": "running",
+        "latest_health": {"executor": {"alive": True}},
+        "last_event": {"event": "steer-delivered"},
+    }
+    monkeypatch.setattr(supervisor, "observe", lambda *_args, **_kwargs: observation)
+    monkeypatch.setattr(
+        supervisor,
+        "steer",
+        lambda *_args, **_kwargs: {
+            "message_id": "message-1",
+            "delivery_outcome": "queued",
+        },
+    )
+    options = SupervisorOptions.from_settings(settings, capture_interactive=False)
+
+    report = supervise_once(settings, options=options)
+
+    details = report["runs"][0]["remediations"][0]["details"]
+    assert details["verification"] == "authoritative_post_action_observation"
+    assert details["post_action_observation"]["observed_state"] == "possibly_stalled"
+    assert details["post_action_observation"]["last_event"] == {"event": "steer-delivered"}
+
 def test_health_journals_validate_on_read_and_terminal_capture_redacts_secrets(
     tmp_path: Path,
 ) -> None:
@@ -177,4 +280,3 @@ def test_process_result_contract_preserves_signal_and_truncation_fields(
     path = tmp_path / "process-result.json"
     write_process_result(path, value)
     assert json.loads(path.read_text(encoding="utf-8"))["signal"] == 15
-

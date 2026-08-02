@@ -258,19 +258,48 @@ def _apply_remediation(
                     reason=str(exc),
                 )
             else:
-                outcome = record_remediation(
-                    run,
-                    session_id=session_id,
-                    incident_id=incident_id,
-                    rule_id=probe_rule,
-                    action="request_progress_probe",
-                    outcome="requested",
-                    reason="semantic progress exceeded the configured stall threshold",
-                    details={
-                        "message_id": message.get("message_id"),
-                        "delivery_outcome": message.get("delivery_outcome"),
-                    },
-                )
+                try:
+                    post_action = observe(settings, session_id)
+                except WorkflowError as exc:
+                    outcome = record_remediation(
+                        run,
+                        session_id=session_id,
+                        incident_id=incident_id,
+                        rule_id=probe_rule,
+                        action="request_progress_probe",
+                        outcome="failed",
+                        reason=f"probe delivery succeeded but post-action observation failed: {exc}",
+                        details={
+                            "message_id": message.get("message_id"),
+                            "delivery_outcome": message.get("delivery_outcome"),
+                            "verification": "failed",
+                        },
+                    )
+                else:
+                    outcome = record_remediation(
+                        run,
+                        session_id=session_id,
+                        incident_id=incident_id,
+                        rule_id=probe_rule,
+                        action="request_progress_probe",
+                        outcome="requested",
+                        reason="semantic progress exceeded the configured stall threshold",
+                        details={
+                            "message_id": message.get("message_id"),
+                            "delivery_outcome": message.get("delivery_outcome"),
+                            "verification": "authoritative_post_action_observation",
+                            "post_action_observation": {
+                                "observed_state": post_action.get("observed_state"),
+                                "status": post_action.get("status"),
+                                "tmux_alive": post_action.get("tmux_alive"),
+                                "failure_category": post_action.get("failure_category"),
+                                "seconds_since_semantic_progress": post_action.get(
+                                    "seconds_since_semantic_progress"
+                                ),
+                                "last_event": post_action.get("last_event"),
+                            },
+                        },
+                    )
             applied.append(outcome)
         elif options.interrupt_stalled:
             interrupt_rule = "OPT-IN-INTERRUPT-STALL-v1"

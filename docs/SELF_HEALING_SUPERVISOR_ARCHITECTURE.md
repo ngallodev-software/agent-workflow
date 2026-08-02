@@ -147,7 +147,9 @@ Each attempted correction binds:
 - action;
 - outcome;
 - reason;
-- bounded details such as message ID, delivery outcome, or retry run ID.
+- bounded details such as message ID, delivery outcome, authoritative post-action
+  observation/verification, or retry run ID. A delivered probe is not treated as
+  verified until the durable session observation is recorded.
 
 The current rules are:
 
