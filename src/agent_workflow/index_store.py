@@ -39,7 +39,7 @@ from .index_schema import (
     validate_database_header as _validated_database_header,
 )
 from .path import require_directory
-from .receipts import verify_seal_details
+from .receipts import verify_legacy_seal_details, verify_seal_details
 from .state import runs_root
 from .util import utc_now, validate_id
 
@@ -66,6 +66,11 @@ LEGACY_EXECUTION_METRICS_FIELDS = frozenset(
         "price_catalog_id",
     }
 )
+LEGACY_ENVELOPE_DRIFT = {
+    "agent-workflow/launch-contract/v2": frozenset({"ticket_identity"}),
+    "agent-workflow/command/v1": frozenset({"classification"}),
+    "agent-workflow/run-provenance/v1": frozenset({"external_snapshots"}),
+}
 
 
 
@@ -242,7 +247,12 @@ def _historical_artifact_class(
         try:
             verify_seal_details(run_dir)
         except WorkflowError:
-            return None
+            # The only alternate authority format is the pre-collection v1
+            # receipt. It still verifies every receipt-listed artifact.
+            try:
+                verify_legacy_seal_details(run_dir)
+            except WorkflowError:
+                return None
     schema_drift = (
         "unknown contract schema:" in detail
         or "required property" in detail
@@ -272,6 +282,22 @@ def _historical_artifact_class(
 
     for value in values:
         schema_id = value.get("schema")
+        legacy_fields = LEGACY_ENVELOPE_DRIFT.get(schema_id)
+        if legacy_fields is not None:
+            if any(field in value for field in legacy_fields):
+                continue
+            compatibility_schema = copy.deepcopy(load_schema(schema_id))
+            compatibility_schema["required"] = [
+                field for field in compatibility_schema["required"] if field not in legacy_fields
+            ]
+            if schema_id == "agent-workflow/run-provenance/v1":
+                compatibility_schema["additionalProperties"] = True
+            try:
+                import jsonschema
+                jsonschema.Draft202012Validator(compatibility_schema).validate(value)
+            except (jsonschema.exceptions.ValidationError, KeyError):
+                return None
+            return "legacy_envelope_fields:" + ",".join(sorted(legacy_fields))
         if schema_id in RETIRED_HISTORICAL_SCHEMA_IDS | LEGACY_EXECUTION_METRICS_SCHEMA_IDS:
             return f"retired_schema_id:{schema_id}"
         if schema_id != "agent-workflow/execution-metrics/v1":

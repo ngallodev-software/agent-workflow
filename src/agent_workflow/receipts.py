@@ -33,6 +33,9 @@ SEALED_ARTIFACTS = (
     "patch.diff",
     "collections/completion.json",
 )
+LEGACY_SEALED_ARTIFACTS = tuple(
+    artifact for artifact in SEALED_ARTIFACTS if artifact != "collections/completion.json"
+)
 SEALED_TREES = ("collections", "scope")
 SEALED_OPTIONAL_ARTIFACTS = (
     "result.json",
@@ -580,6 +583,33 @@ def verify_seal_details(
     run_dir = run_dir.resolve()
     with _seal_lock(run_dir, exclusive=False):
         return _verify_seal_unlocked(run_dir, expected_sha256=expected_sha256)
+
+
+def verify_legacy_seal_details(run_dir: Path) -> tuple[dict[str, Any], str]:
+    """Verify the finite pre-collection receipt format for index compatibility.
+
+    This is deliberately not used by acceptance or lifecycle authority.  It
+    accepts only the old required artifact set and still rehashes every listed
+    artifact before an index may quarantine historical evidence.
+    """
+    run_dir = run_dir.resolve()
+    with _seal_lock(run_dir, exclusive=False):
+        path = run_dir / "final-receipt.json"
+        receipt, actual = _read_final_receipt(path)
+        listed = {item.get("path") for item in receipt["artifacts"] if isinstance(item, dict)}
+        if "launch-contract.json" in listed or not set(LEGACY_SEALED_ARTIFACTS).issubset(listed):
+            raise WorkflowError("receipt is not the supported pre-collection seal format")
+        for item in receipt["artifacts"]:
+            if not isinstance(item, dict) or not isinstance(item.get("path"), str):
+                raise WorkflowError(f"invalid artifact entry in {path}")
+            relative_path = item["path"]
+            _artifact_parts(relative_path)
+            _, size, digest = _read_artifact_descriptor(run_dir, relative_path, capture_bytes=False)
+            if size != item.get("size"):
+                raise WorkflowError(f"sealed artifact size mismatch: {relative_path}")
+            if digest != item.get("sha256"):
+                raise WorkflowError(f"sealed artifact checksum mismatch: {relative_path}")
+        return receipt, actual
 
 
 def verify_seal(
