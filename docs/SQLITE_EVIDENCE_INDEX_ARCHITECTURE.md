@@ -212,7 +212,7 @@ The supervisor reports index errors but continues health collection and safe rem
 agent-workflow index status
 agent-workflow index sync
 agent-workflow index rebuild
-agent-workflow index verify --full
+agent-workflow index verify --full [--review SESSION]
 
 agent-workflow index query runs --state running
 agent-workflow index query incidents --category process_alive_no_progress

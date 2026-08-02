@@ -103,7 +103,7 @@ The database is disposable:
 ```bash
 rm ~/.local/state/agent-workflow/index/agent-workflow.sqlite3*
 agent-workflow index rebuild
-agent-workflow index verify --full
+agent-workflow index verify --full [--review SESSION]
 ```
 
 A corrupt source run is represented as an index error and is not silently repaired. The authoritative run remains available for explicit evidence repair or investigation. SQLite migration errors affect only the projection and must never rewrite historical source artifacts.

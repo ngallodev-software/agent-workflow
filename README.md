@@ -195,11 +195,15 @@ agent-workflow index sync
 agent-workflow index query runs --state possibly_stalled --limit 25
 agent-workflow index query incidents --category permission_wait
 agent-workflow index query performance --executor codex --model MODEL
-agent-workflow index verify --full
+agent-workflow index verify [--full] [--review SESSION]
 
 # Delete and reconstruct every indexed row from authoritative evidence.
 agent-workflow index rebuild
 ```
+
+With `--review SESSION`, verification reports the named run's direct gate as
+`review_valid` separately from global `valid`; the scoped result never hides
+unresolved host integrity blockers.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/evidence-index-dark.svg">

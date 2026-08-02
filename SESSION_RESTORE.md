@@ -48,7 +48,7 @@ for pack in prompt-packs/*/pack.yaml; do
   agent-workflow pack validate "$(dirname "$pack")"
 done
 agent-workflow index rebuild
-agent-workflow index verify --full
+agent-workflow index verify --full [--review SESSION]
 ```
 
 Run the focused or full test command appropriate to the work being resumed. Preserve unavailable live-provider, browser, tmux, or optional-MCP evidence as an explicit limitation rather than simulating it.

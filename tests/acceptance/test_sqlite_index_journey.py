@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -23,14 +24,37 @@ def test_installed_review_scoped_verify_preserves_global_blockers_and_legacy_led
     git_repo(repo)
     prompt = tmp_path / "review.md"
     prompt.write_text("Review the sealed evidence.\n", encoding="utf-8")
-    installed_product.json(
-        "launch", "review-index-target", repo, prompt, "--agent-class", "review",
-        "--tier", "low", "--no-interactive", "--", fake_agent_path, env=product_env,
-    )
-    assert wait_for_status(product_env, "review-index-target")["status"] == "completed"
-    installed_product.json(
-        "review", "review-index-target", "--actor", "reviewer", "--reason", "gate checked",
-        env=product_env,
+    def launch_reviewed(session_id: str) -> Path:
+        installed_product.json(
+            "launch", session_id, repo, prompt, "--agent-class", "review",
+            "--tier", "low", "--no-interactive", "--", fake_agent_path, env=product_env,
+        )
+        assert wait_for_status(product_env, session_id)["status"] == "completed"
+        installed_product.json(
+            "review", session_id, "--actor", "reviewer", "--reason", "gate checked",
+            env=product_env,
+        )
+        return Path(product_env["XDG_STATE_HOME"]) / "agent-workflow" / "runs" / session_id
+
+    run = launch_reviewed("review-index-target")
+    invalid_receipt_run = launch_reviewed("review-invalid-receipt")
+    missing_collection_run = launch_reviewed("review-missing-collection")
+    missing_review_run = launch_reviewed("review-missing-reviewed-receipt")
+    active_run = Path(product_env["XDG_STATE_HOME"]) / "agent-workflow" / "runs" / "review-active-run"
+    _write_json(
+        active_run / "status.json",
+        {
+            "schema": "agent-workflow/session-status/v2",
+            "session_id": "review-active-run",
+            "status": "running",
+            "created_at": "2026-07-30T00:00:00+00:00",
+            "updated_at": "2026-07-30T00:01:00+00:00",
+            "workdir": str(repo),
+            "prompt_path": str(active_run / "prompt.md"),
+            "log_path": str(active_run / "output.log"),
+            "disposition": None,
+            "failure_category": None,
+        },
     )
     state = Path(product_env["XDG_STATE_HOME"]) / "agent-workflow"
     installed_product.json("index", "rebuild", env=product_env)
@@ -50,7 +74,6 @@ def test_installed_review_scoped_verify_preserves_global_blockers_and_legacy_led
     assert verified["review_evidence"]["review_receipt_sha256"]
     assert legacy_ledger.read_text(encoding="utf-8") == '{"legacy":"sentinel"}\n'
 
-    run = state / "runs" / "review-index-target"
     completion = run / "completion.json"
     completion.chmod(0o600)
     completion.write_text(completion.read_text(encoding="utf-8").replace("completed", "partial", 1), encoding="utf-8")
@@ -67,6 +90,48 @@ def test_installed_review_scoped_verify_preserves_global_blockers_and_legacy_led
     assert missing["valid"] is False
     assert missing["review_valid"] is False
     assert legacy_ledger.read_text(encoding="utf-8") == '{"legacy":"sentinel"}\n'
+
+    invalid_receipt = invalid_receipt_run / "final-receipt.json"
+    invalid_receipt.chmod(0o644)
+    invalid_receipt_report = installed_product.json(
+        "index", "verify", "--review", "review-invalid-receipt", env=product_env
+    )
+    assert invalid_receipt_report["valid"] is False
+    assert invalid_receipt_report["review_valid"] is False
+    invalid_receipt.chmod(0o444)
+
+    (missing_collection_run / "collections" / "completion.json").unlink()
+    missing_collection_report = installed_product.json(
+        "index", "verify", "--review", "review-missing-collection", env=product_env
+    )
+    assert missing_collection_report["valid"] is False
+    assert missing_collection_report["review_valid"] is False
+
+    (missing_review_run / "receipts" / "000001-reviewed.json").unlink()
+    missing_review_report = installed_product.json(
+        "index", "verify", "--review", "review-missing-reviewed-receipt", env=product_env
+    )
+    assert missing_review_report["valid"] is False
+    assert missing_review_report["review_valid"] is False
+
+    active_report = installed_product.json(
+        "index", "verify", "--review", "review-active-run", env=product_env
+    )
+    assert active_report["valid"] is False
+    assert active_report["review_valid"] is False
+
+    database = state / "index" / "agent-workflow.sqlite3"
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "UPDATE runs SET source_dir=? WHERE session_id=?",
+            (str(state / "outside-trusted-root"), "review-index-target"),
+        )
+        connection.commit()
+    escaped_report = installed_product.json(
+        "index", "verify", "--review", "review-index-target", env=product_env
+    )
+    assert escaped_report["valid"] is False
+    assert escaped_report["review_valid"] is False
 
 
 def test_installed_index_rebuilds_and_preserves_query_results_after_database_loss(

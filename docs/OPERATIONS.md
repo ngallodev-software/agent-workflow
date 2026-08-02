@@ -138,13 +138,13 @@ agent-workflow index status
 agent-workflow index sync
 agent-workflow index query runs --state possibly_stalled
 agent-workflow index query incidents --category permission_wait
-agent-workflow index verify
+agent-workflow index verify [--full] [--review SESSION]
 ```
 
 Use a full verification before relying on an older index for analysis:
 
 ```bash
-agent-workflow index verify --full
+agent-workflow index verify --full [--review SESSION]
 ```
 
 `--full` rehashes every indexed source artifact in addition to SQLite integrity and foreign-key checks. A mismatch indicates stale or altered current source evidence; it does not rewrite the source file. Obsolete non-authoritative legacy runs are reported as preserved quarantines and do not become valid/current evidence. Unsafe paths and current-schema failures remain blocking.
@@ -160,7 +160,7 @@ If the database is missing, corrupt, on an unsupported schema, or suspected of d
 
 ```bash
 agent-workflow index rebuild
-agent-workflow index verify --full
+agent-workflow index verify --full [--review SESSION]
 ```
 
 The rebuild removes only the SQLite projection and its WAL/SHM companions, acquires the exclusive indexer lock, then reconstructs rows from validated active and archived run evidence. A corrupt individual run is quarantined as an index error while healthy runs remain queryable. Never repair an authoritative JSON/JSONL artifact by editing SQLite.

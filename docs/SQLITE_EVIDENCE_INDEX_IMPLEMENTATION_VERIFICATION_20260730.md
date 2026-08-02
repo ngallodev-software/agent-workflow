@@ -94,13 +94,13 @@ Implemented commands:
 agent-workflow index status
 agent-workflow index sync [--run SESSION] [--active-only]
 agent-workflow index rebuild [--run SESSION] [--active-only]
-agent-workflow index verify [--full]
+agent-workflow index verify [--full] [--review SESSION]
 agent-workflow index query runs|incidents|permissions|performance|workflows|workflow-nodes|errors
 ```
 
 Curated filters include session, state, category, executor, model, prompt pack, and bounded result count where supported.
 
-The command catalog, root help, subcommand help, README, command reference, operations guide, security guide, testing guide, evidence/evaluation guide, installation guide, architecture, changelog, skills, man pages, release audit, and version-bump script were updated.
+The command catalog, root help, subcommand help, README, command reference, operations guide, security guide, testing guide, evidence/evaluation guide, installation guide, architecture, changelog, skills, man pages, release audit, and version-bump script were updated. Scoped review verification reports `review_valid` separately from global `valid`; it fails closed for unsealed or invalid final receipts, missing or invalid direct completion evidence, active or noncanonical runs, and runs without a canonical reviewed lifecycle receipt.
 
 ## Supervisor and archive integration
 
