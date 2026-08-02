@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import hashlib
+import time
+import uuid
 from pathlib import Path
 
 from agent_workflow.util import sha256_file
@@ -15,6 +18,95 @@ from tests.conftest import (
 
 def _run_dir(env: dict[str, str], session_id: str) -> Path:
     return Path(env["XDG_STATE_HOME"]) / "agent-workflow" / "runs" / session_id
+
+
+def _write_control_intent(bridge: Path, session_id: str, *, sequence: int, request_id: str,
+                          kind: str = "progress") -> None:
+    intent = {
+        "schema": "agent-workflow/control-intent/v1",
+        "request_id": request_id,
+        "session_id": session_id,
+        "sequence": sequence,
+        "kind": kind,
+        "actor": "fixture-child",
+        "content": "matrix request",
+        "correlation_id": None,
+        "outcome": None,
+        "completion_sha256": None,
+        "terminal": None,
+    }
+    intent["digest"] = "sha256:" + hashlib.sha256(
+        json.dumps(intent, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    (bridge / f"intent-{request_id}-{sequence}.json").write_text(
+        json.dumps(intent, sort_keys=True, separators=(",", ":")), encoding="utf-8"
+    )
+
+
+def _wait_for_path(path: Path) -> None:
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline and not path.is_dir():
+        time.sleep(0.02)
+    assert path.is_dir()
+
+
+def test_installed_control_intent_matrix_is_durable_correlated_and_append_only(
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+    fake_agent_path: Path,
+    tmp_path: Path,
+) -> None:
+    cases = ("duplicate", "malformed", "stale", "post-exit")
+    for case in cases:
+        session_id = f"bridge-matrix-{case}"
+        repo = tmp_path / case
+        git_repo(repo)
+        prompt = tmp_path / f"{case}.md"
+        prompt.write_text("Exercise one control-intent matrix row.\n", encoding="utf-8")
+        env = dict(product_env)
+        env["FAKE_AGENT_MODE"] = "post-exit-intent" if case == "post-exit" else "slow"
+        env["FAKE_AGENT_DELAY"] = "1.0"
+        installed_product.json(
+            "launch", session_id, repo, prompt, "--tier", "low", "--no-interactive", "--",
+            fake_agent_path, env=env,
+        )
+        bridge = repo / ".agent-workflow-handoff" / session_id / "control-intents"
+        if case != "post-exit":
+            _wait_for_path(bridge)
+            request_id = str(uuid.uuid4())
+            _write_control_intent(bridge, session_id, sequence=1, request_id=request_id,
+                                  kind="bogus" if case == "malformed" else "progress")
+            if case == "duplicate":
+                _write_control_intent(bridge, session_id, sequence=2, request_id=request_id)
+            elif case == "stale":
+                _write_control_intent(bridge, session_id, sequence=3, request_id=str(uuid.uuid4()))
+        status = wait_for_status(env, session_id)
+        assert status["status"] == "completed"
+        run = _run_dir(env, session_id)
+        raw_lines = (run / "control-intents.jsonl").read_text().splitlines()
+        rows = [json.loads(line) for line in raw_lines]
+        assert rows
+        assert len(rows) == len({row["file"] for row in rows}) == len(raw_lines)
+        assert [row["sequence"] for row in rows] == sorted(row["sequence"] for row in rows)
+        expected = {
+            "duplicate": {"applied", "rejected"},
+            "malformed": {"rejected"},
+            "stale": {"applied", "rejected"},
+            "post-exit": {"rejected"},
+        }[case]
+        assert {row["outcome"] for row in rows} == expected
+        if case == "duplicate":
+            assert any("duplicate control request" in row["reason"] for row in rows)
+        if case in {"malformed", "stale", "post-exit"}:
+            assert any(row["outcome"] == "rejected" for row in rows)
+        messages = [json.loads(line) for line in (run / "messages.jsonl").read_text().splitlines()]
+        errors = [row for row in messages if row["kind"] == "error"]
+        request_ids = {row["request_id"] for row in rows}
+        matrix_errors = [
+            row for row in errors
+            if any(request_id in row["content"] for request_id in request_ids)
+        ]
+        assert matrix_errors
 
 
 def test_installed_acceptance_capable_review_requires_launch_tier(

@@ -249,6 +249,8 @@ def _drain_control_bridge(run_dir: Path, *, active: bool) -> bool:
                 correlation_id=correlation_id if isinstance(correlation_id, str) else None,
             )
         record(source.name, request_id, intent.get("sequence") if intent else None, outcome, reason)
+        if request_id is not None:
+            processed_requests.add(request_id)
         if intent and isinstance(intent.get("sequence"), int):
             processed_sequences.add(intent["sequence"])
     return terminal_completion
@@ -1053,7 +1055,7 @@ def execute(
     # The child may write its final intent immediately before exiting. Drain it
     # once while completion is still being finalized; later arrivals are never
     # consumed after the terminal receipt is sealed.
-    _drain_control_bridge(run_dir, active=True)
+    _drain_control_bridge(run_dir, active=False)
     deliver_pending(run_dir, active=False)
     if any(thread.is_alive() for thread in threads):
         pump_errors.append("stream drain deadline exceeded")

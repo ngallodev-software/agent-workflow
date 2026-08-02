@@ -377,10 +377,12 @@ raise SystemExit(0)
         fake_bin / "fake-agent",
         r'''#!/usr/bin/env python3
 import json
+import hashlib
 import os
 import subprocess
 import sys
 import time
+import uuid
 from pathlib import Path
 
 mode = os.environ.get("FAKE_AGENT_MODE", "success")
@@ -512,6 +514,31 @@ if mode == "task-complete-terminate":
         ],
         check=True,
     )
+if mode == "post-exit-intent":
+    request_id = str(uuid.uuid4())
+    intent = {
+        "schema": "agent-workflow/control-intent/v1",
+        "request_id": request_id,
+        "session_id": os.environ["AGENT_WORKFLOW_SESSION_ID"],
+        "sequence": 1,
+        "kind": "progress",
+        "actor": "fixture-child",
+        "content": "arrived after executor exit",
+        "correlation_id": None,
+        "outcome": None,
+        "completion_sha256": None,
+        "terminal": None,
+    }
+    intent["digest"] = "sha256:" + hashlib.sha256(
+        json.dumps(intent, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    bridge = Path(os.environ["AGENT_WORKFLOW_CONTROL_BRIDGE"])
+    (bridge / f"intent-{request_id}-1.json").write_text(
+        json.dumps(intent, sort_keys=True, separators=(",", ":")), encoding="utf-8"
+    )
+    # Leave no user-space work after the intent. The runner must observe the
+    # executor exit before its terminal bridge drain handles this request.
+    os._exit(0)
 if mode == "structured":
     print(json.dumps({"event_id": "message-1", "type": "item.completed", "item": {"type": "agent_message", "text": "fake agent completed"}}))
     print(json.dumps({"event_id": "usage-1", "type": "turn.completed", "usage": {"input_tokens": 5, "cached_input_tokens": 1, "output_tokens": 3}}))
