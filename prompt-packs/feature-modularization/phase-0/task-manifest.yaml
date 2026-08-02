@@ -1,0 +1,14 @@
+phase: "0"
+name: "behavior-preserving-decomposition"
+tasks:
+  - id: "MAINT-001"
+    tier: A
+    session: "module-decomposition-maint-001"
+    prompt: "tickets/MAINT-001-module-decomposition.md"
+    backlog_id: "MAINT-001"
+  - id: "MOD-GATE-0"
+    tier: A
+    session: "module-decomposition-gate"
+    prompt: "tickets/MOD-GATE-0.md"
+    task_type: gate
+    dependencies: ["MAINT-001"]

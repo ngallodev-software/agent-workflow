@@ -1,5 +1,21 @@
-
 # Changelog
+
+## Unreleased
+
+## 0.7.7 — 2026-08-01
+
+- Adopt Apache-2.0 and select GitHub Private Vulnerability Reporting as the primary disclosure channel, pending repository enablement proof.
+- Define a small authority kernel with built-in feature, optional-extra, trusted-plugin, and repository-only tooling boundaries; approve bounded hierarchy as an explicitly enabled feature.
+- Keep Jenkins as core repository CI/CD while excluding its pipeline/job assets from installed wheels and runtime bundles.
+- Make MCP an explicit optional install extra and register MCP clients only for requested MCP profiles.
+- Replace the hand-written MiniYAML subset with declared safe PyYAML loading and adversarial coverage.
+- Start behavior-preserving decomposition by extracting process environment and redaction policy behind the stable `agent_workflow.process` facade.
+- Add the feature-modularization prompt pack for module decomposition, the trusted entry-point plugin host, and evidence-gated subsystem extraction.
+- Implement the trusted plugin-host foundation with import-free entry-point discovery, explicit enablement, strict version/collision validation, atomic command registration, installed provenance, `plugins list`, `--no-plugins`, and a separately built fixture-plugin wheel journey.
+- Correct the worktree-create CLI dispatch regression that referenced benchmark-only assistance-cohort arguments.
+- Reconcile canonical backlog states with the 0.7.6 implementation, move completed task IDs to history, promote satisfied prerequisites, close duplicate REL-007 ownership, and add behavior-preserving maintenance follow-up.
+- Remove obsolete blocker inventories and the stale HARD-004 future placeholder; update public-release readiness and hierarchy wording to match current decisions.
+- Add the 2026-08-01 backlog, architecture, scope, module-decomposition, and library-reuse review.
 
 ## 0.7.6 — 2026-08-01
 
@@ -8,75 +24,47 @@
 - Add authentication and readiness preflight, truthful provider-billed/API-equivalent/subscription-allocation cost semantics, real-executor stdin prompt delivery, retry-attempt retention, publication browser/font runtime attestation and content-addressed sealing, and operator guidance.
 - Harden subprocess stdin/stdout/stderr ownership with selector-based bounded I/O and deterministic descendant cleanup.
 
+## 0.7.5 — 2026-08-01
+
+- Implement the adopted `priority-picker-v1` paired comparative benchmark under the modular `agent_workflow.benchmarking` boundary: packaged suite export, frozen three-phase fixture, coordinator and arm worktrees, synchronized paired execution, timing/token/cache/cost evidence, deterministic 100-point scoring, blinded visual review, 70/30 composite reporting, digest-verified consolidation, verification, and safe cleanup.
+- Add versioned run, arm, pair, phase-event, machine-score, human-review, consolidation, executor, and report contracts plus a full synthetic development acceptance journey.
+- Adopt `DEC-008`: compare the same canonical task through paired `control_raw/v1` and `workflow_full/v1` worktrees and freeze the initial requirement-to-evaluation matrix under BKL-011.
+- Keep actual real-provider cohort and publication-image acceptance under BKL-004 and BKL-010 rather than manufacturing external evidence.
+
+## 0.7.0
+
+- Add explicit local force acceptance with an exact acknowledgement, immutable linked override receipt, and a lifecycle state distinct from ordinary acceptance.
+- Enforce Luna-only automatic Codex model selection with bounded low/medium/high reasoning effort and immutable launch evidence.
+
+## 0.5.1
+
+- Add opt-in cooperative late steering with immutable inbox requests, durable delivery/disposition records, correlated acknowledgements, replay/race safeguards, unsupported/expired evidence, and an installed-wheel journey.
+- Reject placeholder completion handoffs and require matching identity plus substantive revision, criterion, command, or unresolved evidence.
+- Make source cleanliness use a fresh exact-root Git status command while preserving operator global excludes and recording bounded provenance.
+- Separate heartbeat, output-log, executor-event, and semantic-progress evidence when diagnosing a stalled run.
+- Add recoverable accepted-run archive/clear operations and read-only completion templates.
+
+## 0.5.0
+
+- Adopt `DEC-007` and add a host-local, fully rebuildable SQLite evidence projection while preserving JSON/JSONL, immutable snapshots, and sealed receipts as authority.
+- Add `index status|sync|rebuild|verify|query`, versioned migrations, locking, source provenance, corrupt-run quarantine, freshness envelopes, and curated read-only views.
+- Adopt `DEC-006` and add bounded foreground self-healing supervision with health, terminal, permission, incident, remediation, and process-result evidence plus safe projection repair and bounded probes.
+- Add architecture, operations, security, testing, diagrams, prompt packs, and backlog sequencing for the supervisor and SQLite projection programs.
+
 ## 0.3.0 — 2026-07-30
 
-- Add the sandbox-safe child control bridge, exact launcher binding, and an
-  installed-product child-completion journey.
-- Make source preflight honor configured Git excludes and make wheel builds
-  discard stale build artifacts.
+- Add the sandbox-safe child control bridge, exact launcher binding, and an installed-product child-completion journey.
+- Make source preflight honor configured Git excludes and make wheel builds discard stale build artifacts.
 - Add enforceable, maintainer-selected semantic-version bumping.
 
 ## 0.2.5 — 2026-07-27
 
-- Add the delegation-communication-reliability prompt pack with parallel
-  process-hardening tasks for authoritative preflight, durable control
-  handshakes, silent-run recovery, substantive completion validation, and
-  operator enforcement.
-- Register the new process tasks in the canonical backlog and add a bounded
-  release-drift audit and transfer archive.
-
-## Unreleased
-
-- Implement the adopted `priority-picker-v1` paired comparative benchmark under the modular `agent_workflow.benchmarking` boundary: packaged suite export, frozen three-phase fixture, coordinator and arm worktrees, synchronized paired execution, phase/arm/pair/run timing, token/cache/cost evidence, deterministic 100-point scoring, blinded visual review, 70/30 composite reporting, digest-verified consolidation, verification, and safe arm-worktree cleanup.
-- Add versioned comparative benchmark run, arm, pair, phase-event, machine-score, human-review, consolidation, executor, and report contracts plus a full development acceptance journey. Development visual evidence is operational; subscription-first real-executor policy and publication runtime sealing are implemented, while actual external cohort/image acceptance evidence remains gated.
-- Add a dated implementation-verification record covering source and installed-wheel journeys, package inventory, expected synthetic scores, evidence verification, and the remaining publication/real-provider gates.
-- Adopt `DEC-008`: compare the same canonical task through paired `control_raw/v1` and `workflow_full/v1` worktrees, use the synthetic visual priority picker as the first benchmark fixture, and weight the initial composite 70% machine / 30% blinded human visual. Add the comparative benchmark design baseline and sequence `BKL-011` to freeze its requirement-to-evaluation matrix before implementation.
-- Add `DEC-007` and a host-local, fully rebuildable SQLite evidence projection while preserving JSON/JSONL, snapshots, and sealed receipts as execution authority.
-- Add `agent-workflow index status|sync|rebuild|verify|query`, versioned migrations, WAL/foreign-key configuration, exclusive writer locking, source provenance, corrupt-run quarantine, freshness-bearing query envelopes, and curated read-only run/workflow/incident/permission/performance views. Mixed-currency cost groups return null averages and currencies rather than misleading aggregates.
-- Synchronize the index after foreground-supervisor cycles by default, without allowing projection failure to interrupt health supervision.
-- Add the SQLite index architecture, ERD/data-flow/trust diagrams, responsive README graphic, operations/security/testing/evaluation guidance, man page, prompt pack, and sequenced `IDX-*` backlog program.
-
-- Redesigned the root README with responsive light/dark repository-owned graphics, clearer current-state positioning, architecture and self-healing diagrams, an evidence map, and an explicit pre-public-release roadmap.
-- Added `DEC-006`, the detailed self-healing supervisor architecture, four Mermaid source diagrams, and the sequenced `bounded-self-healing-supervisor` prompt pack.
-- Added bounded run-health, interactive-terminal, permission, incident, remediation, and process-result evidence; runner heartbeat is now distinct from semantic progress.
-- Added a foregroundable `supervisor once|run` command with safe projection repair, incident deduplication, one-shot progress probes, and explicitly opted-in bounded interrupt/orphan restart.
-- Updated status observation, configuration, command catalog, receipts, operations, security, testing, architecture, prompt-pack ownership, and backlog sequencing for unattended diagnosis and deterministic recovery.
-
-- Add opt-in cooperative late steering with immutable inbox requests, durable
-  delivery/disposition records, correlated applied/rejected acknowledgements,
-  unsupported/expired evidence, and an installed-wheel acceptance journey.
-- Reject schema-valid placeholder completion handoffs; require matching
-  identity, substantive revision/criterion/command evidence, and unresolved
-  details for non-success outcomes, and fail terminal runs on invalid
-  completion collection.
-- Make source cleanliness use a fresh exact-root Git status command that
-  preserves operator global excludes while recording bounded executable,
-  argv, exit, byte-count, and output-digest provenance.
-- Report heartbeat, output-log, and executor-event ages independently when
-  diagnosing a possibly stalled live pane.
-- Harden the installed-product test fixture so declared runtime dependencies
-  remain importable in an isolated wheel environment.
-- Add recoverable `agent-workflow archive`/`clear` cleanup for accepted runs,
-  with sealed-evidence, lifecycle, score-digest, revision, and tmux-closure
-  gates; add archive manifests and an installed acceptance journey.
-- Add read-only completion templates and explicit interactive-only versus
-  structured non-interactive closeout instructions to reduce malformed handoffs
-  and failed `task-complete` attempts.
-- Add the proposed plugin-first decomposition and sibling `agent-workflow-spec` design: canonical collaborative specs compile into prompt packs and end-to-end evaluation artifacts, while the existing distribution remains the execution host and LangGraph stays an optional authoring adapter.
-- Add the MSG-001 hashed orchestrator registry, launch-evidence-bound child registration, normalized append-only aggregate inbox, bounded metadata reads, and digest-bound source deduplication.
-- Add a parser-derived, schema-validated command catalog and role-scoped launch cards so orchestrators and child agents can execute known CLI signatures without routine `--help` probing; bind new artifacts through backward-compatible launch-contract v2.
-- Expose the same catalog through bounded read-only MCP capability and role resources, plus verified per-run command context/cards; retain explicit MCP exclusions and update future mutation work to preserve launch-contract v2 rather than dynamically wrapping CLI commands.
-- Complete the evaluation/benchmark templating task by maintainer direction while preserving its environment limitations as release-wide follow-up.
-- Implement REL-005 with schema-validated release policy metadata, a synchronized direct-dependency lock, JUnit test evidence, CycloneDX SBOM generation, source/build provenance, optional artifact digests, and enforceable release-blocker status.
-- Add the complete durable two-way orchestrator messaging design, authority/failure model, security requirements, acceptance strategy, and four supporting Mermaid diagrams.
-- Add collision-free backlog items `MSG-001` through `MSG-007`, assign the previously unowned `BKL-001` and `BKL-002` work, and preserve `HARD-*`, `DEC-001`, and `MCP-003` ownership boundaries.
-- Add a six-phase multi-agent `orchestrator-two-way-messaging` prompt pack with parallel foundation, delivery, recovery, and security/acceptance lanes plus an independent gate.
-- Add the repository-wide feature determinism and security assessment as a canonical planning reference.
-- Add priority-ordered HARD/REL backlog tasks with explicit dependencies, prompt-pack ownership, release blockers, and collision rules.
-- Add three detailed multi-agent prompt packs for deterministic enforcement foundations, execution isolation/sensitive content, and public-beta trust/release work.
-- Block the existing MCP mutation pack on immutable authority, MCP read-boundary hardening, and authenticated principals without duplicating MCP-003 ownership.
-- Add the `release-drift-auditor` skill and deterministic release-audit checks for duplicate task IDs, unknown backlog ownership, cross-pack collisions, undocumented active packs, and stale future-test IDs.
-- Align the execution protocol with acceptance-first testing and separate-worktree parallel delegation.
+- Add the delegation-communication-reliability prompt pack with parallel process-hardening tasks for authoritative preflight, durable control handshakes, silent-run recovery, substantive completion validation, and operator enforcement.
+- Register the new process tasks in the canonical backlog and add a bounded release-drift audit and transfer archive.
+- Add the plugin-first decomposition and sibling `agent-workflow-spec` design while retaining this distribution as the execution host.
+- Add the MSG-001 registry/fan-in foundation, parser-derived command catalog, role-scoped launch cards, launch-contract v2 bindings, and bounded read-only MCP command-context resources.
+- Complete evaluation/benchmark templating and REL-005 structured release evidence.
+- Add the durable two-way messaging design, collision-free MSG ownership, multi-phase prompt pack, determinism/security assessment, hardening packs, drift-auditor skill, and acceptance-first execution protocol.
 
 ## 0.2.4 — 2026-07-27
 

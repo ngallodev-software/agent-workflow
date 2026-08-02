@@ -23,6 +23,12 @@ REQUIRED_FILES = (
     "config/agent-workflow.example.toml",
 )
 REQUIRED_TREES = ("schemas", "evals", "prompt-packs", "docs/man", "skills", "scripts/hooks")
+REPOSITORY_ONLY_PATHS = (
+    "Jenkinsfile",
+    "scripts/jenkins-local-job.sh",
+    "scripts/jenkins-local-job.xml",
+    ".github",
+)
 
 
 def digest(path: Path) -> str:
@@ -46,6 +52,12 @@ def copy_release_surface(root: Path, destination: Path) -> None:
         if not source.is_dir():
             raise SystemExit(f"missing release bundle tree: {relative}")
         shutil.copytree(source, destination / relative, copy_function=shutil.copy2)
+
+
+def assert_repository_only_paths_absent(destination: Path) -> None:
+    leaked = [relative for relative in REPOSITORY_ONLY_PATHS if (destination / relative).exists()]
+    if leaked:
+        raise SystemExit(f"repository-only CI/CD assets leaked into runtime bundle: {', '.join(leaked)}")
 
 
 def add_reproducible(tar: tarfile.TarFile, path: Path, archive_root: Path) -> None:
@@ -72,6 +84,7 @@ def build_bundle(root: Path, wheel: Path, version: str, platform: str, output: P
         staging.mkdir()
         copy_release_surface(root, staging)
         shutil.copy2(wheel, staging / wheel.name)
+        assert_repository_only_paths_absent(staging)
         (staging / ".release-bundle").write_text(f"{version}\n{platform}\n", encoding="utf-8")
         for path in staging.rglob("*"):
             os.utime(path, (0, 0), follow_symlinks=False)

@@ -6,13 +6,12 @@ from pathlib import Path
 from typing import Any
 
 from .approval import is_approved
-from .manifests import yaml
-from .miniyaml import load_task_manifest
+import yaml
 
 
 def _manifest(path: Path) -> dict[str, Any]:
     text = path.read_text(encoding="utf-8")
-    value = yaml.safe_load(text) if yaml is not None else load_task_manifest(text)
+    value = yaml.safe_load(text)
     return value if isinstance(value, dict) else {}
 
 

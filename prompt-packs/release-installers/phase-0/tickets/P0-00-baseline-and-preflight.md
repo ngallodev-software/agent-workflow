@@ -10,7 +10,7 @@
 
 ## Objective
 
-Ship a safe release-install surface for Linux, Windows through WSL2, and macOS.
+Verify and harden the implemented release-install surface for Linux, Windows through WSL2, and macOS without broadening its support claims.
 
 ## Required reading
 
@@ -36,7 +36,9 @@ release-bundle scripts/templates, tests, and installation/release documentation.
 4. Add deterministic GitHub release automation that builds wheel/sdist, checksum
    manifest, platform-labelled installer bundles (`linux`, `wsl2`, `macos`), and
    uploads them only for a version tag. Do not publish a release from pull requests.
-5. Add offline/fake-download tests for selector, checksum, and unsupported-host
+5. Keep MCP as an explicit optional install profile; normal installation must not register MCP or require its SDK.
+6. Add inventory tests proving Jenkinsfile, Jenkins server-job files, and `.github/workflows/` are absent from wheels and runtime bundles.
+7. Add offline/fake-download tests for selector, checksum, and unsupported-host
    behavior plus workflow/bundle validation. Document curl install, bundle install,
    uninstall, Python requirements, and trust boundary.
 
@@ -46,6 +48,8 @@ release-bundle scripts/templates, tests, and installation/release documentation.
 - checksum failure stops before install;
 - Linux, WSL2, and macOS bundles contain their needed bootstrap files;
 - release automation cannot publish untagged builds;
+- base installation succeeds without MCP and the optional MCP profile remains explicit;
+- repository-only Jenkins/GitHub workflow assets are absent from installed wheels and runtime bundles;
 - installed executable is verified by a black-box journey.
 
 ## Necessary tests

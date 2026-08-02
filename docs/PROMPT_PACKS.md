@@ -89,21 +89,22 @@ Do not embed host-specific absolute paths, credentials, private project names, m
 | Pack | Backlog ownership | State |
 |---|---|---|
 | [`deterministic-enforcement-foundations`](../prompt-packs/deterministic-enforcement-foundations/) | HARD-001, HARD-002, HARD-004, HARD-005 | Foundation implementations and `FOUND-GATE-01` accepted for the current tree. |
-| [`execution-isolation-and-secrets`](../prompt-packs/execution-isolation-and-secrets/) | HARD-008, HARD-003, HARD-006 | HARD-008 accepted; HARD-003 and HARD-006 remain dependency-gated. |
-| [`public-beta-trust-and-release`](../prompt-packs/public-beta-trust-and-release/) | HARD-007, HARD-009, HARD-010, REL-003, REL-004 | Blocked until both technical hardening gates. |
-| [`mcp-server-next`](../prompt-packs/mcp-server-next/) | MCP-003 | Blocked until HARD-004, HARD-005, and HARD-007; future mutations must preserve the current parser-derived capability/catalog resources and launch-contract v2 command-context parity. |
+| [`execution-isolation-and-secrets`](../prompt-packs/execution-isolation-and-secrets/) | HARD-008, HARD-003, HARD-006 | HARD-008 is accepted; HARD-003 and HARD-006 are unblocked and ready. |
+| [`public-beta-trust-and-release`](../prompt-packs/public-beta-trust-and-release/) | HARD-007, HARD-009, HARD-010, REL-003, REL-004 | HARD-007 and REL-003 are ready; later release/drift/supply-chain work remains dependency-gated. |
+| [`mcp-server-next`](../prompt-packs/mcp-server-next/) | MCP-003 | HARD-004 and HARD-005 are accepted; blocked on HARD-007; future mutations must preserve the current parser-derived capability/catalog resources and launch-contract v2 command-context parity. |
 | [`orchestrator-two-way-messaging`](../prompt-packs/orchestrator-two-way-messaging/) | BKL-001, BKL-002, MSG-003 through MSG-007 | MSG-001 is force-accepted and MSG-002 is accepted; later phases remain dependency-gated. |
-| [`delegation-communication-reliability`](../prompt-packs/delegation-communication-reliability/) | PROC-001 through PROC-005 | Planning complete; phase 0 has four independent implementation lanes, followed by operator enforcement and an independent gate. |
-| [`tmux-pane-identity-reliability`](../prompt-packs/tmux-pane-identity-reliability/) | PROC-006 | Ready; replaces mutable shared-window pane locations with durable pane identity and explicit run binding. |
+| [`delegation-communication-reliability`](../prompt-packs/delegation-communication-reliability/) | PROC-001 through PROC-005 | PROC-001 through PROC-004 are implemented and in review; PROC-005 is ready, followed by the independent gate. |
+| [`tmux-pane-identity-reliability`](../prompt-packs/tmux-pane-identity-reliability/) | PROC-006 | Implemented and in review; live-host and sealed acceptance evidence remain open. |
 | [`tmux-operator-experience`](../prompt-packs/tmux-operator-experience/) | TMUXUI-001 through TMUXUI-009 | Planned; core snapshot, popup, status, dashboard, and traffic-light presentation work waits for accepted PROC-006 evidence. The embedded sidebar remains an optional separately authorized phase. |
-| [`source-preflight-snapshot-reliability`](../prompt-packs/source-preflight-snapshot-reliability/) | PROC-007 | Ready; establishes reproducible exact-root Git cleanliness evidence for worktree creation and launch provenance. |
-| [`chatgpt-sealed-run-assessment`](../prompt-packs/chatgpt-sealed-run-assessment/) | CHATGPT-EVAL-001, CHATGPT-TDD-001 | Assessment and future-TDD artifacts completed; planned runtime work remains blocked behind its own implementation and gates. |
-| [`force-accept-override`](../prompt-packs/force-accept-override/) | LIFE-001 | Ready for one isolated, independently reviewed manual lifecycle-override implementation. |
+| [`source-preflight-snapshot-reliability`](../prompt-packs/source-preflight-snapshot-reliability/) | PROC-007 | Implemented and in review; focused installed/invariant evidence exists and broader host acceptance remains open. |
+| [`chatgpt-sealed-run-assessment`](../prompt-packs/chatgpt-sealed-run-assessment/) | CHATGPT-EVAL-001, CHATGPT-TDD-001 | Completed; implemented future specifications graduate into acceptance coverage. |
+| [`force-accept-override`](../prompt-packs/force-accept-override/) | LIFE-001 | Implemented and in review; authenticated human-only authorization remains HARD-007 work. |
 | [`codex-luna-effort-policy`](../prompt-packs/codex-luna-effort-policy/) | POL-001 | Integrated Luna-only automatic Codex selection with bounded reasoning effort; final review remains open. |
-| [`hierarchical-multi-team-orchestration`](../prompt-packs/hierarchical-multi-team-orchestration/) | HIER-001 through HIER-008 | Proposed; `DEC-005` and ticket-specific accepted messaging, delegation, steering, and pane-identity foundations gate execution. The external-terminal adapter is a separately reviewed optional branch. |
+| [`hierarchical-multi-team-orchestration`](../prompt-packs/hierarchical-multi-team-orchestration/) | HIER-001 through HIER-008 | DEC-005 is decided and HIER-001 is ready. The hierarchy is an explicitly enabled built-in feature; ticket-specific messaging, delegation, steering, and pane-identity foundations gate later phases. The external-terminal adapter is a separately reviewed optional branch. |
 | [`bounded-self-healing-supervisor`](../prompt-packs/bounded-self-healing-supervisor/) | SUP-001 through SUP-008 | SUP-001 and SUP-002 are implemented and in review; security/resource/principal, compatibility, hierarchy, and performance phases remain gated. |
 | [`sqlite-evidence-index`](../prompt-packs/sqlite-evidence-index/) | IDX-001 through IDX-007 | IDX-001 through IDX-005 are implemented and in review; governed analytical export and measured-scale optimization remain gated. |
-| [`release-installers`](../prompt-packs/release-installers/) | REL-008 | Ready: immutable curl bootstrap and checksummed Linux, WSL2, and macOS release bundles. Native Windows is not claimed. |
+| [`release-installers`](../prompt-packs/release-installers/) | REL-008 | Implemented and in review: bootstrap, checksummed bundles, tag-only release workflow, and installer tests exist; tagged-release/clean-host proof remains open. Jenkins CI/job assets remain source-only. |
+| [`feature-modularization`](../prompt-packs/feature-modularization/) | MAINT-001, PLUG-001, ARC-004 | Active decomposition and extension-boundary pack. Behavior-preserving module splits precede the trusted entry-point host; extraction of a separately distributed feature remains evidence-gated. |
 
 The dependency/collision rationale is in [Determinism and security hardening plan](DETERMINISM_SECURITY_HARDENING_PLAN.md). The local two-way messaging architecture and its collision-free implementation sequence are in [Durable two-way messaging](ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md). The source findings are in [Feature determinism and security assessment](FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md).
 
@@ -118,7 +119,7 @@ Use `agent-workflow pack checksum` only when preparing a pack for transfer or un
 
 ## Planned specification compiler
 
-Prompt packs remain the execution bundle, but the proposed `agent-workflow-spec` sibling plugin will treat them as deterministic compiled artifacts of an approved machine-readable implementation specification. Existing hand-authored packs and the current validation/archive format remain supported. Generated packs will pair nuanced Markdown ticket prompts with machine task contracts, acceptance links, result schemas, and requirement traceability rather than replacing all prompts with JSON. See [Collaborative specification compiler and plugin-first decomposition](SPEC_AUTHORING_PLUGIN_ARCHITECTURE.md).
+Prompt packs remain the execution bundle, but the planned `agent-workflow-spec` sibling plugin will treat them as deterministic compiled artifacts of an approved machine-readable implementation specification. Existing hand-authored packs and the current validation/archive format remain supported. Generated packs will pair nuanced Markdown ticket prompts with machine task contracts, acceptance links, result schemas, and requirement traceability rather than replacing all prompts with JSON. See [Collaborative specification compiler and plugin-first decomposition](SPEC_AUTHORING_PLUGIN_ARCHITECTURE.md).
 
 ## Migration and maintenance
 

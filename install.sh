@@ -47,7 +47,7 @@ done
 
 case "$VERSION" in
   v[0-9]*.[0-9]*.[0-9]*|[0-9]*.[0-9]*.[0-9]*) ;;
-  *) echo "an immutable semantic-version tag is required (for example v0.7.6)" >&2; exit 2 ;;
+  *) echo "an immutable semantic-version tag is required (for example v0.7.7)" >&2; exit 2 ;;
 esac
 case "$VERSION" in v*) TAG=$VERSION ;; *) TAG=v$VERSION ;; esac
 RELEASE_VERSION=${TAG#v}

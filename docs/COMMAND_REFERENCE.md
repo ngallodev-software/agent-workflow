@@ -1,15 +1,16 @@
 # Command reference
 
-The parser-derived command catalog is authoritative for agent execution. Run `agent-workflow commands --json` for the full machine-readable contract or `agent-workflow commands --role ROLE --format markdown` for a role-scoped command card. Agents should invoke represented commands directly and use `--help` only after a catalog/version mismatch, an argument error, or when a required command is absent. Global `--json` and `--config PATH` may appear before or after the subcommand; tokens after launch `--` belong to the delegated command.
+The parser-derived command catalog is authoritative for agent execution. Run `agent-workflow commands --json` for the full machine-readable contract or `agent-workflow commands --role ROLE --format markdown` for a role-scoped command card. Agents should invoke represented commands directly and use `--help` only after a catalog/version mismatch, an argument error, or when a required command is absent. Global `--json`, `--config PATH`, and `--no-plugins` may appear before or after the subcommand; tokens after launch `--` belong to the delegated command.
 
 ## Top-level
 
 ```text
-agent-workflow [--config PATH] [--json] COMMAND ...
+agent-workflow [--config PATH] [--json] [--no-plugins] COMMAND ...
 agent-workflow --version
 agent-workflow doctor
 agent-workflow commands [--format json|markdown] [--role all|orchestrator|implementation|review]
 agent-workflow config show
+agent-workflow plugins list
 agent-workflow completion bash|zsh|tcsh
 agent-workflow orchestrator registry create ORCHESTRATOR_ID [--workflow-id ID]
 agent-workflow orchestrator registry inspect ORCHESTRATOR_ID
@@ -20,7 +21,11 @@ agent-workflow orchestrator inbox list ORCHESTRATOR_ID [--after SEQUENCE] [--lim
 agent-workflow orchestrator inbox read ORCHESTRATOR_ID [--event-id UUID] [--include-content]
 ```
 
-`commands` is offline and generated from the exact installed parser. Every new launch stores the full catalog and a role-scoped command card in the sealed run, binds their digests into launch-contract v2, and exports their paths to the child process. `doctor` is offline. It probes only local binaries and local `--version`/`--help` surfaces.
+`commands` is offline and generated from the exact installed parser, including enabled plugin command groups and their installed-distribution provenance. Every new launch stores the full catalog and a role-scoped command card in the sealed run, binds their digests into launch-contract v2, and exports their paths to the child process. `doctor` is offline. It probes only local binaries and local `--version`/`--help` surfaces.
+
+### Trusted plugins
+
+Plugin candidates are discovered from Python package metadata but imported only when their entry-point names are listed in `[plugins].enabled`. `plugins list` reports discovered, enabled, loaded, and suppressed state. `--no-plugins` suppresses all configured imports and restores the core-only parser for recovery. Plugins are trusted executable code and never gain authority merely by being present. See [Trusted plugin API](PLUGIN_API.md).
 
 ## Worktrees and sessions
 

@@ -30,7 +30,9 @@ Only the phase completion/evidence directory designated by the operator. Do not 
    and one isolated installed-product journey.
 3. Confirm bootstrap URLs are immutable release/tag URLs, checksum failure is
    fail-closed, and no real release was published by a test.
-4. Recommend accept or reject; the host records disposition.
+4. Inspect wheel and each runtime bundle inventory; reject Jenkinsfile, Jenkins server-job scripts/XML, or `.github/workflows/`.
+5. Verify the base profile does not require MCP and the MCP profile is explicit.
+6. Recommend accept or reject; the host records disposition.
 
 ## Acceptance criteria
 

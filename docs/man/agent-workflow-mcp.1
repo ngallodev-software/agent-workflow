@@ -1,4 +1,4 @@
-.TH AGENT-WORKFLOW-MCP 1 "2026-08-01" "agent-workflow 0.7.6" "User Commands"
+.TH AGENT-WORKFLOW-MCP 1 "2026-08-01" "agent-workflow 0.7.7" "User Commands"
 .SH NAME
 agent-workflow-mcp \- local stdio MCP adapter
 .SH SYNOPSIS
@@ -12,6 +12,6 @@ The current server does not expose launch, workflow mutation, steering, review/a
 .SH SECURITY
 Access is restricted to configured roots with identifier, traversal, symlink, redaction, pagination, digest, and response-size controls. Run command context is read through the verified launch-contract v1/v2 boundary; command-artifact tampering fails closed and absolute executable paths are not exposed. Standard output is reserved for protocol traffic; diagnostics go to standard error.
 .SH DEPENDENCY
-The core package installs the non-vendored SDK dependency mcp==1.28.1. The installer registers this server as agent-workflow in the user-level Codex config.toml and Claude Code .claude.json on normal installs. Existing entries are preserved.
+The base package does not install the MCP SDK. Install the optional feature with pip install "agent-workflow[mcp]" or ./install.sh --extras mcp. MCP client registration occurs only when that extra is explicitly requested; existing entries are preserved.
 .SH SEE ALSO
 agent-workflow(1), docs/MCP_SERVER.md, docs/ARCHITECTURE.md, SECURITY.md

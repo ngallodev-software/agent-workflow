@@ -1,0 +1,5 @@
+include LICENSE
+exclude Jenkinsfile
+exclude scripts/jenkins-local-job.sh
+exclude scripts/jenkins-local-job.xml
+prune .github

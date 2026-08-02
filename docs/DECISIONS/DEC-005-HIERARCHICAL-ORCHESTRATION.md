@@ -1,7 +1,7 @@
 # DEC-005 — Bounded hierarchical orchestration
 
-- **Status:** proposed
-- **Date:** 2026-07-30
+- **Status:** decided
+- **Date:** 2026-08-01
 - **Decision owner:** maintainer
 - **Related:** `DEC-001-DURABLE-CONTROL.md`, `HIERARCHICAL_MULTI_TEAM_ORCHESTRATION_DESIGN.md`
 
@@ -10,6 +10,8 @@
 The current product can orchestrate direct agent sessions and durable workflows, but a large effort needs multiple independently supervised teams. Placing every worker pane and every decision under one root orchestrator creates attention, layout, capacity, and context bottlenecks.
 
 ## Decision
+
+Approve implementation as a built-in, explicitly enabled hierarchy feature. Preserve direct root-to-worker orchestration as the default compatibility path.
 
 Introduce exactly three authority tiers: root orchestrator, team lead, and worker. The root creates one managed tmux session and one dedicated window per team lead. A team lead is a normal canonical session with a bounded delegation contract and may create worker runs/panes only inside its assigned team scope.
 

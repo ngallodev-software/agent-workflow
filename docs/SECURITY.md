@@ -6,7 +6,7 @@ The repository-wide security classification and residual-risk inventory is [Feat
 
 ## Supported status
 
-The project is pre-public-release and does not yet have a monitored public vulnerability-reporting channel. This is a release blocker tracked as `REL-002`. Do not publish sensitive reports in a public issue tracker.
+The project is pre-public-release. GitHub Private Vulnerability Reporting is the selected primary disclosure channel, but `REL-002` remains in review until a repository administrator enables it and records a successful private notification drill. Do not publish sensitive reports in a public issue tracker. The repository-root [`SECURITY.md`](../SECURITY.md) is the canonical reporting policy.
 
 ## Implemented security boundaries
 
@@ -37,18 +37,17 @@ The index deliberately avoids arbitrary SQL through the CLI and does not duplica
 
 These are active release blockers, not theoretical future hardening:
 
-- The bounded process substrate is integrated for governed call sites, but shared installed-product acceptance and the foundation phase gate remain open (`HARD-001`); `tmux.attach` remains the documented interactive-only terminal ownership boundary.
-- Prompt-pack, native-job, schema, and bounded-path integrity controls are integrated, but filesystem-socket coverage was unavailable on this host and shared phase-gate acceptance remains open (`HARD-002`).
-- MCP reads are metadata-minimal, bounded, and component-wise no-follow, but the installed stdio journey remains unverified and phase-gate acceptance remains open (`HARD-005`).
-- writable-path policy for untrusted commands is primarily post-run detection rather than a preventative OS sandbox (`HARD-003`);
-- some runner/evaluation decisions still depend on mutable status projections rather than one immutable launch authority (`HARD-004`);
+- writable-path policy for untrusted commands is primarily post-run detection rather than preventative OS-level filesystem/network/resource isolation (`HARD-003`);
 - terminal, incident, and searchable index fields use bounded redaction/exclusion, but comprehensive field-level classification, retention, export, deletion, and analytical-release policy remains incomplete (`HARD-006`, `SUP-003`, `IDX-006`);
 - process/resource telemetry is observational; preventative CPU/memory/disk/network enforcement and adaptive backpressure remain incomplete (`HARD-003`, `SUP-004`);
 - actor strings are not authenticated principals, so reviewer independence and remediation/permission attribution remain procedural rather than cryptographically or OS-authenticated (`HARD-007`, `SUP-005`);
 - config/executable ownership and compatibility evidence are enforced by explicit local/governed/release policy; repository-local hooks and filters remain an operator-visible trust decision rather than being silently disabled;
-- release checks now emit a synchronized direct-dependency lock, CycloneDX SBOM, structured test evidence, and source/build provenance (`REL-005`), but full transitive hashes, independent reproducibility, and authenticated signing/attestation remain open (`HARD-010`).
+- generated inventory and backlog drift enforcement remains incomplete (`HARD-009`);
+- release checks emit a synchronized dependency lock, CycloneDX SBOM, structured test evidence, and source/build provenance, but full transitive hashes, independent reproducibility, and authenticated signing/attestation remain open (`HARD-010`);
+- the selected GitHub private reporting channel still requires repository-side enablement and a notification drill (`REL-002`);
+- supported clean-host/tmux/executor combinations and a real tagged release remain evidence-gated (`REL-003`, `REL-008`).
 
-Do not describe these controls as complete until their backlog exit evidence exists.
+Accepted HARD-001, HARD-002, HARD-004, HARD-005, and HARD-008 foundations are no longer listed as open limitations. Do not describe the remaining controls as complete until their canonical backlog exit evidence exists.
 
 ## Operator responsibilities
 
@@ -68,4 +67,4 @@ The default state location is:
 
 ## Reporting before public release
 
-Trusted collaborators should contact the maintainer through an existing private channel and provide the smallest safe reproduction. Include version, platform, command category, and whether the issue affects path containment, evidence authority, process control, identity, information disclosure, or provider accounting. Do not include secrets or private state bundles unless a secure transfer path has been agreed.
+Use GitHub Private Vulnerability Reporting as described in the repository-root [`SECURITY.md`](../SECURITY.md). Until the repository setting is verified as enabled, trusted collaborators should use an already established private maintainer channel only to request a private advisory path; do not send vulnerability details through public issues or discussions.

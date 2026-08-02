@@ -14,7 +14,7 @@ Unit and installed-product fixture journeys cannot establish real tmux/provider 
 
 ## Required implementation
 
-- Propose the smallest support matrix: Linux distribution/kernel class, Python versions, tmux versions, archive tools, Git, and explicitly supported Codex/Claude CLI versions. Maintainer approval is required before calling it supported.
+- Propose the smallest support matrix with separate base and optional `mcp` install profiles: Linux distribution/kernel class, Python versions, tmux versions, archive tools, Git, and explicitly supported Codex/Claude CLI versions. Maintainer approval is required before calling it supported.
 - Provision disposable clean hosts or containers/VMs that do not mount the development checkout or user credentials. Install from the candidate wheel/source artifact.
 - Run install/doctor/uninstall, one bounded delegation per supported adapter, restart/recovery, workflow pipeline, receipt verification, and local stdio MCP read smoke. Use synthetic repositories and prompts.
 - Record executable versions, config/sandbox policy, environment class, network mode, cost/spend ceiling, logs retention, and sealed evidence digests.

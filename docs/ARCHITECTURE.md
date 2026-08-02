@@ -27,15 +27,15 @@ target repository/worktree
   implementation source, project-native tests, legitimate generated artifacts
 ```
 
-## Planned plugin-first decomposition
+## Plugin-first decomposition
 
-The current distribution remains the execution host while a narrow, versioned plugin API is designed and proven. The first external first-party plugin should be the sibling `agent-workflow-spec` repository, which owns collaborative specification authoring and deterministic compilation into existing prompt packs and evaluation artifacts. Core continues to own tmux/process/session execution, durable state, receipts, lifecycle authority, workflow safety, and prompt-pack validation required at launch.
+The current distribution remains the execution host. Version 0.7.7 implements the first narrow, versioned trusted-plugin command host; bounded package-resource activation and independent gate review remain open under PLUG-001. The first external first-party plugin should be the sibling `agent-workflow-spec` repository, which owns collaborative specification authoring and deterministic compilation into existing prompt packs and evaluation artifacts. Core continues to own tmux/process/session execution, durable state, receipts, lifecycle authority, workflow safety, and prompt-pack validation required at launch.
 
-This is an additive migration, not an immediate rename or broad repository split. Installed plugins are trusted code, must be explicitly enabled and version-compatible, and may register only bounded command namespaces, schemas, assets, read services, and diagnostics. LangGraph may be an optional spec-authoring adapter, but its checkpoints never replace canonical JSON, append-only events, approval receipts, compiler receipts, or sealed execution evidence. See [Collaborative specification compiler and plugin-first decomposition](SPEC_AUTHORING_PLUGIN_ARCHITECTURE.md).
+This is an additive migration, not an immediate rename or broad repository split. Installed plugins are trusted code, must be explicitly enabled and version-compatible, and may register only bounded command namespaces, schemas, assets, read services, and diagnostics. LangGraph may be an optional spec-authoring adapter, but its checkpoints never replace canonical JSON, append-only events, approval receipts, compiler receipts, or sealed execution evidence. See [Trusted plugin API](PLUGIN_API.md) and [Collaborative specification compiler and plugin-first decomposition](SPEC_AUTHORING_PLUGIN_ARCHITECTURE.md).
 
-## Planned hierarchical orchestration
+## Approved bounded hierarchical orchestration
 
-The next orchestration layer is a bounded three-tier hierarchy: a root orchestrator manages multiple team leads, and each team lead supervises worker sessions in panes within its own tmux window. Durable hierarchy contracts, journals, scoped delegation authority, team receipts, and root receipts remain authoritative; tmux sessions/windows/panes and optional external terminal windows are projections. The design intentionally reuses canonical session, workflow, inbox, receipt, and worktree services rather than introducing another executor or scheduler path. See [Hierarchical multi-team orchestration design](HIERARCHICAL_MULTI_TEAM_ORCHESTRATION_DESIGN.md) and [DEC-005](DECISIONS/DEC-005-HIERARCHICAL-ORCHESTRATION.md).
+DEC-005 approves an explicitly enabled later orchestration layer using a bounded three-tier hierarchy: a root orchestrator manages multiple team leads, and each team lead supervises worker sessions in panes within its own tmux window. Durable hierarchy contracts, journals, scoped delegation authority, team receipts, and root receipts remain authoritative; tmux sessions/windows/panes and optional external terminal windows are projections. The design intentionally reuses canonical session, workflow, inbox, receipt, and worktree services rather than introducing another executor or scheduler path. See [Hierarchical multi-team orchestration design](HIERARCHICAL_MULTI_TEAM_ORCHESTRATION_DESIGN.md) and [DEC-005](DECISIONS/DEC-005-HIERARCHICAL-ORCHESTRATION.md).
 
 ## Implemented bounded supervision and self-healing
 

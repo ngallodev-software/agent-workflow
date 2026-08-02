@@ -324,9 +324,7 @@ def test_source_installer_round_trip_preserves_user_owned_paths(
     assert (home / ".config" / "agent-workflow" / "config.toml").is_file()
     codex_config = tomllib.loads((home / ".codex" / "config.toml").read_text(encoding="utf-8"))
     assert codex_config["model"] == "keep-me"
-    codex_server = codex_config["mcp_servers"]["agent-workflow"]
-    assert Path(codex_server["command"]).name == "python3"
-    assert codex_server["args"][-1] == str(REPO_ROOT)
+    assert "mcp_servers" not in codex_config
     codex_hook_commands = [
         entry["hooks"][0]["command"] for entry in codex_config["hooks"]["SessionStart"]
     ]
@@ -373,9 +371,7 @@ def test_source_installer_round_trip_preserves_user_owned_paths(
         assert codex_help.returncode == 0, codex_help.stdout + codex_help.stderr
     claude_config = json.loads((home / ".claude.json").read_text(encoding="utf-8"))
     assert claude_config["userSetting"] == "keep-me"
-    claude_server = claude_config["mcpServers"]["agent-workflow"]
-    assert claude_server["type"] == "stdio"
-    assert claude_server["args"][-1] == str(REPO_ROOT)
+    assert "mcpServers" not in claude_config
     claude_settings = json.loads((home / ".claude" / "settings.json").read_text(encoding="utf-8"))
     claude_hook_commands = [
         entry["command"]
@@ -386,8 +382,8 @@ def test_source_installer_round_trip_preserves_user_owned_paths(
     assert all(Path(command).is_file() for command in claude_hook_commands)
     assert claude_settings["permissions"] == {"mode": "acceptEdits"}
     assert len(claude_settings["hooks"]["SessionStart"][0]["hooks"]) == 3
-    assert (home / ".codex" / "config.toml").read_text(encoding="utf-8").count("[mcp_servers.agent-workflow]") == 1
-    assert (home / ".claude.json").read_text(encoding="utf-8").count('"agent-workflow"') == 1
+    assert (home / ".codex" / "config.toml").read_text(encoding="utf-8").count("[mcp_servers.agent-workflow]") == 0
+    assert (home / ".claude.json").read_text(encoding="utf-8").count('"agent-workflow"') == 0
     assert (home / ".claude.json").read_text(encoding="utf-8").count('"hooks"') == 0
     version = subprocess.run(
         [str(launcher), "--version"], env=env, text=True, capture_output=True, timeout=30, check=False

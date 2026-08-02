@@ -6,6 +6,8 @@ Act as the phase coordinator. Execute or delegate only the tickets listed by `ta
 
 ## Objective
 
+Independently review exact release artifacts and reject any Jenkins/GitHub workflow source in installed/runtime inventories.
+
 ## Source-of-truth hierarchy
 
 Use current source first, then current tests/schemas, then verified references, then documentation and historical plans.

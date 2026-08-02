@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 
 import pytest
+
+pytest.importorskip("mcp", reason="install the optional mcp feature to run MCP acceptance")
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
@@ -24,8 +26,8 @@ def test_installed_stdio_mcp_reads_bounded_metadata_only(
     fake_agent_path: Path,
     tmp_path: Path,
 ) -> None:
-    if not installed_product.mcp.exists():
-        pytest.skip("installed-product fixture did not install the core MCP dependency")
+    if not installed_product.mcp_sdk_available:
+        pytest.skip("installed-product fixture does not have the optional mcp feature")
     repo = tmp_path / "repo"
     git_repo(repo)
     prompt = tmp_path / "prompt.md"

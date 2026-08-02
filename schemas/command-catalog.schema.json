@@ -138,6 +138,83 @@
       },
       "type": "array"
     },
+    "plugins": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "api_version": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "assets": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "commands": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "distribution": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "distribution_version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "entry_point": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "plugin_version": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "resources": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "schemas": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "entry_point",
+          "distribution",
+          "distribution_version",
+          "plugin_version",
+          "api_version",
+          "commands",
+          "schemas",
+          "assets",
+          "resources"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
     "role": {
       "enum": [
         "orchestrator",
@@ -157,7 +234,8 @@
     "version",
     "application",
     "global_options",
-    "commands"
+    "commands",
+    "plugins"
   ],
   "type": "object"
 }

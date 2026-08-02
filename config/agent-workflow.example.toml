@@ -43,6 +43,10 @@ archive_level = 19
 write_sha256 = true
 validate_before_archive = true
 
+[plugins]
+# Trusted plugins are imported only when explicitly enabled by entry-point name.
+enabled = []
+
 [agents]
 preferred_names = ["larry", "moe", "curly"]
 generated_prefix = "agent"

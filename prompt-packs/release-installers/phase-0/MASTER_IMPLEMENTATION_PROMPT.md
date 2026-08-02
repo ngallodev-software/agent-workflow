@@ -6,6 +6,8 @@ Act as the phase coordinator. Execute or delegate only the tickets listed by `ta
 
 ## Objective
 
+Verify the implemented installer path, close reproducible defects, and enforce base/optional-profile plus repository-only CI/CD boundaries.
+
 ## Source-of-truth hierarchy
 
 Use current source first, then current tests/schemas, then verified references, then documentation and historical plans.

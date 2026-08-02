@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from . import __version__
 from .benchmarking import (
     attest_benchmark_runtime,
     benchmark_readiness,
@@ -29,12 +30,12 @@ from .benchmarking import (
 )
 from .command_catalog import (
     COMMAND_ROLES,
+    build_command_catalog,
     filter_catalog,
     render_command_markdown,
-    runtime_command_catalog,
 )
 from .archive import archive_runs
-from .config import as_dict, load_settings
+from .config import as_dict, defaults, load_settings
 from .agent_context import auto_reuse as auto_reuse_agent
 from .agent_context import candidates as reuse_candidates
 from .agent_context import complete_task as complete_agent_task
@@ -75,6 +76,8 @@ from .orchestrator_inbox import (
     unregister_child,
 )
 from .path import absolute_path
+from .plugin_api import PluginExecutionContext
+from .plugins import EMPTY_PLUGIN_REGISTRY, PluginRegistry, load_plugin_registry
 from .pack import archive as archive_pack
 from .pack import scaffold as scaffold_pack
 from .receipts import verify_seal_details
@@ -129,14 +132,19 @@ def _print_table(
         print("  ".join(str(row.get(key, "")).ljust(widths[key]) for key, _ in columns))
 
 
-def build_parser() -> argparse.ArgumentParser:
+def build_parser(plugin_registry: PluginRegistry | None = None) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="agent-workflow")
-    parser.add_argument("--version", action="version", version="%(prog)s 0.7.6")
+    parser.add_argument("--version", action="version", version="%(prog)s 0.7.7")
     parser.add_argument("--config", type=Path, help="override config.toml path")
     parser.add_argument(
         "--json",
         action="store_true",
         help="machine-readable output where supported",
+    )
+    parser.add_argument(
+        "--no-plugins",
+        action="store_true",
+        help="suppress configured plugins for recovery and core-only operation",
     )
     commands = parser.add_subparsers(dest="command", required=True)
 
@@ -178,6 +186,9 @@ def build_parser() -> argparse.ArgumentParser:
     config = commands.add_parser("config", help="configuration commands")
     config_commands = config.add_subparsers(dest="config_command", required=True)
     config_commands.add_parser("show", help="show resolved configuration")
+    plugins = commands.add_parser("plugins", help="trusted plugin inventory")
+    plugin_commands = plugins.add_subparsers(dest="plugins_command", required=True)
+    plugin_commands.add_parser("list", help="list discovered and enabled plugins")
 
     orchestrator = commands.add_parser("orchestrator", help="orchestrator registry and inbox commands")
     orchestrator_commands = orchestrator.add_subparsers(dest="orchestrator_command", required=True)
@@ -715,6 +726,20 @@ def build_parser() -> argparse.ArgumentParser:
     archive.add_argument("source", type=Path)
     archive.add_argument("output", type=Path)
 
+    registry = plugin_registry or EMPTY_PLUGIN_REGISTRY
+    for loaded_plugin, plugin_command in registry.commands:
+        if plugin_command.name in commands.choices:
+            raise WorkflowError(
+                f"plugin {loaded_plugin.descriptor.name!r} command {plugin_command.name!r} "
+                "conflicts with a core command"
+            )
+        plugin_parser = commands.add_parser(plugin_command.name, help=plugin_command.summary)
+        plugin_command.configure(plugin_parser)
+        plugin_parser.set_defaults(
+            _plugin_execute=plugin_command.execute,
+            _plugin_name=loaded_plugin.descriptor.name,
+        )
+
     return parser
 
 
@@ -741,7 +766,7 @@ def _parse_args(
     index = 0
     while index < len(raw):
         token = raw[index]
-        if token == "--json":
+        if token in {"--json", "--no-plugins"}:
             normalized_globals.append(token)
             index += 1
             continue
@@ -763,6 +788,27 @@ def _parse_args(
     return args
 
 
+def _bootstrap_plugins(
+    argv: list[str] | None,
+) -> tuple[Any, PluginRegistry]:
+    raw = list(sys.argv[1:] if argv is None else argv)
+    if "--" in raw:
+        raw = raw[: raw.index("--")]
+    pre_parser = argparse.ArgumentParser(add_help=False)
+    pre_parser.add_argument("--config", type=Path)
+    pre_parser.add_argument("--no-plugins", action="store_true")
+    known, _ = pre_parser.parse_known_args(raw)
+    # Version reporting must remain available even when local configuration or
+    # a plugin is broken. All other commands honor configured strict loading.
+    if "--version" in raw:
+        return defaults(known.config), EMPTY_PLUGIN_REGISTRY
+    settings = load_settings(known.config)
+    return settings, load_plugin_registry(
+        settings.plugins_enabled,
+        suppress=known.no_plugins,
+    )
+
+
 def _print_mapping(data: dict[str, Any]) -> None:
     for key, value in data.items():
         if key == "capture" and value:
@@ -775,21 +821,40 @@ def _print_mapping(data: dict[str, Any]) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
-    args = _parse_args(parser, argv)
+    args: argparse.Namespace | None = None
     try:
+        settings, plugin_registry = _bootstrap_plugins(argv)
+        parser = build_parser(plugin_registry)
+        args = _parse_args(parser, argv)
         if args.command == "commands":
-            catalog = runtime_command_catalog()
+            catalog = build_command_catalog(
+                parser,
+                plugin_inventory=plugin_registry.catalog_inventory(),
+            )
             output_format = args.format or ("json" if args.json else "markdown")
             if output_format == "json":
                 _print_json(filter_catalog(catalog, args.role))
             else:
                 print(render_command_markdown(catalog, role=args.role), end="")
             return 0
-        settings = load_settings(args.config)
         data: Any
 
-        if args.command == "doctor":
+        if hasattr(args, "_plugin_execute"):
+            data = args._plugin_execute(
+                args,
+                PluginExecutionContext(
+                    settings=settings,
+                    json_output=args.json,
+                    host_version=__version__,
+                ),
+            )
+        elif args.command == "plugins":
+            data = {
+                "configured_enabled": list(settings.plugins_enabled),
+                "suppressed": bool(args.no_plugins),
+                "plugins": plugin_registry.inventory(),
+            }
+        elif args.command == "doctor":
             data = run_doctor(settings)
         elif args.command == "completion":
             try:
@@ -798,7 +863,7 @@ def main(argv: list[str] | None = None) -> int:
                 raise WorkflowError(
                     "shell completion requires: pip install 'agent-workflow[completion]'"
                 ) from exc
-            print(shtab.complete(build_parser(), shell=args.shell), end="")
+            print(shtab.complete(build_parser(plugin_registry), shell=args.shell), end="")
             return 0
         elif args.command == "config":
             data = as_dict(settings)
@@ -851,7 +916,6 @@ def main(argv: list[str] | None = None) -> int:
                     destination=args.dest,
                     branch=args.branch,
                     allow_dirty=args.allow_dirty,
-                    assistance_cohort=args.assistance_cohort,
                 )
             elif args.worktree_command == "remove":
                 data = remove_worktree(
@@ -1514,7 +1578,7 @@ def main(argv: list[str] | None = None) -> int:
             _print_json(data)
         return 0
     except InteractiveCapacityError as exc:
-        if args.json:
+        if bool(getattr(args, "json", False)):
             _print_json(exc.as_dict())
         else:
             print(f"error: {exc}", file=sys.stderr)

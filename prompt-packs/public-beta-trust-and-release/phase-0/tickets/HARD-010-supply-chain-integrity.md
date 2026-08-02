@@ -14,10 +14,10 @@ SHA-256 manifests detect accidental corruption but not malicious replacement at 
 
 ## Required implementation
 
-- Choose and document a lock strategy covering core and each supported optional extra without forcing every optional dependency into core installation.
+- Choose and document a lock strategy covering core and each supported optional extra without forcing every optional dependency into core installation. The base profile must remain installable without MCP; the `mcp` profile is verified separately.
 - Generate a standard SBOM for wheel and source release contents, including direct/transitive versions and hashes where available.
 - Build wheel and source archive in two clean isolated environments from the same revision; compare normalized contents and document unavoidable metadata.
-- Generate provenance tying revision, source manifest, build commands, toolchain versions, dependency lock, wheel/sdist digests, and test/release-gate results.
+- Generate provenance tying revision, source manifest, build commands, toolchain versions, dependency lock, wheel/sdist digests, profile selection, and test/release-gate results. Assert that repository-only Jenkins/GitHub workflow assets are absent from installed wheels and runtime bundles.
 - Pin CI actions by immutable commit and minimize token permissions. Do not run secret-bearing release jobs on untrusted fork code.
 - Implement an authenticated signing/attestation path approved by maintainers (for example Sigstore or an equivalent). If signing identity/publication is unavailable, produce the design and leave REL-004 blocked rather than simulating trust.
 

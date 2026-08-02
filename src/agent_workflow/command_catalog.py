@@ -245,7 +245,11 @@ def _walk_commands(
             )
 
 
-def build_command_catalog(parser: argparse.ArgumentParser) -> dict[str, Any]:
+def build_command_catalog(
+    parser: argparse.ArgumentParser,
+    *,
+    plugin_inventory: Iterable[dict[str, Any]] = (),
+) -> dict[str, Any]:
     global_positionals, global_options = _parser_arguments(parser)
     if global_positionals:
         raise WorkflowError("top-level command parser unexpectedly contains positionals")
@@ -259,6 +263,7 @@ def build_command_catalog(parser: argparse.ArgumentParser) -> dict[str, Any]:
         },
         "global_options": global_options,
         "commands": sorted(_walk_commands(parser), key=lambda item: item["command"]),
+        "plugins": list(plugin_inventory),
     }
     validate_instance(catalog, COMMAND_CATALOG_SCHEMA, artifact="command catalog")
     return catalog
@@ -269,8 +274,19 @@ def filter_catalog(catalog: dict[str, Any], role: str | None) -> dict[str, Any]:
         return catalog
     if role not in COMMAND_ROLES:
         raise WorkflowError(f"unknown command-card role: {role}")
-    allowed = _ROLE_COMMANDS[role]
+    allowed = set(_ROLE_COMMANDS[role])
     represented = {str(item["command"]) for item in catalog["commands"]}
+    if role == "orchestrator":
+        plugin_roots = {
+            str(command)
+            for plugin in catalog.get("plugins", [])
+            for command in plugin.get("commands", [])
+        }
+        allowed.update(
+            command
+            for command in represented
+            if command.split(" ", 1)[0] in plugin_roots
+        )
     missing = sorted(allowed - represented)
     if missing:
         raise WorkflowError(
@@ -316,12 +332,25 @@ def command_catalog_sha256(catalog: dict[str, Any]) -> str:
     return hashlib.sha256(encode_command_catalog(catalog)).hexdigest()
 
 
-def runtime_command_catalog() -> dict[str, Any]:
+def runtime_command_catalog(
+    settings: Any | None = None,
+    *,
+    no_plugins: bool = False,
+) -> dict[str, Any]:
     # Imported lazily to avoid a module-import cycle: cli imports sessions and
     # sessions writes the catalog only after the CLI module is fully initialized.
     from .cli import build_parser
+    from .plugins import EMPTY_PLUGIN_REGISTRY, load_plugin_registry
 
-    return build_command_catalog(build_parser())
+    registry = (
+        load_plugin_registry(settings.plugins_enabled, suppress=no_plugins)
+        if settings is not None
+        else EMPTY_PLUGIN_REGISTRY
+    )
+    return build_command_catalog(
+        build_parser(registry),
+        plugin_inventory=registry.catalog_inventory(),
+    )
 
 
 def resolve_cli_executable() -> str:
@@ -331,8 +360,13 @@ def resolve_cli_executable() -> str:
     return shutil.which("agent-workflow") or "agent-workflow"
 
 
-def write_launch_command_artifacts(state_dir: Path, *, role: str) -> dict[str, Any]:
-    catalog = runtime_command_catalog()
+def write_launch_command_artifacts(
+    state_dir: Path,
+    *,
+    role: str,
+    settings: Any | None = None,
+) -> dict[str, Any]:
+    catalog = runtime_command_catalog(settings)
     catalog_path = state_dir / COMMAND_CATALOG_FILENAME
     card_path = state_dir / COMMAND_CARD_FILENAME
     atomic_write_bytes(catalog_path, encode_command_catalog(catalog), mode=0o444)

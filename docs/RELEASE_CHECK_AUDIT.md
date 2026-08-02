@@ -1,4 +1,6 @@
 ---
+
+> **Historical/superseded:** This document preserves the pre-REL-005 audit trail. Current release checks, license state, vulnerability-channel state, and blockers are authoritative only in `scripts/audit-release-assets.py`, `release/release-policy.json`, `docs/BACKLOG.md`, and `docs/PUBLIC_RELEASE_READINESS.md`.
 name: release-check-audit
 description: Audit of release-check.sh coverage against P0 blockers and evidence quality
 ---

@@ -1,4 +1,6 @@
-# License Selection Decision Memo
+# Apache-2.0 license decision record
+
+**Decision status:** adopted on 2026-08-01. Apache-2.0 is installed at repository root and synchronized with package/release metadata. Direct dependency license checks found no copyleft conflict in the selected release set.
 
 **Project**: `agent-workflow`  
 **Use case**: Terminal-first control plane for distributed agent execution and workflow orchestration  
@@ -31,7 +33,7 @@
 4. **Upstream dependencies**: 
    - **Core**: `jsonschema>=4.18,<5` (Apache 2.0)
    - **Optional eval**: `inspect-ai` and `inspect-swe` (likely permissive; verify)
-   - **Optional MCP**: `mcp==1.28.1` (need to confirm license)
+   - **Optional MCP**: `mcp==1.28.1` (MIT; optional feature)
    - **Optional telemetry**: OpenTelemetry (Apache 2.0)
 5. **Downstream compatibility**: 
    - Users integrate with Claude API, OpenAI Codex, and proprietary agent frameworks
@@ -214,7 +216,7 @@ These are **compatible with any permissive license**. GPL v3 would add burden by
 6. **Upstream dependency compatibility**: 
    - `jsonschema` (Apache 2.0) ✅ Compatible
    - OpenTelemetry (Apache 2.0) ✅ Compatible
-   - `mcp` (verify, likely permissive or Apache) ✅ Likely compatible
+   - `mcp` (MIT) ✅ Compatible
    - No GPL dependencies ✅ No copyleft conflict
 
 #### Alternative (MIT)
@@ -231,7 +233,7 @@ GPL v3 is fundamentally incompatible with the project's role as a foundation for
 
 ### Next Steps
 
-1. **Dependency verification**: Confirm license of `mcp==1.28.1` and `inspect-ai`/`inspect-swe`. If any are GPL-licensed, revisit and document incompatibility or upgrade path.
+1. **Dependency verification — complete**: `mcp==1.28.1`, `inspect-ai`, and `inspect-swe` use permissive licenses compatible with Apache-2.0.
 
 2. **Add LICENSE file**: Place standard Apache 2.0 text at repository root (`LICENSE` file, no extension).
 
@@ -251,7 +253,7 @@ GPL v3 is fundamentally incompatible with the project's role as a foundation for
    ```markdown
    ## License
    
-   `agent-workflow` is licensed under the Apache License 2.0. The repository license file is still required before release.
+   `agent-workflow` is licensed under the Apache License 2.0. The repository license file is present and required in release artifacts.
    ```
 
 6. **Legal review** (optional): If the organization has legal counsel, brief them on the choice and confirm it aligns with organizational practices.

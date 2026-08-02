@@ -22,7 +22,8 @@ Overlay content now present includes:
 - release-drift-auditor skill;
 - release-audit, documentation, and delegation-protocol updates.
 
-`docs/BACKLOG.md` is canonical. Root steering is in `AGENTS.md`; conditional delegation references are in `docs/references/`. HARD-001 through HARD-010, REL-003/004, and MCP-003 retain explicit pack ownership and sequencing. Local Jenkins/release follow-up remains tracked as REL-005 through REL-007. The MCP mutation pack remains blocked behind HARD-004, HARD-005, and HARD-007.
+`docs/BACKLOG.md` is canonical. Root steering is in `AGENTS.md`; conditional delegation references are in `docs/references/`. HARD-001 through HARD-010, REL-003/004, and MCP-003 retain explicit pack ownership and sequencing. Jenkins is maintained as repository-only CI/CD under completed REL-006; it is excluded from installed wheels and runtime bundles. Release follow-up remains under active REL-002/003/004/008 and HARD-009/010 ownership. The optional MCP mutation pack remains blocked behind HARD-007; HARD-004 and HARD-005 are accepted.
+The 0.7.7 modularization slice also includes the stable process-policy facade and trusted plugin command-host foundation. PLUG-001 remains in progress only for bounded schema/asset package-resource activation and independent gate review.
 
 ## Verification
 

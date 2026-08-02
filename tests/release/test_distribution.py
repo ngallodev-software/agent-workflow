@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
+import sys
+import zipfile
+from pathlib import Path
 
 import jsonschema
 
@@ -61,3 +65,65 @@ def test_documented_commands_match_the_installed_public_surface(
 
     command_reference = (REPO_ROOT / "docs" / "COMMAND_REFERENCE.md").read_text(encoding="utf-8")
     assert "agent-workflow eval compare BASELINE.json CANDIDATE.json --output PATH" in command_reference
+
+
+def test_built_wheel_excludes_repository_only_ci_assets(tmp_path: Path) -> None:
+    output = tmp_path / "dist"
+    output.mkdir()
+    result = subprocess.run(
+        [sys.executable, "-m", "pip", "wheel", ".", "--no-deps", "--no-build-isolation", "--wheel-dir", str(output)],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    wheels = sorted(output.glob("agent_workflow-*.whl"))
+    assert len(wheels) == 1
+    with zipfile.ZipFile(wheels[0]) as archive:
+        names = archive.namelist()
+    forbidden = ("Jenkinsfile", "jenkins-local-job", ".github/workflows")
+    assert not any(any(token in name for token in forbidden) for name in names)
+
+
+def test_optional_mcp_profile_rejects_missing_pinned_sdk_before_client_registration(
+    tmp_path: Path,
+) -> None:
+    fake_python = tmp_path / "python-without-mcp"
+    fake_python.write_text(
+        f"#!/bin/sh\n"
+        "if [ \"${1:-}\" = \"-\" ]; then exit 1; fi\n"
+        f"exec {sys.executable!r} \"$@\"\n",
+        encoding="utf-8",
+    )
+    fake_python.chmod(0o755)
+    home = tmp_path / "home"
+    env = {
+        **os.environ,
+        "HOME": str(home),
+        "XDG_CONFIG_HOME": str(home / ".config"),
+        "XDG_DATA_HOME": str(home / ".local" / "share"),
+    }
+    result = subprocess.run(
+        [
+            str(REPO_ROOT / "scripts" / "install-source.sh"),
+            "--no-deps",
+            "--no-skills",
+            "--no-hooks",
+            "--extras",
+            "mcp",
+            "--python",
+            str(fake_python),
+        ],
+        cwd=REPO_ROOT,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=30,
+    )
+    assert result.returncode != 0
+    assert "MCP support requires mcp==1.28.1" in result.stderr
+    assert not (home / ".codex" / "config.toml").exists()
+    assert not (home / ".claude.json").exists()

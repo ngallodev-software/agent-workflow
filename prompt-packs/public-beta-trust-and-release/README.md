@@ -10,7 +10,7 @@ This pack owns `HARD-007`, `HARD-009`, `HARD-010`, `REL-003`, `REL-004`. Canonic
 
 - `FOUND-GATE-01` and `ISO-GATE-01` are accepted.
 - HARD-001 through HARD-006 and HARD-008 are integrated.
-- REL-001 and REL-002 remain external maintainer prerequisites for the final REL-004 gate.
+- REL-001 is complete. REL-002 has selected GitHub Private Vulnerability Reporting and remains open only for administrator enablement and notification-drill evidence before REL-004.
 
 Do not launch a blocked phase because its prompts are present. The orchestrator must verify prerequisite backlog items and prior phase gates first.
 
@@ -40,3 +40,10 @@ agent-workflow pack validate prompt-packs/public-beta-trust-and-release
 ```
 
 Use the `release-drift-auditor` skill at every phase gate. A valid pack does not override backlog state, runtime policy, executor/model policy, writable-path policy, or human decisions.
+
+## Distribution and feature boundaries
+
+- Validate the base wheel independently from optional extras.
+- Validate the `mcp` profile separately; do not force its SDK into base installation.
+- Treat `Jenkinsfile`, Jenkins server-job assets, and `.github/workflows/` as core repository CI/CD source, never installed runtime content.
+- Release artifacts may document built-in/optional features, but no disabled feature may widen core authority or become active merely because code is installed.

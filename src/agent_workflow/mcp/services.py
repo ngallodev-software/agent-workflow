@@ -363,7 +363,7 @@ class WorkflowReadService:
         if role is not None and role not in COMMAND_ROLES:
             raise ServiceError("invalid_identifier", "unknown command-catalog role")
         try:
-            catalog = filter_catalog(runtime_command_catalog(), role)
+            catalog = filter_catalog(runtime_command_catalog(self.settings), role)
             validate_instance(
                 catalog, COMMAND_CATALOG_SCHEMA, artifact="MCP command catalog"
             )

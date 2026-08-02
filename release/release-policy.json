@@ -1,19 +1,19 @@
 {
   "schema": "agent-workflow/release-policy/v1",
   "project": "agent-workflow",
-  "version": "0.7.6",
+  "version": "0.7.7",
   "license": {
-    "status": "blocked",
+    "status": "configured",
     "backlog_id": "REL-001",
-    "spdx_expression": null,
-    "file": null,
-    "distribution_policy": null
+    "spdx_expression": "Apache-2.0",
+    "file": "LICENSE",
+    "distribution_policy": "Source and binary distributions are licensed under Apache-2.0 and must preserve the license text."
   },
   "security_channel": {
     "status": "blocked",
     "backlog_id": "REL-002",
-    "contact": null,
-    "response_policy": null
+    "contact": "GitHub Private Vulnerability Reporting for the canonical public repository",
+    "response_policy": "SECURITY.md; closeout requires administrator enablement and a successful private notification drill"
   },
   "compatibility": {
     "status": "candidate",

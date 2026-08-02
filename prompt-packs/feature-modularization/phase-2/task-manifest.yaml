@@ -1,0 +1,15 @@
+phase: "2"
+name: "evidence-gated-extraction"
+tasks:
+  - id: "ARC-004"
+    tier: A
+    session: "feature-extraction-arc-004"
+    prompt: "tickets/ARC-004-evidence-gated-extraction.md"
+    backlog_id: "ARC-004"
+    dependencies: ["MOD-GATE-1"]
+  - id: "MOD-GATE-2"
+    tier: A
+    session: "feature-extraction-gate"
+    prompt: "tickets/MOD-GATE-2.md"
+    task_type: gate
+    dependencies: ["ARC-004"]

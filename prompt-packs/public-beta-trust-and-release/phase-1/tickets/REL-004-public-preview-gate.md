@@ -16,7 +16,7 @@ A repository can accumulate release-shaped files while license, vulnerability re
 
 - Verify every P0 HARD item and HARD-010 is accepted and integrated. Confirm REL-001 license, REL-002 monitored security channel, and REL-003 support matrix are complete; missing external decisions produce an explicit no-go.
 - Apply `phase-gate-review` and `release-drift-auditor` with an independent principal under HARD-007 policy.
-- Build source and wheel from a clean revision, verify SBOM/provenance/signature, install into clean environments, run the default acceptance/invariant gate, run declared live compatibility, and uninstall.
+- Build source and wheel from a clean revision, verify SBOM/provenance/signature, inspect artifact inventories, install the base profile and each claimed optional profile into clean environments, run the acceptance/invariant gate, run declared live compatibility, and uninstall. Fail if Jenkins/GitHub workflow assets appear in a wheel or runtime bundle.
 - Review the threat model for same-user malicious agents, untrusted repositories/packs, provider compromise, release-channel replacement, and future MCP mutation. Confirm every public claim states current boundaries and residual risks.
 - Confirm active prompt packs do not collide: MCP-003 remains separately owned and blocked/ready according to HARD-004/HARD-005/HARD-007, while deferred DEC/ARC items remain out of release scope.
 - Produce a signed/immutable gate report with explicit decision, supported matrix, artifact digests, unresolved risks, and rollback/advisory process.

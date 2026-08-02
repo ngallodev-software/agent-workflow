@@ -62,7 +62,11 @@ Migration tests start from every supported prior schema version. Corruption test
 
 A future test must name an approved backlog item and specify an operator-visible result. Parser shape, private helper calls, or speculative interfaces are not acceptable future tests.
 
-### Live compatibility
+### Plugin boundary
+
+The plugin host has compact invariants for import-free discovery, strict API compatibility, duplicate-registration rollback, core-command collision rejection, and `--no-plugins`. Its acceptance journey builds a separate fixture-plugin wheel, installs it beside the built product wheel, proves that disabled metadata discovery does not import the module, executes an explicitly enabled top-level command, verifies command-catalog provenance, and proves core-only recovery.
+
+## Live compatibility
 
 `tests/live/` is opt-in because it requires host resources or paid services. It is intended for real tmux, Codex, Claude, and MCP compatibility checks before release. Set the documented environment switches and run:
 
@@ -119,4 +123,4 @@ executors; no paid provider task is part of the default suite.
 
 ## Current shape
 
-The testing rewrite replaced 239 implementation-heavy tests across 46 files with a compact suite organized by product journeys and invariant matrices. Deleted tests are preserved in Git history and should not be restored merely to recover coverage numbers. Restore a behavior only by expressing it through the test layers above.
+The suite is organized by product journeys and invariant matrices rather than test-count targets. Deleted implementation-coupled tests are preserved in Git history and should not be restored merely to recover coverage numbers. Restore a behavior only by expressing it through the test layers above. Implemented future specifications, such as HARD-004, must graduate into acceptance/invariant coverage instead of remaining strict expected failures.

@@ -87,6 +87,7 @@ class Settings:
     reuse_stale_minutes: int = 120
     config_schema_version: int = CONFIG_SCHEMA_VERSION
     security: SecurityPolicy = field(default_factory=SecurityPolicy)
+    plugins_enabled: tuple[str, ...] = ()
     repository_allowlist: tuple[Path, ...] = ()
     supervisor_interval_seconds: int = 10
     supervisor_probe_stalled: bool = True
@@ -185,7 +186,7 @@ def _reject_unknown(table: object, allowed: set[str], label: str) -> None:
 def _validate_shape(data: dict[str, Any]) -> None:
     _reject_unknown(
         data,
-        {"schema_version", "paths", "terminal", "git", "pack", "agents", "agent_classes", "executors", "security", "supervisor"},
+        {"schema_version", "paths", "terminal", "git", "pack", "agents", "agent_classes", "executors", "security", "supervisor", "plugins"},
         "root",
     )
     sections = {
@@ -195,6 +196,7 @@ def _validate_shape(data: dict[str, Any]) -> None:
         "pack": {"archive_level", "write_sha256", "validate_before_archive"},
         "agents": {"preferred_names", "generated_prefix", "default_executor", "profiles", "non_interactive_tmux", "default_class", "reuse_stale_minutes"},
         "security": {"mode", "executable_digest", "policy_files"},
+        "plugins": {"enabled"},
         "supervisor": {
             "interval_seconds",
             "probe_stalled",
@@ -490,6 +492,16 @@ def load_settings(path: Path | None = None) -> Settings:
     policy_files = security.get("policy_files", [])
     if not isinstance(policy_files, list) or not all(isinstance(value, str) and value for value in policy_files):
         raise WorkflowError("config value [security].policy_files must be a string list")
+    plugins = data.get("plugins", {})
+    if not isinstance(plugins, dict):
+        raise WorkflowError("[plugins] must be a table")
+    plugins_enabled = plugins.get("enabled", list(base.plugins_enabled))
+    if not isinstance(plugins_enabled, list) or not all(
+        isinstance(value, str) and value for value in plugins_enabled
+    ):
+        raise WorkflowError("config value [plugins].enabled must be a string list")
+    if len(plugins_enabled) != len(set(plugins_enabled)):
+        raise WorkflowError("config value [plugins].enabled must not contain duplicates")
     settings = Settings(
         config_path=path,
         worktree_root=absolute_path(
@@ -540,6 +552,7 @@ def load_settings(path: Path | None = None) -> Settings:
             executable_digest=executable_digest,
             policy_files=tuple(absolute_path(Path(os.path.expandvars(value))) for value in policy_files),
         ),
+        plugins_enabled=tuple(plugins_enabled),
         repository_allowlist=tuple(absolute_path(Path(os.path.expandvars(value))) for value in repository_allowlist),
         supervisor_interval_seconds=supervisor_interval,
         supervisor_probe_stalled=_boolean(
@@ -620,6 +633,7 @@ def as_dict(s: Settings) -> dict[str, Any]:
             "executable_digest": s.security.executable_digest,
             "policy_files": [str(path) for path in s.security.policy_files],
         },
+        "plugins": {"enabled": list(s.plugins_enabled)},
         "pack": {
             "archive_level": s.archive_level,
             "write_sha256": s.write_sha256,

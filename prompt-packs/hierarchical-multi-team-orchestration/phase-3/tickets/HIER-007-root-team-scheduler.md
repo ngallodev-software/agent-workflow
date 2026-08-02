@@ -34,3 +34,7 @@ All required behavior is proven from immutable contracts, append-only journals, 
 ## Stop conditions
 
 Stop and report rather than weakening durable authority, bypassing canonical launch/workflow services, inferring completion from tmux/process state, adding arbitrary recursion or multi-host infrastructure, widening permissions, or introducing shell-derived terminal commands.
+
+## Feature-boundary steering
+
+Implement hierarchy-specific contracts, services, state, and policy in the dedicated built-in hierarchy feature package. Core authority services may be consumed through narrow public interfaces; do not embed hierarchy-only branches throughout generic session, scheduler, CLI, workflow, or tmux modules. Preserve direct orchestration as the default path and require explicit hierarchy enablement.

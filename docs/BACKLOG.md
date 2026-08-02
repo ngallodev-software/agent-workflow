@@ -7,7 +7,8 @@ The determinism and security work below is derived from the [feature determinism
 ## Rules
 
 - Every active item has a stable ID, priority, state, observable exit evidence, and one canonical owner.
-- `done` means behavior and evidence exist; completed items move to the history summary.
+- `completed` means behavior and accepted evidence exist; completed items move to the history summary.
+- `ready` means every declared implementation prerequisite is satisfied, although acceptance evidence may still be required.
 - `in-review` means the implementation is integrated but shared acceptance and phase-gate evidence remain open.
 - `blocked` names the missing prerequisite.
 - `needs-decision` requires explicit maintainer authorization before implementation.
@@ -17,26 +18,27 @@ The determinism and security work below is derived from the [feature determinism
 - Parallel agents use separate worktrees. Missing dependency edges permit concurrency; prose may not bypass manifest dependencies.
 - Run the `release-drift-auditor` skill and `scripts/audit-release-assets.py` before every phase gate and archive.
 
-## Active prompt-pack ownership
+## Prompt-pack ownership and gate state
 
 | Prompt pack | Canonical backlog ownership | Execution status |
 | --- | --- | --- |
-| [`deterministic-enforcement-foundations`](../prompt-packs/deterministic-enforcement-foundations/) | HARD-001, HARD-002, HARD-004, HARD-005 | HARD-001, HARD-002, HARD-004, HARD-005, and FOUND-GATE-01 accepted for the current integrated tree. |
-| [`execution-isolation-and-secrets`](../prompt-packs/execution-isolation-and-secrets/) | HARD-008, HARD-003, HARD-006 | HARD-008 accepted; HARD-003 and HARD-006 remain blocked on their declared prerequisites. |
-| [`public-beta-trust-and-release`](../prompt-packs/public-beta-trust-and-release/) | HARD-007, HARD-009, HARD-010, REL-003, REL-004 | Blocked until the first two packs are accepted. |
-| [`mcp-server-next`](../prompt-packs/mcp-server-next/) | MCP-003 | Blocked on HARD-004, HARD-005, and HARD-007; future mutations must preserve the current parser-derived capability/catalog resources and launch-contract v2 command-context parity. |
+| [`deterministic-enforcement-foundations`](../prompt-packs/deterministic-enforcement-foundations/) | HARD-001, HARD-002, HARD-004, HARD-005 | Completed and accepted for the current integrated tree, including FOUND-GATE-01. |
+| [`execution-isolation-and-secrets`](../prompt-packs/execution-isolation-and-secrets/) | HARD-008, HARD-003, HARD-006 | HARD-008 is completed; HARD-003 and HARD-006 are now unblocked and ready. |
+| [`public-beta-trust-and-release`](../prompt-packs/public-beta-trust-and-release/) | HARD-007, HARD-009, HARD-010, REL-003, REL-004 | HARD-007 and REL-003 are ready; HARD-009, HARD-010, and REL-004 remain dependency-gated. |
+| [`mcp-server-next`](../prompt-packs/mcp-server-next/) | MCP-003 | HARD-004 and HARD-005 are accepted; blocked on HARD-007; future mutations must preserve the current parser-derived capability/catalog resources and launch-contract v2 command-context parity. |
 | [`orchestrator-two-way-messaging`](../prompt-packs/orchestrator-two-way-messaging/) | BKL-001, BKL-002, MSG-003 through MSG-007 | MSG-002 was independently accepted with a valid sealed, critical-tier review at `570a787`; BKL-002 remains in review pending HARD-007, claimed live-executor adapters, and the owning phase gate. MSG-001 was force-accepted with a sealed, explicit operator override after independent focused verification. |
 | [`delegation-communication-reliability`](../prompt-packs/delegation-communication-reliability/) | PROC-001 through PROC-005 | PROC-001 and PROC-002 remain in review. PROC-003 and PROC-004 are implemented with focused invariant/installed evidence and are in review pending the pack gate and remaining recovery matrix. |
 | [`tmux-pane-identity-reliability`](../prompt-packs/tmux-pane-identity-reliability/) | PROC-006 | Integrated pane-identity work is in review pending repaired closeout, live-host, and sealed acceptance evidence. |
 | [`tmux-operator-experience`](../prompt-packs/tmux-operator-experience/) | TMUXUI-001 through TMUXUI-009 | Planned from the tmux prior-art assessment. Core work is dependency-gated on accepted PROC-006 pane identity; the traffic-light material is an additive presentation contract, and the embedded sidebar remains separately `needs-decision`. |
 | [`source-preflight-snapshot-reliability`](../prompt-packs/source-preflight-snapshot-reliability/) | PROC-007 | Implemented and in review: exact-root status now preserves operator Git excludes while recording bounded command provenance; focused installed clean/dirty evidence passes. |
-| [`chatgpt-sealed-run-assessment`](../prompt-packs/chatgpt-sealed-run-assessment/) | CHATGPT-EVAL-001, CHATGPT-TDD-001 | Assessment and future-TDD artifacts completed; future journeys remain strict expected failures and do not unblock planned runtime work. |
+| [`chatgpt-sealed-run-assessment`](../prompt-packs/chatgpt-sealed-run-assessment/) | CHATGPT-EVAL-001, CHATGPT-TDD-001 | Completed. HARD-004 graduated from future TDD to installed acceptance; remaining future journeys stay strict expected failures. |
 | [`force-accept-override`](../prompt-packs/force-accept-override/) | LIFE-001 | Integrated in 0.7.0 and in review: explicit local force acceptance writes a separate immutable receipt and preserves the normal acceptance gate. |
 | [`codex-luna-effort-policy`](../prompt-packs/codex-luna-effort-policy/) | POL-001 | Integrated and in review; automatic Codex selection is Luna-only with low/medium/high effort and immutable launch evidence. |
-| [`hierarchical-multi-team-orchestration`](../prompt-packs/hierarchical-multi-team-orchestration/) | HIER-001 through HIER-008 | Proposed design package; blocked on maintainer approval of DEC-005 and the ticket-specific accepted messaging, delegation, steering, and pane-identity prerequisites listed below. |
+| [`hierarchical-multi-team-orchestration`](../prompt-packs/hierarchical-multi-team-orchestration/) | HIER-001 through HIER-008 | DEC-005 is decided and HIER-001 is ready. Later tickets remain gated by their accepted messaging, delegation, steering, and pane-identity prerequisites; hierarchy stays an explicitly enabled built-in feature under DEC-009. |
 | [`bounded-self-healing-supervisor`](../prompt-packs/bounded-self-healing-supervisor/) | SUP-001 through SUP-008 | SUP-001 and SUP-002 are implemented and in review. Security enforcement, authenticated authority, live compatibility, hierarchy integration, and performance control remain sequenced behind their declared gates. |
 | [`sqlite-evidence-index`](../prompt-packs/sqlite-evidence-index/) | IDX-001 through IDX-007 | IDX-001 through IDX-005 are implemented and in review. Privacy-governed analytical export and measured-scale checkpoint work remain explicitly gated. |
-| [`release-installers`](../prompt-packs/release-installers/) | REL-008 | Ready: add signed/checksummed release bootstrap and Linux, WSL2, and macOS installer bundles without claiming native Windows support or publishing an unreviewed release. |
+| [`release-installers`](../prompt-packs/release-installers/) | REL-008 | Implemented and in review: bootstrap, deterministic bundles, checksums, tag-only publication workflow, and installer tests exist; clean tagged-release evidence remains open. Jenkins CI/job files are repository-only and must never enter installed wheels or runtime bundles. |
+| [`feature-modularization`](../prompt-packs/feature-modularization/) | MAINT-001, PLUG-001, ARC-004 | MAINT-001 and PLUG-001 are in progress; the trusted host, explicit enablement, atomic command registry, recovery path, catalog provenance, and installed fixture journey are implemented, while bounded schema/asset bundle activation remains before the gate; ARC-004 remains evidence-gated until the plugin boundary has survived real first-party use. |
 
 ## Bounded self-healing supervision
 
@@ -118,13 +120,13 @@ DEC-007 → IDX-001 → ┬→ IDX-002 ─┐
                                                         [measured scale] → IDX-007 → IDX-GATE-3
 ```
 
-## Proposed hierarchical orchestration
+## Bounded hierarchical orchestration
 
-These items implement the bounded root orchestrator → team lead → worker design. `DEC-005` authorizes the hierarchy. Existing messaging, delegation, steering, and pane-identity work remains independently gated at the first ticket that consumes each foundation; those prerequisites may proceed in parallel with the decision and Phase 0 contract work.
+These items describe the approved bounded root orchestrator → team lead → worker feature. `DEC-005` is decided; direct orchestration remains the default compatibility path and hierarchy implementation must stay behind the feature boundary defined by `DEC-009`. Existing messaging, delegation, steering, and pane-identity work remains independently gated at the first ticket that consumes each foundation; those prerequisites may proceed in parallel with the decision and Phase 0 contract work.
 
 | ID | Priority | Risk | State | Work and exit evidence | Reference |
 |---|---|---:|---|---|---|
-| HIER-001 | P0 | Critical | needs-decision | After `DEC-005` is approved, define immutable hierarchy and team-delegation contracts with fixed depth, principal identity, scope, budgets, allowed command/model policy, and capability narrowing. | [Hierarchical design](HIERARCHICAL_MULTI_TEAM_ORCHESTRATION_DESIGN.md#contracts) |
+| HIER-001 | P0 | Critical | ready | Define immutable hierarchy and team-delegation contracts with fixed depth, principal identity, scope, budgets, allowed command/model policy, and capability narrowing. | [Hierarchical design](HIERARCHICAL_MULTI_TEAM_ORCHESTRATION_DESIGN.md#contracts) |
 | HIER-002 | P0 | Critical | blocked | Add append-only hierarchy/action/ack journals, deterministic replay, team receipts, and root orchestration receipts with tamper/truncation tests. Blocked on HIER-001. | [Prompt pack phase 0](../prompt-packs/hierarchical-multi-team-orchestration/phase-0/) |
 | HIER-003 | P0 | Critical | blocked | Add a managed tmux session with stable root/team window IDs and worker panes scoped to the owning team; reconcile movement, reindexing, loss, and restart without duplicate launch. Blocked on HIER-002 and accepted PROC-006. | [Managed tmux topology](HIERARCHICAL_MULTI_TEAM_ORCHESTRATION_DESIGN.md#tmux-and-terminal-design) |
 | HIER-004 | P1 | High | blocked | Add an optional configured argv-only external terminal adapter that attaches to an exact team window and fails without destroying durable team state. Blocked on HIER-003. | [Forking a new terminal](HIERARCHICAL_MULTI_TEAM_ORCHESTRATION_DESIGN.md#forking-a-new-terminal) |
@@ -160,22 +162,28 @@ Optional parallel branch after HIER-003:
   HIER-004 → HIER-GATE-1A
 ```
 
-## Ready now
+## Active implementation and review
+
+These items have no unresolved implementation prerequisite, are already integrated and awaiting acceptance, or require an explicit maintainer decision. `ready` does not imply release acceptance.
 
 | ID | Priority | Risk | State | Work and exit evidence | Reference |
 |---|---|---:|---|---|---|
 | BKL-002 | P0 | High | in-review | Added a typed opt-in `control-file-v1` adapter, immutable request inbox, durable `queued`/`delivered`/`applied`/`rejected`/`unsupported`/`expired`/`failed` journal, correlated child bridge acknowledgement, replay/race safeguards, and an installed-wheel acceptance journey. Default and unverified executors remain `unsupported`. Acceptance still requires HARD-007, any claimed live Codex/Claude adapter evidence, and the owning phase gate. | Installed journey in `tests/acceptance/test_late_steering_journey.py` |
-| PROC-001 | P0 | High | in-review | Reimplemented and integrated at `7136f86`; receipt-bound preflight rejects missing, stale, and rejected lifecycle evidence before tmux creation. Obtain final phase-review/acceptance evidence without treating the invalid child completion projection as success. | [`delegation-communication-reliability`](../prompt-packs/delegation-communication-reliability/phase-0/tickets/PROC-001-authoritative-preflight.md) |
-| PROC-002 | P0 | Critical | in-review | Control bridge is integrated at `1368769`; close installed matrix and sealed-evidence gaps for correlated progress/ack delivery, application, rejection, and unavailable outcomes. | [`delegation-communication-reliability`](../prompt-packs/delegation-communication-reliability/phase-0/tickets/PROC-002-control-handshake.md) |
+| PROC-001 | P0 | High | in-review | Receipt-bound preflight is implemented and integrated; receipt-bound preflight rejects missing, stale, and rejected lifecycle evidence before tmux creation. Obtain final phase-review/acceptance evidence without treating the invalid child completion projection as success. | [`delegation-communication-reliability`](../prompt-packs/delegation-communication-reliability/phase-0/tickets/PROC-001-authoritative-preflight.md) |
+| PROC-002 | P0 | Critical | in-review | The control bridge is implemented and integrated; close installed matrix and sealed-evidence gaps for correlated progress/ack delivery, application, rejection, and unavailable outcomes. | [`delegation-communication-reliability`](../prompt-packs/delegation-communication-reliability/phase-0/tickets/PROC-002-control-handshake.md) |
 | PROC-003 | P1 | High | in-review | Observation now separates runner heartbeat, executor/process liveness, semantic progress, terminal activity, permission state, pane death, and output-capture exhaustion. A fresh heartbeat no longer masks a no-progress stall. The new supervisor journals bounded health/incident evidence; installed terminate/retry/live-host closeout and the owning pack gate remain open. | [`delegation-communication-reliability`](../prompt-packs/delegation-communication-reliability/phase-0/tickets/PROC-003-run-observability.md) |
 | PROC-004 | P0 | Critical | in-review | Completion collection now rejects placeholder-only completed reports, identity mismatch, absent revisions, acceptance evidence, or command receipts; failed/partial/blocked reports retain real failed commands and require unresolved evidence. Invalid collection makes the terminal run fail. Focused installed and invariant evidence passes; the owning phase gate remains open. | [`delegation-communication-reliability`](../prompt-packs/delegation-communication-reliability/phase-0/tickets/PROC-004-completion-validation.md) |
 | PROC-005 | P1 | High | ready | Align steering, templates, hooks/reminders, and recovery references with the enforced launch, communication, observation, completion, and closeout pattern; completed handoffs require committed source and schema-valid revision-bound evidence. | [`delegation-communication-reliability`](../prompt-packs/delegation-communication-reliability/phase-1/tickets/PROC-005-operator-enforcement.md) |
-| PROC-006 | P0 | Critical | in-review | Pane identity is integrated at `55f4ed5`; current corrective commits `5785998` and `72451cc` await integration. Complete live-host and sealed acceptance evidence: layout changes must retain the bound pane, while termination or genuine loss must report it unavailable without rebinding. | [`tmux-pane-identity-reliability`](../prompt-packs/tmux-pane-identity-reliability/phase-0/tickets/PROC-006-pane-identity.md) |
+| PROC-006 | P0 | Critical | in-review | Stable pane-identity behavior is implemented. Complete live-host and sealed acceptance evidence: layout changes must retain the bound pane, while termination or genuine loss must report it unavailable without rebinding. | [`tmux-pane-identity-reliability`](../prompt-packs/tmux-pane-identity-reliability/phase-0/tickets/PROC-006-pane-identity.md) |
 | PROC-007 | P0 | High | in-review | Exact-root cleanliness now executes a fresh `git -C <root> status --porcelain`, preserves the operator's system/global exclude view without enabling prompts or helpers, records bounded executable/argv/exit/output-digest provenance, accepts globally ignored state, and still rejects real untracked changes. Focused installed and invariant evidence passes; pack review and broader host compatibility remain open. | [`source-preflight-snapshot-reliability`](../prompt-packs/source-preflight-snapshot-reliability/phase-0/tickets/PROC-007-source-snapshot.md) |
+| MSG-005 | P1 | Critical | in-review | Implementation is integrated and under independent review. Close the remaining reconstruction finding: same-schema inconsistent or oversized supervisor status projections must be diagnosed and deterministically rebuilt rather than trusted or allowed to raise. | [Messaging design](ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md#failure-and-restart-behavior) |
 | LIFE-001 | P0 | Critical | in-review | Integrated in 0.7.0: `force-accept` requires the exact `FORCE-ACCEPT` acknowledgement, writes a read-only receipt linked to the final seal, projects a distinct `force-accepted` state, and preserves ordinary `accept` validation. Authenticated human-only authorization remains blocked on HARD-007; independent phase acceptance remains open. | [`force-accept-override`](../prompt-packs/force-accept-override/phase-0/tickets/LIFE-001-force-accept.md) |
 | POL-001 | P0 | High | in-review | Automatic Codex selection is Luna-only with bounded low/medium/high effort, deterministic `-c model_reasoning_effort=...` argv, immutable launch effort evidence, and pre-launch bypass rejection. Focused installed/invariant evidence passes; final phase evidence remains open. | [`codex-luna-effort-policy`](../prompt-packs/codex-luna-effort-policy/phase-0/tickets/POL-001-luna-effort-policy.md) |
-| REL-001 | P0 | Critical | needs-decision | Select and add the project license, matching package metadata, and distribution policy. | [Public release readiness](PUBLIC_RELEASE_READINESS.md#governance-and-compatibility-blockers) |
-| REL-002 | P0 | Critical | blocked | Establish a real monitored vulnerability-reporting channel and update `SECURITY.md`. | [Public release readiness](PUBLIC_RELEASE_READINESS.md#governance-and-compatibility-blockers) |
+| HARD-003 | P0 | Critical | ready | All declared implementation prerequisites are accepted. Enforce allowed writes, home/credential isolation, network default-deny, and CPU/memory/time/output limits for native jobs and evaluation/acceptance commands through explicit platform backends that fail closed. Post-run scope comparison remains evidence, not the barrier. | [Assessment F39-F42, F69-F73](FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#5-guidance-that-should-become-deterministic-enforcement) |
+| HARD-006 | P1 | High | ready | All declared implementation prerequisites are accepted. Add content classification, redaction, explicit sensitive-content opt-in, and retention/deletion policy for prompts, argv, logs, messages, provider events, telemetry, and exported reports. | [Assessment F44-F47, F64, F81-F85](FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#7-security-posture-by-trust-boundary) |
+| HARD-007 | P1 | Critical | ready | HARD-004 is accepted. Replace caller-selected actor labels with authenticated principals for review, acceptance, steering, and future MCP mutation, and enforce independent-review policy from immutable identity evidence. | [Assessment F48-F52, F89](FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#5-guidance-that-should-become-deterministic-enforcement) |
+| REL-002 | P0 | Critical | in-review | GitHub Private Vulnerability Reporting is the selected primary channel and `SECURITY.md` defines the coordinated-disclosure policy. Closeout requires a repository administrator to enable the GitHub setting and record a successful private-report/notification drill; no public issue or invented email address is an acceptable substitute. | [Public release readiness](PUBLIC_RELEASE_READINESS.md#governance-and-compatibility-blockers) |
+| REL-003 | P0 | High | ready | HARD-008 is accepted. Define the supported Linux/Python/tmux/executor matrix and run opt-in live compatibility journeys on representative clean hosts. | [Testing](TESTING.md#live-compatibility) |
 
 ## Planned tmux operator experience
 
@@ -198,54 +206,30 @@ lifecycle state or supersede the current dependencies below.
 | TMUXUI-009 | P1 | High | blocked | After TMUXUI-005 through TMUXUI-007, close clean-wheel, fake-tmux, opt-in real-tmux/fzf, security, package-data, docs/help/man-page, install/uninstall, drift-audit, and sealed acceptance evidence without claiming the broader REL-003 compatibility matrix. | [`tmux-operator-experience`](../prompt-packs/tmux-operator-experience/phase-3/tickets/TMUXUI-009-acceptance-and-docs.md) |
 | TMUXUI-008 | P2 | Medium | needs-decision | Only after the core independent gate and explicit maintainer authorization, add a first-class `@agent-workflow-role=ui` and optional embedded sidebar. Prove deterministic capacity/layout under concurrent launch and complete reversible removal. | [`tmux-operator-experience`](../prompt-packs/tmux-operator-experience/phase-4/tickets/TMUXUI-008-optional-sidebar.md) |
 
-## Additional release follow-up
+## Release and maintenance follow-up
 
-These items remain tracked separately from the hardening ownership above; they are release-evidence and local-CI follow-up, not alternate owners for HARD or MCP work.
-
-| ID | Priority | State | Work and exit evidence | Reference |
-|---|---|---|---|---|
-| REL-005 | P1 | completed | Added schema-validated release policy and direct dependency lock, JUnit evidence, CycloneDX SBOM, source/build provenance, artifact digests, and an enforceable blocker summary. | [Release evidence](RELEASE_EVIDENCE.md) |
-| REL-006 | P1 | ready | Configure the local Jenkins job to trigger from commits to the local repository and verify that the trigger builds the matching master revision; the pipeline itself is already green. | [Release check audit](RELEASE_CHECK_AUDIT.md#jenkins-verification) |
-| REL-007 | P1 | ready | Run and record clean-machine install/uninstall evidence and a controlled real workflow/provider cohort before describing the project as publicly supported. | [Public release readiness](PUBLIC_RELEASE_READINESS.md#governance-and-compatibility-blockers) |
-| REL-008 | P1 | ready | Add immutable-release curl bootstrap, deterministic Linux/WSL2/macOS installer bundles, checksums, tag-only GitHub release publishing, and installed-product validation. Native Windows is explicitly out of scope. | [`release-installers`](../prompt-packs/release-installers/phase-0/tickets/P0-00-baseline-and-preflight.md) |
-| CHATGPT-EVAL-001 | P1 | High | completed | Added evidence-first exported-run assessment, truthful ledger evaluation state, and focused invariant coverage. | [Sealed foundation evidence](EVIDENCE_SEALED_FOUNDATION_RUNS_20260726.md) |
-
-## Integrated pending phase gate
-
-| ID | Priority | Risk | State | Integrated implementation and remaining exit evidence | Reference |
-|---|---|---:|---|---|---|
-| BKL-001 | P0 | High | completed | Integrated in `63e953b`; sealed verification run `bkl-001-completion-verification-20260728-r7` passed focused tests, evidence fidelity, writable scope, report/collection/ledger checks, and lifecycle acceptance. | [Evidence recovery and final acceptance](BKL-001_EVIDENCE_RECOVERY_20260728.md) |
-| HARD-001 | P0 | Critical | completed | Integrated in `91f5ff3`; sealed implementation run passed its focused process/acceptance criteria and was independently accepted in lifecycle receipt `deterministic-foundations-hard-001-rerun-20260726`. The aggregate foundation gate remains separate and rejected. | [Sealed evidence](EVIDENCE_SEALED_FOUNDATION_RUNS_20260726.md) |
-| HARD-002 | P0 | Critical | completed | Integrated in `5d689b6`; sealed path/schema criteria passed, with filesystem-socket coverage unavailable on this host, and was independently accepted in lifecycle receipt `deterministic-foundations-hard-002-rerun-20260726`. The aggregate foundation gate remains separate and rejected. | [Sealed evidence](EVIDENCE_SEALED_FOUNDATION_RUNS_20260726.md) |
-| HARD-004 | P0 | Critical | completed | Accepted at `ef6393e`; coordinator review verified the immutable launch contract, restart authority, projection repair, exact receipt digest, installed status-tamper journey, focused slice (`26 passed`), full suite (`103 passed, 2 skipped, 5 xfailed`), release assets, and pack validation. The shared foundation gate remains open; MSG-001 must not start. | [HARD-004 review and closure](HARD-004-REVIEW-20260728.md) |
-| HARD-005 | P0 | Critical | completed | Accepted against the current tree after the installed stdio journey (`7 passed`), security slices (`18 passed`), full suite (`103 passed, 2 skipped, 5 xfailed`), release audit, and pack validation. | [HARD-005 review and closure](HARD-005-REVIEW-20260728.md) |
-| HARD-008 | P1 | High | completed | Integrated in `622b0df`; current trust/config acceptance slices pass (`14 passed`), with full-suite, release-audit, and pack validation evidence retained. | [Foundation gate review](FOUNDATION-GATE-REVIEW-20260728.md) |
-
-## Planned TDD follow-up
+These items are release mechanics or behavior-preserving maintenance. They do not create alternate ownership for HARD, MCP, messaging, or product-feature work. Active modularization work is owned by the `feature-modularization` prompt pack and must preserve stable public behavior while moving optional capabilities behind explicit feature boundaries.
 
 | ID | Priority | Risk | State | Work and exit evidence | Reference |
 |---|---|---:|---|---|---|
-| CHATGPT-TDD-001 | P1 | High | completed | Added strict future journeys for HARD-004, MSG-005, BKL-004, and MCP-003/HARD-007; all remain honest expected failures pending implementation and accepted gates. | [Future tests](../tests/future/) |
+| REL-008 | P1 | High | in-review | Bootstrap, deterministic Linux/WSL2/macOS installer bundles, checksums, tag-only GitHub release publishing, and installed-product installer tests are implemented. Close with a real immutable tag/release run and representative clean-host install/uninstall evidence. Native Windows remains out of scope. | [`release-installers`](../prompt-packs/release-installers/phase-0/tickets/P0-00-baseline-and-preflight.md) |
+| MAINT-001 | P2 | Medium | in-progress | The first behavior-preserving slice moved process environment/redaction policy behind the stable `agent_workflow.process` facade. Continue to decompose `sessions.py`, `cli.py`, `index_store.py`, `runner.py`, and `process.py` behind stable public interfaces in behavior-preserving slices. Keep parser-derived command metadata, evidence formats, and installed journeys unchanged; do not combine this refactor with new product scope. | [2026-08-01 review](BACKLOG_AND_ARCHITECTURE_REVIEW_20260801.md#files-that-should-be-split) |
 
-## Blocked prerequisites
+## Dependency-gated work
+
+These items are blocked by the prerequisite named in their row, or are partially implemented but cannot close until external or security evidence exists.
 
 | ID | Priority | Risk | State | Missing prerequisite and exit evidence | Reference |
 |---|---|---:|---|---|---|
 | MSG-003 | P0 | Critical | blocked | After MSG-002, HARD-004, HARD-006, HARD-007, and HARD-008, add fixed-format orchestrator wake/resume adapters that receive opaque event IDs only and cannot inject child-controlled content. | [Messaging design](ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md#the-supervisor-must-wake-the-orchestrator-safely) |
 | MSG-004 | P1 | High | blocked | After MSG-002, MSG-003, MSG-005, and HARD-007, distinguish durable event delivery, orchestrator application acknowledgement, and linked scheduling/lifecycle action evidence through shared services. | [Messaging design](ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md#acknowledgement-model) |
-| MSG-005 | P1 | Critical | in-review | The implementation is committed for independent review. Repair the P1 finding that same-schema inconsistent and oversized supervisor status projections must be diagnosed and deterministically rebuilt rather than accepted or allowed to raise. | [Messaging design](ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md#failure-and-restart-behavior) |
 | MSG-006 | P1 | Critical | blocked | After the integrated messaging implementation and HARD-001/HARD-002/HARD-004/HARD-006/HARD-007/HARD-008, harden identity, bounds, redaction, no-follow storage, duplicate IDs, prompt injection, notification templates, resource use, and supervisor ownership adversarially. | [Messaging design](ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md#security-requirements) |
 | MSG-007 | P1 | High | blocked | After MSG-001 through MSG-005 and BKL-002, add installed-wheel completion/wakeup/restart/action journeys plus opt-in real tmux and supported executor compatibility tests; keep low-level tests limited to compact security/replay matrices. | [Messaging design](ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md#acceptance-strategy) |
-| HARD-003 | P0 | Critical | blocked | After HARD-001, HARD-002, and HARD-008, enforce allowed writes, home/credential isolation, network default-deny, and CPU/memory/time/output limits for native jobs and evaluation/acceptance commands. Post-run scope comparison remains evidence, not the barrier. | [Assessment F39-F42, F69-F73](FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#5-guidance-that-should-become-deterministic-enforcement) |
-| HARD-006 | P1 | High | blocked | After HARD-001 and HARD-005, add content classification, redaction, explicit sensitive-content opt-in, and retention/deletion policy for prompts, argv, logs, messages, provider events, telemetry, and exported reports. | [Assessment F44-F47, F64, F81-F85](FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#7-security-posture-by-trust-boundary) |
-| HARD-007 | P1 | Critical | blocked | After HARD-004, replace caller-selected actor labels with authenticated principals for review, acceptance, steering, and future MCP mutation. Enforce independent-review policy from immutable identity evidence. | [Assessment F48-F52, F89](FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#5-guidance-that-should-become-deterministic-enforcement) |
-| HARD-009 | P1 | High | blocked | After HARD-003 through HARD-008, generate command/man/schema/service inventories from code, enforce backlog-to-pack ownership, detect stale docs/skills/diagrams/future tests, and make drift audit a release gate. | [Assessment F01-F02, F09-F10, F90-F96](FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#8-public-release-direction) |
-| HARD-010 | P1 | High | blocked | After FOUND-GATE-01 and ISO-GATE-01, add locked dependencies, SBOM generation, wheel/source provenance, independent reproducibility checks, and authenticated release signing/attestation against the integrated hardened tree. | [Assessment F13-F14](FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#4-feature-and-component-inventory) |
-| REL-003 | P0 | High | blocked | After HARD-008, define the supported Linux/Python/tmux/executor matrix and run opt-in live compatibility journeys on representative clean hosts. | [Testing](TESTING.md#live-compatibility) |
+| HARD-009 | P1 | High | blocked | After HARD-003 through HARD-008, generate command/man/schema/service inventories from code; enforce backlog-to-pack ownership, valid state transitions, satisfied-prerequisite promotion, and active-versus-completed grouping; detect stale docs/skills/diagrams/future tests; and make the drift audit a release gate. | [Assessment F01-F02, F09-F10, F90-F96](FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#8-public-release-direction) |
+| HARD-010 | P1 | High | blocked | After FOUND-GATE-01 and ISO-GATE-01, complete transitive dependency locking and vulnerability audit, standards-based SBOM generation, wheel/source provenance, independent reproducibility checks, and authenticated release signing/attestation against the integrated hardened tree instead of custom signing or SBOM formats. | [Assessment F13-F14](FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md#4-feature-and-component-inventory) |
 | BKL-004 | P1 | High | in-review | The subscription-first Codex/Claude adapters, optional API adapters, readiness preflight, paired retry isolation, cohort statistics, cost semantics, and sealed reporting are implemented. After HARD-003, HARD-006, and REL-003, execute and independently accept the first controlled real-provider cohort; do not manufacture that external evidence in development. | [Operations](COMPARATIVE_BENCHMARK_OPERATIONS.md) |
-| BKL-007 | P1 | High | blocked | After HARD-001 and HARD-008, add opt-in installer-owned host routing enforcement only for narrowly defined direct delegation commands, with preserved hooks and an audited break-glass path. | [Operations](OPERATIONS.md#host-routing) |
 | MCP-003 | P1 | Critical | blocked | After HARD-004, HARD-005, and HARD-007, add idempotent pack validation, worktree creation, bounded launch, workflow validate/start/status/resume, progress, ack, and steer tools through existing services. Preserve the current read-only capability/catalog resources; MCP launch must reuse the CLI launch service and retain launch-contract v2 command artifacts/digests rather than creating MCP-local command or launch authority. | [MCP server](MCP_SERVER.md#planned-mutation-phase) and [`mcp-server-next`](../prompt-packs/mcp-server-next/) |
-| REL-004 | P1 | Critical | blocked | After all P0 HARD items, HARD-010, REL-001, REL-002, and REL-003, execute the public-preview gate: clean-source build/install/uninstall, signed artifacts, drift audit, live compatibility, threat-model review, and explicit go/no-go record. | [Public release readiness](PUBLIC_RELEASE_READINESS.md#release-gate) |
+| REL-004 | P1 | Critical | blocked | After all P0 HARD items, HARD-010, accepted REL-002 channel evidence, and REL-003, execute the public-preview gate: clean-source build/install/uninstall, signed artifacts, drift audit, live compatibility, threat-model review, and explicit go/no-go record. | [Public release readiness](PUBLIC_RELEASE_READINESS.md#release-gate) |
 | BKL-010 | P1 | Medium | in-review | Runtime attestation, the publication container definition, content-addressed sealing, browser/font digest enforcement, viewport contract, and publication readiness gate are implemented. Build/publish the image and independently verify its immutable digest before the first publication claim. | [Operations](COMPARATIVE_BENCHMARK_OPERATIONS.md#publication-visual-runtime) |
 
 ## Decisions
@@ -257,18 +241,19 @@ These items remain tracked separately from the hardening ownership above; they a
 | DEC-003 | P2 | deferred | Authorize multi-host orchestration only after a measured single-host failure. Preserve replayable durable records as authority; prefer JetStream unless an existing Redis dependency is mandated. | — |
 | DEC-MCP-HTTP | P2 | deferred | Authorize any non-stdio MCP transport only through a separate security ADR after local adoption evidence. | — |
 | DEC-004 | P1 | decided | Retain `agent-workflow` as the execution host, add a versioned trusted plugin API, and build `agent-workflow-spec` as the first sibling plugin before extracting other subsystems. | — |
-| DEC-005 | P0 | needs-decision | Adopt a bounded root orchestrator → team lead → worker hierarchy with durable authority and one managed tmux window per team. | [Decision](DECISIONS/DEC-005-HIERARCHICAL-ORCHESTRATION.md) |
+| DEC-005 | P0 | decided | Adopt a bounded root orchestrator → team lead → worker hierarchy with durable authority and one managed tmux window per team. | [Decision](DECISIONS/DEC-005-HIERARCHICAL-ORCHESTRATION.md) |
 | DEC-006 | P0 | decided | Use bounded deterministic self-healing: durable evidence is authoritative; automatic action must be preauthorized, idempotent, attempt-bounded, verified, and incapable of widening authority. | [Decision](DECISIONS/DEC-006-BOUNDED-SELF-HEALING.md) |
 | DEC-007 | P0 | decided | Keep JSON/JSONL, immutable snapshots, and sealed receipts authoritative while adding a host-local, single-writer, fully rebuildable SQLite projection for cross-run search and analysis. | [Decision](DECISIONS/DEC-007-REBUILDABLE-SQLITE-PROJECTION.md) |
 | DEC-008 | P1 | decided | Run the same task in paired `control_raw/v1` and `workflow_full/v1` worktrees, adopt the synthetic visual priority picker as the first fixture, and weight the initial composite 70% machine / 30% blinded human visual. | [Decision](DECISIONS/DEC-008-INITIAL-COMPARATIVE-BENCHMARK.md) |
+| DEC-009 | P1 | decided | Keep a small authority kernel; retain higher-level capabilities as built-in features, optional extras, trusted plugins, or repository-only tooling with explicit distribution boundaries. | [Decision](DECISIONS/DEC-009-FEATURE-MODULE-BOUNDARIES.md) |
 
-## Proposed specification and plugin program
+## Specification and plugin program
 
-These tasks are designed under decided `DEC-004` but remain planning-only until their individual implementation gates are authorized. No prompt pack owns them yet. The sibling repository remains independent; core must not import it.
+These tasks are designed under decided `DEC-004` and the host boundary in `DEC-009`. `PLUG-001` and `ARC-004` are owned by the `feature-modularization` prompt pack; sibling-spec tasks remain independently gated. The sibling repository remains independent and core must not import it.
 
 | ID | Priority | Risk | State | Work and exit evidence | Reference |
 |---|---|---:|---|---|---|
-| PLUG-001 | P1 | High | needs-decision | Add a minimal trusted first-party plugin host using package entry points, explicit enablement, API/version checks, atomic conflict-free registration, command-catalog provenance, schema/assets registration, recovery mode, and one installed-product fixture-plugin journey. | [Plugin mechanism](SPEC_AUTHORING_PLUGIN_ARCHITECTURE.md#plugin-mechanism) |
+| PLUG-001 | P1 | High | in-progress | Entry-point discovery, explicit `[plugins].enabled`, strict API/version checks, an atomic typed command registry, `plugins list`, `--no-plugins`, command-catalog provenance, identifier collision checks, and an installed fixture-plugin wheel journey are implemented. Complete bounded package-resource resolution/validation for declared schema and asset bundles, then run MOD-GATE-1. Defer a general hook framework until multiple plugins require ordered 1:N hooks. | [Plugin mechanism](SPEC_AUTHORING_PLUGIN_ARCHITECTURE.md#plugin-mechanism) |
 | SPEC-001 | P1 | High | blocked | After `PLUG-001`, bootstrap the sibling `agent-workflow-spec` repository with canonical implementation-spec, event, approval, and compiler-receipt contracts plus standalone init/validate/render/approve commands. | [Sibling repository design](SPEC_AUTHORING_PLUGIN_ARCHITECTURE.md#sibling-repository-design-agent-workflow-spec) |
 | SPEC-002 | P1 | High | blocked | After `SPEC-001`, deterministically compile approved specs into the existing prompt-pack format, machine task contracts, result schemas, traceability, output manifests, and compiler receipts. | [Deterministic compiler](SPEC_AUTHORING_PLUGIN_ARCHITECTURE.md#deterministic-compiler) |
 | SPEC-003 | P1 | High | blocked | After `SPEC-002`, generate declarative installed-product acceptance/evaluation artifacts and assess sealed evidence at requirement granularity without generating a bespoke test file for every requirement. | [Acceptance and evaluation](SPEC_AUTHORING_PLUGIN_ARCHITECTURE.md#acceptance-and-evaluation-generation) |
@@ -283,17 +268,39 @@ These existing items already own the assessment's P2 recommendations. The harden
 | ID | Priority | Trigger |
 |---|---|---|
 | ARC-001 | P2 | Add a transport-neutral notifier only after measured wakeup latency or operability requires it; replay remains mandatory. |
+| BKL-007 | P2 | Retain host routing as a separate optional feature module and implement it only after measured direct-delegation routing failures justify the added authority surface. |
 | ARC-003 | P3 | Add a multi-host broker, shared-artifact references, and cross-trust signing only after `DEC-003`. |
 | MCP-004 | P2 | Add policy-gated review/disposition and interrupt/terminate tools after `MCP-003`; preserve the capability/command-context resources and never infer authorization from catalog membership; force kill remains excluded. |
 | WF-006 | P2 | Consider evidence-derived routing recommendations only after comparable real-executor cohorts exist; no online learning or vector-memory dependency. |
 
 ## Completed history
 
+Completed task IDs are retained here only to prevent resurrection or duplicate ownership; implementation detail belongs in Git history and the changelog.
+
+| ID | Final disposition | Evidence summary |
+|---|---|---|
+| BKL-001 | completed | Durable consumer cursors, reconstruction, idempotent handling, and sealed acceptance are complete. |
+| BKL-011 | completed | The comparative benchmark requirement-to-evaluation matrix and frozen synthetic fixture were completed for 0.7.5. |
+| MSG-001 | completed | Registry/fan-in implementation was independently verified and force-accepted with a sealed operator override. |
+| MSG-002 | completed | Supervisor fan-in was independently accepted with sealed critical-tier evidence. |
+| HARD-001 | completed | Bounded process execution foundation accepted. |
+| HARD-002 | completed | Artifact, path, and schema integrity foundation accepted. |
+| HARD-004 | completed | Immutable launch/final-receipt authority accepted; its future-test placeholder has graduated to installed acceptance coverage. |
+| HARD-005 | completed | Read-only MCP privacy and path-safety boundary accepted. |
+| HARD-008 | completed | Configuration, executor, and host-environment trust foundation accepted. |
+| REL-001 | completed | Apache-2.0 selected; LICENSE, package metadata, and release distribution policy are configured. |
+| REL-006 | completed | Jenkinsfile and local server-job setup are retained as core repository CI/CD while excluded from installed runtime and release bundles. |
+| MAINT-002 | completed | Removed the duplicate MiniYAML parser and made PyYAML safe loading a declared core dependency with adversarial coverage. |
+| REL-005 | completed | Structured release policy, SBOM/provenance evidence, and blocker enforcement implemented. |
+| CHATGPT-EVAL-001 | completed | Evidence-first sealed-run assessment and truthful evaluation-state coverage completed. |
+| CHATGPT-TDD-001 | completed | Strict future specifications established; implemented items graduate out of `tests/future`. |
+| REL-007 | superseded | Clean-host compatibility is owned by REL-003; real provider cohorts are owned by BKL-004. The duplicate task is closed. |
+
 | Release | Summary |
 |---|---|
 | 0.5.1 | Completion handoffs validate before reuse, invalid child bridge intents are rejected, and pending reuse cannot seal as successful. |
 | 0.5.0 | Bounded self-healing supervision added with Luna-only automatic Codex policy preserved. |
-| 0.3.0 | Sandbox-safe child control bridge, launcher-executable binding, source-snapshot repair, clean wheel builds, and enforceable semantic-version bump checks. PROC-001, PROC-002, PROC-006, and MSG-001 remain separately tracked as in-review until their acceptance evidence is complete. |
+| 0.3.0 | Sandbox-safe child control bridge, launcher-executable binding, source-snapshot repair, clean wheel builds, and enforceable semantic-version bump checks. |
 | 0.3.0 SQLite projection design | `ARC-002` superseded by decided `DEC-007`; implementation is tracked under `IDX-001` through `IDX-007`. |
 | 0.1.x | Worktrees, tmux lifecycle, durable state, prompt packs, evaluation, provider adapters, skills, and packaging foundations. |
 | 0.2.0 | Workflow DAGs, approvals, result binding, aggregate receipts, templates, routing advice, and provider/trial evidence. |

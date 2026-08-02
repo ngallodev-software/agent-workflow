@@ -19,7 +19,7 @@
   <a href="docs/BACKLOG.md">Roadmap</a>
 </div>
 
-> **Status:** pre-public-release. The single-host execution, evidence, workflow, messaging, evaluation, MCP-read, and foreground supervision foundations are implemented. Hierarchical root-orchestrator → team-lead → worker orchestration is designed and sequenced, but remains gated by the decisions and dependencies in [`docs/BACKLOG.md`](docs/BACKLOG.md).
+> **Status:** pre-public-release. The single-host execution, evidence, workflow, messaging, evaluation, trusted plugin-command host, optional MCP-read, and foreground supervision foundations are implemented. Bounded root-orchestrator → team-lead → worker orchestration is approved as an explicitly enabled feature and remains implementation-gated by [`docs/BACKLOG.md`](docs/BACKLOG.md).
 
 ## Why agent-workflow exists
 
@@ -46,7 +46,8 @@ The application favors **deterministic control code around probabilistic agents*
 | Bounded self-correction | Foreground supervisor, projection repair, one-shot progress probes, opt-in interruption and lineage-preserving restart |
 | Searchable evidence | Rebuildable SQLite projection for cross-run, workflow, incident, permission, and performance queries |
 | Evaluation | Deterministic templates, provider-neutral usage evidence, cohort comparison, sealed-run assessment and ledgers |
-| MCP | Bounded read-only local stdio adapter for command and run context |
+| Optional MCP feature | Bounded read-only local stdio adapter for command and run context; installed with the `mcp` extra |
+| Trusted plugin host | Explicit entry-point enablement, atomic top-level command registration, installed provenance, and `--no-plugins` recovery |
 
 The application does **not** merge branches, approve permissions, expand filesystem/network authority, accept work automatically, or silently retry without preserved lineage.
 
@@ -93,7 +94,7 @@ export PATH="$HOME/.local/bin:$PATH"
 agent-workflow doctor
 ```
 
-The installer creates an editable local installation, links repository skills into supported discovery roots, and writes a starter XDG configuration without replacing unrelated files. See [`docs/INSTALLATION.md`](docs/INSTALLATION.md).
+The installer creates an editable local installation, links repository skills into supported discovery roots, and writes a starter XDG configuration without replacing unrelated files. Add `--extras mcp` only on hosts that need the optional MCP adapter. Jenkins CI and local server-job files remain in the source repository and are never installed as runtime files. See [`docs/INSTALLATION.md`](docs/INSTALLATION.md).
 
 For a released Linux, WSL2, or macOS wheel, use the immutable-tag bootstrap
 documented in [`docs/INSTALLATION.md`](docs/INSTALLATION.md). Native Windows is
@@ -259,7 +260,7 @@ The remaining governed-sandbox and authenticated-principal work is tracked under
 
 ## Project state and roadmap
 
-The searchable evidence projection and bounded supervisor foundations are implemented and in review. The next major orchestration layer is bounded hierarchical orchestration:
+The searchable evidence projection and bounded supervisor foundations are implemented and in review. A bounded hierarchical orchestration layer is approved as an explicitly enabled built-in feature; implementation remains gated by its ticket-specific prerequisites:
 
 ```text
 root orchestrator
@@ -326,6 +327,7 @@ The suite is acceptance-first: build a wheel, install it, and exercise public co
 | Comparative benchmark initial verification | [`docs/COMPARATIVE_BENCHMARK_IMPLEMENTATION_VERIFICATION_20260801.md`](docs/COMPARATIVE_BENCHMARK_IMPLEMENTATION_VERIFICATION_20260801.md) |
 | Comparative benchmark operating-policy verification | [`docs/COMPARATIVE_BENCHMARK_OPERATING_POLICY_VERIFICATION_20260801.md`](docs/COMPARATIVE_BENCHMARK_OPERATING_POLICY_VERIFICATION_20260801.md) |
 | Prompt packs | [`docs/PROMPT_PACKS.md`](docs/PROMPT_PACKS.md) |
+| Trusted plugin API | [`docs/PLUGIN_API.md`](docs/PLUGIN_API.md) |
 | MCP server | [`docs/MCP_SERVER.md`](docs/MCP_SERVER.md) |
 | Testing | [`docs/TESTING.md`](docs/TESTING.md) |
 | Canonical backlog | [`docs/BACKLOG.md`](docs/BACKLOG.md) |
@@ -337,3 +339,7 @@ GitHub Flavored Markdown supports headings, tables, fenced code, images, and a s
 ## Contributing and support
 
 The project is not yet accepting a public compatibility promise. Internal contributors should begin with [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md), run the release checks, and preserve durable evidence contracts. Support and disclosure guidance is in [`docs/SUPPORT.md`](docs/SUPPORT.md).
+
+## License
+
+`agent-workflow` is licensed under the [Apache License 2.0](LICENSE).

@@ -29,12 +29,16 @@ def _junit(path: Path, *, failures: int = 0, errors: int = 0) -> Path:
     return path
 
 
-def test_mcp_is_a_core_host_dependency() -> None:
+def test_mcp_is_an_optional_first_party_feature_and_pyyaml_is_core() -> None:
     metadata = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    assert "mcp==1.28.1" in metadata["project"]["dependencies"]
+    assert "mcp==1.28.1" not in metadata["project"]["dependencies"]
+    assert metadata["project"]["optional-dependencies"]["mcp"] == ["mcp==1.28.1"]
+    assert "PyYAML>=6.0.3,<7" in metadata["project"]["dependencies"]
     lock = _load(REPO_ROOT / "release" / "dependency-lock.json")
     mcp = next(package for package in lock["packages"] if package["name"] == "mcp")
-    assert set(mcp["groups"]) == {"mcp", "runtime"}
+    pyyaml = next(package for package in lock["packages"] if package["name"] == "PyYAML")
+    assert set(mcp["groups"]) == {"mcp"}
+    assert set(pyyaml["groups"]) == {"runtime"}
 
 
 def test_release_evidence_preserves_open_governance_blockers_and_writes_durable_artifacts(
@@ -51,7 +55,7 @@ def test_release_evidence_preserves_open_governance_blockers_and_writes_durable_
 
     assert summary["status"] == "blocked"
     checks = {item["id"]: item for item in summary["checks"]}
-    assert checks["license-metadata"]["status"] == "blocked"
+    assert checks["license-metadata"]["status"] == "pass"
     assert checks["security-channel"]["status"] == "blocked"
     assert checks["compatibility-matrix"]["status"] == "blocked"
     assert checks["dependency-lock"]["status"] == "pass"
@@ -114,9 +118,9 @@ def test_configured_release_claims_fail_closed_without_matching_repository_evide
     policy["license"] = {
         "status": "configured",
         "backlog_id": "REL-001",
-        "spdx_expression": "Apache-2.0",
-        "file": "LICENSE",
-        "distribution_policy": "Public distribution under Apache-2.0.",
+        "spdx_expression": "MIT",
+        "file": "MISSING-LICENSE",
+        "distribution_policy": "Public distribution under MIT.",
     }
     policy["security_channel"] = {
         "status": "configured",

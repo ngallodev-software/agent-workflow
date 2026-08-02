@@ -1,5 +1,7 @@
 # Release Blockers Audit
 
+> **Historical/superseded:** This is a historical 2026-07-26 snapshot. Its task states and effort estimates are superseded by `docs/BACKLOG.md`, `docs/PUBLIC_RELEASE_READINESS.md`, and the 0.7.7 release metadata. Do not use it as an active checklist.
+
 **Date:** 2026-07-26
 **Status:** Release candidate assessment  
 **Scope:** P0 blockers from BACKLOG.md and PUBLIC_RELEASE_READINESS.md

@@ -968,7 +968,9 @@ def launch(
     )
     created_at = utc_now()
     command_artifacts = write_launch_command_artifacts(
-        state_dir, role=role_for_agent_class(agent_class)
+        state_dir,
+        role=role_for_agent_class(agent_class),
+        settings=settings,
     )
     launch_prompt = _write_launch_prompt(
         state_dir,

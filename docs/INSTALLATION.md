@@ -19,6 +19,14 @@ cd ~/src/agent-workflow
 ./install.sh
 ```
 
+The base install includes the CLI and core authority/runtime dependencies. Install the optional local MCP adapter only where needed:
+
+```bash
+./install.sh --extras mcp
+```
+
+MCP configuration is registered only when the `mcp` extra is requested. Jenkins repository automation is not copied into the environment.
+
 This installs the package and its core Python dependencies in editable user
 mode, then wires the launcher, skills, man pages, schemas, evaluation assets,
 and active prompt packs. The core package includes the pinned MCP SDK because
@@ -51,8 +59,8 @@ missing or non-semantic release references, downloads only from that tag's
 release assets, and verifies `SHA256SUMS` before extracting or invoking pip:
 
 ```sh
-curl -fsSL https://github.com/ngallodev-software/agent-workflow/raw/v0.7.6/install.sh \
-  | sh -s -- --version v0.7.6
+curl -fsSL https://github.com/ngallodev-software/agent-workflow/raw/v0.7.7/install.sh \
+  | sh -s -- --version v0.7.7
 ```
 
 The release contract requires Python 3.11+, `curl`, a SHA-256 tool, and `tar`.
@@ -68,9 +76,9 @@ installer, then use the matching `uninstall.sh` to remove the wheel and owned
 assets:
 
 ```sh
-tar -xzf agent-workflow-0.7.6-linux.tar.gz
-cd agent-workflow-0.7.6-linux
-./install.sh --wheel agent_workflow-0.7.6-py3-none-any.whl
+tar -xzf agent-workflow-0.7.7-linux.tar.gz
+cd agent-workflow-0.7.7-linux
+./install.sh --wheel agent_workflow-0.7.7-py3-none-any.whl
 ./uninstall.sh
 ```
 
@@ -127,3 +135,8 @@ run the job under the target host account. The pipeline fails if the target is
 not configured; it never silently installs only into Jenkins's private home.
 The pipeline uses the core MCP dependency; use `--extras eval` only when the
 host is intentionally dedicated to the optional evaluator stack.
+
+
+## Repository-only CI/CD assets
+
+`Jenkinsfile`, `scripts/jenkins-local-job.sh`, `scripts/jenkins-local-job.xml`, and `.github/workflows/` are development and release-automation source. They are intentionally excluded from installed wheels and platform runtime bundles. A Jenkins deployment may invoke `./install.sh --extras mcp` on a development host when its job needs MCP acceptance coverage; that does not make MCP or Jenkins part of the default runtime install.

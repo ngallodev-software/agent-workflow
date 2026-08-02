@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import hashlib
 import os
-import re
 import selectors
 import shutil
 import signal
@@ -18,52 +17,23 @@ import subprocess
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, Mapping, Sequence
+from typing import Iterable, Sequence
 
 from .errors import WorkflowError
+from .runtime.environment import DEFAULT_PATH, EnvironmentPolicy, build_environment
+from .runtime.redaction import (
+    redact_argv,
+    redact_bytes,
+    redact_text,
+    secret_values_from_argv,
+)
 
 
-DEFAULT_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 DEFAULT_TIMEOUT_SECONDS = 60.0
 DEFAULT_GRACE_SECONDS = 2.0
 DEFAULT_MAX_CAPTURE_BYTES = 1024 * 1024
 DEFAULT_MAX_SPOOL_BYTES = 16 * 1024 * 1024
 MAX_EXECUTABLE_DIGEST_BYTES = 512 * 1024 * 1024
-_SECRET_OPTION = re.compile(
-    r"(?:token|password|passwd|secret|api[-_]?key|auth(?:entication)?|credential|private[-_]?key)",
-    re.IGNORECASE,
-)
-
-
-@dataclass(frozen=True)
-class EnvironmentPolicy:
-    """Explicit child environment policy.
-
-    Values in ``values`` are caller-supplied named values. Ambient values are
-    copied only when their names appear in ``allowlist``. ``unsafe_inherit``
-    is intentionally explicit and is recorded in the result; governed launch
-    paths do not use it.
-    """
-
-    allowlist: tuple[str, ...] = (
-        "TMUX",
-        "TMUX_PANE",
-        "FAKE_TMUX_STATE",
-        "FAKE_TMUX_AGENT_COUNT",
-        "FAKE_AGENT_MODE",
-        "FAKE_AGENT_DELAY",
-        "FAKE_AGENT_RESULT_JSON",
-        "FAKE_AGENT_AUTO_STEER",
-        "FAKE_AGENT_EMPTY_COMPLETION",
-        "FAKE_AGENT_STEER_OUTCOME",
-        "XDG_CONFIG_HOME",
-        "XDG_DATA_HOME",
-        "XDG_STATE_HOME",
-    )
-    values: Mapping[str, str] = field(default_factory=dict)
-    unsafe_inherit: bool = False
-    git_config_policy: str = "isolated"
-
 
 @dataclass(frozen=True)
 class ProcessRequest:
@@ -156,65 +126,6 @@ class ProcessResult:
         return result
 
 
-def _secret_digest(value: str) -> str:
-    return hashlib.sha256(value.encode("utf-8", errors="surrogatepass")).hexdigest()[:16]
-
-
-def _redaction(value: str) -> str:
-    return f"<redacted:{_secret_digest(value)}>"
-
-
-def redact_text(value: str, secret_values: Iterable[str] = ()) -> str:
-    redacted = value
-    for secret in sorted({item for item in secret_values if item}, key=len, reverse=True):
-        redacted = redacted.replace(secret, _redaction(secret))
-    return redacted
-
-
-def redact_bytes(value: bytes, secret_values: Iterable[str] = ()) -> bytes:
-    redacted = value
-    for secret in sorted({item for item in secret_values if item}, key=len, reverse=True):
-        needle = secret.encode("utf-8", errors="surrogatepass")
-        redacted = redacted.replace(needle, _redaction(secret).encode())
-    return redacted
-
-
-def secret_values_from_argv(argv: Sequence[str]) -> tuple[str, ...]:
-    """Return values following secret-looking options for launch diagnostics."""
-    values: list[str] = []
-    for index, item in enumerate(argv):
-        option, separator, value = item.partition("=")
-        if separator and _SECRET_OPTION.search(option):
-            values.append(value)
-        elif _SECRET_OPTION.search(item) and index + 1 < len(argv):
-            values.append(argv[index + 1])
-    return tuple(value for value in values if value)
-
-
-def redact_argv(
-    argv: Sequence[str],
-    *,
-    secret_values: Iterable[str] = (),
-    secret_positions: Iterable[int] = (),
-) -> tuple[str, ...]:
-    secrets = tuple(secret_values)
-    positions = set(secret_positions)
-    result: list[str] = []
-    for index, item in enumerate(argv):
-        if index in positions:
-            result.append(_redaction(item))
-            continue
-        option, separator, value = item.partition("=")
-        if separator and _SECRET_OPTION.search(option):
-            result.append(option + "=" + _redaction(value))
-            continue
-        if _SECRET_OPTION.search(item) and index + 1 < len(argv):
-            result.append(item)
-            positions.add(index + 1)
-            continue
-        result.append(redact_text(item, secrets))
-    return tuple(result)
-
 
 def _validate_limit(name: str, value: int) -> None:
     if isinstance(value, bool) or value < 0:
@@ -238,77 +149,6 @@ def _command(request: ProcessRequest) -> tuple[str, ...]:
         raise WorkflowError("grace_seconds must be non-negative")
     return command
 
-
-def _controlled_path(executable: str, resolved: str | None) -> str:
-    directories = DEFAULT_PATH.split(os.pathsep)
-    if resolved:
-        parent = str(Path(resolved).parent)
-        if parent not in directories:
-            directories.insert(0, parent)
-    return os.pathsep.join(directories)
-
-
-def build_environment(
-    command: Sequence[str], policy: EnvironmentPolicy
-) -> tuple[dict[str, str], str, tuple[str, ...]]:
-    resolved = shutil.which(command[0], path=os.environ.get("PATH", DEFAULT_PATH))
-    environment: dict[str, str] = {
-        "PATH": _controlled_path(command[0], resolved),
-        "LC_ALL": "C",
-        "LANG": "C",
-        "LANGUAGE": "C",
-        "TZ": "UTC",
-    }
-    if policy.unsafe_inherit:
-        environment.update({str(key): str(value) for key, value in os.environ.items()})
-        environment["PATH"] = _controlled_path(command[0], resolved)
-    else:
-        for name in policy.allowlist:
-            if name in os.environ:
-                environment[name] = os.environ[name]
-    for name, value in policy.values.items():
-        if not isinstance(name, str) or not name or "=" in name or "\x00" in name:
-            raise WorkflowError(f"invalid environment variable name: {name!r}")
-        environment[name] = str(value)
-    # Git is a policy input boundary. Pagers, external diff helpers, editors,
-    # and prompts are always disabled. Governed commands isolate system/global
-    # config by default, while an explicit operator policy preserves the same
-    # excludes/config inputs used by a human ``git status`` cleanliness check.
-    if Path(command[0]).name == "git":
-        if policy.git_config_policy not in {"isolated", "operator"}:
-            raise WorkflowError(
-                "git_config_policy must be isolated or operator"
-            )
-        if policy.git_config_policy == "isolated":
-            environment.update(
-                {
-                "GIT_CONFIG_NOSYSTEM": "1",
-                "GIT_CONFIG_SYSTEM": os.devnull,
-                "GIT_CONFIG_GLOBAL": os.devnull,
-                }
-            )
-        else:
-            for name in ("GIT_CONFIG_NOSYSTEM", "GIT_CONFIG_SYSTEM", "GIT_CONFIG_GLOBAL"):
-                if name not in policy.values:
-                    environment.pop(name, None)
-        environment.update(
-            {
-                "GIT_PAGER": "cat",
-                "PAGER": "cat",
-                "GIT_EXTERNAL_DIFF": "",
-                "GIT_TERMINAL_PROMPT": "0",
-                "GIT_EDITOR": "true",
-                "GIT_SEQUENCE_EDITOR": "true",
-                "GIT_ASKPASS": "true",
-                "SSH_ASKPASS": "true",
-            }
-        )
-    policy_name = "unsafe-inherit" if policy.unsafe_inherit else "controlled"
-    if Path(command[0]).name == "git" and policy.git_config_policy == "operator":
-        policy_name += "+operator-git-config"
-    return environment, policy_name, (
-        tuple(str(value) for value in policy.values.values())
-    )
 
 
 def _digest_file(path: Path) -> str | None:

@@ -14,6 +14,7 @@ from typing import Any
 
 import pytest
 import jsonschema
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TERMINAL_STATES = {"completed", "failed", "interrupted", "killed"}
@@ -25,6 +26,7 @@ class InstalledProduct:
     python: Path
     cli: Path
     mcp: Path
+    mcp_sdk_available: bool
 
     def run(
         self,
@@ -96,23 +98,19 @@ def installed_product(tmp_path_factory: pytest.TempPathFactory) -> InstalledProd
     environment = root / "venv"
     venv.EnvBuilder(with_pip=True, system_site_packages=True).create(environment)
     python = environment / "bin" / "python"
+    venv_site = environment / "lib" / f"python{sys.version_info.major}.{sys.version_info.minor}" / "site-packages"
+    runtime_paths = {
+        str(Path(jsonschema.__file__).resolve().parents[1]),
+        str(Path(yaml.__file__).resolve().parents[1]),
+    }
+    mcp_sdk_available = False
     try:
         mcp_distribution = importlib.metadata.distribution("mcp")
     except importlib.metadata.PackageNotFoundError:
-        pytest.fail(
-            "installed-product fixture requires mcp==1.28.1 in the configured "
-            "environment; install that pinned SDK before running acceptance tests"
-        )
-    if mcp_distribution.version != "1.28.1":
-        pytest.fail(
-            "installed-product fixture requires mcp==1.28.1 in the configured "
-            f"environment; found mcp=={mcp_distribution.version}"
-        )
-    venv_site = environment / "lib" / f"python{sys.version_info.major}.{sys.version_info.minor}" / "site-packages"
-    runtime_paths = {
-        str(mcp_distribution.locate_file("")),
-        str(Path(jsonschema.__file__).resolve().parents[1]),
-    }
+        mcp_distribution = None
+    if mcp_distribution is not None and mcp_distribution.version == "1.28.1":
+        runtime_paths.add(str(mcp_distribution.locate_file("")))
+        mcp_sdk_available = True
     (venv_site / "agent_workflow_configured_dependencies.pth").write_text(
         "\n".join(sorted(runtime_paths)) + "\n", encoding="utf-8"
     )
@@ -128,9 +126,8 @@ def installed_product(tmp_path_factory: pytest.TempPathFactory) -> InstalledProd
             str(python),
             "-c",
             (
-                "import importlib.metadata as metadata; import mcp; "
-                "version = metadata.version('mcp'); "
-                "print(version)"
+                "import importlib.metadata as metadata; import jsonschema, yaml; "
+                "print(metadata.version('jsonschema')); print(metadata.version('PyYAML'))"
             ),
         ],
         text=True,
@@ -138,18 +135,15 @@ def installed_product(tmp_path_factory: pytest.TempPathFactory) -> InstalledProd
         check=False,
         timeout=30,
     )
-    if dependency.returncode or dependency.stdout.strip() != "1.28.1":
-        detail = (dependency.stderr or dependency.stdout).strip().splitlines()[-1:]
-        detail_text = detail[0] if detail else "the SDK could not be imported"
-        pytest.fail(
-            "installed-product fixture requires mcp==1.28.1 in the configured "
-            f"environment; make that pinned SDK available before running acceptance tests ({detail_text})"
-        )
+    if dependency.returncode:
+        detail = (dependency.stderr or dependency.stdout).strip()
+        pytest.fail(f"installed-product fixture could not import core dependencies: {detail}")
     return InstalledProduct(
         root=root,
         python=python,
         cli=environment / "bin" / "agent-workflow",
         mcp=environment / "bin" / "agent-workflow-mcp",
+        mcp_sdk_available=mcp_sdk_available,
     )
 
 

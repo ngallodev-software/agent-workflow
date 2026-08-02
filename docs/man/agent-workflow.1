@@ -1,18 +1,19 @@
-.TH AGENT-WORKFLOW 1 "2026-08-01" "agent-workflow 0.7.6" "User Commands"
+.TH AGENT-WORKFLOW 1 "2026-08-01" "agent-workflow 0.7.7" "User Commands"
 .SH NAME
 agent-workflow \- terminal-first delegated execution, workflow, evidence, and review CLI
 .SH SYNOPSIS
 .B agent-workflow
 .RI [ --config " PATH" ]
 .RI [ --json ]
+.RI [ --no-plugins ]
 .I COMMAND
 .RI [ ARGS ]
 .SH DESCRIPTION
 agent-workflow creates isolated Git worktrees, launches configured coding executors through tmux, stores durable run evidence, supports restart-safe workflow graphs, and seals review and evaluation receipts. Durable JSON/JSONL records and read-only receipts are authoritative; tmux capture, logs, and SQLite rows are observational or reconstructable projections.
 .SH COMMAND FAMILIES
 .TP
-.B doctor, commands, config, completion
-Environment/configuration inspection, parser-derived command contracts, and generated shell completion.
+.B doctor, commands, config, plugins, completion
+Environment/configuration inspection, parser-derived command contracts, trusted-plugin inventory, and generated shell completion.
 .TP
 .B worktree
 Create, list, and remove isolated ticket worktrees.
@@ -60,10 +61,15 @@ Use an alternate TOML configuration path.
 .B --json
 Request machine-readable output where supported.
 .TP
+.B --no-plugins
+Suppress all configured plugin imports and expose the core-only command parser for recovery.
+.TP
 .B --version
 Print the release version.
 .SH EVIDENCE
 Run evidence is normally stored below ~/.local/state/agent-workflow/runs/SESSION. final-receipt.json seals required and optional artifacts. Review dispositions are separate read-only receipts. Structured provider evidence is bounded and sealed before trial extraction. The host-local SQLite index stores normalized searchable fields and source provenance but excludes raw prompt, terminal, message, and log bodies.
+.SH PLUGINS
+Trusted plugins are separate Python distributions discovered through the agent_workflow.plugins entry-point group and imported only when listed in [plugins].enabled. They are executable code, not a sandbox or authority grant. Use plugins list for inventory and --no-plugins for recovery.
 .SH MCP
 The optional local stdio server is a separate executable, agent-workflow-mcp(1). It is currently bounded/read-only plus pack validation; planned mutation tools are not present.
 .SH FILES
@@ -74,4 +80,4 @@ Default user configuration.
 .I ~/.local/state/agent-workflow/
 Default durable state root. The rebuildable database is normally under the index subdirectory.
 .SH SEE ALSO
-agent-workflow-index(1), agent-workflow-workflow(1), agent-workflow-mcp(1), docs/COMMAND_REFERENCE.md, docs/ARCHITECTURE.md
+agent-workflow-index(1), agent-workflow-workflow(1), agent-workflow-mcp(1), docs/COMMAND_REFERENCE.md, docs/PLUGIN_API.md, docs/ARCHITECTURE.md

@@ -7,9 +7,9 @@ Usage: ./install.sh [--no-skills] [--no-hooks] [--no-deps] [--python PATH]
 
 Installs this checkout, or a supplied wheel, into the current user's Python
 environment, including its declared core dependencies, then creates launcher, skill
-symlinks, and client hook reminders. The core package includes the local stdio
-MCP server and registers it with Codex and Claude Code. Missing dependencies may
-require network access.
+symlinks, and client hook reminders. The local stdio MCP adapter is an optional
+feature installed and registered only when the `mcp` extra is requested. Missing
+dependencies may require network access.
 
 Options:
   --no-skills            Skip installation of agent skill symlinks.
@@ -17,8 +17,8 @@ Options:
   --no-deps              Skip Python package/dependency installation.
   --python PATH          Python interpreter used for the host installation.
   --wheel PATH           Install this built wheel instead of an editable checkout.
-  --extras NAME[,NAME...] Install optional dependency groups (for example
-                          eval,stats or all). Core dependencies are always
+  --extras NAME[,NAME...] Install optional feature groups (for example
+                          mcp,eval,stats or all). Core dependencies are always
                           included unless --no-deps is set.
 USAGE
 }
@@ -64,8 +64,9 @@ CODEX_HOME_DIR="${CODEX_HOME:-$HOME/.codex}"
 CODEX_CONFIG_FILE="$CODEX_HOME_DIR/config.toml"
 CLAUDE_CONFIG_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 CLAUDE_SETTINGS_FILE="$CLAUDE_CONFIG_DIR/settings.json"
-# MCP is a core runtime dependency, so normal host installs configure it too.
-MCP_CONFIG_REQUESTED=1
+# MCP is a first-party optional feature. Installation and client registration
+# are requested explicitly through --extras mcp (or --extras all).
+MCP_CONFIG_REQUESTED=0
 command -v python3 >/dev/null || { echo "python3 is required" >&2; exit 127; }
 command -v "$PYTHON_BIN" >/dev/null || {
   echo "Python interpreter not found: $PYTHON_BIN" >&2
@@ -74,6 +75,12 @@ command -v "$PYTHON_BIN" >/dev/null || {
 PYTHON_PATH="$(command -v "$PYTHON_BIN")"
 "$PYTHON_BIN" -c 'import sys; sys.exit("agent-workflow requires Python 3.11+") if sys.version_info < (3,11) else None'
 PYTHON_IN_VENV="$("$PYTHON_BIN" -c 'import sys; print("1" if sys.prefix != sys.base_prefix else "0")')"
+if [[ "$EXTRAS" == "all" ]]; then
+  EXTRAS="eval,stats,otel,mlflow,completion,mcp"
+fi
+if [[ ",$EXTRAS," == *,mcp,* ]]; then
+  MCP_CONFIG_REQUESTED=1
+fi
 if [[ $INSTALL_DEPS -eq 1 ]]; then
   if ! "$PYTHON_BIN" -m pip --version >/dev/null 2>&1; then
     echo "pip is missing for $PYTHON_PATH; trying ensurepip" >&2
@@ -98,9 +105,6 @@ EOF3
     [[ -f "$WHEEL_PATH" ]] || { echo "wheel not found: $WHEEL_PATH" >&2; exit 2; }
     install_target="$WHEEL_PATH"
   elif [[ -n "$EXTRAS" ]]; then
-    if [[ "$EXTRAS" == "all" ]]; then
-      EXTRAS="eval,stats,otel,mlflow,completion,mcp"
-    fi
     install_target="$ROOT[$EXTRAS]"
   fi
   echo "installing Python package and dependencies: $install_target"
@@ -113,8 +117,22 @@ EOF3
   else
     "$PYTHON_BIN" -m pip install --upgrade --editable "$install_target"
   fi
-elif ! "$PYTHON_BIN" -c 'import jsonschema' >/dev/null 2>&1; then
-  echo "jsonschema>=4.18,<5 is required; rerun without --no-deps or install it with $PYTHON_BIN -m pip" >&2
+fi
+if [[ $MCP_CONFIG_REQUESTED -eq 1 ]] && ! "$PYTHON_BIN" - <<'PY' >/dev/null 2>&1
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    installed = version("mcp")
+except PackageNotFoundError:
+    raise SystemExit(1)
+raise SystemExit(0 if installed == "1.28.1" else 1)
+PY
+then
+  echo "MCP support requires mcp==1.28.1 for $PYTHON_PATH; rerun without --no-deps or install it with $PYTHON_BIN -m pip install mcp==1.28.1" >&2
+  exit 1
+fi
+if [[ $INSTALL_DEPS -eq 0 ]] && ! "$PYTHON_BIN" -c 'import jsonschema, yaml' >/dev/null 2>&1; then
+  echo "jsonschema>=4.18,<5 and PyYAML>=6.0.3,<7 are required; rerun without --no-deps or install them with $PYTHON_BIN -m pip" >&2
   exit 1
 fi
 mkdir -p "$BIN_DIR" "$CONFIG_DIR"

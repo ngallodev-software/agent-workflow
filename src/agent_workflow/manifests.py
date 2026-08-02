@@ -5,12 +5,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-try:
-    import yaml  # type: ignore
-except ImportError:  # pragma: no cover - covered through forced fallback test
-    yaml = None
+import yaml
 
-from .miniyaml import MiniYamlError, load_task_manifest
 from .evaluation import validate_evaluation
 from .errors import WorkflowError
 from .path import absolute_path, inventory_tree, read_regular_file, require_directory
@@ -44,15 +40,10 @@ class ValidationReport:
 def _load_yaml(path: Path, report: ValidationReport) -> dict[str, Any] | None:
     try:
         text = read_regular_file(path).data.decode("utf-8")
-        value = yaml.safe_load(text) if yaml is not None else load_task_manifest(text)
-    except (OSError, UnicodeDecodeError, MiniYamlError, ValueError, WorkflowError) as exc:
+        value = yaml.safe_load(text)
+    except (OSError, UnicodeDecodeError, ValueError, WorkflowError, yaml.YAMLError) as exc:
         report.errors.append(f"{path.relative_to(report.root)}: invalid YAML: {exc}")
         return None
-    except Exception as exc:
-        if yaml is not None and exc.__class__.__module__.startswith("yaml"):
-            report.errors.append(f"{path.relative_to(report.root)}: invalid YAML: {exc}")
-            return None
-        raise
     if not isinstance(value, dict):
         report.errors.append(f"{path.relative_to(report.root)}: expected YAML mapping")
         return None
