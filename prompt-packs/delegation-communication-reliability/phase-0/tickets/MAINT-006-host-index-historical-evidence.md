@@ -13,6 +13,15 @@ host-wide full index verifier rejected historical directories with obsolete
 schemas, missing retired metrics fields, and absent old collections. That
 unrelated state prevents every otherwise valid review gate from completing.
 
+The current host census is bounded and must be addressed deliberately: 109
+legacy `launch-contract.json` envelopes lack `ticket_identity`, 30 legacy
+`command.json` envelopes lack `classification`, 10 legacy
+`run-provenance.json` envelopes contain an earlier allowed-property shape, and
+seven sealed receipts predate `collections/completion.json`. One separately
+sealed `executor-events.jsonl` size mismatch remains an integrity failure, not
+compatibility evidence. Do not replace these finite observed categories with a
+generic "old artifact" rule.
+
 ## Required behavior
 
 - Classify historical artifacts that cannot satisfy the current schema without
