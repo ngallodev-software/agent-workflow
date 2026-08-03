@@ -39,7 +39,26 @@ pipeline {
         }
         stage('Build') {
             steps {
-                    sh 'rm -rf build dist && python -m build --wheel --no-isolation'
+                sh '''
+                    set -eu
+                    rm -rf build dist
+                    python -m build --sdist --wheel --no-isolation
+                    wheel="$(find "$WORKSPACE/dist" -maxdepth 1 -type f -name 'agent_workflow-*.whl' -print -quit)"
+                    sdist="$(find "$WORKSPACE/dist" -maxdepth 1 -type f -name 'agent_workflow-*.tar.gz' -print -quit)"
+                    test -n "$wheel" || { echo 'built agent-workflow wheel is missing' >&2; exit 2; }
+                    test -n "$sdist" || { echo 'built agent-workflow sdist is missing' >&2; exit 2; }
+                    python scripts/build-release-bundles.py \
+                        --version "v$(tr -d '\n' < VERSION)" \
+                        --wheel "$wheel" \
+                        --sdist "$sdist" \
+                        --output-dir "$WORKSPACE/dist"
+                    linux_installer="$WORKSPACE/dist/agent-workflow-$(tr -d '\n' < VERSION)-linux.tar.gz"
+                    test -s "$linux_installer" || {
+                        echo "Linux installer bundle is missing: $linux_installer" >&2
+                        exit 2
+                    }
+                    echo "Linux installer: $linux_installer"
+                '''
             }
         }
         stage('Host install') {
@@ -66,15 +85,27 @@ pipeline {
                         echo "host install root is invalid: $install_root" >&2
                         exit 2
                     }
-                    if [ "$(id -un)" = "$target_user" ]; then
-                        AGENT_WORKFLOW_INSTALL_PYTHON="$host_python" "$install_root/install.sh" --wheel "$wheel" --extras mcp
-                    else
+                    run_as_target() {
+                        if [ "$(id -un)" = "$target_user" ]; then
+                            "$@"
+                            return
+                        fi
                         command -v sudo >/dev/null || {
                             echo 'sudo is required when Jenkins deploys to another host account' >&2
                             exit 2
                         }
-                        sudo -n -u "$target_user" -H env AGENT_WORKFLOW_INSTALL_PYTHON="$host_python" "$install_root/install.sh" --wheel "$wheel" --extras mcp
-                    fi
+                        sudo -n -u "$target_user" -H "$@"
+                    }
+                    run_as_target env AGENT_WORKFLOW_INSTALL_PYTHON="$host_python" \
+                        "$install_root/install.sh" --wheel "$wheel" --extras mcp
+                    expected_version="$(tr -d '\n' < VERSION)"
+                    installed_version="$(run_as_target "$host_python" -c \
+                        'from importlib.metadata import version; print(version("agent-workflow"))')"
+                    test "$installed_version" = "$expected_version" || {
+                        echo "installed agent-workflow version $installed_version != $expected_version" >&2
+                        exit 2
+                    }
+                    echo "Installed agent-workflow version: $installed_version"
                 '''
             }
         }

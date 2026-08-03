@@ -15,8 +15,6 @@ AUTHORITIES = (
     (PYPROJECT, PROJECT_VERSION),
     (ROOT / "agent-workflow.yaml", re.compile(r"(?m)^version: (\S+)$")),
     (ROOT / "src/agent_workflow/__init__.py", re.compile(r'__version__ = "([^"]+)"')),
-    (ROOT / "src/agent_workflow/cli_parser.py", re.compile(r'version="%\(prog\)s ([^"]+)"')),
-    (ROOT / "src/agent_workflow/doctor.py", re.compile(r'"version": "([^"]+)"')),
     (ROOT / "docs/man/agent-workflow.1", re.compile(r"agent-workflow ([0-9.]+)")),
     (ROOT / "docs/man/agent-workflow-workflow.1", re.compile(r"agent-workflow ([0-9.]+)")),
     (ROOT / "docs/man/agent-workflow-mcp.1", re.compile(r"agent-workflow ([0-9.]+)")),
@@ -40,6 +38,12 @@ def check() -> str:
         matches = pattern.findall(path.read_text(encoding="utf-8"))
         if matches != [version]:
             raise SystemExit(f"VERSION={version} disagrees with {path.relative_to(ROOT)}={matches!r}")
+    cli_parser = (ROOT / "src/agent_workflow/cli_parser.py").read_text(encoding="utf-8")
+    if 'version=f"%(prog)s {__version__}"' not in cli_parser:
+        raise SystemExit("cli_parser.py does not derive --version from __version__")
+    doctor = (ROOT / "src/agent_workflow/doctor.py").read_text(encoding="utf-8")
+    if '"version": __version__' not in doctor:
+        raise SystemExit("doctor.py does not derive its version from __version__")
     return version
 
 
