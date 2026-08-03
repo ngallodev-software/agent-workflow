@@ -99,6 +99,8 @@ def file_inventory(root: Path, *, exclude: Iterable[str] = ()) -> list[dict[str,
         if not path.is_file():
             continue
         relative = PurePosixPath(path.relative_to(root).as_posix())
+        if "__pycache__" in relative.parts or relative.suffix == ".pyc":
+            continue
         if any(relative == item or item in relative.parents for item in excluded):
             continue
         records.append(
