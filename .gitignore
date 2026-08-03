@@ -14,3 +14,6 @@ testing-output/
 *.tar.zst
 *.sha256
 docs/BACKLOG.html
+.local/
+CODEX_HANDOFF_CHANGELOG.md
+CODEX_HANDOFF_START_HERE.md
