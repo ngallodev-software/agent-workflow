@@ -21,6 +21,8 @@ This checkpoint validates the implementation delivered through checkpoint 03 aga
 
 The repository was clean before this report was added. An uncommitted README edit found during validation was an accidental regression to the historical v1-only description and was discarded.
 
+> Maintenance note: the later test-authority consolidation removed private CLI-handler tests. Installed command routing is now protected by acceptance journeys, while benchmark arithmetic and policy remain in the compact invariant matrices.
+
 ## Test evidence
 
 ### Benchmark contracts and operator lifecycle
@@ -30,7 +32,6 @@ Command group:
 ```text
 python -m pytest -q \
   tests/invariants/test_benchmark_operator_experience.py \
-  tests/invariants/test_cli_benchmark_handler_boundary.py \
   tests/invariants/test_comparative_benchmark_contracts.py \
   tests/invariants/test_comparative_benchmark_operating_policy.py \
   tests/acceptance/test_comparative_benchmark_journey.py
@@ -46,7 +47,6 @@ Command group:
 
 ```text
 python -m pytest -q \
-  tests/invariants/test_cli_agent_handler_boundary.py \
   tests/invariants/test_release_evidence.py \
   tests/release/test_distribution.py \
   tests/release/test_documentation_sync.py

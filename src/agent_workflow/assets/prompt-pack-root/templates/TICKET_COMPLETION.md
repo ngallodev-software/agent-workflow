@@ -24,13 +24,15 @@ substitute. Its command and criterion records must use the authoritative shape:
   "ticket_id": "<ticket-or-null>",
   "pack_id": "<pack-or-null>",
   "result": "completed",
+  "review_disposition": "approved",
   "base_revision": "<git-sha>",
   "head_revision": "<git-sha>",
   "changed_files": ["src/example.py"],
   "criteria": [{"id": "criterion", "result": "pass", "evidence": ["test output"]}],
   "commands": [{"argv": ["pytest", "-q"], "cwd": "/absolute/worktree", "exit_code": 0, "receipt": "1 passed"}],
   "unresolved": [],
-  "usage": null
+  "usage": null,
+  "repository_closeout": {"path": "repository-closeout.json", "sha256": "<sha256-of-sidecar>"}
 }
 ```
 
@@ -50,16 +52,30 @@ must use an absolute `cwd`, every criterion result must be `pass`, `fail`, or
 `not_verified`, and `result: completed` requires `unresolved: []`.
 
 Reviewers must provide the same schema-valid sidecar evidence for the review
-run, including the exact commands and exit codes they actually ran. A Markdown
-report is supplementary and never replaces `completion.json`.
+run, including the exact commands and exit codes they actually ran. Reviewers
+must also set `review_disposition` to `approved`, `changes_requested`, or
+`blocked`; this field is separate from the execution `result`. A completed
+review may therefore use `result: completed` with
+`review_disposition: changes_requested`, failed/not-verified review criteria,
+and unresolved review findings. A Markdown report is supplementary and never
+replaces `completion.json`.
+
+When repository integration is part of closeout, run `agent-workflow worktree
+closeout` and place its immutable receipt at
+`$AGENT_WORKFLOW_HANDOFF_DIR/repository-closeout.json`. Bind that exact file in
+`completion.json` with `repository_closeout.path` and `sha256`. Collection
+rejects a mismatched digest, repository root, local HEAD, or internally
+inconsistent committed/pushed/merged claim. Omit the field when repository
+integration is not part of the ticket evidence.
 
 Reviewers report an accept/reject recommendation only. `review`, `accept`,
 `reject`, and `force-accept` mutate canonical lifecycle state and are executed
 only by the host orchestrator, never from a sandboxed reviewer.
 
-For a `completed` result, `unresolved` must be empty. Do not list normal
-host-owned merge, review, acceptance, release, or pane-closure work as an
-unresolved item; report those as next steps in the Markdown handoff instead.
+For a non-review `completed` result, `unresolved` must be empty. A completed
+review with `review_disposition: changes_requested` may list substantive review
+findings there. Do not list normal host-owned merge, review, acceptance,
+release, or pane-closure work as unresolved; report those as next steps instead.
 
 ## Source baseline
 
@@ -72,14 +88,23 @@ unresolved item; report those as next steps in the Markdown handoff instead.
 |---|---|
 | Exact worktree root | |
 | Index project identity | |
-| Index mode | `full` |
+| Index mode | `full` or `not_run` |
+| Persistence | `non_persistent`, `external_cache`, `authorized_disposable`, or `not_run` |
+| External artifact root | |
 | Index status | |
 | Nodes / edges | |
 | Artifact or digest | |
-| Limitations or fallback | |
+| Dirty before / after digest | |
+| Local artifact owner / bytes / tree digest | |
+| Cleanup policy / size-limit result | |
+| Limitations, residue, or fallback | |
 
-The index must belong to this worktree. If the optional codebase-memory service
-was unavailable, say so and do not claim graph-backed structural analysis.
+The index must belong to this worktree and must not dirty it by default. If the
+optional service was unavailable or could not index without unauthorized local
+persistence, say so and do not claim graph-backed structural analysis. A child
+must not request destructive cleanup approval; repository-local artifacts are
+valid only when `.codebase-memory/` was pre-authorized as a disposable tree and
+the host coordinator owns cleanup.
 
 ## Scope delivered
 

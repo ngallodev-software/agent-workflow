@@ -17,10 +17,13 @@ Never implement a historical “completed” claim without confirming that the b
 
 For a new agent worktree, perform the repository procedure in
 `docs/references/WORKTREE_PREFLIGHT.md` before structural code discovery or
-editing. Generate and verify a full index
-for the exact worktree, record its identity and counts, and refresh it before
-the completion handoff. This is an agent/operator procedure; codebase-memory
-MCP remains optional to the application runtime.
+editing. Probe the optional service once and use a full non-persistent index for
+the exact worktree. Persistent artifacts are allowed only in an explicit
+external cache or a pre-authorized `.codebase-memory/` disposable tree owned by
+the host coordinator. Record before/after porcelain status, identity, counts,
+and any artifact digest; otherwise continue immediately with the fallback.
+This is an agent/operator procedure, and codebase-memory remains optional to
+the application runtime.
 
 Record:
 
@@ -90,6 +93,8 @@ Start with the intended installed-product outcome or future acceptance journey. 
 4. a narrowly matched strict future xfail tied to one approved backlog item.
 
 Do not add tests for line coverage, private parser shape, mock-call choreography, exact internal dictionaries, duplicated CLI help, prose wording, user-created local files, or broad snapshots. A low-level test must state why an end-to-end journey cannot protect the same boundary efficiently.
+
+Before changing the suite, run `python3 scripts/audit-test-suite.py`. Every invariant file must remain declared in `tests/test-authority.json` with its authority and rationale. Do not raise a file, function, collection, subprocess, wheel-build, or runtime ceiling without documenting why the nearest installed-product journey and existing invariant matrices are insufficient.
 
 ## 7. Completion evidence
 

@@ -3,6 +3,6 @@
 cat <<'REMINDER'
 CRITICAL - codebase-memory-mcp discovery policy:
 1. For code structure, symbols, callers, dependencies, and impact, use codebase-memory-mcp first: list_projects, search_graph, trace_path, get_code_snippet, query_graph, or get_architecture.
-2. If the repository is not indexed or stale, use index_repository/index_status before code discovery.
-3. Fall back to grep/glob/file reads for text literals, configuration, scripts, and non-code documents.
+2. If the repository is not indexed or stale, use a full exact-worktree index with persistence disabled by default; use repository-local persistence only when `.codebase-memory/` is pre-authorized disposable scope with host-owned cleanup.
+3. Compare Git porcelain before and after the probe. If the tool creates unauthorized residue, stop using it and fall back to grep/glob/file reads for text literals, configuration, scripts, and non-code documents.
 REMINDER

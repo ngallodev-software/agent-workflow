@@ -8,22 +8,30 @@
   "pack_checksum_reference": null,
   "run_receipt_sha256": null,
   "receipt_verification": "unavailable",
+  "executor_result": null,
+  "completion_result": null,
+  "policy_result": "not_evaluated",
+  "acceptance_eligible": false,
+  "attempt_classification": "integrity-unverified",
+  "supplemental_repairs": [],
   "evaluation_state": "not_verified",
   "evaluation_result": null,
   "disposition": null,
   "evidence_paths": {
     "status": null,
     "completion": null,
+    "completion_collection": null,
     "run_provenance": null,
     "final_receipt": null,
     "evaluation_runtime": null,
     "score_set": null,
     "evaluation_report": null,
     "trial_collection": null,
-    "lifecycle_disposition": null
+    "lifecycle_disposition": null,
+    "repository_closeout": null
   },
   "failures": [
     "No run evidence has been supplied."
-  ]
+  ],
+  "repository_closeout": null
 }
-

@@ -22,7 +22,7 @@ Run the baseline checks available in the worktree:
 python3 -m pytest -q \
   tests/invariants/test_comparative_benchmark_contracts.py \
   tests/invariants/test_comparative_benchmark_operating_policy.py \
-  tests/invariants/test_cli_benchmark_handler_boundary.py
+  tests/acceptance/test_comparative_benchmark_journey.py
 python3 scripts/audit-release-assets.py
 agent-workflow pack validate prompt-packs/comparative-benchmark-scoring-corrections
 ```

@@ -245,3 +245,101 @@ def test_installed_supervisor_repairs_corrupt_status_from_immutable_evidence(
     ]
     assert events[-1]["rule_id"] == "SAFE-REPAIR-STATUS-v1"
     assert events[-1]["outcome"] == "applied"
+
+
+def test_supervisor_recovery_finalizes_dead_runner_without_completion(
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+    fake_agent_path: Path,
+    tmp_path: Path,
+) -> None:
+    import signal
+    import subprocess
+
+    repo = tmp_path / "repo-orphan-finalize"
+    git_repo(repo)
+    prompt = tmp_path / "orphan-prompt.md"
+    prompt.write_text("Remain alive until the host disappears.\n", encoding="utf-8")
+    config = tmp_path / "orphan-config.toml"
+    config.write_text("[git]\nrequire_clean_source = false\n", encoding="utf-8")
+    env = dict(product_env)
+    env["FAKE_AGENT_MODE"] = "hang"
+    env["FAKE_AGENT_DELAY"] = "30"
+    installed_product.json(
+        "launch",
+        "supervisor-orphan-finalize",
+        repo,
+        prompt,
+        "--config",
+        config,
+        "--no-interactive",
+        "--",
+        fake_agent_path,
+        env=env,
+    )
+    run = (
+        Path(env["XDG_STATE_HOME"])
+        / "agent-workflow"
+        / "runs"
+        / "supervisor-orphan-finalize"
+    )
+    deadline = time.time() + 10
+    heartbeat: dict[str, object] = {}
+    while time.time() < deadline:
+        try:
+            heartbeat = json.loads((run / "heartbeat.json").read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            heartbeat = {}
+        if heartbeat.get("runner_pid") and heartbeat.get("executor_pid"):
+            break
+        time.sleep(0.05)
+    assert isinstance(heartbeat.get("runner_pid"), int)
+    assert isinstance(heartbeat.get("executor_pid"), int)
+
+    os.kill(int(heartbeat["runner_pid"]), signal.SIGKILL)
+    os.kill(int(heartbeat["executor_pid"]), signal.SIGKILL)
+    subprocess.run(
+        ["tmux", "kill-session", "-t", "supervisor-orphan-finalize"],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    time.sleep(0.2)
+
+    report = installed_product.json(
+        "supervisor",
+        "once",
+        "--config",
+        config,
+        "--session",
+        "supervisor-orphan-finalize",
+        "--no-capture-interactive",
+        env=env,
+        timeout=30,
+    )
+    item = report["runs"][0]
+    assert item["observed_state"] == "orphaned"
+    assert item["finalization"]["outcome"] == "finalized"
+    assert item["finalization"]["executor_result"] == "lost"
+    assert item["finalization"]["completion_result"] == "missing"
+    assert item["finalization_error"] is None
+
+    status = json.loads((run / "status.json").read_text(encoding="utf-8"))
+    assert status["status"] == "failed"
+    assert status["executor_result"] == "lost"
+    assert status["completion_validation_status"] == "missing"
+    assert status["failure_category"] == "executor_lost"
+    assert status["final_receipt_sha256"]
+    assert (run / "final-receipt.json").is_file()
+    assert (run / "recovery-finalization.json").is_file()
+
+    again = installed_product.json(
+        "finalize",
+        "supervisor-orphan-finalize",
+        "--config",
+        config,
+        env=env,
+    )
+    assert again["outcome"] == "already_finalized"
+    assert again["final_receipt_sha256"] == status["final_receipt_sha256"]

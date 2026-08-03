@@ -87,11 +87,28 @@ Do not add a test merely because a function, branch, parser field, dictionary sh
 
 When a defect is discovered, first extend the nearest end-to-end journey. Add a narrow invariant only when the defect belongs to a general security/state matrix.
 
+## Test authority and drift budgets
+
+`tests/test-authority.json` is the executable inventory for the suite. It records the authority and rationale for every invariant file, any narrowly approved mock or private-import exception, per-file function ceilings, layer file/function/collection ceilings, subprocess and wheel-build site ceilings, and the default-suite runtime ceiling.
+
+Run the audit before and after test changes:
+
+```bash
+python3 scripts/audit-test-suite.py
+```
+
+The policy is a drift ceiling, not a coverage target. Deleting redundant coverage does not require restoring the old count. Raising any ceiling requires a reviewable explanation of the complete user journey or isolated invariant that cannot be protected by existing authority. New invariant files fail until they are explicitly inventoried. Direct imports from `agent_workflow.cli_handlers`, `agent_workflow.cli_parser`, or `agent_workflow.cli_runtime` are forbidden in invariants; those behaviors belong at the installed executable boundary.
+
+The 2026-08-02 consolidation removed private CLI dispatch/decomposition tests and moved manifest-native pack validation, repository closeout, evidence repair, and parser/runtime routing to installed-product journeys. The invariant layer decreased from 52 files and 320 collected cases to 35 files and 247 collected cases; preserving the LAN live-review regression adds one accepted default-suite case, so the current default ceiling is 341 cases. The retained ceilings are intentionally below the prior shape and are enforced mechanically.
+
+`release-check.sh` runs the authority audit before pytest, then re-runs it against JUnit evidence. The post-run audit records total test count and duration in `build/release-evidence/test-suite-audit.json`; the current default-suite runtime ceiling is 420 seconds, based on a measured 332.98-second successful full gate plus bounded scheduling headroom. Static budgets also prevent silent multiplication of subprocess call sites or wheel builds.
+
 ## Commands
 
 ```bash
 # Default release-development environment and gate
 ./scripts/bootstrap-dev.sh
+python3 scripts/audit-test-suite.py
 .venv/bin/python -m pytest -q
 ./scripts/release-check.sh
 # Public-release enforcement: exits 3 while governance/compatibility blockers remain
@@ -127,11 +144,12 @@ Focused invariant and installed-wheel journeys cover:
 
 - trusted-plugin import suppression, atomic registration, collision handling, digest-bound package resources, traversal/tamper rejection, and a separately installed fixture plugin;
 - hierarchy contracts, capability/budget narrowing, append-only journals, idempotent imports, deterministic replay, and mutation-sensitive team/root receipts;
-- behavior-preserving CLI handler, SQLite schema/source/query, session artifact, and session-control decomposition behind stable public facades;
+- installed CLI routing and stable public behavior without private handler/parser tests;
+- SQLite source/query, session-control, and evidence boundaries only where adversarial state matrices are cheaper than installed journeys;
 - distribution exclusion of Jenkins/GitHub CI assets and fail-safe optional MCP installation.
 
 A passing hierarchy authority test does not claim team runtime, tmux topology, scheduling, or recovery. Those remain future/gated journeys.
 
 ## Current shape
 
-The suite is organized by product journeys and invariant matrices rather than test-count targets. Deleted implementation-coupled tests are preserved in Git history and should not be restored merely to recover coverage numbers. Restore a behavior only by expressing it through the test layers above. Implemented future specifications, such as HARD-004, must graduate into acceptance/invariant coverage instead of remaining strict expected failures.
+The suite is organized by product journeys and invariant matrices rather than test-count targets. Deleted implementation-coupled tests are preserved in Git history and should not be restored merely to recover coverage numbers. Restore a behavior only by expressing it through the test layers above. The authority policy is reviewed whenever a legitimate new test changes a ceiling; it must never be increased merely because a new helper or branch exists. Implemented future specifications, such as HARD-004, must graduate into acceptance/invariant coverage instead of remaining strict expected failures.

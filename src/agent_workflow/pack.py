@@ -105,8 +105,15 @@ def archive(
         # MANIFEST.sha256 is a mutable, ignored transfer sidecar. The archive's
         # canonical MANIFEST.json must describe the bytes actually archived.
         inventory = tuple(entry for entry in report.inventory if entry.path != "MANIFEST.sha256")
-        if any(entry.path == "MANIFEST.json" for entry in inventory):
-            raise WorkflowError("pack entry MANIFEST.json is reserved for archive integrity")
+        archive_manifest_name = (
+            "ARCHIVE_MANIFEST.json"
+            if report.pack_format == "manifest-native"
+            else "MANIFEST.json"
+        )
+        if any(entry.path == archive_manifest_name for entry in inventory):
+            raise WorkflowError(
+                f"pack entry {archive_manifest_name} is reserved for archive integrity"
+            )
         for entry in inventory:
             target = staged / entry.path
             if entry.kind == "directory":
@@ -135,7 +142,7 @@ def archive(
             ],
         }
         validate_instance(canonical_manifest, "agent-workflow/pack-manifest/v1", artifact="archive manifest")
-        (staged / "MANIFEST.json").write_text(
+        (staged / archive_manifest_name).write_text(
             json.dumps(canonical_manifest, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
@@ -197,4 +204,7 @@ def archive(
             str(checksum_path) if settings.write_sha256 else None
         ),
         "validation": report.as_dict(),
+        "pack_format": report.pack_format,
+        "manifest_version": report.manifest_version,
+        "archive_manifest": archive_manifest_name,
     }

@@ -66,7 +66,9 @@ jobs:
       - name: Acceptance and invariant suite
         if: matrix.suite == 'full'
         shell: bash
-        run: python -m pytest
+        run: |
+          python scripts/audit-test-suite.py
+          python -m pytest
       - name: Build wheel and source distribution
         shell: bash
         run: |
@@ -83,7 +85,9 @@ jobs:
             --output-dir dist
       - name: Write checksum manifest
         shell: bash
-        run: python scripts/write-release-checksums.py --output-dir dist
+        run: |
+          find dist -maxdepth 1 -type f \( -name '*.whl' -o -name '*.tar.gz' \) -print0 \
+            | sort -z | xargs -0 sha256sum > dist/SHA256SUMS
       - name: Audit release assets
         shell: bash
         run: python scripts/audit-release-assets.py
@@ -116,7 +120,8 @@ jobs:
           sdist=$(python -c 'from pathlib import Path; print(next(Path("dist").glob("agent_workflow-*.tar.gz")))')
           python scripts/build-release-bundles.py \
             --version "$RELEASE_TAG" --wheel "$wheel" --sdist "$sdist" --output-dir dist
-          python scripts/write-release-checksums.py --output-dir dist
+          find dist -maxdepth 1 -type f \( -name '*.whl' -o -name '*.tar.gz' \) -print0 \
+            | sort -z | xargs -0 sha256sum > dist/SHA256SUMS
           python scripts/audit-release-assets.py
       - name: Publish tagged release
         run: |

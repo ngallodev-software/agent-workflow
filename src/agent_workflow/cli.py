@@ -13,6 +13,7 @@ from .cli_handlers.pack import handle_pack_command
 from .cli_handlers.orchestrator import handle_orchestrator_command
 from .cli_handlers.agent import handle_agent_command
 from .cli_handlers.eval import handle_eval_command
+from .cli_handlers.evidence import handle_evidence_command
 from .cli_handlers.benchmark import handle_benchmark_command
 from .cli_handlers.session import SESSION_COMMANDS, handle_session_command
 from .cli_handlers.supervisor import handle_supervisor_command
@@ -81,6 +82,8 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
         elif args.command == "agent":
             data = handle_agent_command(settings, args)
+        elif args.command == "evidence":
+            data = handle_evidence_command(settings, args)
         elif args.command == "eval":
             data, output_complete = handle_eval_command(settings, args)
             if output_complete:

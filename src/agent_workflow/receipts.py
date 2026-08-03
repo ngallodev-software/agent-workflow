@@ -38,6 +38,7 @@ LEGACY_SEALED_ARTIFACTS = tuple(
 )
 SEALED_TREES = ("collections", "scope")
 SEALED_OPTIONAL_ARTIFACTS = (
+    "repository-closeout.json",
     "result.json",
     "evaluation-runtime.json",
     "execution-metrics.json",
@@ -58,6 +59,7 @@ SEALED_OPTIONAL_ARTIFACTS = (
     "incident-events.jsonl",
     "remediation-events.jsonl",
     "process-result.json",
+    "recovery-finalization.json",
 )
 SEALED_OPTIONAL_TREES = ("assignments",)
 
@@ -264,6 +266,7 @@ def initial_completion(
         "commands": [],
         "unresolved": ["agent completion sidecar not finalized"],
         "usage": None,
+        "repository_closeout": None,
     }
 
 
@@ -273,6 +276,7 @@ def completion_template(
     ticket_id: str | None,
     pack_id: str | None,
     base_revision: str | None,
+    review: bool = False,
 ) -> dict[str, Any]:
     """Return a complete, editable starting point for a child handoff."""
     value = initial_completion(
@@ -283,6 +287,9 @@ def completion_template(
     )
     value["result"] = "completed"
     value["unresolved"] = []
+    if review:
+        value["review_disposition"] = "changes_requested"
+        value["unresolved"] = ["<review finding or blocker>"]
     value["criteria"] = [
         {
             "id": "<criterion-id>",
@@ -484,6 +491,11 @@ def _seal_run_unlocked(run_dir: Path, *, session_id: str) -> dict[str, Any]:
     provider_evidence = run_dir / "provider-evidence.json"
     if provider_evidence.is_file():
         read_contract(provider_evidence, "agent-workflow/provider-evidence/v1")
+    recovery_finalization = run_dir / "recovery-finalization.json"
+    if recovery_finalization.is_file():
+        read_contract(
+            recovery_finalization, "agent-workflow/recovery-finalization/v1"
+        )
     controls = run_dir / "control-events.jsonl"
     if controls.is_file():
         for line_number, raw in enumerate(controls.read_text(encoding="utf-8").splitlines(), start=1):

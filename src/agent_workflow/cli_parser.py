@@ -138,6 +138,26 @@ def build_parser(plugin_registry: PluginRegistry | None = None) -> argparse.Argu
     listing = worktree_commands.add_parser("list", help="list repository worktrees")
     listing.add_argument("repo", type=Path)
 
+    closeout = worktree_commands.add_parser(
+        "closeout", help="write an immutable repository integration receipt"
+    )
+    closeout.add_argument("repo", type=Path)
+    closeout.add_argument("--output", type=Path, required=True)
+    closeout.add_argument("--baseline-revision")
+    closeout.add_argument("--remote", default="origin")
+    closeout.add_argument("--fetch", action="store_true", help="refresh and verify remote state")
+    closeout.add_argument("--push", action="store_true", help="push HEAD to the resolved remote branch")
+    closeout.add_argument("--push-branch")
+    closeout.add_argument("--set-upstream", action="store_true")
+    closeout.add_argument("--integration-branch")
+    closeout.add_argument("--operational-tree", action="append", default=[])
+    closeout.add_argument("--disposable-tree", action="append", default=[])
+
+    closeout_verify = worktree_commands.add_parser(
+        "closeout-verify", help="verify a repository closeout receipt"
+    )
+    closeout_verify.add_argument("receipt", type=Path)
+
     launch = commands.add_parser(
         "launch", help="launch a prompt in a fresh tmux session"
     )
@@ -230,6 +250,11 @@ def build_parser(plugin_registry: PluginRegistry | None = None) -> argparse.Argu
         "repair", help="rebuild a mutable status projection from run authority"
     )
     repair.add_argument("session_id")
+
+    finalize = commands.add_parser(
+        "finalize", help="idempotently finalize a terminal unsealed delegation"
+    )
+    finalize.add_argument("session_id")
 
     supervisor = commands.add_parser(
         "supervisor",
@@ -328,7 +353,7 @@ def build_parser(plugin_registry: PluginRegistry | None = None) -> argparse.Argu
     )
     index_query.add_argument(
         "kind",
-        choices=("runs", "incidents", "permissions", "performance", "workflows", "workflow-nodes", "errors"),
+        choices=("runs", "incidents", "permissions", "performance", "workflows", "workflow-nodes", "repairs", "errors"),
     )
     index_query.add_argument("--session", dest="session_id")
     index_query.add_argument("--state")
@@ -415,6 +440,10 @@ def build_parser(plugin_registry: PluginRegistry | None = None) -> argparse.Argu
         "--keep-alive", action="store_true",
         help="keep the interactive executor available for explicit same-worktree reuse",
     )
+    agent_validate = agent_commands.add_parser(
+        "completion-validate", help="validate the current completion handoff before exit"
+    )
+    agent_validate.add_argument("session_id")
     agent_candidates = agent_commands.add_parser(
         "candidates", help="rank reusable agents for a worktree"
     )
@@ -464,6 +493,22 @@ def build_parser(plugin_registry: PluginRegistry | None = None) -> argparse.Argu
         "--acknowledge", required=True, choices=("FORCE-ACCEPT",),
         help="explicitly acknowledge the unauthenticated local override",
     )
+
+    evidence = commands.add_parser("evidence", help="append-only evidence repair commands")
+    evidence_commands = evidence.add_subparsers(dest="evidence_command", required=True)
+    evidence_repair = evidence_commands.add_parser(
+        "repair", help="normalize one sealed source artifact without mutating its run"
+    )
+    evidence_repair.add_argument("--source-run", required=True)
+    evidence_repair.add_argument("--source-receipt", required=True)
+    evidence_repair.add_argument("--artifact", required=True)
+    evidence_repair.add_argument("--adapter", default="completion-normalize-v1", choices=("completion-normalize-v1",))
+    evidence_repair.add_argument("--output-run", required=True, help="append-only repair identity")
+    evidence_repair.add_argument("--actor", required=True)
+    evidence_verify = evidence_commands.add_parser("verify", help="verify one supplemental evidence repair")
+    evidence_verify.add_argument("repair_id")
+    evidence_list = evidence_commands.add_parser("list", help="list verified and invalid evidence repairs")
+    evidence_list.add_argument("--source-run")
 
     evaluation = commands.add_parser("eval", help="evaluation commands")
     evaluation_commands = evaluation.add_subparsers(dest="eval_command", required=True)

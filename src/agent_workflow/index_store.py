@@ -24,6 +24,8 @@ from typing import Any, Iterable, Iterator
 from .config import Settings, enforce_trust
 from .contracts import load_schema, validate_instance
 from .errors import WorkflowError
+from .evidence_repair import evidence_repairs_root, list_evidence_repairs
+from .eval.outcomes import classify_attempt
 from .index_sources import (
     artifact_paths as _artifact_paths,
     discover_runs as _discover_runs,
@@ -666,6 +668,9 @@ def _index_run(
     status = _read_json(run_dir / "final-status.json") or _read_json(run_dir / "status.json") or {}
     process_result = _read_json(run_dir / "process-result.json")
     metrics = _read_json(run_dir / "execution-metrics.json")
+    ledger_row = _read_json(run_dir / "ledger-row.json") or {}
+    score_set = _read_json(run_dir / "scores" / "score-set.json") or {}
+    completion_collection = _read_json(run_dir / "collections" / "completion.json") or {}
 
     evidence_complete = 0
     final_receipt_sha256 = None
@@ -686,8 +691,10 @@ def _index_run(
             launch_schema,ticket_id,pack_id,workflow_id,workflow_node_id,retry_of_run_id,
             agent_name,agent_class,tier,executor,model,interactive,workdir,source_revision,
             branch,dirty_at_launch,created_at,started_at,finished_at,durable_status,
-            disposition,failure_category,exit_code,final_receipt_sha256,evidence_complete,indexed_at
-        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            disposition,failure_category,exit_code,final_receipt_sha256,evidence_complete,
+            executor_result,completion_result,policy_result,acceptance_eligible,
+            attempt_classification,score_verdict,evaluation_state,indexed_at
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (
             session_id,
             str(run_dir),
@@ -720,6 +727,13 @@ def _index_run(
             provenance.get("exit_code") if provenance.get("exit_code") is not None else (process_result or {}).get("exit_code"),
             final_receipt_sha256,
             evidence_complete,
+            ledger_row.get("executor_result") or status.get("executor_result"),
+            ledger_row.get("completion_result") or completion_collection.get("validation_status") or status.get("completion_result"),
+            ledger_row.get("policy_result") or status.get("policy_result"),
+            _bool_int(ledger_row.get("acceptance_eligible") if "acceptance_eligible" in ledger_row else status.get("acceptance_eligible")),
+            ledger_row.get("attempt_classification") or (classify_attempt(status, completion_result=completion_collection.get("validation_status")) if evidence_complete else None),
+            score_set.get("verdict") or ledger_row.get("evaluation_result"),
+            ledger_row.get("evaluation_state") or ("verified" if score_set.get("verdict") in {"pass", "fail", "invalid"} else "not_verified" if status.get("evaluation_path") else "not_planned"),
             indexed_at,
         ),
     )
@@ -931,6 +945,52 @@ def _record_index_error(
     return category
 
 
+
+def _sync_evidence_repairs(
+    connection: sqlite3.Connection,
+    settings: Settings,
+    *,
+    source_session_id: str | None,
+) -> list[dict[str, Any]]:
+    if source_session_id is None:
+        connection.execute("DELETE FROM evidence_repairs")
+    else:
+        connection.execute(
+            "DELETE FROM evidence_repairs WHERE source_session_id = ?",
+            (source_session_id,),
+        )
+    indexed: list[dict[str, Any]] = []
+    for row in list_evidence_repairs(settings, source_session_id=source_session_id):
+        if row.get("validation_result") != "valid":
+            continue
+        repair_root = Path(str(row["repair_dir"]))
+        record = _read_json(repair_root / "evidence-repair.json") or {}
+        receipt_sha256 = _sha256_file(repair_root / "repair-receipt.json")
+        adapter = row.get("adapter") if isinstance(row.get("adapter"), dict) else {}
+        connection.execute(
+            """INSERT OR REPLACE INTO evidence_repairs(
+                repair_id,source_session_id,source_final_receipt_sha256,
+                source_artifact_path,source_artifact_sha256,adapter_id,adapter_version,
+                adapter_sha256,canonical_sha256,validation_result,source_mutation_verified,
+                repair_receipt_sha256,repair_dir,created_at,actor,indexed_at
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                row["repair_id"], row["source_session_id"],
+                row["source_final_receipt_sha256"], row["source_artifact_path"],
+                row["source_artifact_sha256"], adapter.get("id"),
+                adapter.get("version"), adapter.get("sha256"),
+                row["canonical_sha256"], row["validation_result"],
+                int(bool(row.get("source_mutation_verified"))), receipt_sha256,
+                str(repair_root), record.get("created_at"), record.get("actor"), utc_now(),
+            ),
+        )
+        indexed.append({
+            "repair_id": row["repair_id"],
+            "source_session_id": row["source_session_id"],
+            "validation_result": row["validation_result"],
+        })
+    return indexed
+
 def _sync_locked(
     settings: Settings,
     *,
@@ -1021,6 +1081,11 @@ def _sync_locked(
                     _delete_run_projection(connection, stale)
                 pruned.append(stale)
         with connection:
+            _sync_evidence_repairs(
+                connection,
+                settings,
+                source_session_id=session_id,
+            )
             connection.execute(
                 "INSERT OR REPLACE INTO index_metadata(key,value) VALUES('last_sync_at',?)",
                 (utc_now(),),
@@ -1234,12 +1299,19 @@ def _review_verification(settings: Settings, connection: sqlite3.Connection, ses
         )
         if completion.get("result") != "completed" or completion.get("unresolved"):
             raise WorkflowError("review completion is not a successful direct gate")
+        disposition = completion.get("review_disposition")
+        if disposition is not None and disposition != "approved":
+            raise WorkflowError(
+                f"review completion disposition is not approved: {disposition}"
+            )
         if any(item.get("result") != "pass" for item in completion.get("criteria", [])):
             raise WorkflowError("review completion contains a failed direct gate")
         if any(item.get("exit_code") != 0 for item in completion.get("commands", [])):
             raise WorkflowError("review completion contains a failed command gate")
         if collection.get("validation_status") != "valid":
             raise WorkflowError("review completion collection is not valid")
+        if final_status.get("policy_result") == "failed":
+            raise WorkflowError("review run failed execution policy")
         chain = lifecycle_receipts(target, expected_final_receipt_sha256=final_digest)
         if not chain or chain[-1]["receipt"].get("action") != "reviewed":
             raise WorkflowError("review target has no current reviewed lifecycle gate")

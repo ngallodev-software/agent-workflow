@@ -33,6 +33,10 @@ QUERY_COLUMNS: dict[str, tuple[str, Sequence[str]]] = {
         "SELECT workflow_id,node_id,kind,ticket_id,bound_run_id,state,attempt,executor,model,terminal_reason FROM workflow_nodes",
         ("workflow_id", "node_id", "kind", "ticket_id", "bound_run_id", "state", "attempt", "executor", "model", "terminal_reason"),
     ),
+    "repairs": (
+        "SELECT repair_id,source_session_id,source_final_receipt_sha256,source_artifact_path,source_artifact_sha256,adapter_id,adapter_version,adapter_sha256,canonical_sha256,validation_result,source_mutation_verified,repair_receipt_sha256,repair_dir,created_at,actor,indexed_at FROM evidence_repairs",
+        ("repair_id", "source_session_id", "source_final_receipt_sha256", "source_artifact_path", "source_artifact_sha256", "adapter_id", "adapter_version", "adapter_sha256", "canonical_sha256", "validation_result", "source_mutation_verified", "repair_receipt_sha256", "repair_dir", "created_at", "actor", "indexed_at"),
+    ),
     "errors": (
         "SELECT error_id,session_id,source_path,detected_at,category,detail FROM index_errors",
         ("error_id", "session_id", "source_path", "detected_at", "category", "detail"),
@@ -71,7 +75,7 @@ def build_query(
         "permissions": "state",
     }.get(kind)
     filters = [
-        ("session_id", session_id),
+        ("source_session_id" if kind == "repairs" else "session_id", session_id),
         (state_column, state),
         ("category", category),
         ("executor", executor),

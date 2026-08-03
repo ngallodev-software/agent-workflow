@@ -35,6 +35,11 @@ Plugin candidates are discovered from Python package metadata but imported only 
 agent-workflow worktree create REPO TICKET BASE [--dest PATH] [--branch NAME] [--allow-dirty]
 agent-workflow worktree list REPO
 agent-workflow worktree remove REPO WORKTREE [--delete-branch] [--force]
+agent-workflow worktree closeout REPO --output PATH
+  [--baseline-revision REV] [--remote NAME] [--fetch] [--push]
+  [--push-branch NAME] [--set-upstream] [--integration-branch NAME]
+  [--operational-tree PATH]... [--disposable-tree PATH]...
+agent-workflow worktree closeout-verify RECEIPT
 
 agent-workflow launch SESSION WORKDIR PROMPT
   [--ticket ID] [--tier low|medium|high|critical] [--pack PACK] [--job JOB]
@@ -60,6 +65,12 @@ agent-workflow restart SESSION [--new-session NAME]
 Configured launches enforce class/executor/model allowlists and permission arguments. Implementation launches are interactive by default; exploration/review classes are non-interactive by default. At a full tmux pane limit, the CLI reports idle candidates and requires an explicit close-idle, structured non-interactive, or cancel choice. A no-go model requires `--allow-no-go-model`, which is recorded. `--structured` and native interactive TUI mode are mutually exclusive. Git worktrees must be clean unless `--allow-dirty` is explicit; retries preserve prior evidence and lineage.
 
 `archive` is the recoverable `list` cleanup operation; `clear` is an alias. It never deletes evidence. A run must have a valid sealed final receipt, completed/valid completion collection, authoritative accepted lifecycle receipt, matching accepted revision, and a closed tmux session. `--all-verified` skips runs that fail a gate and reports the reason. Use `--dry-run` first. A real move requires the explicit `--verified` confirmation and writes a read-only archive manifest under the state archive root.
+
+`worktree closeout` writes a read-only, digest-bound repository receipt. Network
+operations are opt-in. Offline observations are marked cached/unverified;
+`pushed=true` is derived only after a post-push remote query returns the exact
+local HEAD. The receipt keeps source, operational, and disposable dirtiness,
+ahead/behind state, fetch/push results, and integration ancestry separate.
 
 ## Supervisor
 
@@ -104,7 +115,7 @@ agent-workflow index status
 agent-workflow index sync [--run SESSION] [--active-only]
 agent-workflow index rebuild [--run SESSION] [--active-only]
 agent-workflow index verify [--full] [--review SESSION]
-agent-workflow index query runs|incidents|permissions|performance|workflows|workflow-nodes|errors
+agent-workflow index query runs|incidents|permissions|performance|workflows|workflow-nodes|repairs|errors
   [--session SESSION] [--state STATE] [--category CATEGORY]
   [--executor NAME] [--model MODEL] [--pack PACK] [--limit N]
 ```
@@ -112,6 +123,24 @@ agent-workflow index query runs|incidents|permissions|performance|workflows|work
 `status` reports the database path, schema/application versions, source and indexed run counts, freshness, journal mode, historical quarantines, and blocking index errors. `sync` reconciles only changed source directories; `rebuild` replaces the projection from authoritative JSON/JSONL and sealed receipts. `verify` always runs SQLite integrity and foreign-key checks; `--full` additionally rehashes indexed source files and reports preserved legacy artifacts separately from blocking current mismatches. `--review SESSION` adds a separately named `review_valid` result for that indexed sealed run and its direct completion/lifecycle gate; it never changes global `valid`. Unsafe paths, malformed current schemas, and changed current evidence remain failures.
 
 `query` exposes fixed, parameterized operational views rather than arbitrary SQL. JSON output uses an `agent-workflow/index-query/v1` envelope containing freshness, stale/error counts, and `rows`; human output prints the same freshness summary before the table. Rows include source provenance. The index is disposable: lifecycle, permission, workflow, remediation, review, and acceptance authority remains in source artifacts and sealed receipts. Raw prompts, terminal/message bodies, and large logs are not copied into SQLite. See [SQLite evidence index architecture](SQLITE_EVIDENCE_INDEX_ARCHITECTURE.md).
+
+## Supplemental evidence repair
+
+```bash
+agent-workflow evidence repair \
+  --source-run RUN_ID \
+  --source-receipt FINAL_RECEIPT_SHA256 \
+  --artifact result.json \
+  --adapter completion-normalize-v1 \
+  --output-run REPAIR_ID \
+  --actor COORDINATOR
+agent-workflow evidence verify REPAIR_ID
+agent-workflow evidence list [--source-run RUN_ID]
+```
+
+`evidence repair` creates a separate append-only supplemental interpretation under the state root. It binds the exact sealed source run, final-receipt digest, artifact path and artifact digest. The built-in adapter may normalize only completion schema/session identity and review-disposition encoding; it refuses to invent or rewrite criteria, command arguments, command receipts, revisions, changed paths, unresolved findings, ticket/pack identity, or usage. The source run is fingerprinted before and after repair and is never rewritten.
+
+A repair has no acceptance authority. Evaluation ledgers and the `repairs` index view link verified repairs to the original attempt while retaining the original completion validity and acceptance result. Changed receipts, changed repair artifacts, writable repair artifacts, symlinks, unsafe paths, conflicting repair IDs, and malformed substantive evidence fail closed.
 
 The explicit-only integrity foundation is separate from run artifacts and the legacy `index_errors` projection:
 

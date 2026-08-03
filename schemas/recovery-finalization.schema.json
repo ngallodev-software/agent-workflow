@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/recovery-finalization/v1",
+  "type": "object",
+  "required": [
+    "schema",
+    "session_id",
+    "triggered_at",
+    "actor",
+    "reason",
+    "source_status",
+    "observed_state",
+    "tmux_alive",
+    "runner",
+    "executor",
+    "process_result_present",
+    "executor_result",
+    "completion_result",
+    "terminal_status",
+    "failure_category"
+  ],
+  "properties": {
+    "schema": {"const": "agent-workflow/recovery-finalization/v1"},
+    "session_id": {"type": "string"},
+    "triggered_at": {"type": "string"},
+    "actor": {"type": "string"},
+    "reason": {"type": "string"},
+    "source_status": {"type": ["string", "null"]},
+    "observed_state": {"type": ["string", "null"]},
+    "tmux_alive": {"type": ["boolean", "null"]},
+    "runner": {"type": "object"},
+    "executor": {"type": "object"},
+    "process_result_present": {"type": "boolean"},
+    "executor_result": {"enum": ["completed", "failed", "interrupted", "lost"]},
+    "completion_result": {"enum": ["valid", "missing", "invalid"]},
+    "terminal_status": {"enum": ["failed", "interrupted"]},
+    "failure_category": {"type": "string"}
+  },
+  "additionalProperties": false
+}

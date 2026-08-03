@@ -15,7 +15,21 @@
     "validation_status": {"enum": ["valid", "missing", "invalid"]},
     "validation_errors": {"type": "array", "items": {"type": "string"}},
     "collected_at": {"type": "string"},
-    "stored_path": {"type": ["string", "null"]}
+    "stored_path": {"type": ["string", "null"]},
+    "repository_closeout_source_path": {"type": ["string", "null"]},
+    "repository_closeout_source_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+    "repository_closeout_stored_path": {"type": ["string", "null"]},
+    "repository_closeout_payload_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+    "repository_closeout_claims": {
+      "type": ["object", "null"],
+      "required": ["committed", "pushed", "merged"],
+      "properties": {
+        "committed": {"type": "boolean"},
+        "pushed": {"type": "boolean"},
+        "merged": {"type": ["boolean", "null"]}
+      },
+      "additionalProperties": false
+    }
   },
   "additionalProperties": false
 }

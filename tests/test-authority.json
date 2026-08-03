@@ -1,0 +1,297 @@
+{
+  "default_suite": {
+    "max_collected_cases": 341,
+    "max_runtime_seconds": 420
+  },
+  "invariants": [
+    {
+      "authority": "durability",
+      "max_test_functions": 6,
+      "mock_rationale": "Synthetic clock and lifecycle boundaries isolate deterministic retry and timeout transitions.",
+      "path": "tests/invariants/test_benchmark_lifecycle_hardening.py",
+      "rationale": "Exhaustive benchmark lifecycle, retry, and receipt transitions are cheaper and more deterministic than full paired-run reproduction."
+    },
+    {
+      "authority": "process",
+      "max_test_functions": 12,
+      "mock_rationale": "Fake runner, tmux, and timing boundaries avoid host and paid-provider dependence.",
+      "path": "tests/invariants/test_benchmark_operator_experience.py",
+      "rationale": "Bounded runner, pane, and synthetic fast-suite edge behavior requires deterministic process fixtures rather than paid or host-dependent runs."
+    },
+    {
+      "authority": "path-security",
+      "max_test_functions": 1,
+      "mock_rationale": "The size ceiling is patched to exercise oversized artifacts without allocating hundreds of MiB.",
+      "path": "tests/invariants/test_codebase_memory_preflight_hygiene.py",
+      "rationale": "Repository-local tooling residue must be classified across authorized, unauthorized, and oversized path cases."
+    },
+    {
+      "authority": "evaluation",
+      "max_test_functions": 7,
+      "mock_rationale": "Targeted pure-function seams isolate blinding and scoring edge conditions.",
+      "path": "tests/invariants/test_comparative_benchmark_contracts.py",
+      "private_import_rationale": "These pure scoring helpers are the smallest authority surface for exhaustive pair-identity and defect-unblinding matrices.",
+      "private_imports": [
+        "agent_workflow.benchmarking.review._require_exact_pair_ids",
+        "agent_workflow.benchmarking.review._unblind_blocking_defects",
+        "agent_workflow.benchmarking.scoring._observed_machine_score"
+      ],
+      "rationale": "Scoring, blinding, pair identity, and defect-unblinding rules require exact adversarial contract matrices."
+    },
+    {
+      "authority": "process",
+      "max_test_functions": 13,
+      "mock_rationale": "Process and policy adapters are replaced to prove bounded fail-closed orchestration.",
+      "path": "tests/invariants/test_comparative_benchmark_operating_policy.py",
+      "rationale": "Process delivery, worktree isolation, and operating-policy failures require bounded adversarial cases."
+    },
+    {
+      "authority": "durability",
+      "max_test_functions": 18,
+      "mock_rationale": "Delivery adapters and Git observations are replaced to exercise durable binding failures deterministically.",
+      "path": "tests/invariants/test_completion_git_and_steering.py",
+      "rationale": "Completion binding, repository identity, and steering delivery are cross-cutting durable-state invariants."
+    },
+    {
+      "authority": "replay",
+      "max_test_functions": 7,
+      "path": "tests/invariants/test_consumer_cursors.py",
+      "rationale": "Cursor monotonicity, replay, and compaction behavior require exact sequence matrices."
+    },
+    {
+      "authority": "durability",
+      "max_test_functions": 5,
+      "path": "tests/invariants/test_durable_state.py",
+      "rationale": "Append-only state, sequence, and replay boundaries require isolated deterministic coverage."
+    },
+    {
+      "authority": "evaluation",
+      "max_test_functions": 10,
+      "path": "tests/invariants/test_evaluation_templating.py",
+      "rationale": "Template and schema semantics require exhaustive invalid and unavailable-data matrices."
+    },
+    {
+      "authority": "durability",
+      "max_test_functions": 2,
+      "path": "tests/invariants/test_evidence_repair.py",
+      "rationale": "Supplemental evidence must fail closed for unsafe bindings, symlinks, tampering, and invented evidence."
+    },
+    {
+      "authority": "accounting",
+      "max_test_functions": 1,
+      "path": "tests/invariants/test_execution_policy.py",
+      "rationale": "Budget-policy classification must remain independent from executor outcome across all configured and unconfigured cases."
+    },
+    {
+      "authority": "path-security",
+      "max_test_functions": 7,
+      "mock_rationale": "Filesystem race and schema-index seams are controlled to reproduce substitution attacks.",
+      "path": "tests/invariants/test_hard_002_path_integrity.py",
+      "private_import_rationale": "The schema index is a security-sensitive cache whose substitution behavior cannot be reached economically through every public journey.",
+      "private_imports": [
+        "agent_workflow.contracts._schema_index"
+      ],
+      "rationale": "Archive, manifest, schema lookup, and beneath-root path integrity require adversarial filesystem coverage."
+    },
+    {
+      "authority": "path-security",
+      "max_test_functions": 6,
+      "path": "tests/invariants/test_hard_008_config_trust.py",
+      "rationale": "Configuration trust and executable identity need hostile path and policy matrices."
+    },
+    {
+      "authority": "durability",
+      "max_test_functions": 7,
+      "mock_rationale": "Health samples and remediation adapters are injected because real stalls are nondeterministic and slow.",
+      "path": "tests/invariants/test_health_supervisor.py",
+      "rationale": "Health classification and bounded remediation ceilings require synthetic observations that are impractical through full host journeys."
+    },
+    {
+      "authority": "scheduler",
+      "max_test_functions": 9,
+      "path": "tests/invariants/test_hierarchy_contracts.py",
+      "rationale": "Capability narrowing, budget inheritance, and hierarchy identity require exhaustive contract matrices."
+    },
+    {
+      "authority": "replay",
+      "max_test_functions": 8,
+      "path": "tests/invariants/test_hierarchy_journals.py",
+      "rationale": "Append-only hierarchy journal ordering and replay require deterministic sequence and tamper cases."
+    },
+    {
+      "authority": "durability",
+      "max_test_functions": 7,
+      "path": "tests/invariants/test_hierarchy_receipts.py",
+      "rationale": "Team and root receipt sealing, mutation invalidation, and budget aggregation require adversarial evidence matrices."
+    },
+    {
+      "authority": "accounting",
+      "max_test_functions": 3,
+      "path": "tests/invariants/test_index_queries_boundary.py",
+      "rationale": "Curated SQL filters, bound limits, and freshness envelopes require injection-safe query matrices."
+    },
+    {
+      "authority": "path-security",
+      "max_test_functions": 5,
+      "path": "tests/invariants/test_index_sources_boundary.py",
+      "rationale": "Source discovery, stable reads, symlink rejection, and fingerprints require adversarial filesystem cases."
+    },
+    {
+      "authority": "evaluation",
+      "max_test_functions": 1,
+      "path": "tests/invariants/test_ledger_evaluation_semantics.py",
+      "rationale": "Ledger rows must preserve non-planned evaluation semantics without conflating them with failures."
+    },
+    {
+      "authority": "accounting",
+      "max_test_functions": 4,
+      "path": "tests/invariants/test_luna_effort_policy.py",
+      "rationale": "Model effort selection and fallback accounting require a compact policy matrix."
+    },
+    {
+      "authority": "scheduler",
+      "max_test_functions": 1,
+      "path": "tests/invariants/test_manifest_native_pack.py",
+      "rationale": "Manifest-native packs must reject unknown schemas and dependency cycles independently of happy-path CLI journeys."
+    },
+    {
+      "authority": "path-security",
+      "max_test_functions": 5,
+      "path": "tests/invariants/test_mcp_read_boundary.py",
+      "private_import_rationale": "Pagination and result-normalization helpers are the bounded read-only authority surfaces exercised by the MCP server.",
+      "private_imports": [
+        "agent_workflow.mcp.server._service_result",
+        "agent_workflow.mcp.services._page"
+      ],
+      "rationale": "MCP pagination and service-result limits require exact read-only boundary matrices."
+    },
+    {
+      "authority": "replay",
+      "max_test_functions": 7,
+      "mock_rationale": "Signal, cursor, and batch boundaries are controlled to prove replay and shutdown behavior.",
+      "path": "tests/invariants/test_orchestrator_inbox.py",
+      "rationale": "Inbox import, deduplication, fairness, signaling, and cursor recovery require deterministic replay matrices."
+    },
+    {
+      "authority": "path-security",
+      "max_test_functions": 11,
+      "mock_rationale": "Entry-point discovery and import boundaries are controlled to prove import suppression and atomic rollback.",
+      "path": "tests/invariants/test_plugin_host.py",
+      "rationale": "Plugin discovery and registration must fail closed for imports, collisions, traversal, tampering, and rollback."
+    },
+    {
+      "authority": "process",
+      "max_test_functions": 2,
+      "mock_rationale": "Synthetic clocks and process handles exercise timeout and cancellation without flaky sleeps.",
+      "path": "tests/invariants/test_process_boundaries.py",
+      "rationale": "Timeout, process-group cancellation, output caps, environment policy, and redaction require adversarial process matrices."
+    },
+    {
+      "authority": "accounting",
+      "max_test_functions": 3,
+      "path": "tests/invariants/test_provider_and_evaluation.py",
+      "rationale": "Provider accounting, duplicate identities, and evaluator semantics require exact numeric matrices."
+    },
+    {
+      "authority": "release-evidence",
+      "max_test_functions": 8,
+      "path": "tests/invariants/test_release_evidence.py",
+      "rationale": "Release-evidence generation must distinguish technical failure, governance blockers, and claim provenance."
+    },
+    {
+      "authority": "durability",
+      "max_test_functions": 4,
+      "path": "tests/invariants/test_repository_closeout.py",
+      "rationale": "Remote state, push verification, dirty classification, and receipt tamper handling require real Git edge matrices."
+    },
+    {
+      "authority": "evaluation",
+      "max_test_functions": 9,
+      "path": "tests/invariants/test_sealed_run_assessment.py",
+      "private_import_rationale": "Trial-collection verification is the security-sensitive decision point for sealed comparability.",
+      "private_imports": [
+        "agent_workflow.eval.assessment._verify_trial_collection"
+      ],
+      "rationale": "Sealed trial collections and comparability decisions require adversarial evidence verification."
+    },
+    {
+      "authority": "path-security",
+      "max_test_functions": 4,
+      "path": "tests/invariants/test_security_boundaries.py",
+      "rationale": "Seal, traversal, symlink, and read-only boundaries require adversarial filesystem matrices."
+    },
+    {
+      "authority": "replay",
+      "max_test_functions": 5,
+      "mock_rationale": "Message, bridge, and tmux adapters are controlled while durable ordering remains real.",
+      "path": "tests/invariants/test_session_control_boundary.py",
+      "rationale": "Durable message ordering, wakeup replay, and bridge routing require deterministic state injection."
+    },
+    {
+      "authority": "durability",
+      "max_test_functions": 18,
+      "path": "tests/invariants/test_sqlite_index.py",
+      "rationale": "Projection rebuild, migration, tamper, freshness, and typed query behavior require generated multi-run matrices."
+    },
+    {
+      "authority": "durability",
+      "max_test_functions": 11,
+      "mock_rationale": "Synthetic pane listings reproduce topology races without requiring a live tmux server.",
+      "path": "tests/invariants/test_tmux_pane_identity.py",
+      "rationale": "Pane identity, role selection, and lifecycle reconciliation require synthetic tmux topology matrices."
+    },
+    {
+      "authority": "path-security",
+      "max_test_functions": 3,
+      "path": "tests/invariants/test_yaml_loading.py",
+      "private_import_rationale": "The loader helper is the security-sensitive YAML construction boundary.",
+      "private_imports": [
+        "agent_workflow.manifests._load_yaml"
+      ],
+      "rationale": "Safe YAML loading must reject object construction while preserving supported nested manifests."
+    }
+  ],
+  "layers": {
+    "acceptance": {
+    "max_collected_cases": 64,
+      "max_files": 20,
+      "max_test_functions": 61,
+      "path": "tests/acceptance"
+    },
+    "future": {
+      "max_collected_cases": 11,
+      "max_files": 4,
+      "max_test_functions": 11,
+      "path": "tests/future"
+    },
+    "invariants": {
+      "max_collected_cases": 249,
+      "max_files": 35,
+      "max_test_functions": 230,
+      "path": "tests/invariants"
+    },
+    "live": {
+      "max_collected_cases": 2,
+      "max_files": 1,
+      "max_test_functions": 2,
+      "path": "tests/live"
+    },
+    "release": {
+      "max_collected_cases": 15,
+      "max_files": 3,
+      "max_test_functions": 15,
+      "path": "tests/release"
+    },
+    "root": {
+      "max_collected_cases": 2,
+      "max_files": 1,
+      "max_test_functions": 2,
+      "path": "tests/test_preflight_journey.py"
+    }
+  },
+  "schema": "agent-workflow/test-authority/v1",
+  "static_budgets": {
+    "max_subprocess_calls": 72,
+    "max_wheel_build_sites": 2
+  }
+}

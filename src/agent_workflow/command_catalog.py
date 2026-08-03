@@ -28,6 +28,7 @@ _ROLE_COMMANDS: dict[str, frozenset[str]] = {
             "ack",
             "watch",
             "agent context",
+            "agent completion-validate",
             "agent task-complete",
         }
     ),
@@ -38,6 +39,7 @@ _ROLE_COMMANDS: dict[str, frozenset[str]] = {
             "ack",
             "watch",
             "agent context",
+            "agent completion-validate",
             "agent task-complete",
             "assess-sealed-runs",
             "ledger",

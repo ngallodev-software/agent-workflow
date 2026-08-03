@@ -36,7 +36,7 @@ session context, configured pane capacity, idle reusable candidates, ticket and
 pack identity, worktree, and whether the run needs structured post-run evidence.
 The child must perform [`WORKTREE_PREFLIGHT.md`](../../docs/references/WORKTREE_PREFLIGHT.md)
 as its first worktree action: verify the exact worktree, probe the optional
-codebase-memory service once, and use its exact-worktree index when available.
+codebase-memory service once, and use its non-persistent exact-worktree index when available. Local persistence is forbidden unless `.codebase-memory/` was pre-authorized as a disposable tree and cleanup remains host-owned.
 If it is unavailable or permission-gated, the child records the limitation and
 uses bounded RTK shell discovery without retrying. Launch, implementation,
 review, and acceptance must never depend on MCP availability or silently

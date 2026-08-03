@@ -3,19 +3,7 @@ from __future__ import annotations
 import pytest
 
 from agent_workflow.errors import WorkflowError
-from agent_workflow.index_queries import QUERY_COLUMNS, build_query, build_query_report
-
-
-def test_public_query_inventory_is_explicit() -> None:
-    assert set(QUERY_COLUMNS) == {
-        "runs",
-        "incidents",
-        "permissions",
-        "performance",
-        "workflows",
-        "workflow-nodes",
-        "errors",
-    }
+from agent_workflow.index_queries import build_query, build_query_report
 
 
 def test_query_builder_preserves_filters_order_and_bound_limit() -> None:

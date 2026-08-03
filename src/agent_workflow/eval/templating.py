@@ -9,12 +9,18 @@ from typing import Any, Mapping, Sequence
 
 from ..contracts import read_contract, validate_instance
 from ..errors import WorkflowError
+from ..evidence_repair import supplemental_repairs_for_run
 from ..lifecycle import lifecycle_receipts
 from ..path import inventory_tree, read_regular_file, require_directory
-from ..receipts import read_sealed_contract, verify_seal_details
+from ..receipts import read_sealed_artifact_bytes, read_sealed_contract, verify_seal_details
+from ..repository_closeout import (
+    repository_closeout_summary,
+    validate_repository_closeout_payload,
+)
 from ..util import atomic_write_json, sha256_file
 from .compare import compare_trials
-from .scoring import validate_score_set
+from .outcomes import classify_attempt
+from .scoring import evaluation_policy_for_run, validate_score_set
 from .trials import load_trials
 
 BENCHMARK_MANIFEST_SCHEMA = "agent-workflow/benchmark-manifest/v1"
@@ -540,59 +546,88 @@ def _read_object(path: Path) -> tuple[dict[str, Any] | None, str | None]:
 
 def build_ledger_row(run_dir: Path) -> dict[str, Any]:
     run_dir = run_dir.resolve()
-    status, status_error = _read_object(run_dir / "status.json")
+    mutable_status, status_error = _read_object(run_dir / "status.json")
     failures = [status_error] if status_error and (run_dir / "status.json").exists() else []
     receipt_digest = None
     receipt_verified = False
     final_receipt: dict[str, Any] | None = None
+    final_status: dict[str, Any] = {}
     completion: dict[str, Any] = {}
+    completion_collection: dict[str, Any] = {}
     provenance: dict[str, Any] = {}
     runtime: dict[str, Any] = {}
+    repository_closeout: dict[str, Any] | None = None
+    sealed_paths: set[str] = set()
+
     try:
         final_receipt, receipt_digest = verify_seal_details(run_dir)
         receipt_verified = True
-        completion, _ = read_sealed_contract(
-            run_dir,
-            final_receipt,
-            "completion.json",
-            "agent-workflow/completion/v1",
-        )
-        provenance, _ = read_sealed_contract(
-            run_dir,
-            final_receipt,
-            "run-provenance.json",
-            "agent-workflow/run-provenance/v1",
-        )
         sealed_paths = {
-            item.get("path")
+            str(item.get("path"))
             for item in final_receipt.get("artifacts", [])
-            if isinstance(item, dict)
+            if isinstance(item, dict) and isinstance(item.get("path"), str)
         }
-        if "evaluation-runtime.json" in sealed_paths:
-            runtime, _ = read_sealed_contract(
-                run_dir,
-                final_receipt,
-                "evaluation-runtime.json",
-                "agent-workflow/evaluation-runtime/v1",
-            )
     except WorkflowError as exc:
         failures.append(str(exc))
+
+    if receipt_verified and final_receipt is not None:
+        contracts = (
+            ("final-status.json", "agent-workflow/session-status/v2", "status"),
+            ("completion.json", "agent-workflow/completion/v1", "completion"),
+            ("collections/completion.json", "agent-workflow/completion-collection/v1", "collection"),
+            ("run-provenance.json", "agent-workflow/run-provenance/v1", "provenance"),
+        )
+        for relative_path, schema, target in contracts:
+            try:
+                value, _ = read_sealed_contract(run_dir, final_receipt, relative_path, schema)
+            except WorkflowError as exc:
+                failures.append(str(exc))
+                continue
+            if target == "status":
+                final_status = value
+            elif target == "completion":
+                completion = value
+            elif target == "collection":
+                completion_collection = value
+            else:
+                provenance = value
+        if "evaluation-runtime.json" in sealed_paths:
+            try:
+                runtime, _ = read_sealed_contract(
+                    run_dir,
+                    final_receipt,
+                    "evaluation-runtime.json",
+                    "agent-workflow/evaluation-runtime/v1",
+                )
+            except WorkflowError as exc:
+                failures.append(str(exc))
+        if "repository-closeout.json" in sealed_paths:
+            try:
+                closeout_data, _ = read_sealed_artifact_bytes(
+                    run_dir,
+                    final_receipt,
+                    "repository-closeout.json",
+                )
+                closeout_receipt = validate_repository_closeout_payload(
+                    closeout_data,
+                    artifact=str(run_dir / "repository-closeout.json"),
+                )
+                repository_closeout = repository_closeout_summary(closeout_receipt)
+            except WorkflowError as exc:
+                failures.append(str(exc))
 
     score, score_error = _read_object(run_dir / "scores" / "score-set.json")
     if score_error and (run_dir / "scores" / "score-set.json").exists():
         failures.append(score_error)
+    effective_status = final_status or mutable_status or {}
     evaluation_required = bool(
         runtime
-        or (status or {}).get("evaluation_path")
+        or effective_status.get("evaluation_path")
         or (run_dir / "evaluation-runtime.json").is_file()
+        or (isinstance(final_receipt, dict) and bool(evaluation_policy_for_run(run_dir, final_receipt)))
     )
     score_verdict = None
-    if (
-        score is not None
-        and receipt_verified
-        and final_receipt is not None
-        and receipt_digest is not None
-    ):
+    if score is not None and receipt_verified and final_receipt is not None and receipt_digest is not None:
         try:
             validated_score = validate_score_set(
                 run_dir,
@@ -615,53 +650,68 @@ def build_ledger_row(run_dir: Path) -> dict[str, Any]:
     disposition_path = None
     if receipt_verified:
         try:
-            chain = lifecycle_receipts(
-                run_dir, expected_final_receipt_sha256=receipt_digest
-            )
+            chain = lifecycle_receipts(run_dir, expected_final_receipt_sha256=receipt_digest)
             if chain:
                 disposition = chain[-1]["receipt"].get("action")
                 disposition_path = chain[-1]["path"].relative_to(run_dir).as_posix()
             override_path = run_dir / "force-accept-receipt.json"
             if override_path.is_file():
                 override = json.loads(override_path.read_text(encoding="utf-8"))
-                disposition = override.get("schema") == "agent-workflow/force-accept-receipt/v1" and "force-accepted" or disposition
+                disposition = "force-accepted" if override.get("schema") == "agent-workflow/force-accept-receipt/v1" else disposition
                 disposition_path = override_path.relative_to(run_dir).as_posix()
         except WorkflowError as exc:
             failures.append(str(exc))
     workflow = provenance.get("workflow")
     case_id = workflow.get("node_id") if isinstance(workflow, Mapping) else None
+    completion_result = completion_collection.get("validation_status") or effective_status.get("completion_result")
+    executor_result = effective_status.get("executor_result")
+    policy_result = effective_status.get("policy_result") or "not_evaluated"
+    acceptance_eligible = bool(effective_status.get("acceptance_eligible", False))
+    attempt_classification = classify_attempt(
+        effective_status,
+        receipt_verified=receipt_verified,
+        completion_result=completion_result if isinstance(completion_result, str) else None,
+    )
     evidence_paths = {
         "status": "status.json" if (run_dir / "status.json").is_file() else None,
         "completion": "completion.json" if (run_dir / "completion.json").is_file() else None,
+        "completion_collection": "collections/completion.json" if (run_dir / "collections" / "completion.json").is_file() else None,
         "run_provenance": "run-provenance.json" if (run_dir / "run-provenance.json").is_file() else None,
         "final_receipt": "final-receipt.json" if (run_dir / "final-receipt.json").is_file() else None,
         "evaluation_runtime": "evaluation-runtime.json" if (run_dir / "evaluation-runtime.json").is_file() else None,
         "score_set": "scores/score-set.json" if (run_dir / "scores" / "score-set.json").is_file() else None,
         "evaluation_report": "reports/evaluation.md" if (run_dir / "reports" / "evaluation.md").is_file() else None,
         "trial_collection": "trials.json" if (run_dir / "trials.json").is_file() else None,
+        "repository_closeout": "repository-closeout.json" if (run_dir / "repository-closeout.json").is_file() else None,
         "lifecycle_disposition": disposition_path,
     }
+    supplemental_repairs = (
+        supplemental_repairs_for_run(run_dir, receipt_digest)
+        if receipt_verified and receipt_digest is not None
+        else []
+    )
     row = {
         "schema": LEDGER_ROW_SCHEMA,
         "run_id": run_dir.name,
-        "ticket_id": completion.get("ticket_id") or runtime.get("ticket_id"),
+        "ticket_id": completion.get("ticket_id") or runtime.get("ticket_id") or effective_status.get("ticket_id"),
         "case_id": case_id,
         "source_revision": provenance.get("source_revision"),
-        "pack_id": completion.get("pack_id"),
+        "pack_id": completion.get("pack_id") or effective_status.get("pack_id"),
         "pack_checksum_reference": provenance.get("pack_manifest_sha256"),
         "run_receipt_sha256": receipt_digest,
-        "receipt_verification": (
-            "verified"
-            if receipt_verified
-            else "not_verified"
-            if (run_dir / "final-receipt.json").exists()
-            else "unavailable"
-        ),
+        "receipt_verification": "verified" if receipt_verified else "not_verified" if (run_dir / "final-receipt.json").exists() else "unavailable",
+        "executor_result": executor_result,
+        "completion_result": completion_result,
+        "policy_result": policy_result,
+        "acceptance_eligible": acceptance_eligible,
+        "attempt_classification": attempt_classification,
+        "supplemental_repairs": supplemental_repairs,
+        "repository_closeout": repository_closeout,
         "evaluation_state": evaluation_state,
         "evaluation_result": score_verdict,
         "disposition": disposition,
         "evidence_paths": evidence_paths,
-        "failures": sorted(set(failures)),
+        "failures": sorted(set(item for item in failures if item)),
     }
     validate_instance(row, LEDGER_ROW_SCHEMA, artifact="evaluation ledger row")
     return row

@@ -13,6 +13,7 @@ from ..archive import archive_runs
 from ..cli_output import print_json, print_table
 from ..config import Settings
 from ..errors import InteractiveCapacityError, WorkflowError
+from ..finalization import finalize_run
 from ..lifecycle import record as record_lifecycle
 from ..sessions import acknowledge as acknowledge_message
 from ..sessions import interrupt as interrupt_session
@@ -36,6 +37,7 @@ SESSION_COMMANDS = frozenset(
         "clear",
         "status",
         "repair",
+        "finalize",
         "attach",
         "tail",
         "steer",
@@ -182,6 +184,9 @@ def handle_session_command(
         return observe(settings, args.session_id, capture_lines), False
     if command == "repair":
         return repair_status(settings, args.session_id), False
+    if command == "finalize":
+        observation = observe(settings, args.session_id)
+        return finalize_run(settings, args.session_id, observation=observation), False
     if command == "attach":
         read_status(settings, args.session_id)
         attach_tmux(args.session_id)

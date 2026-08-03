@@ -479,7 +479,7 @@ def test_durable_messages_survive_process_boundaries_and_are_acknowledged(
     prompt.write_text("Wait briefly for steering.\n", encoding="utf-8")
     env = dict(product_env)
     env["FAKE_AGENT_MODE"] = "slow"
-    env["FAKE_AGENT_DELAY"] = "1.5"
+    env["FAKE_AGENT_DELAY"] = "30"
 
     installed_product.json(
         "launch", "message-run", repo, prompt, "--tier", "low", "--no-interactive", "--", fake_agent_path,
@@ -502,7 +502,9 @@ def test_durable_messages_survive_process_boundaries_and_are_acknowledged(
     )
     assert duplicate["duplicate"] is True
     assert duplicate["message_id"] == ack["message_id"]
-    wait_for_status(env, "message-run")
+    installed_product.json(
+        "terminate", "message-run", "--grace-seconds", "0", env=env
+    )
 
     replayed = installed_product.json(
         "watch", "message-run", "--after", "0", "--timeout", "0", env=env

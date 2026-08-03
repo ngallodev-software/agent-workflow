@@ -108,3 +108,73 @@ def test_installed_executor_bounds_timeout_output_and_secret_evidence(
     for artifact in secret_run.rglob("*"):
         if artifact.is_file() and artifact.stat().st_size <= 2 * 1024 * 1024:
             assert secret.encode() not in artifact.read_bytes(), artifact
+
+
+def test_completed_executor_over_budget_remains_completed_but_ineligible(
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+    fake_agent_path: Path,
+    tmp_path: Path,
+) -> None:
+    from tests.conftest import write_config
+
+    repo = tmp_path / "budget-repo"
+    git_repo(repo)
+    prompt = tmp_path / "budget-prompt.md"
+    prompt.write_text("Emit structured evidence.\n", encoding="utf-8")
+    plan = tmp_path / "budget-plan.json"
+    plan.write_text(
+        json.dumps(
+            {
+                "schema": "agent-workflow/evaluation-plan/v1",
+                "dataset_split": "development",
+                "task_ids": ["BUDGET-1"],
+                "repetitions": 1,
+                "timeout_seconds": 60,
+                "max_retries": 0,
+                "scorers": ["schema_validity"],
+                "budgets": {"max_input_tokens": 1, "max_output_tokens": 10},
+                "scope": {
+                    "writable_paths": [],
+                    "writable_trees": [],
+                    "disposable_trees": [".agent-workflow-handoff/", ".delegations/"],
+                },
+                "sandbox": "docker",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    config = write_config(product_env, fake_agent=fake_agent_path)
+    env = dict(product_env)
+    env["FAKE_AGENT_MODE"] = "structured"
+    installed_product.json(
+        "launch",
+        "budget-policy-run",
+        repo,
+        prompt,
+        "--ticket",
+        "BUDGET-1",
+        "--tier",
+        "low",
+        "--evaluation",
+        plan,
+        "--config",
+        config,
+        "--executor",
+        "codex",
+        "--structured",
+        "--no-interactive",
+        env=env,
+    )
+    status = wait_for_status(env, "budget-policy-run")
+    assert status["status"] == "completed"
+    final = json.loads(
+        (_run_dir(env, "budget-policy-run") / "final-status.json").read_text()
+    )
+    assert final["executor_result"] == "completed"
+    assert final["completion_result"] == "valid"
+    assert final["policy_result"] == "failed"
+    assert final["policy_failure_category"] == "budget_exhausted"
+    assert final["acceptance_eligible"] is False
+    assert final["failure_category"] is None

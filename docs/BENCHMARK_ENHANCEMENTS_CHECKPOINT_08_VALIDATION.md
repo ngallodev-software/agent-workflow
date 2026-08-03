@@ -20,11 +20,10 @@ Commands executed from the repository root:
 ```text
 python -m pytest -q \
   tests/invariants/test_comparative_benchmark_contracts.py \
-  tests/invariants/test_comparative_benchmark_operating_policy.py \
-  tests/invariants/test_cli_benchmark_handler_boundary.py
+  tests/invariants/test_comparative_benchmark_operating_policy.py
 ```
 
-Result: `23 passed in 0.63s`.
+Result at checkpoint time: `23 passed in 0.63s`. The later test-authority consolidation removed the private handler test; installed CLI routing is now covered by `tests/acceptance/test_comparative_benchmark_journey.py` and the remaining contract/policy matrices.
 
 ```text
 python -m pytest -q \

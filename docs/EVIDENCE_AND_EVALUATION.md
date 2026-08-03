@@ -13,6 +13,8 @@
 
 Status JSON files and the SQLite evidence index are projections and may be regenerated.
 
+Scope snapshots also distinguish source inventory from explicitly disposable operator-tool artifacts. When `.codebase-memory/` exists, the snapshot records its owner, mode, file count, byte size, deterministic tree digest, authorization state, cleanup policy, and size-limit result. Disposable classification prevents authorized local cache files from being mistaken for source changes, while unauthorized, unsafe, or oversized residue still fails the scope gate.
+
 ## Searchable operational projection
 
 `agent-workflow index` materializes validated run, workflow, health, incident, permission, remediation, process, and performance fields into a host-local SQLite database. The projection exists to answer cross-run questions efficiently; it does not replace source artifacts or sealed receipts. Every imported file and record is traceable through relative path, sequence, schema identity, size, modification metadata, and SHA-256 digest.
@@ -49,7 +51,7 @@ A trial binds:
 - duration, usage, cost, retry, steering, error, and verdict fields;
 - explicit exclusions or missing evidence.
 
-Score-set verdicts are accepted only after their content-addressed scorer receipts and the sealed final receipt are validated.
+Score-set verdicts are accepted only after their content-addressed scorer receipts and the sealed final receipt are validated. `completion_presence` is mandatory: a missing or invalid native completion collection produces an explicit `invalid` score rather than suppressing evaluation output.
 
 
 ## Evaluation and benchmark templates
@@ -74,6 +76,16 @@ Use `agent-workflow eval template KIND --output PATH`. Template output is canoni
 `agent-workflow eval benchmark-report` combines two immutable trial collections only after their declared source revision, optional pack checksum, model, executor, and executor version agree with the corresponding cohort definition. Case-level prompt, input, fixture, oracle, and reference digests are verified when declared. Trials outside the manifest are counted and named rather than silently discarded. The report preserves unavailable cases and missing metrics rather than filling them with zero or a fabricated verdict. Regressions are explicit per-case transitions from baseline `pass` to a non-pass candidate verdict. The aggregate comparison remains non-decisive when the configured evidence threshold is not met.
 
 ## Ledger and archive inputs
+
+Every terminal sealed attempt now receives a post-seal `ledger-row.json`. When evaluation was planned, the runner also writes `scores/score-set.json`, `reports/evaluation.json`, and `reports/evaluation.md`; recovery finalization uses the same path. These projections summarize immutable evidence and never grant acceptance. Reports and ledger rows keep executor result, completion validity, budget-policy result, deterministic score, review disposition, and acceptance eligibility as separate fields.
+
+## Supplemental evidence repair
+
+A sealed run is never edited to repair a historical completion-format mismatch. `agent-workflow evidence repair` instead creates an append-only record under `evidence-repairs/<repair-id>/` containing the deterministic adapter identity, a canonical supplemental completion, a normalization-difference record, and a read-only repair receipt. The record binds the source session, exact final-receipt SHA-256, sealed source artifact path, and source artifact SHA-256. Source fingerprints before and after generation must match.
+
+The only built-in adapter, `completion-normalize-v1`, translates legacy completion schema/session identity and review-disposition/result encodings. It preserves criteria, command evidence, revisions, changed files, unresolved findings, ticket/pack identity, and usage byte-for-byte at the JSON-value level. Legacy command strings, missing command receipts, or other substantive schema failures remain invalid and require a new authoritative run rather than an invented repair.
+
+Verified repairs are exposed as `supplemental_repairs` in evaluation reports and ledger rows and as the `repairs` SQLite view. They preserve both original and supplemental interpretations, always carry `acceptance_authority: false`, and cannot make an originally ineligible run acceptable. Receipt or artifact drift, writable artifacts, unsafe paths, and symlinks exclude the repair from projections and make direct verification fail.
 
 `agent-workflow eval ledger-row` verifies the final receipt and score-set chain before exposing an evaluation result. An unreadable, absent, tampered, or unverified score remains `null` with `evaluation_state: not_verified`. Lifecycle disposition is derived from the immutable receipt chain, not mutable `status.json` fields. Exported-run assessment additionally binds a one-trial collection back to the run ID, final-receipt digest, sealed provider-evidence digest, raw-stream digest, and verified score verdict before marking the collection complete.
 

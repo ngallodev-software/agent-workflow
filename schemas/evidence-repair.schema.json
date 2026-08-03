@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/evidence-repair/v1",
+  "type": "object",
+  "required": [
+    "schema", "repair_id", "created_at", "actor", "source", "adapter",
+    "canonical", "original_interpretation", "supplemental_interpretation",
+    "normalization_differences", "source_mutation_check"
+  ],
+  "properties": {
+    "schema": {"const": "agent-workflow/evidence-repair/v1"},
+    "repair_id": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string"},
+    "actor": {"type": "string", "minLength": 1},
+    "source": {
+      "type": "object",
+      "required": ["session_id", "final_receipt_sha256", "artifact_path", "artifact_sha256"],
+      "properties": {
+        "session_id": {"type": "string", "minLength": 1},
+        "final_receipt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "artifact_path": {"type": "string", "minLength": 1},
+        "artifact_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      },
+      "additionalProperties": false
+    },
+    "adapter": {
+      "type": "object",
+      "required": ["id", "version", "sha256"],
+      "properties": {
+        "id": {"const": "completion-normalize-v1"},
+        "version": {"const": "1"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      },
+      "additionalProperties": false
+    },
+    "canonical": {
+      "type": "object",
+      "required": ["path", "sha256", "schema", "validation_result"],
+      "properties": {
+        "path": {"const": "canonical-completion.json"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "schema": {"const": "agent-workflow/completion/v1"},
+        "validation_result": {"const": "valid"}
+      },
+      "additionalProperties": false
+    },
+    "original_interpretation": {
+      "type": "object",
+      "required": ["schema", "result", "review_disposition"],
+      "properties": {
+        "schema": {"type": ["string", "null"]},
+        "result": {"type": ["string", "null"]},
+        "review_disposition": {"type": ["string", "null"]}
+      },
+      "additionalProperties": false
+    },
+    "supplemental_interpretation": {
+      "type": "object",
+      "required": ["result", "review_disposition", "acceptance_authority"],
+      "properties": {
+        "result": {"enum": ["completed", "partial", "failed", "blocked"]},
+        "review_disposition": {"type": ["string", "null"], "enum": ["approved", "changes_requested", "blocked", null]},
+        "acceptance_authority": {"const": false}
+      },
+      "additionalProperties": false
+    },
+    "normalization_differences": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["field", "before", "after", "classification"],
+        "properties": {
+          "field": {"type": "string"},
+          "before": {},
+          "after": {},
+          "classification": {"const": "structural-normalization"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "source_mutation_check": {
+      "type": "object",
+      "required": ["fingerprint_before", "fingerprint_after", "unchanged"],
+      "properties": {
+        "fingerprint_before": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "fingerprint_after": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "unchanged": {"const": true}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

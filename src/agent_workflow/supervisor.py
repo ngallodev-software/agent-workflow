@@ -13,6 +13,7 @@ from .config import Settings
 from .contracts import read_launch_contract
 from .diagnostics import diagnose_observation
 from .errors import WorkflowError
+from .finalization import finalize_run
 from .index_store import sync_index
 from .health import (
     permission_signal,
@@ -434,14 +435,33 @@ def supervise_once(
             if category
             else None
         )
-        remediations = _apply_remediation(
-            settings, session_id, observation, incident, category, options
+        finalization: dict[str, Any] | None = None
+        finalization_error: str | None = None
+        if category == "process_missing":
+            try:
+                finalization = finalize_run(
+                    settings,
+                    session_id,
+                    observation=observation,
+                    actor="agent-workflow-supervisor",
+                    reason="supervisor confirmed terminal executor loss",
+                )
+            except WorkflowError as exc:
+                finalization_error = str(exc)
+        remediations = (
+            []
+            if category == "process_missing"
+            else _apply_remediation(
+                settings, session_id, observation, incident, category, options
+            )
         )
         results.append(
             {
                 "session_id": session_id,
                 "observed_state": observation.get("observed_state"),
                 "incident": incident,
+                "finalization": finalization,
+                "finalization_error": finalization_error,
                 "remediations": remediations,
                 "seconds_since_semantic_progress": observation.get(
                     "seconds_since_semantic_progress"

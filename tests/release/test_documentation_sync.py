@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import subprocess
+import sys
 import tomllib
 from pathlib import Path
 
@@ -20,12 +23,26 @@ def test_active_version_authorities_and_release_examples_are_synchronized() -> N
     assert pyproject["project"]["version"] == version
     assert f'version: {version}' in _read("agent-workflow.yaml")
     assert f'__version__ = "{version}"' in _read("src/agent_workflow/__init__.py")
-    parser_source = _read("src/agent_workflow/cli_parser.py")
-    assert "from . import __version__" in parser_source
-    assert 'version=f"%(prog)s {__version__}"' in parser_source
-    doctor_source = _read("src/agent_workflow/doctor.py")
-    assert "from . import __version__" in doctor_source
-    assert '"version": __version__' in doctor_source
+    assert 'version=f"%(prog)s {__version__}"' in _read("src/agent_workflow/cli_parser.py")
+    result = subprocess.run(
+        [sys.executable, "-m", "agent_workflow", "--version"],
+        cwd=REPO_ROOT,
+        env={**os.environ, "PYTHONPATH": str(REPO_ROOT / "src")},
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    assert result.stdout.strip() == f"agent-workflow {version}"
+    assert '"version": __version__' in _read("src/agent_workflow/doctor.py")
+    doctor = subprocess.run(
+        [sys.executable, "-m", "agent_workflow", "--json", "doctor"],
+        cwd=REPO_ROOT,
+        env={**os.environ, "PYTHONPATH": str(REPO_ROOT / "src")},
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    assert json.loads(doctor.stdout)["version"] == version
 
     for relative in ("release/release-policy.json", "release/dependency-lock.json"):
         assert json.loads(_read(relative))["version"] == version
@@ -43,6 +60,7 @@ def test_active_version_authorities_and_release_examples_are_synchronized() -> N
             "prompt-packs/feature-modularization/pack.yaml",
             "docs/man/agent-workflow.1",
             "docs/man/agent-workflow-index.1",
+            "docs/man/agent-workflow-evidence.1",
             "docs/man/agent-workflow-workflow.1",
             "docs/man/agent-workflow-mcp.1",
         )

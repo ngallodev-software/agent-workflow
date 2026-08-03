@@ -1,13 +1,31 @@
 # Prompt packs
 
-A prompt pack is a portable, reviewable execution plan for bounded delegated work. It contains phase manifests, ticket prompts, execution rules, evidence templates, and deterministic checksums.
+A prompt pack is a portable, reviewable execution plan for bounded delegated work. It may use the legacy phased layout or a versioned manifest-native ticket inventory. Both formats contain bounded ticket prompts, evidence contracts, and deterministic transfer metadata.
 
 Pack roots are validated component-by-component without following links. Only
 regular files and directories are accepted; symlinks, hard-linked files, FIFOs,
 sockets, devices, and type changes are rejected and reported by relative entry
-name. Archive staging consumes the exact validated inventory and adds a typed,
-canonical `MANIFEST.json` with normalized paths, sizes, mode policy, and file
-digests.
+name. Archive staging consumes the exact validated inventory. Legacy phased
+archives receive a typed canonical `MANIFEST.json`; manifest-native archives
+preserve their source `MANIFEST.json` and receive `ARCHIVE_MANIFEST.json` for
+normalized archive paths, sizes, mode policy, and file digests.
+
+## Supported formats
+
+`agent-workflow pack validate` reports `pack_format`, `manifest_version`, and
+`manifest_path` in JSON output.
+
+- `legacy-phased` requires the existing root execution files, templates, and
+  one or more complete `phase-*` directories.
+- `manifest-native` uses a root `MANIFEST.json` with schema
+  `agent-workflow/manifest-native-pack/v1` (the alias
+  `agent-workflow/prompt-pack-manifest/v1` is also accepted), a non-empty
+  `tickets` array, stable unique IDs, optional prompt paths, dependencies, and
+  result contracts. Unknown schema versions fail closed.
+
+A schema-less manifest-native inventory remains readable as `legacy-v0` with a
+migration warning so registered historical packs can be validated before they
+are upgraded. New packs must declare the v1 schema.
 
 ## Canonical structure
 

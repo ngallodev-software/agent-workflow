@@ -192,6 +192,7 @@ def _write_launch_prompt(
     interactive: bool = False,
     detached_interactive: bool = False,
     command_artifacts: dict[str, Any],
+    steering_adapter: str = "unsupported",
 ) -> Path:
     context = [
         "# Agent-workflow launch context",
@@ -217,12 +218,17 @@ def _write_launch_prompt(
             ]
         )
     if interactive:
+        steering_instruction = (
+            "- This interactive agent accepts durable steering while its assignment is active."
+            if steering_adapter != "unsupported"
+            else "- This executor has no evidence-capable steering adapter. Do not wait for approval or operator input; when authorization is required, write a blocked or partial completion and exit cleanly."
+        )
         context.extend(
             [
-                "- This interactive agent accepts durable steering while its assignment is active.",
+                steering_instruction,
                 '- End the assignment with `"$AGENT_WORKFLOW_CLI" agent task-complete "$AGENT_WORKFLOW_SESSION_ID" --actor <agent-name> --summary <summary>`; the host then terminates this executor, seals the run, and closes the pane.',
                 "- `--keep-alive` is only for an explicitly requested same-worktree reuse; in that mode acknowledge its correlated steer message before starting the reused assignment.",
-                "- Write and validate the completion handoff before task-complete; task-complete is interactive-only.",
+                '- Run `"$AGENT_WORKFLOW_CLI" agent completion-validate "$AGENT_WORKFLOW_SESSION_ID"` before task-complete; task-complete is interactive-only.',
             ]
         )
     elif detached_interactive:
@@ -244,9 +250,10 @@ def _write_launch_prompt(
             f"- completion_handoff_dir: `{handoff_dir}`",
             f"- completion_template: `{handoff_dir / 'completion-template.json'}` (read-only starting point; copy it to `completion.json` and edit the evidence)",
             "- Write completion JSON only to `AGENT_WORKFLOW_HANDOFF_DIR/completion.json` using schema `agent-workflow/completion/v1`.",
+            "- Review agents must keep `result` separate from `review_disposition`: use `approved`, `changes_requested`, or `blocked` only in `review_disposition`.",
             "- Write it atomically; optional `completion.md` and `evidence.json` sidecars may use the same handoff directory.",
-            "- `result: completed` requires an empty `unresolved` list. Host-owned merge, review, acceptance, release, and pane closure are normal next steps, not unresolved defects.",
-            "- For `result: completed`, record only final verification commands that passed. Do not put exploratory, setup, staging, or unrelated failed commands in `completion.json`; preserve material failures in `completion.md` and use `partial`, `failed`, or `blocked` if they leave unresolved work.",
+            "- `result: completed` requires an empty `unresolved` list except for a completed review with `review_disposition: changes_requested`; Host-owned merge, review, acceptance, release, and pane closure are not unresolved defects.",
+            "- For non-review `result: completed`, record only final verification commands that passed. A completed review may record a failed target gate only when `review_disposition` is `changes_requested`; preserve exploratory or unrelated failures in `completion.md`.",
             "- Canonical runtime completion paths are collector-owned; do not write to them.",
             "- Matching environment variables use the `AGENT_WORKFLOW_` prefix.",
             "- At meaningful checkpoints you may emit a concise durable progress update with `\"$AGENT_WORKFLOW_CLI\" progress "
@@ -846,6 +853,7 @@ def launch(
         interactive=interactive,
         detached_interactive=not interactive and executor_interactive,
         command_artifacts=command_artifacts,
+        steering_adapter=(executor_policy.steering_adapter if executor_policy else "unsupported"),
     )
 
     git_info: dict[str, Any]
@@ -900,6 +908,7 @@ def launch(
             ticket_id=ticket_id,
             pack_id=pack_id,
             base_revision=git_info["source_revision"],
+            review=role_for_agent_class(agent_class) == "review",
         ),
         mode=0o444,
     )
@@ -1182,6 +1191,13 @@ def launch(
         "handoff_dir": str(handoff_dir),
         "completion_collection_path": str(state_dir / "collections" / "completion.json"),
         "completion_validation_status": None,
+        "steering_adapter": (executor_policy.steering_adapter if executor_policy else "unsupported"),
+        "steering_supported": bool(executor_policy and executor_policy.steering_adapter != "unsupported"),
+        "steering_reason": (
+            "configured evidence-capable adapter"
+            if executor_policy and executor_policy.steering_adapter != "unsupported"
+            else "executor has no configured evidence-capable late-steering adapter"
+        ),
         "provenance_path": str(provenance_path),
         "events_path": str(events_path),
         "stderr_path": str(stderr_path),
@@ -1430,14 +1446,34 @@ def observe(
         safe_actions.append(f"agent-workflow interrupt {session_id}")
     elif observed == "blocked_permission":
         safe_actions.append(f"agent-workflow attach {session_id}")
-    result = {
-        **data,
+    projection_fields = {
         "tmux_alive": alive,
         "terminal_error": terminal_error,
         "observed_state": observed,
-        "failure_category": failure_category,
+        "observed_failure_category": failure_category,
         "pane_pid": pane.pid if pane else data.get("pane_pid"),
         "pane_command": pane.command if pane else data.get("pane_command"),
+        "last_semantic_progress_at": progress["last_semantic_progress_at"],
+        "last_semantic_progress_source": progress["last_semantic_progress_source"],
+        "latest_health": latest_health,
+        "permission_state": permission_state,
+        "latest_permission_event": latest_permission,
+        "output_capture_exhausted": output_capture_exhausted,
+    }
+    persisted = update_status(
+        settings,
+        session_id,
+        **projection_fields,
+        _projection_source="observe",
+        _projection_freshness="live",
+        _reason="live status projection refreshed",
+    )
+    result = {
+        **persisted,
+        "durable_failure_category": data.get("failure_category"),
+        # Compatibility: CLI status continues to expose the current observed
+        # failure category while the durable projection keeps it separate.
+        "failure_category": failure_category,
         "seconds_since_log_growth": (
             round(seconds_since_log_growth, 1)
             if seconds_since_log_growth is not None
@@ -1463,12 +1499,6 @@ def observe(
             if seconds_since_semantic_progress is not None
             else None
         ),
-        "last_semantic_progress_at": progress["last_semantic_progress_at"],
-        "last_semantic_progress_source": progress["last_semantic_progress_source"],
-        "latest_health": latest_health,
-        "permission_state": permission_state,
-        "latest_permission_event": latest_permission,
-        "output_capture_exhausted": output_capture_exhausted,
         "signals": {
             "tmux_alive": alive,
             "pane_dead": pane.dead if pane else None,

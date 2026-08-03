@@ -9,6 +9,7 @@ from ..config import Settings
 from ..worktrees import create as create_worktree
 from ..worktrees import list_worktrees
 from ..worktrees import remove as remove_worktree
+from ..repository_closeout import create_repository_closeout, verify_repository_closeout
 
 
 def handle_worktree_command(
@@ -33,4 +34,20 @@ def handle_worktree_command(
             force=args.force,
             delete_branch=args.delete_branch,
         )
+    if args.worktree_command == "closeout":
+        return create_repository_closeout(
+            args.repo,
+            output=args.output,
+            baseline_revision=args.baseline_revision,
+            remote=args.remote,
+            fetch=args.fetch,
+            push=args.push,
+            push_branch=args.push_branch,
+            set_upstream=args.set_upstream,
+            integration_branch=args.integration_branch,
+            operational_trees=args.operational_tree,
+            disposable_trees=args.disposable_tree,
+        )
+    if args.worktree_command == "closeout-verify":
+        return verify_repository_closeout(args.receipt)
     return list_worktrees(args.repo)

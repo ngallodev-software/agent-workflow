@@ -12,6 +12,13 @@
     "pack_checksum_reference",
     "run_receipt_sha256",
     "receipt_verification",
+    "executor_result",
+    "completion_result",
+    "policy_result",
+    "acceptance_eligible",
+    "attempt_classification",
+    "supplemental_repairs",
+    "repository_closeout",
     "evaluation_state",
     "evaluation_result",
     "disposition",
@@ -19,64 +26,503 @@
     "failures"
   ],
   "properties": {
-    "schema": {"const": "agent-workflow/evaluation-ledger-row/v1"},
-    "run_id": {"type": "string", "minLength": 1},
-    "ticket_id": {"type": ["string", "null"]},
-    "case_id": {"type": ["string", "null"]},
-    "source_revision": {"type": ["string", "null"]},
-    "pack_id": {"type": ["string", "null"]},
+    "schema": {
+      "const": "agent-workflow/evaluation-ledger-row/v1"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "ticket_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "case_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "source_revision": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "pack_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "pack_checksum_reference": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "pattern": "^[0-9a-f]{64}$"
     },
     "run_receipt_sha256": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "pattern": "^[0-9a-f]{64}$"
     },
     "receipt_verification": {
-      "enum": ["verified", "not_verified", "unavailable"]
+      "enum": [
+        "verified",
+        "not_verified",
+        "unavailable"
+      ]
     },
     "evaluation_state": {
-      "enum": ["not_planned", "verified", "not_verified", "unavailable"]
+      "enum": [
+        "not_planned",
+        "verified",
+        "not_verified",
+        "unavailable"
+      ]
     },
     "evaluation_result": {
-      "type": ["string", "null"],
-      "enum": ["pass", "fail", "invalid", null]
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "pass",
+        "fail",
+        "invalid",
+        null
+      ]
     },
     "disposition": {
-      "type": ["string", "null"],
-      "enum": ["reviewed", "accepted", "force-accepted", "rejected", null]
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "reviewed",
+        "accepted",
+        "force-accepted",
+        "rejected",
+        null
+      ]
     },
     "evidence_paths": {
       "type": "object",
       "required": [
         "status",
         "completion",
+        "completion_collection",
         "run_provenance",
         "final_receipt",
         "evaluation_runtime",
         "score_set",
         "evaluation_report",
         "trial_collection",
+        "repository_closeout",
         "lifecycle_disposition"
       ],
       "properties": {
-        "status": {"type": ["string", "null"]},
-        "completion": {"type": ["string", "null"]},
-        "run_provenance": {"type": ["string", "null"]},
-        "final_receipt": {"type": ["string", "null"]},
-        "evaluation_runtime": {"type": ["string", "null"]},
-        "score_set": {"type": ["string", "null"]},
-        "evaluation_report": {"type": ["string", "null"]},
-        "trial_collection": {"type": ["string", "null"]},
-        "lifecycle_disposition": {"type": ["string", "null"]}
+        "status": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "completion": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "run_provenance": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "final_receipt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "evaluation_runtime": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "score_set": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "evaluation_report": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "trial_collection": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "lifecycle_disposition": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "completion_collection": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "repository_closeout": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       },
       "additionalProperties": false
     },
     "failures": {
       "type": "array",
-      "items": {"type": "string"},
+      "items": {
+        "type": "string"
+      },
       "uniqueItems": true
+    },
+    "executor_result": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "completed",
+        "failed",
+        "interrupted",
+        "killed",
+        "lost",
+        null
+      ]
+    },
+    "completion_result": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "valid",
+        "missing",
+        "invalid",
+        null
+      ]
+    },
+    "policy_result": {
+      "enum": [
+        "passed",
+        "failed",
+        "not_evaluated"
+      ]
+    },
+    "acceptance_eligible": {
+      "type": "boolean"
+    },
+    "attempt_classification": {
+      "enum": [
+        "integrity-unverified",
+        "completion-missing",
+        "completion-invalid",
+        "policy-failed",
+        "executor-failed",
+        "executor-interrupted",
+        "executor-killed",
+        "executor-lost",
+        "acceptance-eligible",
+        "completed-not-accepted",
+        "terminal-unclassified"
+      ]
+    },
+    "supplemental_repairs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "repair_id",
+          "source_artifact_path",
+          "source_artifact_sha256",
+          "adapter",
+          "canonical_sha256",
+          "validation_result",
+          "acceptance_authority",
+          "repair_path"
+        ],
+        "properties": {
+          "repair_id": {
+            "type": "string"
+          },
+          "source_artifact_path": {
+            "type": "string"
+          },
+          "source_artifact_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "adapter": {
+            "type": "object",
+            "required": [
+              "id",
+              "version",
+              "sha256"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            },
+            "additionalProperties": false
+          },
+          "canonical_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "validation_result": {
+            "const": "valid"
+          },
+          "acceptance_authority": {
+            "const": false
+          },
+          "repair_path": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "repository_closeout": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "path",
+        "payload_sha256",
+        "baseline_revision",
+        "local_head",
+        "local_branch",
+        "commit_state",
+        "dirty_counts",
+        "remote_name",
+        "remote_branch",
+        "remote_revision_before",
+        "remote_revision_after",
+        "remote_verification",
+        "fetch_result",
+        "push_result",
+        "ahead",
+        "behind",
+        "comparison_state",
+        "comparison_verification",
+        "integration_branch",
+        "integration_revision",
+        "merged_verified",
+        "claims"
+      ],
+      "properties": {
+        "path": {
+          "const": "repository-closeout.json"
+        },
+        "payload_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "baseline_revision": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "local_head": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "local_branch": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "commit_state": {
+          "enum": [
+            "clean",
+            "source-clean-operational-dirty",
+            "source-dirty"
+          ]
+        },
+        "dirty_counts": {
+          "type": "object",
+          "required": [
+            "source",
+            "operational",
+            "disposable"
+          ],
+          "properties": {
+            "source": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "operational": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "disposable": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false
+        },
+        "remote_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "remote_branch": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "remote_revision_before": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "remote_revision_after": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "remote_verification": {
+          "enum": [
+            "verified",
+            "failed",
+            "cached-unverified",
+            "unverified"
+          ]
+        },
+        "fetch_result": {
+          "enum": [
+            "not-attempted",
+            "succeeded",
+            "failed"
+          ]
+        },
+        "push_result": {
+          "enum": [
+            "not-attempted",
+            "failed",
+            "succeeded-unverified",
+            "succeeded-verified"
+          ]
+        },
+        "ahead": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "behind": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "comparison_state": {
+          "enum": [
+            "no-upstream",
+            "unverified",
+            "equal",
+            "ahead",
+            "behind",
+            "diverged"
+          ]
+        },
+        "comparison_verification": {
+          "enum": [
+            "verified",
+            "cached-unverified",
+            "unverified"
+          ]
+        },
+        "integration_branch": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "integration_revision": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "merged_verified": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "claims": {
+          "type": "object",
+          "required": [
+            "committed",
+            "pushed",
+            "merged"
+          ],
+          "properties": {
+            "committed": {
+              "type": "boolean"
+            },
+            "pushed": {
+              "type": "boolean"
+            },
+            "merged": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false

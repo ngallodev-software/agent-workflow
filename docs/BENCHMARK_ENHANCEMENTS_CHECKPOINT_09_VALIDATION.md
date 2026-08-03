@@ -15,12 +15,13 @@ Checkpoint 09 closes a local operator-readiness gap. Benchmark execution already
 - Preserved fail-before-mutation behavior.
 - Updated benchmark command and operations documentation.
 
+> Maintenance note: the later test-authority consolidation removed private CLI-handler tests. Installed command routing is now protected by acceptance journeys, while benchmark arithmetic and policy remain in the compact invariant matrices.
+
 ## Validation
 
 ```text
 python -m pytest -q \
   tests/invariants/test_benchmark_operator_experience.py \
-  tests/invariants/test_cli_benchmark_handler_boundary.py \
   tests/invariants/test_comparative_benchmark_contracts.py \
   tests/invariants/test_comparative_benchmark_operating_policy.py
 

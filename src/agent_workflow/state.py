@@ -5,7 +5,7 @@ from .config import enforce_trust
 from .errors import WorkflowError
 from .events import append_lifecycle_event
 from .migrations import migrate_contract
-from .util import atomic_write_json, read_json, validate_id
+from .util import atomic_write_json, read_json, utc_now, validate_id
 from .contracts import read_launch_contract
 from .path import require_directory
 
@@ -17,6 +17,21 @@ TERMINAL_STATUSES = {
 }
 
 STATUS_SCHEMA = "agent-workflow/session-status/v2"
+PROJECTION_AUTHORITY = "cache"
+
+
+def _stamp_projection(
+    data: dict[str, Any],
+    *,
+    source: str,
+    freshness: str = "snapshot",
+) -> dict[str, Any]:
+    stamped = dict(data)
+    stamped["projection_generated_at"] = utc_now()
+    stamped["projection_source"] = source
+    stamped["projection_freshness"] = freshness
+    stamped["projection_authority"] = PROJECTION_AUTHORITY
+    return stamped
 
 
 def _current(data: dict[str, Any]) -> dict[str, Any]:
@@ -99,8 +114,16 @@ def _migrate_legacy_tmux_status(
     return migrated
 
 
-def write_status(settings: Settings, session_id: str, data: dict[str, Any]):
-    current = _current(data)
+def write_status(
+    settings: Settings,
+    session_id: str,
+    data: dict[str, Any],
+    *,
+    projection_source: str = "initialization",
+):
+    current = _stamp_projection(
+        _current(data), source=projection_source, freshness="snapshot"
+    )
     append_lifecycle_event(
         run_dir(settings, session_id),
         dimension="execution",
@@ -120,6 +143,8 @@ def update_status(settings: Settings, session_id: str, **changes: Any):
     actor = str(changes.pop("_actor", "agent-workflow"))
     reason = str(changes.pop("_reason", "status updated"))
     receipt_refs = changes.pop("_receipt_refs", ())
+    projection_source = str(changes.pop("_projection_source", "status-update"))
+    projection_freshness = str(changes.pop("_projection_freshness", "snapshot"))
     if "status" in changes and changes["status"] != data.get("status"):
         append_lifecycle_event(
             path.parent,
@@ -141,6 +166,9 @@ def update_status(settings: Settings, session_id: str, **changes: Any):
             receipt_refs=receipt_refs,
         )
     data.update(changes)
+    data = _stamp_projection(
+        data, source=projection_source, freshness=projection_freshness
+    )
     atomic_write_json(path, data)
     return data
 
@@ -228,5 +256,6 @@ def repair_status(settings: Settings, session_id: str) -> dict[str, Any]:
         lifecycle = reconstruct_lifecycle(run / "events.jsonl") if (run / "events.jsonl").is_file() else {"state": {}}
         status["status"] = lifecycle.get("state", {}).get("execution", "prepared")
         status["disposition"] = lifecycle.get("state", {}).get("review")
+    status = _stamp_projection(status, source="repair", freshness="snapshot")
     atomic_write_json(status_path(settings, session_id), status)
     return status

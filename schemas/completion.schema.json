@@ -2,20 +2,229 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "agent-workflow/completion/v1",
   "type": "object",
-  "required": ["schema", "session_id", "result", "base_revision", "head_revision", "changed_files", "criteria", "commands", "unresolved"],
+  "required": [
+    "schema",
+    "session_id",
+    "result",
+    "base_revision",
+    "head_revision",
+    "changed_files",
+    "criteria",
+    "commands",
+    "unresolved"
+  ],
   "properties": {
-    "schema": {"const": "agent-workflow/completion/v1"},
-    "session_id": {"type": "string"},
-    "ticket_id": {"type": ["string", "null"]},
-    "pack_id": {"type": ["string", "null"]},
-    "result": {"enum": ["completed", "partial", "failed", "blocked"]},
-    "base_revision": {"type": ["string", "null"]},
-    "head_revision": {"type": ["string", "null"]},
-    "changed_files": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
-    "criteria": {"type": "array", "items": {"type": "object", "required": ["id", "result", "evidence"], "properties": {"id": {"type": "string"}, "result": {"enum": ["pass", "fail", "not_verified"]}, "evidence": {"type": "array", "items": {"type": "string"}}}, "additionalProperties": false}},
-    "commands": {"type": "array", "items": {"type": "object", "required": ["argv", "cwd", "exit_code", "receipt"], "properties": {"argv": {"type": "array", "minItems": 1, "items": {"type": "string"}}, "cwd": {"type": "string"}, "exit_code": {"type": "integer"}, "receipt": {"type": "string"}}, "additionalProperties": false}},
-    "unresolved": {"type": "array", "items": {"type": "string"}},
-    "usage": {"type": ["object", "null"]}
+    "schema": {
+      "const": "agent-workflow/completion/v1"
+    },
+    "session_id": {
+      "type": "string"
+    },
+    "ticket_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "pack_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "result": {
+      "enum": [
+        "completed",
+        "partial",
+        "failed",
+        "blocked"
+      ]
+    },
+    "base_revision": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "head_revision": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "changed_files": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string"
+      }
+    },
+    "criteria": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "result",
+          "evidence"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "result": {
+            "enum": [
+              "pass",
+              "fail",
+              "not_verified"
+            ]
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "argv",
+          "cwd",
+          "exit_code",
+          "receipt"
+        ],
+        "properties": {
+          "argv": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "exit_code": {
+            "type": "integer"
+          },
+          "receipt": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "unresolved": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "usage": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "review_disposition": {
+      "enum": [
+        "approved",
+        "changes_requested",
+        "blocked"
+      ],
+      "description": "Review-only disposition; separate from execution result."
+    },
+    "repository_closeout": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "const": "repository-closeout.json"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "additionalProperties": false
+    }
   },
-  "additionalProperties": false
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "review_disposition": {
+            "const": "approved"
+          }
+        },
+        "required": [
+          "review_disposition"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "const": "completed"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "review_disposition": {
+            "const": "changes_requested"
+          }
+        },
+        "required": [
+          "review_disposition"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "enum": [
+              "completed",
+              "partial"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "review_disposition": {
+            "const": "blocked"
+          }
+        },
+        "required": [
+          "review_disposition"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "enum": [
+              "partial",
+              "blocked"
+            ]
+          }
+        }
+      }
+    }
+  ]
 }

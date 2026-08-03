@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from ..errors import WorkflowError
+from ..evidence_repair import supplemental_repairs_for_run
 from ..receipts import read_sealed_contract, read_sealed_json, verify_seal_details
 from .scoring import validate_score_set
 
@@ -46,6 +47,13 @@ def build_report(
         "schema": "agent-workflow/evaluation-report/v1",
         "session_id": final.get("session_id"),
         "status": status.get("status"),
+        "executor_result": status.get("executor_result"),
+        "completion_result": status.get("completion_result"),
+        "policy_result": status.get("policy_result"),
+        "policy_failures": status.get("policy_failures", []),
+        "acceptance_eligible": bool(status.get("acceptance_eligible", False)),
+        "failure_category": status.get("failure_category"),
+        "supplemental_repairs": supplemental_repairs_for_run(run_dir, verified_digest),
         "executor": provenance.get("executor"),
         "executor_version": provenance.get("executor_version"),
         "source_revision": provenance.get("source_revision"),
@@ -62,10 +70,16 @@ def render_markdown(value: dict[str, Any]) -> str:
         f"# Evaluation report: {value.get('session_id')}",
         "",
         f"- Status: `{value.get('status')}`",
+        f"- Executor result: `{value.get('executor_result') or 'unavailable'}`",
+        f"- Completion result: `{value.get('completion_result') or 'unavailable'}`",
+        f"- Policy result: `{value.get('policy_result') or 'not_evaluated'}`",
+        f"- Acceptance eligible: `{str(bool(value.get('acceptance_eligible'))).lower()}`",
         f"- Executor: `{value.get('executor') or 'explicit'}`",
         f"- Source revision: `{value.get('source_revision') or 'unavailable'}`",
         f"- Overall deterministic verdict: `{value.get('score_verdict') or 'not-scored'}`",
         f"- Sealed artifacts: {value.get('sealed_artifact_count', 0)}",
+        f"- Supplemental evidence repairs: {len(value.get('supplemental_repairs', []))}",
+        "- Deterministic scoring summarizes evidence and does not grant acceptance.",
         f"- Normalized metrics: `{'present' if value.get('metrics') else 'unavailable'}`",
         "",
         "## Deterministic scores",

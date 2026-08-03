@@ -7,7 +7,6 @@ from tests.conftest import (
     InstalledProduct,
     fake_agent_path,
     git_repo,
-    wait_for_status,
     write_config,
 )
 
@@ -24,7 +23,7 @@ def test_detached_executor_consumes_post_launch_steer_without_restart(
     prompt.write_text("Remain active long enough to receive steering.\n", encoding="utf-8")
     env = dict(product_env)
     env["FAKE_AGENT_MODE"] = "slow"
-    env["FAKE_AGENT_DELAY"] = "2.0"
+    env["FAKE_AGENT_DELAY"] = "30"
     env["FAKE_AGENT_AUTO_STEER"] = "1"
     config = write_config(env, fake_agent=fake_agent_path)
 
@@ -60,7 +59,9 @@ def test_detached_executor_consumes_post_launch_steer_without_restart(
             for item in messages
         )
     finally:
-        wait_for_status(env, "late-steer-future")
+        installed_product.json(
+            "terminate", "late-steer-future", "--grace-seconds", "0", env=env
+        )
 
 
 def test_cooperative_executor_can_reject_and_unverified_mode_is_unsupported(
@@ -80,7 +81,7 @@ def test_cooperative_executor_can_reject_and_unverified_mode_is_unsupported(
     rejected_env.update(
         {
             "FAKE_AGENT_MODE": "slow",
-            "FAKE_AGENT_DELAY": "2.0",
+            "FAKE_AGENT_DELAY": "30",
             "FAKE_AGENT_AUTO_STEER": "1",
             "FAKE_AGENT_STEER_OUTCOME": "rejected",
         }
@@ -104,7 +105,6 @@ def test_cooperative_executor_can_reject_and_unverified_mode_is_unsupported(
         and item.get("correlation_id") == steer["message_id"]
         for item in messages
     )
-    wait_for_status(rejected_env, "late-steer-rejected")
     journal = (
         Path(rejected_env["XDG_STATE_HOME"])
         / "agent-workflow" / "runs" / "late-steer-rejected"
@@ -113,9 +113,12 @@ def test_cooperative_executor_can_reject_and_unverified_mode_is_unsupported(
     outcomes = [json.loads(line)["outcome"] for line in journal.read_text().splitlines()]
     assert outcomes[-1] == "rejected"
     assert "applied" not in outcomes
+    installed_product.json(
+        "terminate", "late-steer-rejected", "--grace-seconds", "0", env=rejected_env
+    )
 
     unsupported_env = dict(product_env)
-    unsupported_env.update({"FAKE_AGENT_MODE": "slow", "FAKE_AGENT_DELAY": "1.0"})
+    unsupported_env.update({"FAKE_AGENT_MODE": "slow", "FAKE_AGENT_DELAY": "30"})
     installed_product.json(
         "launch", "late-steer-unsupported", repo, prompt, "--tier", "low",
         "--no-interactive", "--", fake_agent_path, env=unsupported_env,
@@ -125,4 +128,6 @@ def test_cooperative_executor_can_reject_and_unverified_mode_is_unsupported(
         "--actor", "orchestrator", env=unsupported_env,
     )
     assert unsupported["delivery_outcome"] == "unsupported"
-    wait_for_status(unsupported_env, "late-steer-unsupported")
+    installed_product.json(
+        "terminate", "late-steer-unsupported", "--grace-seconds", "0", env=unsupported_env
+    )

@@ -14,13 +14,35 @@
     "rows"
   ],
   "properties": {
-    "schema": {"const": "agent-workflow/index-query/v1"},
-    "database": {"type": "string", "minLength": 1},
-    "authority": {"const": "json-jsonl-sealed-receipts"},
-    "freshness": {"enum": ["current", "stale", "incomplete"]},
-    "current_run_count": {"type": "integer", "minimum": 0},
-    "stale_run_count": {"type": "integer", "minimum": 0},
-    "error_count": {"type": "integer", "minimum": 0},
+    "schema": {
+      "const": "agent-workflow/index-query/v1"
+    },
+    "database": {
+      "type": "string",
+      "minLength": 1
+    },
+    "authority": {
+      "const": "json-jsonl-sealed-receipts"
+    },
+    "freshness": {
+      "enum": [
+        "current",
+        "stale",
+        "incomplete"
+      ]
+    },
+    "current_run_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "stale_run_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "error_count": {
+      "type": "integer",
+      "minimum": 0
+    },
     "kind": {
       "enum": [
         "runs",
@@ -29,12 +51,15 @@
         "performance",
         "workflows",
         "workflow-nodes",
+        "repairs",
         "errors"
       ]
     },
     "rows": {
       "type": "array",
-      "items": {"type": "object"}
+      "items": {
+        "type": "object"
+      }
     }
   },
   "additionalProperties": false

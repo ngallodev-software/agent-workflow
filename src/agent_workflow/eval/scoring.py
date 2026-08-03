@@ -9,6 +9,7 @@ from typing import Any, Mapping
 
 from ..contracts import validate_instance, validate_launch_contract_value
 from ..errors import WorkflowError
+from ..evidence_repair import supplemental_repairs_for_run
 from ..receipts import read_sealed_contract, read_sealed_json, verify_seal_details
 from ..util import atomic_write_json
 from .junit import compare_junit
@@ -124,7 +125,7 @@ def validate_score_set(
         for item in final_receipt.get("artifacts", [])
         if isinstance(item, dict)
     }
-    required = {"schema_validity"}
+    required = {"schema_validity", "completion_presence"}
     policy = evaluation_policy_for_run(run_dir, final_receipt)
     if policy:
         required.update(str(item) for item in policy.get("scorers", []))
@@ -217,7 +218,43 @@ def score_trial(
             "evidence_fidelity",
         }
     )
-    required_scorers.add("schema_validity")
+    required_scorers.update({"schema_validity", "completion_presence"})
+
+    try:
+        completion_collection, _ = read_sealed_contract(
+            run_dir,
+            dict(final),
+            "collections/completion.json",
+            "agent-workflow/completion-collection/v1",
+        )
+        completion_status = completion_collection.get("validation_status")
+        supplemental_repairs = supplemental_repairs_for_run(run_dir, final_hash)
+        scores.append(
+            _receipt(
+                "completion_presence",
+                final_hash,
+                "pass" if completion_status == "valid" else "invalid",
+                {
+                    "validation_status": completion_status,
+                    "validation_errors": completion_collection.get("validation_errors", []),
+                    "adapter": completion_collection.get("adapter"),
+                    "adapter_version": completion_collection.get("adapter_version"),
+                    "supplemental_repairs": supplemental_repairs,
+                    "original_acceptance_authority": completion_status == "valid",
+                },
+                _evidence(final, "collections/completion.json"),
+            )
+        )
+    except WorkflowError as exc:
+        scores.append(
+            _receipt(
+                "completion_presence",
+                final_hash,
+                "invalid",
+                {"error": str(exc), "validation_status": "unavailable"},
+                [],
+            )
+        )
 
     try:
         completion, _ = read_sealed_contract(

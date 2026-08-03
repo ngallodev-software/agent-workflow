@@ -249,6 +249,8 @@ def record(
             raise WorkflowError("acceptance requires completion result 'completed'")
         if collection.get("validation_status") != "valid":
             raise WorkflowError("acceptance requires a valid collected completion")
+        if final_status.get("policy_result") == "failed":
+            raise WorkflowError("acceptance requires passing execution policy")
         if final_status.get("tier") not in {"low", "medium", "high", "critical"}:
             raise WorkflowError(
                 "acceptance requires a recorded task tier; relaunch with --tier"

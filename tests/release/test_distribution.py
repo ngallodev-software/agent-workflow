@@ -25,6 +25,52 @@ def test_release_asset_audit_is_the_single_static_repository_gate() -> None:
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+
+
+def test_test_authority_audit_blocks_silent_suite_growth(tmp_path: Path) -> None:
+    policy = json.loads((REPO_ROOT / "tests" / "test-authority.json").read_text(encoding="utf-8"))
+    blocked_policy = tmp_path / "blocked-test-authority.json"
+    policy["layers"]["invariants"]["max_files"] = 0
+    blocked_policy.write_text(json.dumps(policy, indent=2) + "\n", encoding="utf-8")
+
+    cases = [
+        ([sys.executable, "scripts/audit-test-suite.py", "--skip-collection"], 0, "test authority audit: passed"),
+        (
+            [
+                sys.executable,
+                "scripts/audit-test-suite.py",
+                "--skip-collection",
+                "--policy",
+                str(blocked_policy),
+            ],
+            1,
+            "invariants files grew",
+        ),
+    ]
+    for command, expected_code, expected_text in cases:
+        result = subprocess.run(
+            command,
+            cwd=REPO_ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=60,
+        )
+        assert result.returncode == expected_code, result.stdout + result.stderr
+        assert expected_text in result.stdout + result.stderr
+
+    testing = (REPO_ROOT / "docs" / "TESTING.md").read_text(encoding="utf-8")
+    protocol = (REPO_ROOT / "docs" / "references" / "EXECUTION_PROTOCOL.md").read_text(encoding="utf-8")
+    preflight = (REPO_ROOT / "docs" / "references" / "WORKTREE_PREFLIGHT.md").read_text(encoding="utf-8")
+    assert "tests/test-authority.json" in testing
+    assert "scripts/audit-test-suite.py" in testing
+    assert "test-authority" in protocol
+    assert "persistence=false" in preflight
+    assert "$XDG_CACHE_HOME/agent-workflow/codebase-memory/<worktree-id>/" in preflight
+    assert "git status --porcelain=v2 -z" in preflight
+    assert "256 MiB" in preflight
+
+
 def test_all_published_json_schemas_are_valid_draft_2020_12() -> None:
     schemas = sorted((REPO_ROOT / "schemas").glob("*.json"))
     assert schemas

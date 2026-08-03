@@ -1,4 +1,19 @@
 # Changelog
+- Consolidate the test suite around installed-product journeys and explicit invariant authority: remove private CLI/decomposition tests, reduce the invariant layer from 320 to 247 collected cases and the complete default collection from 411 to 340, add `tests/test-authority.json`, and enforce layer/function/collection/subprocess/wheel-build/runtime drift ceilings in release checks.
+
+- Add immutable repository-closeout receipts with explicit offline/fetch/push
+  modes, classified dirty paths, verified post-push remote revisions,
+  integration ancestry, completion-sidecar binding, and separate ledger fields.
+
+
+## 0.7.9 live-run reliability fixes
+
+- Preserve valid terminal attempts as first-class evidence even when executor, completion, budget-policy, evaluation, or acceptance gates are non-green.
+- Emit post-seal ledger rows for every terminal run and deterministic score/report artifacts whenever evaluation was planned.
+- Require a valid native completion collection as an explicit `completion_presence` scorer.
+- Upgrade the rebuildable SQLite index to schema version 2 with separate executor, completion, policy, score, classification, and acceptance-eligibility fields.
+- Add append-only evidence repair with exact sealed-source binding, deterministic structural-only completion normalization, immutable repair receipts, evaluation/ledger linkage, and SQLite schema version 3 repair projections.
+- Make optional codebase-memory discovery non-persistent by default; require external cache or explicit disposable-tree authorization for persistence, and record bounded ownership/size/digest/cleanup evidence for local tooling artifacts.
 
 ## Unreleased
 

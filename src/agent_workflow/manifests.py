@@ -21,6 +21,9 @@ class ValidationReport:
     phases: int = 0
     tasks: int = 0
     inventory: tuple[Any, ...] = field(default_factory=tuple, repr=False)
+    pack_format: str | None = None
+    manifest_version: str | None = None
+    manifest_path: str | None = None
 
     @property
     def ok(self) -> bool:
@@ -32,6 +35,9 @@ class ValidationReport:
             "ok": self.ok,
             "phase_count": self.phases,
             "task_count": self.tasks,
+            "pack_format": self.pack_format,
+            "manifest_version": self.manifest_version,
+            "manifest_path": self.manifest_path,
             "errors": self.errors,
             "warnings": self.warnings,
         }
@@ -71,6 +77,21 @@ def task_result_contract(root: Path, ticket_id: str | None) -> dict[str, Any] | 
         return None
     root = require_directory(root, label="pack root")
     entries = {entry.path: entry for entry in inventory_tree(root)}
+    manifest_entry = entries.get("MANIFEST.json")
+    if manifest_entry is not None and manifest_entry.kind == "file":
+        try:
+            manifest_value = json.loads(
+                read_regular_file(root / "MANIFEST.json").data.decode("utf-8")
+            )
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, WorkflowError):
+            manifest_value = None
+        tickets = manifest_value.get("tickets") if isinstance(manifest_value, dict) else None
+        if isinstance(tickets, list):
+            for item in tickets:
+                if _manifest_ticket_id(item) != ticket_id or not isinstance(item, dict):
+                    continue
+                contract = item.get("result_contract")
+                return dict(contract) if isinstance(contract, dict) else None
     for relative in sorted(
         path for path, entry in entries.items()
         if entry.kind == "file" and path.startswith("phase-") and path.count("/") == 1 and path.endswith("/task-manifest.yaml")
@@ -120,6 +141,191 @@ def _find_dependency_cycle(graph: dict[str, list[str]]) -> list[str] | None:
     return None
 
 
+
+def _manifest_native_version(value: dict[str, Any], report: ValidationReport) -> str | None:
+    schema = value.get("schema")
+    accepted = {
+        "agent-workflow/manifest-native-pack/v1": "1",
+        "agent-workflow/prompt-pack-manifest/v1": "1",
+    }
+    if isinstance(schema, str):
+        if schema not in accepted:
+            report.errors.append(f"MANIFEST.json: unsupported manifest schema: {schema}")
+            return None
+        return accepted[schema]
+    raw = value.get("manifest_version", value.get("version"))
+    if raw in {1, "1", "v1", "1.0"}:
+        return "1"
+    if raw is not None:
+        report.errors.append(f"MANIFEST.json: unsupported manifest version: {raw}")
+        return None
+    if isinstance(value.get("tickets"), list):
+        report.warnings.append(
+            "MANIFEST.json: legacy manifest-native inventory has no explicit schema/version; "
+            "add agent-workflow/manifest-native-pack/v1"
+        )
+        return "legacy-v0"
+    report.errors.append("MANIFEST.json: missing manifest schema/version")
+    return None
+
+
+def _manifest_ticket_id(item: Any) -> str | None:
+    if isinstance(item, str) and item.strip():
+        return item.strip()
+    if not isinstance(item, dict):
+        return None
+    for key in ("id", "ticket_id", "ticket"):
+        value = item.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _validate_manifest_native(
+    root: Path,
+    entries: dict[str, Any],
+    report: ValidationReport,
+) -> set[str]:
+    entry = entries.get("MANIFEST.json")
+    if entry is None or entry.kind != "file":
+        report.errors.append("manifest-native pack requires MANIFEST.json")
+        return set()
+    report.pack_format = "manifest-native"
+    report.manifest_path = "MANIFEST.json"
+    try:
+        value = json.loads(read_regular_file(root / "MANIFEST.json").data.decode("utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, WorkflowError) as exc:
+        report.errors.append(f"MANIFEST.json: invalid JSON: {exc}")
+        return set()
+    if not isinstance(value, dict):
+        report.errors.append("MANIFEST.json: expected JSON object")
+        return set()
+    report.manifest_version = _manifest_native_version(value, report)
+    tickets = value.get("tickets")
+    if not isinstance(tickets, list) or not tickets:
+        report.errors.append("MANIFEST.json: tickets must be a non-empty list")
+        return set()
+
+    ticket_ids: set[str] = set()
+    dependencies: dict[str, list[str]] = {}
+    locations: dict[str, str] = {}
+    for index, item in enumerate(tickets):
+        location = f"MANIFEST.json tickets[{index}]"
+        ticket_id = _manifest_ticket_id(item)
+        if ticket_id is None:
+            report.errors.append(f"{location}: missing ticket ID")
+            continue
+        report.tasks += 1
+        if ticket_id in ticket_ids:
+            report.errors.append(f"{location}: duplicate ticket ID: {ticket_id}")
+        ticket_ids.add(ticket_id)
+        locations[ticket_id] = location
+        if isinstance(item, dict):
+            raw_dependencies = item.get("dependencies", [])
+            if raw_dependencies is None:
+                raw_dependencies = []
+            if not isinstance(raw_dependencies, list) or any(
+                not isinstance(dependency, str) or not dependency
+                for dependency in raw_dependencies
+            ):
+                report.errors.append(f"{location}: dependencies must be ticket IDs")
+                raw_dependencies = []
+            dependencies[ticket_id] = list(raw_dependencies)
+            prompt = next(
+                (
+                    item.get(key)
+                    for key in ("prompt", "path", "file")
+                    if isinstance(item.get(key), str) and item.get(key)
+                ),
+                None,
+            )
+            if prompt is not None:
+                relative = Path(prompt)
+                if (
+                    relative.is_absolute()
+                    or any(part in {"", ".", ".."} for part in relative.parts)
+                    or relative.as_posix() != prompt
+                ):
+                    report.errors.append(f"{location}: prompt escapes pack root: {prompt}")
+                else:
+                    prompt_entry = entries.get(prompt)
+                    if prompt_entry is None or prompt_entry.kind != "file":
+                        report.errors.append(f"{location}: prompt not found: {prompt}")
+            result_contract = item.get("result_contract")
+            if result_contract is not None:
+                if not isinstance(result_contract, dict):
+                    report.errors.append(f"{location}: result_contract must be an object")
+                else:
+                    schema_path = result_contract.get("schema")
+                    if not isinstance(schema_path, str) or not schema_path:
+                        report.errors.append(f"{location}: result_contract.schema is required")
+                    elif entries.get(schema_path) is None or entries[schema_path].kind != "file":
+                        report.errors.append(
+                            f"{location}: result contract schema not found: {schema_path}"
+                        )
+        else:
+            dependencies[ticket_id] = []
+
+    for ticket_id, required in dependencies.items():
+        unknown = sorted(set(required) - ticket_ids)
+        if unknown:
+            report.errors.append(f"{locations[ticket_id]}: unknown dependencies: {unknown}")
+        if ticket_id in required:
+            report.errors.append(f"{locations[ticket_id]}: ticket cannot depend on itself")
+    graph = {
+        ticket_id: [dependency for dependency in required if dependency in ticket_ids]
+        for ticket_id, required in dependencies.items()
+    }
+    cycle = _find_dependency_cycle(graph)
+    if cycle:
+        report.errors.append("dependency cycle: " + " -> ".join(cycle))
+
+    evaluation_path = root / "evals" / "evaluation.json"
+    if entries.get("evals/evaluation.json") is not None:
+        try:
+            validate_evaluation(evaluation_path, pack_root=root, task_ids=ticket_ids)
+        except WorkflowError as exc:
+            report.errors.append(str(exc))
+    return ticket_ids
+
+
+def _validate_checksum_manifest(
+    root: Path,
+    inventory: tuple[Any, ...],
+    entries: dict[str, Any],
+    report: ValidationReport,
+    verify_checksums: bool,
+) -> None:
+    checksum_file = root / "MANIFEST.sha256"
+    if verify_checksums and entries.get("MANIFEST.sha256") is not None:
+        listed: dict[str, str] = {}
+        for line_number, line in enumerate(
+            read_regular_file(checksum_file).data.decode("utf-8").splitlines(), 1
+        ):
+            if not line.strip():
+                continue
+            checksum, separator, rel = line.partition("  ")
+            if not separator or len(checksum) != 64:
+                report.errors.append(f"MANIFEST.sha256:{line_number}: invalid checksum line")
+                continue
+            if rel in listed:
+                report.errors.append(f"MANIFEST.sha256:{line_number}: duplicate path: {rel}")
+            listed[rel] = checksum
+        actual = {
+            entry.path: str(entry.sha256)
+            for entry in inventory
+            if entry.kind == "file" and entry.path != "MANIFEST.sha256"
+        }
+        for rel in sorted(actual.keys() - listed.keys()):
+            report.errors.append(f"MANIFEST.sha256: missing file: {rel}")
+        for rel in sorted(listed.keys() - actual.keys()):
+            report.errors.append(f"MANIFEST.sha256: lists nonexistent file: {rel}")
+        for rel in sorted(actual.keys() & listed.keys()):
+            if actual[rel] != listed[rel]:
+                report.errors.append(f"MANIFEST.sha256: checksum mismatch: {rel}")
+    elif verify_checksums:
+        report.errors.append("MANIFEST.sha256: missing")
+
 def validate_pack(root: Path, verify_checksums: bool = False) -> ValidationReport:
     root = absolute_path(root)
     report = ValidationReport(root=root)
@@ -131,7 +337,6 @@ def validate_pack(root: Path, verify_checksums: bool = False) -> ValidationRepor
         return report
     entries = {entry.path: entry for entry in inventory}
     report.inventory = inventory
-    _check_required(root, entries, report)
 
     phase_dirs = sorted(
         root / entry.path
@@ -139,7 +344,16 @@ def validate_pack(root: Path, verify_checksums: bool = False) -> ValidationRepor
         if entry.kind == "directory" and "/" not in entry.path and entry.path.startswith("phase-")
     )
     if not phase_dirs:
-        report.errors.append("no phase-* directories found")
+        if entries.get("MANIFEST.json") is not None:
+            _validate_manifest_native(root, entries, report)
+            _validate_checksum_manifest(root, inventory, entries, report, verify_checksums)
+            return report
+        report.errors.append("no phase-* directories found and no manifest-native MANIFEST.json present")
+        return report
+
+    report.pack_format = "legacy-phased"
+    report.manifest_version = "1"
+    _check_required(root, entries, report)
 
     sessions: set[str] = set()
     ticket_ids: set[str] = set()
@@ -268,29 +482,7 @@ def validate_pack(root: Path, verify_checksums: bool = False) -> ValidationRepor
         except WorkflowError as exc:
             report.errors.append(str(exc))
 
-    checksum_file = root / "MANIFEST.sha256"
-    if verify_checksums and entries.get("MANIFEST.sha256") is not None:
-        listed: dict[str, str] = {}
-        for line_number, line in enumerate(read_regular_file(checksum_file).data.decode("utf-8").splitlines(), 1):
-            if not line.strip():
-                continue
-            checksum, separator, rel = line.partition("  ")
-            if not separator or len(checksum) != 64:
-                report.errors.append(f"MANIFEST.sha256:{line_number}: invalid checksum line")
-                continue
-            if rel in listed:
-                report.errors.append(f"MANIFEST.sha256:{line_number}: duplicate path: {rel}")
-            listed[rel] = checksum
-        actual = {entry.path: str(entry.sha256) for entry in inventory if entry.kind == "file" and entry.path != "MANIFEST.sha256"}
-        for rel in sorted(actual.keys() - listed.keys()):
-            report.errors.append(f"MANIFEST.sha256: missing file: {rel}")
-        for rel in sorted(listed.keys() - actual.keys()):
-            report.errors.append(f"MANIFEST.sha256: lists nonexistent file: {rel}")
-        for rel in sorted(actual.keys() & listed.keys()):
-            if actual[rel] != listed[rel]:
-                report.errors.append(f"MANIFEST.sha256: checksum mismatch: {rel}")
-    elif verify_checksums:
-        report.errors.append("MANIFEST.sha256: missing")
+    _validate_checksum_manifest(root, inventory, entries, report, verify_checksums)
     return report
 
 

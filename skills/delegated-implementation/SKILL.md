@@ -14,7 +14,7 @@ Read `AGENT_WORKFLOW_COMMAND_CARD` for the role-scoped signatures and `AGENT_WOR
 ## Required behavior
 
 1. Read the ticket, phase README, master prompt, execution protocol, and named references.
-2. In a new worktree, perform [`WORKTREE_PREFLIGHT.md`](../../docs/references/WORKTREE_PREFLIGHT.md): verify the exact worktree and probe codebase-memory once. Use an exact-worktree index when available; otherwise record the limitation and continue with bounded RTK shell discovery without retrying.
+2. In a new worktree, perform [`WORKTREE_PREFLIGHT.md`](../../docs/references/WORKTREE_PREFLIGHT.md): verify the exact worktree and probe codebase-memory once. Use a non-persistent exact-worktree index by default; repository-local persistence requires pre-authorized disposable scope and host-owned cleanup. Otherwise record the limitation and continue with bounded RTK shell discovery without retrying.
 3. Verify current source before editing.
 4. Stay inside writable paths.
 5. Implement the smallest coherent change.

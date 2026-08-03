@@ -1,0 +1,199 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/repository-closeout/v1",
+  "type": "object",
+  "required": [
+    "schema",
+    "captured_at",
+    "repository",
+    "baseline_revision",
+    "local",
+    "dirty_state",
+    "remote",
+    "comparison",
+    "integration",
+    "commands",
+    "claims",
+    "payload_sha256"
+  ],
+  "properties": {
+    "schema": {"const": "agent-workflow/repository-closeout/v1"},
+    "captured_at": {"type": "string", "minLength": 1},
+    "repository": {
+      "type": "object",
+      "required": ["root", "identity_sha256", "git_common_dir_sha256"],
+      "properties": {
+        "root": {"type": "string", "minLength": 1},
+        "identity_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "git_common_dir_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      },
+      "additionalProperties": false
+    },
+    "baseline_revision": {"type": ["string", "null"]},
+    "local": {
+      "type": "object",
+      "required": [
+        "head",
+        "branch",
+        "detached",
+        "upstream_ref",
+        "upstream_remote",
+        "upstream_branch",
+        "operation_state",
+        "commit_state",
+        "source_changes_committed"
+      ],
+      "properties": {
+        "head": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "branch": {"type": ["string", "null"]},
+        "detached": {"type": "boolean"},
+        "upstream_ref": {"type": ["string", "null"]},
+        "upstream_remote": {"type": ["string", "null"]},
+        "upstream_branch": {"type": ["string", "null"]},
+        "operation_state": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"enum": ["merge", "cherry-pick", "revert", "bisect", "rebase-merge", "rebase-apply"]}
+        },
+        "commit_state": {"enum": ["clean", "source-clean-operational-dirty", "source-dirty"]},
+        "source_changes_committed": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "dirty_state": {
+      "type": "object",
+      "required": ["porcelain_sha256", "entry_count", "counts", "operational_trees", "disposable_trees", "entries"],
+      "properties": {
+        "porcelain_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "entry_count": {"type": "integer", "minimum": 0},
+        "counts": {
+          "type": "object",
+          "required": ["source", "operational", "disposable"],
+          "properties": {
+            "source": {"type": "integer", "minimum": 0},
+            "operational": {"type": "integer", "minimum": 0},
+            "disposable": {"type": "integer", "minimum": 0}
+          },
+          "additionalProperties": false
+        },
+        "operational_trees": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+        "disposable_trees": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["status", "path", "original_path", "classification"],
+            "properties": {
+              "status": {"type": "string", "minLength": 2, "maxLength": 2},
+              "path": {"type": "string", "minLength": 1},
+              "original_path": {"type": ["string", "null"]},
+              "classification": {"enum": ["source", "operational", "disposable"]}
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "remote": {
+      "type": "object",
+      "required": ["name", "network_mode", "target_branch", "tracking_ref", "fetch", "revision_before", "push", "revision_after"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "network_mode": {"enum": ["offline", "fetch", "push", "fetch-and-push"]},
+        "target_branch": {"type": ["string", "null"]},
+        "tracking_ref": {"type": ["string", "null"]},
+        "fetch": {
+          "type": "object",
+          "required": ["attempted", "result", "completed_at"],
+          "properties": {
+            "attempted": {"type": "boolean"},
+            "result": {"enum": ["not-attempted", "succeeded", "failed"]},
+            "completed_at": {"type": ["string", "null"]}
+          },
+          "additionalProperties": false
+        },
+        "revision_before": {"$ref": "#/$defs/remoteRevision"},
+        "push": {
+          "type": "object",
+          "required": ["attempted", "result", "returncode", "target_ref", "set_upstream"],
+          "properties": {
+            "attempted": {"type": "boolean"},
+            "result": {"enum": ["not-attempted", "failed", "succeeded-unverified", "succeeded-verified"]},
+            "returncode": {"type": ["integer", "null"]},
+            "target_ref": {"type": ["string", "null"]},
+            "set_upstream": {"type": "boolean"}
+          },
+          "additionalProperties": false
+        },
+        "revision_after": {"$ref": "#/$defs/remoteRevision"}
+      },
+      "additionalProperties": false
+    },
+    "comparison": {
+      "type": "object",
+      "required": ["ahead", "behind", "state", "verification"],
+      "properties": {
+        "ahead": {"type": ["integer", "null"], "minimum": 0},
+        "behind": {"type": ["integer", "null"], "minimum": 0},
+        "state": {"enum": ["no-upstream", "unverified", "equal", "ahead", "behind", "diverged"]},
+        "verification": {"enum": ["verified", "cached-unverified", "unverified"]}
+      },
+      "additionalProperties": false
+    },
+    "integration": {
+      "type": "object",
+      "required": ["branch", "remote_revision", "verification", "head_reachable", "merged_verified"],
+      "properties": {
+        "branch": {"type": ["string", "null"]},
+        "remote_revision": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40}$"},
+        "verification": {"enum": ["not-requested", "verified", "failed", "cached-unverified", "unverified"]},
+        "head_reachable": {"type": ["boolean", "null"]},
+        "merged_verified": {"type": ["boolean", "null"]}
+      },
+      "additionalProperties": false
+    },
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "argv", "returncode", "stdout_sha256", "stdout_bytes", "stderr_sha256", "stderr_bytes", "duration_seconds", "error_category"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "argv": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+          "returncode": {"type": "integer"},
+          "stdout_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "stdout_bytes": {"type": "integer", "minimum": 0},
+          "stderr_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "stderr_bytes": {"type": "integer", "minimum": 0},
+          "duration_seconds": {"type": "number", "minimum": 0},
+          "error_category": {"type": "string", "minLength": 1}
+        },
+        "additionalProperties": false
+      }
+    },
+    "claims": {
+      "type": "object",
+      "required": ["committed", "pushed", "merged"],
+      "properties": {
+        "committed": {"type": "boolean"},
+        "pushed": {"type": "boolean"},
+        "merged": {"type": ["boolean", "null"]}
+      },
+      "additionalProperties": false
+    },
+    "payload_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "remoteRevision": {
+      "type": "object",
+      "required": ["value", "verification"],
+      "properties": {
+        "value": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40}$"},
+        "verification": {"enum": ["verified", "failed", "cached-unverified", "unverified"]}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

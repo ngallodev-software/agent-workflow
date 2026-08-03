@@ -16,7 +16,9 @@ agent-workflow creates isolated Git worktrees, launches configured coding execut
 Environment/configuration inspection, parser-derived command contracts, trusted-plugin inventory, and generated shell completion.
 .TP
 .B worktree
-Create, list, and remove isolated ticket worktrees.
+Create, list, remove, and close out isolated ticket worktrees. Closeout writes
+an immutable digest-bound receipt that separates local HEAD, remote revision,
+dirty-path classes, fetch/push state, and verified integration ancestry.
 .TP
 .B launch, list, status, attach, tail, restart
 Launch and observe delegated sessions.
@@ -45,8 +47,11 @@ Append immutable lifecycle receipts. Acceptance requires exact revision and vali
 .B index
 Maintain and query the rebuildable SQLite projection over authoritative run and workflow evidence. See agent-workflow-index(1).
 .TP
+.B evidence
+Create, verify, and list append-only supplemental interpretations of exact sealed source artifacts. Repairs never mutate source runs or grant acceptance. See agent-workflow-evidence(1).
+.TP
 .B eval, ledger
-Render and validate evaluation/benchmark templates, score sealed runs, collect immutable trials, compare cohorts, render benchmark reports and evidence-ledger rows, prepare archive inputs, and render pack ledgers.
+Render and validate evaluation/benchmark templates, score sealed runs, collect immutable trials, compare cohorts, render benchmark reports and evidence-ledger rows, prepare archive inputs, and render pack ledgers. Terminal sealed runs automatically retain a ledger row and, when evaluation is planned, a deterministic score and report; these artifacts do not grant acceptance.
 .TP
 .B benchmark
 Export and validate a frozen paired benchmark suite; create coordinator and arm worktrees; execute synchronized control/workflow phases; capture visual evidence; score, blind-review, consolidate, report, verify, and clean up a run.
@@ -206,4 +211,4 @@ Default user configuration.
 .I ~/.local/state/agent-workflow/
 Default durable state root. The rebuildable database is normally under the index subdirectory.
 .SH SEE ALSO
-agent-workflow-index(1), agent-workflow-workflow(1), agent-workflow-mcp(1), docs/COMMAND_REFERENCE.md, docs/COMPARATIVE_BENCHMARK_EXPLAINED.md, docs/COMPARATIVE_BENCHMARK_CORRECTION_BACKLOG.md, docs/PLUGIN_API.md, docs/ARCHITECTURE.md
+agent-workflow-index(1), agent-workflow-evidence(1), agent-workflow-workflow(1), agent-workflow-mcp(1), docs/COMMAND_REFERENCE.md, docs/COMPARATIVE_BENCHMARK_EXPLAINED.md, docs/COMPARATIVE_BENCHMARK_CORRECTION_BACKLOG.md, docs/PLUGIN_API.md, docs/ARCHITECTURE.md

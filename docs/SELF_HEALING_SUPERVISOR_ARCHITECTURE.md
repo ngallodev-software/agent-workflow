@@ -189,11 +189,23 @@ Semantic progress is the newest modification among these durable channels:
 
 A heartbeat does not participate in semantic progress. This is the key change that allows a live process to be classified as `possibly_stalled`.
 
+The mutable `status.json` projection is a freshness-stamped cache, not run authority.
+Every direct observation atomically refreshes its live operator fields and records
+`projection_generated_at`, `projection_source`, `projection_freshness`, and
+`projection_authority=cache`. Immutable launch contracts, lifecycle journals,
+process results, completion evidence, and sealed receipts remain authoritative.
+Observed diagnoses use `observed_failure_category`; they never overwrite the
+durable terminal `failure_category`.
+
 The status projection exposes:
 
 ```json
 {
+  "projection_source": "observe",
+  "projection_freshness": "live",
+  "projection_authority": "cache",
   "observed_state": "possibly_stalled",
+  "observed_failure_category": "stalled",
   "seconds_since_semantic_progress": 712.4,
   "last_semantic_progress_source": "terminal_event",
   "permission_state": null,
@@ -462,3 +474,17 @@ Hierarchy lane
 ## Decision
 
 This architecture is authorized by [`DEC-006`](DECISIONS/DEC-006-BOUNDED-SELF-HEALING.md). Any future remediation rule that expands authority, changes acceptance, or performs destructive cleanup requires a new explicit decision rather than being added as a convenience branch.
+
+### Terminal-loss convergence
+
+A `process_missing` diagnosis now enters a bounded recovery-finalization service
+instead of leaving the durable execution state active. The service requires either
+a durable process result or a confirmed dead orphan observation, refuses to run
+while the recorded runner or executor is alive, and is serialized by a per-run
+finalization lock. It preserves unknown exit state as `executor_result=lost`,
+collects completion exactly as the normal runner does, writes an append-only
+lifecycle transition before updating the mutable projection, seals all available
+evidence, and returns the existing verified receipt on repeated calls.
+
+Replacement launch remains separate from finalization so the supervisor cannot
+turn evidence recovery into an implicit retry or duplicate execution.

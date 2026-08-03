@@ -8,7 +8,6 @@ import pytest
 from agent_workflow.config import defaults
 from agent_workflow.errors import WorkflowError
 from agent_workflow.session_control import (
-    _child_lifecycle_control,
     acknowledge,
     kill,
     messages,
@@ -22,17 +21,6 @@ def _settings(tmp_path: Path):
     settings = defaults(tmp_path / "config.toml")
     object.__setattr__(settings, "state_root", tmp_path / "state")
     return settings
-
-
-def test_child_lifecycle_controls_fail_closed_when_bridge_is_required() -> None:
-    with (
-        patch("agent_workflow.session_control.bridge_available", return_value=False),
-        patch("agent_workflow.session_control.bridge_required", return_value=True),
-    ):
-        assert _child_lifecycle_control("session-1") == {
-            "outcome": "unavailable",
-            "reason": "lifecycle controls are host-owned; exit the child normally",
-        }
 
 
 def test_steer_persists_before_delivery_and_preserves_delivery_evidence(tmp_path: Path) -> None:

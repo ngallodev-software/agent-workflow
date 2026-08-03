@@ -63,7 +63,7 @@ and
 .SH QUERY FILTERS
 .TP
 .B --session SESSION
-Limit results to one run/session where the selected view supports it.
+Limit results to one run/session where the selected view supports it. For the repairs view this filters the bound source session.
 .TP
 .B --state STATE
 Filter run, incident, permission, or workflow state where supported.
@@ -83,7 +83,7 @@ Filter run or workflow ownership by prompt-pack ID.
 .B --limit N
 Bound returned rows.
 .SH AUTHORITY AND PRIVACY
-Every indexed source retains relative path, record sequence where applicable, schema identity, size/metadata, and SHA-256 provenance. Raw prompts, terminal bodies, message bodies, output logs, credentials, and unrestricted provider payloads are excluded. A query result must be reopened against original evidence before any authority-changing action.
+Every indexed source retains relative path, record sequence where applicable, schema identity, size/metadata, and SHA-256 provenance. Verified evidence-repair rows additionally retain the exact source receipt and artifact digests, deterministic adapter identity, canonical digest, mutation-check result, and repair-receipt digest. Repairs are supplemental only and cannot change source-run acceptance. Raw prompts, terminal bodies, message bodies, output logs, credentials, and unrestricted provider payloads are excluded. A query result must be reopened against original evidence before any authority-changing action.
 .SH FILES
 .TP
 .I ~/.local/state/agent-workflow/index/agent-workflow.sqlite3
@@ -105,6 +105,6 @@ agent-workflow index rebuild
 agent-workflow index verify --full
 .fi
 .PP
-A corrupt source run is quarantined as an index error; it is not rewritten or silently repaired.
+A corrupt or unverifiable source run is quarantined as an index error; it is not rewritten or silently repaired. A valid sealed run with a failed executor result, invalid or missing completion, failed budget policy, or non-pass score remains indexed with separate typed outcome fields and is never treated as accepted merely because it is queryable.
 .SH SEE ALSO
 agent-workflow(1), agent-workflow-workflow(1), docs/SQLITE_EVIDENCE_INDEX_ARCHITECTURE.md

@@ -95,7 +95,7 @@ agent-workflow index status
 agent-workflow index sync [--run SESSION] [--active-only]
 agent-workflow index rebuild [--run SESSION] [--active-only]
 agent-workflow index verify [--full] [--review SESSION]
-agent-workflow index query runs|incidents|permissions|performance|workflows|workflow-nodes|errors
+agent-workflow index query runs|incidents|permissions|performance|workflows|workflow-nodes|repairs|errors
 ```
 
 Curated filters include session, state, category, executor, model, prompt pack, and bounded result count where supported.

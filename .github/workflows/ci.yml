@@ -46,7 +46,9 @@ jobs:
       - name: Acceptance and invariant suite
         if: matrix.suite == 'full'
         shell: bash
-        run: python -m pytest
+        run: |
+          python scripts/audit-test-suite.py
+          python -m pytest
       - name: Cross-platform release build validation
         shell: bash
         run: |
@@ -57,7 +59,8 @@ jobs:
           python scripts/build-release-bundles.py \
             --version "v$(python -c 'print(__import__("pathlib").Path("VERSION").read_text().strip())')" \
             --wheel "$wheel" --sdist "$sdist" --output-dir dist
-          python scripts/write-release-checksums.py --output-dir dist
+          find dist -maxdepth 1 -type f \( -name '*.whl' -o -name '*.tar.gz' \) -print0 \
+            | sort -z | xargs -0 sha256sum > dist/SHA256SUMS
           python scripts/audit-release-assets.py
       - name: Compile and release assets
         if: runner.os != 'Windows'

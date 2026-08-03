@@ -11,12 +11,16 @@ from ..agent_context import complete_task as complete_agent_task
 from ..agent_context import read as read_agent_context
 from ..agent_context import request_reuse as reuse_agent
 from ..config import Settings
+from ..completion import validate_completion_handoff
+from ..state import run_dir
 
 
 def handle_agent_command(settings: Settings, args: argparse.Namespace) -> Any:
     """Execute one parsed reusable-agent context command."""
     if args.agent_command == "context":
         return read_agent_context(settings, args.session_id)
+    if args.agent_command == "completion-validate":
+        return validate_completion_handoff(run_dir(settings, args.session_id))
     if args.agent_command == "task-complete":
         return complete_agent_task(
             settings,

@@ -35,6 +35,22 @@ def test_installed_cli_exposes_operable_public_surface(
     assert config["terminal"]["backend"] == "tmux"
     assert Path(config["paths"]["state_root"]).is_absolute()
 
+    # Public parser/runtime behavior is protected through the installed executable,
+    # not through private handler or parser imports.
+    after_subcommand = installed_product.run("doctor", "--json", env=product_env, check=True)
+    assert json.loads(after_subcommand.stdout)["version"] == expected_version
+    missing_config = Path(product_env["XDG_CONFIG_HOME"]) / "missing.toml"
+    version_without_bootstrap = installed_product.run(
+        "--config", missing_config, "--version", env=product_env, check=True
+    )
+    assert version_without_bootstrap.stdout.strip() == f"agent-workflow {expected_version}"
+    rejected_tail = installed_product.run("doctor", "--", "echo", "no", env=product_env)
+    assert rejected_tail.returncode == 2
+
+    catalog = installed_product.json("commands", "--format", "json", env=product_env)
+    represented = {item["command"] for item in catalog["commands"]}
+    assert {"launch", "agent task-complete", "worktree closeout", "evidence repair"} <= represented
+
 
 def test_installed_config_doctor_and_provenance_trust_journey(
     installed_product: InstalledProduct,
@@ -109,7 +125,7 @@ def test_installed_config_doctor_and_provenance_trust_journey(
         "--agent-class",
         "review",
         "--tier",
-        "low",
+        "medium",
         "--structured",
         env=env,
     )
@@ -214,6 +230,51 @@ def test_prompt_pack_scaffold_validate_and_archive_round_trip_is_deterministic(
     assert hashlib.sha256(first.read_bytes()).digest() == hashlib.sha256(second.read_bytes()).digest()
     subprocess.run(["zstd", "-t", "-q", str(first)], check=True)
 
+    native = tmp_path / "native-pack"
+    (native / "tickets").mkdir(parents=True)
+    (native / "contracts").mkdir()
+    for ticket in ("T-1", "T-2"):
+        (native / "tickets" / f"{ticket}.md").write_text(
+            "Writable scope, acceptance criteria, tests, and stop conditions.\n",
+            encoding="utf-8",
+        )
+    (native / "contracts" / "result.schema.json").write_text(
+        json.dumps({"type": "object"}) + "\n", encoding="utf-8"
+    )
+    (native / "MANIFEST.json").write_text(
+        json.dumps(
+            {
+                "schema": "agent-workflow/manifest-native-pack/v1",
+                "pack_id": "native-pack",
+                "tickets": [
+                    {
+                        "id": "T-1",
+                        "prompt": "tickets/T-1.md",
+                        "dependencies": [],
+                        "result_contract": {"schema": "contracts/result.schema.json"},
+                    },
+                    {
+                        "id": "T-2",
+                        "prompt": "tickets/T-2.md",
+                        "dependencies": ["T-1"],
+                    },
+                ],
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    native_validation = installed_product.json("pack", "validate", native, env=product_env)
+    assert native_validation["ok"] is True
+    assert native_validation["pack_format"] == "manifest-native"
+    assert native_validation["task_count"] == 2
+    native_first = tmp_path / "native-first.tar.zst"
+    native_second = tmp_path / "native-second.tar.zst"
+    installed_product.json("pack", "archive", native, native_first, env=product_env)
+    installed_product.json("pack", "archive", native, native_second, env=product_env)
+    assert native_first.read_bytes() == native_second.read_bytes()
+
 
 def test_worktree_create_list_and_remove_uses_real_git(
     installed_product: InstalledProduct, product_env: dict[str, str], tmp_path: Path
@@ -236,6 +297,41 @@ def test_worktree_create_list_and_remove_uses_real_git(
     )
     assert removed["branch_deleted"] is True
     assert not destination.exists()
+
+    (repo / "source-change.txt").write_text("dirty\n", encoding="utf-8")
+    operational = repo / ".agent-workflow-handoff"
+    operational.mkdir()
+    (operational / "completion.json").write_text("{}\n", encoding="utf-8")
+    disposable = repo / ".codebase-memory"
+    disposable.mkdir()
+    (disposable / "graph.db.zst").write_bytes(b"graph")
+    receipt_path = tmp_path / "repository-closeout.json"
+    closeout = installed_product.json(
+        "worktree",
+        "closeout",
+        repo,
+        "--output",
+        receipt_path,
+        "--baseline-revision",
+        head,
+        "--operational-tree",
+        ".agent-workflow-handoff/",
+        "--disposable-tree",
+        ".codebase-memory/",
+        env=product_env,
+    )
+    assert closeout["remote"]["network_mode"] == "offline"
+    assert closeout["dirty_state"]["counts"] == {
+        "source": 1,
+        "operational": 1,
+        "disposable": 1,
+    }
+    assert closeout["claims"] == {"committed": False, "pushed": False, "merged": None}
+    verified = installed_product.json(
+        "worktree", "closeout-verify", receipt_path, env=product_env
+    )
+    assert verified["digest_valid"] is True
+    assert verified["read_only_mode"] is True
 
 
 def test_worktree_cleanliness_matches_operator_excludes_and_rejects_real_dirt(

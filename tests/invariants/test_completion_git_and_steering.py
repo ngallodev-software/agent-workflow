@@ -6,11 +6,16 @@ from pathlib import Path
 
 import pytest
 
-from agent_workflow.completion import completion_revision_errors, substantive_completion_errors
+from agent_workflow.completion import (
+    completion_revision_errors,
+    substantive_completion_errors,
+    validate_completion_repository_closeout,
+)
 from agent_workflow.contracts import validate_instance, validate_ticket_identity
 from agent_workflow.errors import WorkflowError
 from agent_workflow.git import snapshot
 from agent_workflow.steering import append_delivery_event, replay_delivery_events
+from agent_workflow.repository_closeout import create_repository_closeout
 
 
 def _completion(**overrides: object) -> dict[str, object]:
@@ -182,6 +187,59 @@ def test_completed_revisions_bind_to_launch_baseline_and_current_head() -> None:
     ) == ["completed base_revision does not match the launch source revision"]
 
 
+def test_completion_repository_closeout_binds_digest_root_and_head(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.email", "tests@example.invalid"], check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.name", "Tests"], check=True)
+    (repo / "tracked.txt").write_text("tracked\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "tracked.txt"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "initial"], check=True)
+    head = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"],
+        text=True,
+        capture_output=True,
+        check=True,
+    ).stdout.strip()
+    handoff = repo / ".agent-workflow-handoff"
+    handoff.mkdir()
+    receipt_path = handoff / "repository-closeout.json"
+    create_repository_closeout(
+        repo,
+        output=receipt_path,
+        operational_trees=(".agent-workflow-handoff/",),
+    )
+    import hashlib
+
+    digest = hashlib.sha256(receipt_path.read_bytes()).hexdigest()
+    value = _completion(
+        base_revision=head,
+        head_revision=head,
+        changed_files=[],
+        repository_closeout={"path": "repository-closeout.json", "sha256": digest},
+    )
+    summary = validate_completion_repository_closeout(
+        value,
+        handoff=handoff,
+        expected_worktree=repo,
+    )
+    assert summary is not None
+    assert summary["local_head"] == head
+    assert summary["claims"]["pushed"] is False
+
+    value["repository_closeout"] = {
+        "path": "repository-closeout.json",
+        "sha256": "0" * 64,
+    }
+    with pytest.raises(WorkflowError, match="digest does not match"):
+        validate_completion_repository_closeout(
+            value,
+            handoff=handoff,
+            expected_worktree=repo,
+        )
+
+
 def test_git_snapshot_matches_operator_global_excludes_and_records_provenance(
     tmp_path: Path, monkeypatch,
 ) -> None:
@@ -322,6 +380,17 @@ def test_observe_tracks_executor_event_growth_independently(
         "interactive": False,
     }
     monkeypatch.setattr(sessions, "read_status", lambda _settings, _session: status)
+    monkeypatch.setattr(
+        sessions,
+        "update_status",
+        lambda _settings, _session, **changes: {
+            **status,
+            **{key: value for key, value in changes.items() if not key.startswith("_")},
+            "projection_source": changes.get("_projection_source"),
+            "projection_freshness": changes.get("_projection_freshness"),
+            "projection_authority": "cache",
+        },
+    )
     monkeypatch.setattr(sessions.tmux, "session_exists", lambda _target: True)
     monkeypatch.setattr(
         sessions.tmux,
@@ -342,3 +411,117 @@ def test_observe_tracks_executor_event_growth_independently(
     assert stale["observed_state"] == "possibly_stalled"
     assert stale["failure_category"] == "stalled"
     assert stale["safe_actions"][-1] == "agent-workflow interrupt observe-run"
+
+
+def test_review_disposition_is_separate_from_execution_result() -> None:
+    value = _completion(
+        review_disposition="changes_requested",
+        criteria=[
+            {
+                "id": "durability",
+                "result": "fail",
+                "evidence": ["restart persistence is not implemented"],
+            }
+        ],
+        commands=[
+            {
+                "argv": ["pytest", "-q", "tests/review"],
+                "cwd": "/worktree",
+                "exit_code": 1,
+                "receipt": "1 failed, 4 passed",
+            },
+            {
+                "argv": ["pytest", "-q", "tests/unit"],
+                "cwd": "/worktree",
+                "exit_code": 0,
+                "receipt": "17 passed",
+            },
+        ],
+        unresolved=["durable review state is missing"],
+    )
+    validate_instance(value, "agent-workflow/completion/v1")
+    assert substantive_completion_errors(
+        value, session_id="run-1", ticket_id="T-1", pack_id="pack-1"
+    ) == []
+
+
+def test_approved_review_requires_green_evidence_and_no_unresolved() -> None:
+    value = _completion(
+        review_disposition="approved",
+        criteria=[
+            {
+                "id": "security",
+                "result": "not_verified",
+                "evidence": ["privacy test timed out"],
+            }
+        ],
+        unresolved=["privacy boundary not verified"],
+    )
+    errors = substantive_completion_errors(
+        value, session_id="run-1", ticket_id="T-1", pack_id="pack-1"
+    )
+    assert "approved review requires criteria[0] to be pass" in errors
+    assert "approved review disposition requires an empty unresolved list" in errors
+
+
+def test_review_schema_rejects_disposition_as_result() -> None:
+    value = _completion(result="changes_requested")
+    with pytest.raises(WorkflowError, match="invalid artifact"):
+        validate_instance(value, "agent-workflow/completion/v1")
+
+
+def test_observe_refreshes_mutable_status_projection(tmp_path: Path, monkeypatch) -> None:
+    from dataclasses import replace
+
+    from agent_workflow import sessions
+    from agent_workflow.config import defaults
+    from agent_workflow.state import read_status
+    from agent_workflow.tmux import PaneInfo
+    from agent_workflow.util import atomic_write_json
+
+    settings = replace(
+        defaults(tmp_path / "missing-config.toml"),
+        state_root=tmp_path / "state",
+        stall_minutes=1,
+    )
+    run = settings.state_root / "runs" / "projection-run"
+    run.mkdir(parents=True)
+    log = run / "output.log"
+    log.write_text("progress\n", encoding="utf-8")
+    atomic_write_json(
+        run / "status.json",
+        {
+            "schema": "agent-workflow/session-status/v2",
+            "session_id": "projection-run",
+            "status": "running",
+            "created_at": "2026-08-02T00:00:00+00:00",
+            "workdir": str(tmp_path),
+            "prompt_path": str(run / "prompt.md"),
+            "log_path": str(log),
+            "tmux_session": "projection-run",
+            "tmux_target": "projection-run",
+            "tmux_mode": "dedicated_session",
+            "interactive": False,
+            "failure_category": None,
+        },
+    )
+    monkeypatch.setattr(sessions.tmux, "session_exists", lambda _target: True)
+    monkeypatch.setattr(
+        sessions.tmux,
+        "resolve_status_pane",
+        lambda _status: PaneInfo(pid=456, dead=False, command="python", pane_id="%2"),
+    )
+
+    observed = sessions.observe(settings, "projection-run")
+    persisted = read_status(settings, "projection-run")
+
+    assert observed["observed_state"] == "running"
+    assert persisted["observed_state"] == "running"
+    assert persisted["tmux_alive"] is True
+    assert persisted["pane_pid"] == 456
+    assert persisted["projection_source"] == "observe"
+    assert persisted["projection_freshness"] == "live"
+    assert persisted["projection_authority"] == "cache"
+    assert persisted["projection_generated_at"]
+    assert persisted["failure_category"] is None
+    assert persisted["observed_failure_category"] is None

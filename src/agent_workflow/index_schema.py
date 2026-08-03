@@ -12,7 +12,7 @@ import sqlite3
 from .errors import WorkflowError
 from .util import utc_now
 
-INDEX_SCHEMA_VERSION = 1
+INDEX_SCHEMA_VERSION = 3
 INDEX_APPLICATION_ID = 0x41574631  # "AWF1"
 
 MIGRATION_1 = r"""
@@ -333,6 +333,48 @@ JOIN runs r ON r.session_id = m.session_id
 GROUP BY r.executor, r.model, m.stage;
 """
 
+MIGRATION_2 = r"""
+ALTER TABLE runs ADD COLUMN executor_result TEXT;
+ALTER TABLE runs ADD COLUMN completion_result TEXT;
+ALTER TABLE runs ADD COLUMN policy_result TEXT;
+ALTER TABLE runs ADD COLUMN acceptance_eligible INTEGER;
+ALTER TABLE runs ADD COLUMN attempt_classification TEXT;
+ALTER TABLE runs ADD COLUMN score_verdict TEXT;
+ALTER TABLE runs ADD COLUMN evaluation_state TEXT;
+CREATE INDEX IF NOT EXISTS runs_attempt_class_idx ON runs(attempt_classification, evaluation_state);
+CREATE VIEW IF NOT EXISTS attempt_summary AS
+SELECT attempt_classification, executor_result, completion_result, policy_result,
+       score_verdict, evaluation_state, COUNT(*) AS run_count,
+       SUM(CASE WHEN acceptance_eligible = 1 THEN 1 ELSE 0 END) AS acceptance_eligible_count
+FROM runs
+GROUP BY attempt_classification, executor_result, completion_result, policy_result,
+         score_verdict, evaluation_state;
+"""
+
+
+MIGRATION_3 = r"""
+CREATE TABLE IF NOT EXISTS evidence_repairs (
+    repair_id TEXT PRIMARY KEY,
+    source_session_id TEXT NOT NULL,
+    source_final_receipt_sha256 TEXT NOT NULL,
+    source_artifact_path TEXT NOT NULL,
+    source_artifact_sha256 TEXT NOT NULL,
+    adapter_id TEXT NOT NULL,
+    adapter_version TEXT NOT NULL,
+    adapter_sha256 TEXT NOT NULL,
+    canonical_sha256 TEXT NOT NULL,
+    validation_result TEXT NOT NULL,
+    source_mutation_verified INTEGER NOT NULL,
+    repair_receipt_sha256 TEXT NOT NULL,
+    repair_dir TEXT NOT NULL,
+    created_at TEXT,
+    actor TEXT,
+    indexed_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS evidence_repairs_source_idx ON evidence_repairs(source_session_id, source_final_receipt_sha256);
+"""
+
+
 
 def validate_database_header(connection: sqlite3.Connection) -> tuple[int, int]:
     application_id = int(connection.execute("PRAGMA application_id").fetchone()[0])
@@ -367,11 +409,31 @@ def migrate(connection: sqlite3.Connection) -> None:
                 "INSERT OR REPLACE INTO schema_migrations(version, applied_at, description) VALUES(1, ?, ?)",
                 (utc_now(), "initial rebuildable evidence projection"),
             )
-            connection.execute(f"PRAGMA user_version = {INDEX_SCHEMA_VERSION}")
+            connection.execute("PRAGMA user_version = 1")
             connection.execute(
                 "INSERT OR REPLACE INTO index_metadata(key, value) VALUES('authority', 'json-jsonl-sealed-receipts')"
             )
+        version = 1
+    if version < 2:
+        with connection:
+            connection.executescript(MIGRATION_2)
             connection.execute(
-                "INSERT OR REPLACE INTO index_metadata(key, value) VALUES('schema_version', ?)",
-                (str(INDEX_SCHEMA_VERSION),),
+                "INSERT OR REPLACE INTO schema_migrations(version, applied_at, description) VALUES(2, ?, ?)",
+                (utc_now(), "typed attempt outcome and evaluation projection"),
             )
+            connection.execute("PRAGMA user_version = 2")
+        version = 2
+    if version < 3:
+        with connection:
+            connection.executescript(MIGRATION_3)
+            connection.execute(
+                "INSERT OR REPLACE INTO schema_migrations(version, applied_at, description) VALUES(3, ?, ?)",
+                (utc_now(), "append-only supplemental evidence repair projection"),
+            )
+            connection.execute("PRAGMA user_version = 3")
+        version = 3
+    with connection:
+        connection.execute(
+            "INSERT OR REPLACE INTO index_metadata(key, value) VALUES('schema_version', ?)",
+            (str(INDEX_SCHEMA_VERSION),),
+        )

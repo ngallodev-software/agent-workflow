@@ -129,6 +129,18 @@ Key evidence:
 5. Restart only when the original process is proven unavailable or terminal and the retry budget permits it.
 6. Verify the new run from durable evidence, not from a pane appearing active.
 
+## Mutable run-status projection
+
+`runs/<session>/status.json` is an atomically updated operator cache. Running
+`agent-workflow status <session> --json` refreshes live tmux, health, semantic
+progress, permission, and capture-exhaustion fields in that file. Inspect
+`projection_generated_at`, `projection_source`, and `projection_freshness` before
+using a copied projection. Never treat it as launch, completion, evaluation, or
+acceptance authority; those decisions are reconstructed from immutable contracts,
+append-only journals, process results, and sealed receipts. An observed diagnosis
+is stored separately as `observed_failure_category` and does not replace the
+durable `failure_category`.
+
 ## Searchable evidence projection
 
 The host-local SQLite database is an operational projection, not execution authority. The supervisor performs `index sync` after each cycle by default. For manual operations:
@@ -207,6 +219,8 @@ JSON Schema validation is only the first gate. A `completed` handoff must match 
 
 `worktree create` and launch preflight execute a fresh exact-root `git -C <root> status --porcelain`. The command preserves the operator's configured Git exclude view while still disabling pagers, editors, diff helpers, and credential prompts. Worktree creation returns bounded provenance—resolved executable, exact argv/root, return code, byte counts, and output digests—without exposing the unbounded filename list. A real tracked or untracked change remains fail-closed unless `--allow-dirty` is explicit.
 
+Optional codebase-memory discovery uses a full non-persistent exact-worktree index by default and compares porcelain status before and after the one allowed probe. Persistent graphs must use an external host cache or an explicitly pre-authorized `.codebase-memory/` disposable tree. For the local exception, scope snapshots record ownership, mode, file count, total size, tree digest, cleanup policy, and a 256 MiB limit. Unauthorized, unsafe, or oversized tooling residue remains a scope violation; optional-tool failure never blocks bounded shell discovery.
+
 ## Interactive agent reuse
 
 `task-complete` is terminal by default: after the host validates the completion intent it stops the interactive executor, seals the run, and lets tmux close the pane. Interactive agents can retain bounded assignment context only with the explicit `--keep-alive` mode. Reuse then requires:
@@ -250,6 +264,24 @@ Do not delete a failed worktree or run directory automatically. Review the patch
 
 Use `worktree remove` only after deciding whether the branch should be retained. Use uninstall only for installer-owned links and launchers; unrelated paths are left untouched.
 
+Before claiming repository integration, create an immutable closeout receipt:
+
+```bash
+agent-workflow worktree closeout /path/to/worktree \
+  --output /path/to/repository-closeout.json \
+  --baseline-revision BASE_SHA --fetch --push \
+  --integration-branch main \
+  --operational-tree .agent-workflow-handoff/ \
+  --disposable-tree .codebase-memory/
+agent-workflow worktree closeout-verify /path/to/repository-closeout.json
+```
+
+Without `--fetch` or `--push`, remote observations remain explicitly
+unverified. A successful local `git push` exit is not enough: the pushed claim
+is true only when the exact remote branch is re-read and equals local HEAD.
+Ledger rows expose local/remote revisions and committed, pushed, and merged
+claims separately.
+
 ## Host routing
 
 Global instructions may recommend `agent-workflow` for bounded delegation. They are guidance, not a security boundary. Future installer-owned hooks may block a narrowly defined set of direct delegation commands, but only after explicit maintainer authorization and an audited break-glass path. See `BKL-007` in [BACKLOG.md](BACKLOG.md).
@@ -282,3 +314,24 @@ agent-workflow orchestrator inbox list ORCHESTRATOR_ID --after 0 --limit 100
 The registry binds child sessions to immutable launch evidence and preserves source evidence on unregistration. Inbox import is delivery authority only; it does not replace child lifecycle authority. The foregroundable supervisor, shared wake loop, and safe orchestrator resume adapter remain `MSG-002` and `MSG-003`.
 
 See [Durable two-way messaging](ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md).
+
+## Recovery finalization for dead executors
+
+The supervisor automatically invokes the idempotent recovery finalizer when it
+confirms that an active durable run has lost both its runner/executor and its tmux
+presentation. Recovery finalization never fabricates a process exit code or valid
+completion. It records `executor_result=lost` when no process result exists,
+collects the completion handoff as `valid`, `missing`, or `invalid`, writes
+`recovery-finalization.json`, creates a terminal lifecycle event, seals available
+evidence, and marks the run ineligible for acceptance.
+
+Use the same service explicitly when investigating a terminal unsealed run:
+
+```text
+agent-workflow finalize <session-id> --json
+```
+
+The command refuses to race a live runner or executor. Repeating it after a
+successful seal returns the verified existing receipt. Restart is a separate,
+lineage-preserving operator action; recovery finalization never silently launches
+a replacement task.

@@ -2,16 +2,146 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "agent-workflow/scope-snapshot/v1",
   "type": "object",
-  "required": ["schema", "phase", "root", "captured_at", "policy", "repositories", "inventory", "excluded"],
+  "required": [
+    "schema",
+    "phase",
+    "root",
+    "captured_at",
+    "policy",
+    "repositories",
+    "inventory",
+    "excluded"
+  ],
   "properties": {
-    "schema": {"const": "agent-workflow/scope-snapshot/v1"},
-    "phase": {"enum": ["baseline", "post"]},
-    "root": {"type": "string"},
-    "captured_at": {"type": "string"},
-    "policy": {"type": "object"},
-    "repositories": {"type": "array", "items": {"type": "object"}},
-    "inventory": {"type": "array", "items": {"type": "object"}},
-    "excluded": {"type": "array", "items": {"type": "string"}}
+    "schema": {
+      "const": "agent-workflow/scope-snapshot/v1"
+    },
+    "phase": {
+      "enum": [
+        "baseline",
+        "post"
+      ]
+    },
+    "root": {
+      "type": "string"
+    },
+    "captured_at": {
+      "type": "string"
+    },
+    "policy": {
+      "type": "object"
+    },
+    "repositories": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "inventory": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "excluded": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "tooling_artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "tool",
+          "valid",
+          "owner_uid",
+          "owner_gid",
+          "mode",
+          "file_count",
+          "size_bytes",
+          "tree_sha256",
+          "authorized_disposable",
+          "cleanup_policy",
+          "size_limit_bytes",
+          "within_size_limit",
+          "error"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "tool": {
+            "const": "codebase-memory"
+          },
+          "valid": {
+            "type": "boolean"
+          },
+          "owner_uid": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "owner_gid": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "mode": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "file_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "tree_sha256": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "authorized_disposable": {
+            "type": "boolean"
+          },
+          "cleanup_policy": {
+            "enum": [
+              "host-owned-disposable",
+              "not-authorized"
+            ]
+          },
+          "size_limit_bytes": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "within_size_limit": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
   },
   "additionalProperties": false
 }

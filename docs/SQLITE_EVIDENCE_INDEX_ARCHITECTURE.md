@@ -48,6 +48,7 @@ The dashed edge emphasizes that SQLite can point back to source evidence but can
 $XDG_STATE_HOME/agent-workflow/
 ├── runs/<session-id>/              active authoritative evidence
 ├── archive/<session-id>/           archived authoritative evidence
+├── evidence-repairs/<repair-id>/    append-only supplemental interpretations
 └── index/
     ├── agent-workflow.sqlite3       disposable query projection
     ├── agent-workflow.sqlite3-wal   SQLite WAL, when active
@@ -70,6 +71,7 @@ erDiagram
     RUNS ||--o| PROCESS_RESULTS : terminates_with
     RUNS ||--o{ EXECUTION_METRICS : measures
     RUNS ||--o| WORKFLOWS : owns
+    RUNS ||--o{ EVIDENCE_REPAIRS : supplements
     WORKFLOWS ||--o{ WORKFLOW_NODES : contains
     WORKFLOWS ||--o{ WORKFLOW_EDGES : orders
 
@@ -85,6 +87,13 @@ erDiagram
       text model
       text durable_status
       text disposition
+      text executor_result
+      text completion_result
+      text policy_result
+      boolean acceptance_eligible
+      text attempt_classification
+      text score_verdict
+      text evaluation_state
       text final_receipt_sha256
       boolean evidence_complete
       text indexed_at
@@ -126,6 +135,21 @@ erDiagram
       text record_sha256
     }
 
+    EVIDENCE_REPAIRS {
+      text repair_id PK
+      text source_session_id FK
+      text source_final_receipt_sha256
+      text source_artifact_path
+      text source_artifact_sha256
+      text adapter_id
+      text adapter_version
+      text adapter_sha256
+      text canonical_sha256
+      text validation_result
+      boolean source_mutation_verified
+      text repair_receipt_sha256
+    }
+
     WORKFLOWS {
       text workflow_id PK
       text owner_run_id FK
@@ -156,8 +180,12 @@ The initial indexer discovers structured `.json` and `.jsonl` artifacts within e
 | `remediation-events.jsonl` | Rule, action, outcome, incident linkage, and reason digest; free-form reason text remains in source |
 | `process-result.json` | Exit, signal, timeout, byte/truncation, duration facts |
 | `execution-metrics.json` | Provider-neutral timing, usage, retry, steering, separately aggregated provider-billed cost, and local-estimate cost |
+| `ledger-row.json` / `scores/score-set.json` | Typed attempt classification, separate executor/completion/policy/acceptance results, evaluation state, and deterministic score verdict |
+| `evidence-repairs/<repair-id>/` | Exact source-receipt/artifact binding, deterministic adapter identity, canonical supplemental digest, mutation check, and repair receipt |
 
 Output logs, terminal bodies, prompts, completion prose, and arbitrary provider payload bodies are intentionally not indexed.
+
+Schema version 2 adds typed attempt outcomes. Valid sealed attempts remain queryable even when completion is missing or invalid, budget policy fails, execution is interrupted, or deterministic scoring is non-pass. Schema version 3 adds verified supplemental evidence-repair linkage. Repair rows are projections of separate append-only records and never override the source run's acceptance fields. Those rows are historical evidence, not acceptance authority.
 
 ## Rebuild and incremental synchronization
 
