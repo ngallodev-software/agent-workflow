@@ -4,7 +4,7 @@
 **Priority:** P1 / High
 **Dependencies:** BENCH-CORR-007 and BENCH-CORR-008
 **Parallel lane:** migration/reporting lane
-**Baseline:** `agent-workflow` 0.7.8
+**Baseline:** `agent-workflow` 0.7.9
 
 ## Objective
 
@@ -34,7 +34,7 @@ No command or report can silently compare incompatible score semantics, and old 
 
 Stop if migration requires mutating old receipts, if version identity is inferred from file location alone, or if mixed cohorts can still declare a winner.
 
-## 0.7.8 implementation ownership
+## 0.7.9 implementation ownership
 
 - Version identity/validation: `src/agent_workflow/benchmarking/contracts.py`, `scoring.py`, and versioned schemas.
 - Cohort compatibility and claims: `reporting.py` and `statistics.py`.

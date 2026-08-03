@@ -1,0 +1,29 @@
+phase: "0"
+name: "baseline-install-and-readiness"
+tasks:
+  - id: "BRH-001"
+    tier: A
+    session: "handoff-source-baseline"
+    prompt: "tickets/BRH-001-source-and-package-baseline.md"
+    task_type: review
+    result_contract:
+      schema: "contracts/task-result.schema.json"
+      required: true
+  - id: "BRH-002"
+    tier: A
+    session: "handoff-host-readiness"
+    prompt: "tickets/BRH-002-host-auth-and-runtime-readiness.md"
+    task_type: review
+    dependencies: ["BRH-001"]
+    result_contract:
+      schema: "contracts/task-result.schema.json"
+      required: true
+  - id: "BRH-GATE-0"
+    tier: C
+    session: "handoff-baseline-gate"
+    prompt: "tickets/BRH-GATE-0-baseline-review.md"
+    task_type: gate
+    dependencies: ["BRH-001", "BRH-002"]
+    result_contract:
+      schema: "contracts/task-result.schema.json"
+      required: true

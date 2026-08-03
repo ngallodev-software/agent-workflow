@@ -21,6 +21,8 @@ from ..benchmarking import (
     score_benchmark,
     seal_benchmark_runtime,
     status_benchmark,
+    start_live_benchmark,
+    stop_live_benchmark,
     validate_benchmark as validate_comparative_benchmark,
     verify_benchmark,
     visual_capture_benchmark,
@@ -87,6 +89,10 @@ def handle_benchmark_command(
         return resume_benchmark(settings, args.run)
     if command == "status":
         return status_benchmark(settings, args.run)
+    if command == "live-start":
+        return start_live_benchmark(settings, args.run)
+    if command == "live-stop":
+        return stop_live_benchmark(settings, args.run)
     if command == "visual-capture":
         return visual_capture_benchmark(settings, args.run)
     if command == "score":
@@ -105,5 +111,8 @@ def handle_benchmark_command(
     if command == "verify":
         return verify_benchmark(settings, args.run)
     if command == "cleanup":
-        return cleanup_benchmark(settings, args.run, remove_worktrees=args.remove_worktrees)
+        kwargs = {"remove_worktrees": args.remove_worktrees}
+        if bool(getattr(args, "stop_live_apps", False)):
+            kwargs["stop_live_apps"] = True
+        return cleanup_benchmark(settings, args.run, **kwargs)
     raise WorkflowError(f"unhandled benchmark command: {command}")

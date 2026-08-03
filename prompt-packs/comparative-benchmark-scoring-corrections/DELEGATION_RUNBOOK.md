@@ -2,7 +2,7 @@
 
 ## Baseline preflight
 
-Use the 0.7.8 repository root and one isolated worktree per writable ticket. Record:
+Use the 0.7.9 repository root and one isolated worktree per writable ticket. Record:
 
 ```bash
 pwd
@@ -14,7 +14,7 @@ cat VERSION
 python3 --version
 ```
 
-Verify the ownership map in `references/LOCATION_DISCOVERY_AND_MAPPING.md`. If a listed owner moved after 0.7.8, record the new dedicated owner and do not reintroduce the old path.
+Verify the ownership map in `references/LOCATION_DISCOVERY_AND_MAPPING.md`. If a listed owner moved after 0.7.9, record the new dedicated owner and do not reintroduce the old path.
 
 Run the baseline checks available in the worktree:
 
@@ -31,7 +31,7 @@ Use the source environment's public CLI when an installed `agent-workflow` is no
 
 ## Launch and parallelism
 
-Phase 0 tickets may analyze in parallel but must converge on one accepted contract and efficiency policy. In phase 1, BENCH-CORR-002 lands before BENCH-CORR-003, BENCH-CORR-004, and BENCH-CORR-005 proceed in separate worktrees. Phase 2 tickets may run concurrently after their manifest dependencies. Phase 3 is sequential.
+Phase 0 tickets may analyze in parallel but must converge on one accepted contract and efficiency policy. In phase 1, BENCH-CORR-002 lands before BENCH-CORR-003, BENCH-CORR-004, and BENCH-CORR-005 proceed in separate worktrees. Phase 2 tickets may run concurrently after their manifest dependencies. Phase 3 is sequential. Phase 4 integrates sequentially because pane topology, live review, and the compact suite share lifecycle boundaries; its final gate must use a separate review worktree and a real tmux host.
 
 Never place two writable agents in one worktree. Integration is a separate reviewed action.
 
@@ -58,7 +58,10 @@ After every merge:
 - verify old v1 reports remain readable and unchanged;
 - verify mixed-version cohorts cannot declare a winner;
 - verify benchmark commands do not require an enabled plugin;
-- run `python3 scripts/audit-release-assets.py`.
+- run `python3 scripts/audit-release-assets.py`;
+- verify an installed run adds exactly two panes to the invoking window and reuses them;
+- verify live applications remain reachable after automated scoring;
+- verify the compact suite has one model phase below 180 seconds and exports byte-identically.
 
 ## Phase gate
 

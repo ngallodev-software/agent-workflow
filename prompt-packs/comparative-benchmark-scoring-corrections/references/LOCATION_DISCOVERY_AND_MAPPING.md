@@ -1,8 +1,8 @@
-# agent-workflow 0.7.8 benchmark ownership map
+# agent-workflow 0.7.9 benchmark ownership map
 
-This pack is rebased to the 0.7.8 repository. The relative paths below are the expected owners for the baseline. Before editing, verify that each path still exists and record any behavior-preserving move in the ticket completion report. Do not write through a compatibility facade when a dedicated owner exists.
+This pack is rebased to the 0.7.9 repository. The relative paths below are the expected owners for the baseline. Before editing, verify that each path still exists and record any behavior-preserving move in the ticket completion report. Do not write through a compatibility facade when a dedicated owner exists.
 
-| Functional surface | 0.7.8 path(s) | Authority/derivative | Required handling |
+| Functional surface | 0.7.9 path(s) | Authority/derivative | Required handling |
 |---|---|---|---|
 | CLI grammar | `src/agent_workflow/cli_parser.py` | Public command contract | Preserve parser/catalog/help behavior; add options only when required by the corrected contract. |
 | Benchmark command dispatch | `src/agent_workflow/cli_handlers/benchmark.py` | Built-in feature adapter | Keep this thin; route behavior to the benchmarking service. |

@@ -20,8 +20,12 @@ def test_active_version_authorities_and_release_examples_are_synchronized() -> N
     assert pyproject["project"]["version"] == version
     assert f'version: {version}' in _read("agent-workflow.yaml")
     assert f'__version__ = "{version}"' in _read("src/agent_workflow/__init__.py")
-    assert f'%(prog)s {version}' in _read("src/agent_workflow/cli_parser.py")
-    assert f'"version": "{version}"' in _read("src/agent_workflow/doctor.py")
+    parser_source = _read("src/agent_workflow/cli_parser.py")
+    assert "from . import __version__" in parser_source
+    assert 'version=f"%(prog)s {__version__}"' in parser_source
+    doctor_source = _read("src/agent_workflow/doctor.py")
+    assert "from . import __version__" in doctor_source
+    assert '"version": __version__' in doctor_source
 
     for relative in ("release/release-policy.json", "release/dependency-lock.json"):
         assert json.loads(_read(relative))["version"] == version

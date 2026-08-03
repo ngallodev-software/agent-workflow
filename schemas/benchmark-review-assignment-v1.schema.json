@@ -42,11 +42,19 @@
                   "evidence_sha256": {
                     "pattern": "^[0-9a-f]{64}$",
                     "type": "string"
+                  },
+                  "live_url": {
+                    "maxLength": 4096,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   }
                 },
                 "required": [
                   "evidence",
-                  "evidence_sha256"
+                  "evidence_sha256",
+                  "live_url"
                 ],
                 "type": "object"
               },
@@ -64,11 +72,19 @@
                   "evidence_sha256": {
                     "pattern": "^[0-9a-f]{64}$",
                     "type": "string"
+                  },
+                  "live_url": {
+                    "maxLength": 4096,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   }
                 },
                 "required": [
                   "evidence",
-                  "evidence_sha256"
+                  "evidence_sha256",
+                  "live_url"
                 ],
                 "type": "object"
               }

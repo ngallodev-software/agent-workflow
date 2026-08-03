@@ -10,12 +10,15 @@ from .common import canonical_json_sha256, child, safe_relative
 from .runtime import validate_runtime_lock
 
 BENCHMARK_SPEC_SCHEMA = "agent-workflow/benchmark-spec/v1"
+BENCHMARK_SPEC_SCHEMAS = {BENCHMARK_SPEC_SCHEMA, "agent-workflow/benchmark-spec/v2"}
+BENCHMARK_SCORING_CONTRACT_SCHEMA = "agent-workflow/benchmark-scoring-contract/v1"
 BENCHMARK_EXECUTOR_SCHEMA = "agent-workflow/benchmark-executor-config/v1"
 BENCHMARK_RUN_SCHEMA = "agent-workflow/benchmark-run/v1"
 BENCHMARK_ARM_SCHEMA = "agent-workflow/benchmark-arm/v1"
 BENCHMARK_PAIR_SCHEMA = "agent-workflow/benchmark-pair/v1"
 BENCHMARK_PHASE_EVENT_SCHEMA = "agent-workflow/benchmark-phase-event/v1"
 BENCHMARK_MACHINE_SCORE_SCHEMA = "agent-workflow/benchmark-machine-score/v1"
+BENCHMARK_MACHINE_SCORE_V2_SCHEMA = "agent-workflow/benchmark-machine-score/v2"
 BENCHMARK_REVIEW_ASSIGNMENT_SCHEMA = "agent-workflow/benchmark-review-assignment/v1"
 BENCHMARK_HUMAN_REVIEW_SCHEMA = "agent-workflow/benchmark-human-review/v1"
 BENCHMARK_CONSOLIDATION_SCHEMA = "agent-workflow/benchmark-consolidation-receipt/v1"
@@ -43,9 +46,46 @@ def _require_directory(root: Path, relative: str, label: str) -> Path:
     return path
 
 
+def load_scoring_contract(path: Path, spec: dict[str, Any] | None = None) -> dict[str, Any] | None:
+    """Load and validate the explicit corrected-version scoring authority."""
+    path = path.expanduser().resolve()
+    spec = spec or read_contract(path)
+    relative = spec.get("scoring_contract_path")
+    if not isinstance(relative, str):
+        return None
+    contract_path = _require_file(path.parent, relative, "scoring contract")
+    contract = read_contract(contract_path, BENCHMARK_SCORING_CONTRACT_SCHEMA)
+    if contract["benchmark_id"] != spec["benchmark_id"] or contract["benchmark_version"] != spec["version"]:
+        raise WorkflowError("scoring contract benchmark identity does not match benchmark specification")
+    dimension_ids = [str(item["id"]) for item in contract["dimensions"]]
+    _unique(dimension_ids, "scoring-contract dimension IDs")
+    check_ids: list[str] = []
+    total = 0.0
+    for dimension in contract["dimensions"]:
+        ids = [str(item["id"]) for item in dimension["checks"]]
+        _unique(ids, f"scoring-contract check IDs in {dimension['id']}")
+        check_ids.extend(ids)
+        observed = sum(float(item["max_points"]) for item in dimension["checks"] )
+        maximum = float(dimension["max_points"])
+        if abs(observed - maximum) > 1e-9:
+            raise WorkflowError(
+                f"scoring contract dimension {dimension['id']} points must total {maximum:g}, observed {observed:g}"
+            )
+        total += maximum
+    _unique(check_ids, "scoring-contract check IDs")
+    if abs(total - float(contract["total_points"])) > 1e-9 or abs(total - 100.0) > 1e-9:
+        raise WorkflowError(f"scoring contract points must total 100, observed {total:g}")
+    evaluator = _require_file(path.parent, str(contract["evaluator_path"]), "scoring evaluator")
+    if not evaluator.is_file():  # pragma: no cover - _require_file owns the error
+        raise WorkflowError(f"scoring evaluator not found: {evaluator}")
+    return contract
+
+
 def validate_spec(path: Path) -> dict[str, Any]:
     path = path.expanduser().resolve()
-    value = read_contract(path, BENCHMARK_SPEC_SCHEMA)
+    value = read_contract(path)
+    if value.get("schema") not in BENCHMARK_SPEC_SCHEMAS:
+        raise WorkflowError(f"unexpected benchmark specification schema: {value.get('schema')}")
     root = path.parent
     _require_file(root, value["canonical_task"], "canonical task")
     _require_directory(root, value["fixture"]["template_path"], "fixture template")
@@ -95,8 +135,15 @@ def validate_spec(path: Path) -> dict[str, Any]:
         "scope_completeness",
         "engineering_quality",
     }
-    if {str(item["dimension"]) for item in scorers} != required_dimensions:
+    scorer_dimensions = {str(item["dimension"]) for item in scorers}
+    if scorer_dimensions != required_dimensions:
         raise WorkflowError("benchmark machine scoring must define the six frozen dimensions")
+    contract = load_scoring_contract(path, value)
+    if contract is not None:
+        contract_dimensions = {str(item["id"]): float(item["max_points"]) for item in contract["dimensions"]}
+        scorer_points = {str(item["dimension"]): float(item["max_points"]) for item in scorers}
+        if contract_dimensions != scorer_points:
+            raise WorkflowError("benchmark scorer dimensions/points do not match the scoring contract")
     return value
 
 

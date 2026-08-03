@@ -46,7 +46,15 @@ def test_task_complete_preserves_all_arguments(tmp_path: Path) -> None:
         summary="done",
         tags=["python"],
         files=["src/example.py"],
+        terminal=True,
     )
+
+
+def test_task_complete_keep_alive_is_nonterminal(tmp_path: Path) -> None:
+    settings = defaults(tmp_path / "config.toml")
+    with patch("agent_workflow.cli_handlers.agent.complete_agent_task", return_value={}) as call:
+        handle_agent_command(settings, _args("task-complete", keep_alive=True))
+    assert call.call_args.kwargs["terminal"] is False
 
 
 def test_candidates_preserves_ranking_filters(tmp_path: Path) -> None:

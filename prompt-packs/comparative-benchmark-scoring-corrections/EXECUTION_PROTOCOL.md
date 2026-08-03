@@ -6,7 +6,7 @@ The existing `priority-picker-v1` suite, v1 evaluator, sealed receipts, and repo
 
 Original receipts remain immutable. Optional rescoring is additive, versioned, and lineage-linked.
 
-## 2. Use the 0.7.8 owners
+## 2. Use the 0.7.9 owners
 
 Start from `references/LOCATION_DISCOVERY_AND_MAPPING.md`. Verify the current relative paths and record any moved owner before editing. The expected write flow is:
 
@@ -15,13 +15,14 @@ Start from `references/LOCATION_DISCOVERY_AND_MAPPING.md`. Verify the current re
 3. schema additions under `schemas/`;
 4. synchronized installed suite under `src/agent_workflow/assets/benchmarks/`;
 5. focused acceptance/invariant tests;
-6. docs/man/help and release-drift validation.
+6. docs/man/help and release-drift validation;
+7. stable operator panes, live-review lifecycle, and compact suite under their dedicated benchmark modules/assets.
 
 Do not restore an obsolete path or write new behavior into `agent_workflow.cli` when the dedicated benchmark handler/service owns it.
 
 ## 3. Respect the plugin boundary
 
-Benchmarking remains a built-in feature for this correction program. The 0.7.8 plugin API is a trusted top-level-command and digest-bound-resource boundary, not an internal scorer hook framework.
+Benchmarking remains a built-in feature for this correction program. The 0.7.9 plugin API is a trusted top-level-command and digest-bound-resource boundary, not an internal scorer hook framework.
 
 - Do not add a second plugin registry.
 - Do not make core benchmark authority depend on an enabled plugin.
@@ -60,7 +61,11 @@ Required test classes:
 - source/installed-suite byte equivalence;
 - mixed-version comparison rejection;
 - old v1 report rendering and verification;
-- core benchmark commands functioning with `--no-plugins` and with no enabled plugin.
+- core benchmark commands functioning with `--no-plugins` and with no enabled plugin;
+- exact two-pane same-window topology and stable run/arm bindings;
+- visible provider streaming with atomic result handoff and process-group cancellation;
+- durable live-review readiness/status/restart/stop and blinded URL refresh;
+- compact suite one-phase timeout below 180 seconds and exact 100-point calibration.
 
 Do not add broad snapshots, private-call choreography, or tests that merely duplicate help text.
 
@@ -87,7 +92,7 @@ Any changed contract must update or generate the matrix, explanation, man-page t
 
 Use `templates/TICKET_COMPLETION.md`. Every completion includes:
 
-- 0.7.8 path ownership touched;
+- 0.7.9 path ownership touched;
 - old and new benchmark/scorer/evaluator/report versions;
 - exact changed semantics;
 - tests and installed-product commands with exit status;
@@ -109,5 +114,8 @@ The gate reviewer independently inspects the complete diff and reruns the smalle
 - treatment identity leaks;
 - mixed-version winner calculations;
 - source/package suite drift;
+- detached benchmark sessions or hidden file-only provider output;
+- live applications that terminate before human review;
+- a “fast” suite that weakens paired isolation, scoring, browser evidence, or blinded review;
 - benchmark commands requiring a plugin;
 - documentation tables that can diverge silently from the contract.

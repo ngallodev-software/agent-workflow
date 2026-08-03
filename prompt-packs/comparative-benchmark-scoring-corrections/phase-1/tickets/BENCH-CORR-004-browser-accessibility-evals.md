@@ -4,7 +4,7 @@
 **Priority:** P0 / High
 **Dependencies:** BENCH-CORR-001 and BENCH-CORR-002
 **Parallel lane:** visual evaluator lane
-**Baseline:** `agent-workflow` 0.7.8
+**Baseline:** `agent-workflow` 0.7.9
 
 ## Objective
 
@@ -30,7 +30,7 @@ Browser check names accurately describe what is proven; no check awards behavior
 
 Stop if the proposed checks require uncontrolled network access, leak treatment identity, or conflate runtime attestation with UI-quality points.
 
-## 0.7.8 implementation ownership
+## 0.7.9 implementation ownership
 
 - Corrected browser capture: `benchmarks/specs/priority-picker-v2/evaluation/capture_visual.py`.
 - Corrected visual rubric/runtime files: the corrected suite's `visual-rubric.json`, runtime lock, and deterministic fixtures.

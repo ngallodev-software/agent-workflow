@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import shutil
 import subprocess
 from dataclasses import replace
@@ -42,8 +43,12 @@ def _settings(tmp_path: Path):
 
 
 @pytest.mark.skipif(
-    importlib.util.find_spec("playwright") is None or shutil.which("chromium") is None,
-    reason="comparative visual journey requires the pinned Playwright/Chromium development runtime",
+    importlib.util.find_spec("playwright") is None
+    or shutil.which("chromium") is None
+    or shutil.which("tmux") is None
+    or not os.environ.get("TMUX")
+    or not os.environ.get("TMUX_PANE"),
+    reason="comparative journey requires Playwright/Chromium and an invoking tmux pane",
 )
 def test_paired_benchmark_runs_scores_blinds_reviews_and_consolidates(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
@@ -65,9 +70,29 @@ def test_paired_benchmark_runs_scores_blinds_reviews_and_consolidates(tmp_path: 
     automated = run_benchmark(settings, plan_path)
     assert automated["state"] == "awaiting_human_review"
     assert automated["automated_pipeline_wall_seconds"] > 0
+    live_apps = automated["live_review"]["apps"]
+    assert len(live_apps) == 2
+    assert {item["arm"] for item in live_apps} == {"control_raw", "workflow_full"}
+    assert len({item["port"] for item in live_apps}) == 2
+    assert all(item["host"] == "0.0.0.0" for item in live_apps)
+    assert all(item["url"].startswith("http://") for item in live_apps)
+    assert all(item["local_url"].startswith("http://127.0.0.1:") for item in live_apps)
 
     plan = json.loads(plan_path.read_text(encoding="utf-8"))
     run_dir = Path(plan["coordinator"]["run_dir"])
+    operator_panes = json.loads(
+        (run_dir.parents[2] / ".agent-workflow-benchmark-runtime" / plan["run_id"] / "operator-panes.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    for pane_id in operator_panes["panes"].values():
+        observed = subprocess.run(
+            ["tmux", "display-message", "-p", "-t", pane_id, "#{pane_id}"],
+            check=True,
+            text=True,
+            capture_output=True,
+        ).stdout.strip()
+        assert observed == pane_id
     report = json.loads((run_dir / "report.json").read_text(encoding="utf-8"))
     pair = report["pairs"][0]
     assert pair["arms"]["control_raw"]["machine_score"] == 88.0
@@ -155,7 +180,7 @@ def test_paired_benchmark_runs_scores_blinds_reviews_and_consolidates(tmp_path: 
 
     verified = verify_benchmark(settings, plan_path)
     assert verified["valid"] is True
-    cleanup = cleanup_benchmark(settings, plan_path, remove_worktrees=True)
+    cleanup = cleanup_benchmark(settings, plan_path, remove_worktrees=True, stop_live_apps=True)
     assert all(item["worktree_removed"] for item in cleanup["removed"])
     assert Path(cleanup["coordinator_preserved"]).is_dir()
     assert verify_benchmark(settings, plan_path)["valid"] is True

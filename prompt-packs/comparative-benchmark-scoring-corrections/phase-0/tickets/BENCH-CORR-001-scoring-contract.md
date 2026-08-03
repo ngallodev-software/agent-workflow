@@ -4,7 +4,7 @@
 **Priority:** P0 / Critical
 **Dependencies:** none; may analyze in parallel with BENCH-CORR-010
 **Parallel lane:** contract lane
-**Baseline:** `agent-workflow` 0.7.8
+**Baseline:** `agent-workflow` 0.7.9
 
 ## Objective
 
@@ -48,7 +48,7 @@ Add deterministic tests proving exact arithmetic, ID uniqueness, evidence-produc
 
 Stop if the work would overwrite historical scores, leave unallocated points, require changing old receipts, or cannot reconcile the documented matrix with an exact contract.
 
-## 0.7.8 implementation ownership
+## 0.7.9 implementation ownership
 
 - Read-only legacy evidence: `benchmarks/specs/priority-picker-v1/` and its installed mirror.
 - Corrected source contract: expected `benchmarks/specs/priority-picker-v2/` unless the accepted phase-0 decision selects another new major ID.

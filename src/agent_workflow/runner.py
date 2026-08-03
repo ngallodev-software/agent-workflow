@@ -161,9 +161,13 @@ def _drain_control_bridge(run_dir: Path, *, active: bool) -> bool:
             digest = "sha256:" + hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
             if value.get("session_id") != session_id or value.get("digest") != digest:
                 raise WorkflowError("control intent identity or digest mismatch")
-            if not active:
-                raise WorkflowError("request arrived after executor exit")
             intent_kind = str(value["kind"])
+            # A cooperative child may persist its already-validated completion
+            # intent immediately before exiting.  The one final drain after
+            # process exit may consume that completion, but no other control
+            # intent is allowed after the executor is gone.
+            if not active and intent_kind != "task_complete":
+                raise WorkflowError("request arrived after executor exit")
             acknowledgement_outcome = value.get("outcome", "applied")
             if intent_kind == "ack" and acknowledgement_outcome not in {"applied", "rejected"}:
                 raise WorkflowError("invalid acknowledgement outcome")

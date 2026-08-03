@@ -4,7 +4,7 @@
 **Priority:** P1 / High
 **Dependencies:** BENCH-CORR-001 and BENCH-CORR-002
 **Parallel lane:** drift/documentation lane
-**Baseline:** `agent-workflow` 0.7.8
+**Baseline:** `agent-workflow` 0.7.9
 
 ## Objective
 
@@ -39,7 +39,7 @@ No manually duplicated point table can silently disagree with the authoritative 
 
 Stop if generation overwrites independent rationale or if package assets remain a manually maintained divergent copy.
 
-## 0.7.8 implementation ownership
+## 0.7.9 implementation ownership
 
 - Authoritative contract: corrected suite under `benchmarks/specs/priority-picker-v2/`.
 - Installed mirror: `src/agent_workflow/assets/benchmarks/priority-picker-v2/`.

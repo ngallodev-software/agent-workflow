@@ -11,9 +11,12 @@ backlog_items:
   - "BENCH-CORR-008"
   - "BENCH-CORR-009"
   - "BENCH-CORR-010"
+  - "BENCH-OPS-001"
+  - "BENCH-OPS-002"
+  - "BENCH-OPS-003"
 workflow:
   name: agent-workflow
-  minimum_version: "0.7.8"
+  minimum_version: "0.7.9"
   terminal_backend: tmux
   requires:
     - isolated_worktree

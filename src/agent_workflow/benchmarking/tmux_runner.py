@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import signal
+import shlex
 import subprocess
 import sys
 import threading
@@ -64,13 +65,39 @@ def main(argv: list[str] | None = None) -> int:
     returncode = 127
     timed_out = False
     error_category = None
+    provider: subprocess.Popen[bytes] | None = None
+    forwarded_signal: int | None = None
 
-    def drain(source: object, destination: object, limit: int, state: dict[str, bool]) -> None:
+    def forward_signal(signum: int, _frame: object) -> None:
+        nonlocal forwarded_signal, error_category
+        forwarded_signal = signum
+        error_category = "cancelled"
+        if provider is not None and provider.poll() is None:
+            try:
+                os.killpg(provider.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+
+    for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+        signal.signal(signum, forward_signal)
+
+    def drain(
+        source: object,
+        destination: object,
+        mirror: object,
+        limit: int,
+        state: dict[str, bool],
+    ) -> None:
         total = 0
         while True:
             chunk = source.read(65536)  # type: ignore[union-attr]
             if not chunk:
                 break
+            # Provider output is visible in the foreground pane while a bounded
+            # copy is retained as evidence.  The pane is the operator surface;
+            # the files remain the durable machine-readable record.
+            mirror.write(chunk)  # type: ignore[union-attr]
+            mirror.flush()  # type: ignore[union-attr]
             remaining = max(0, limit - total)
             if remaining:
                 destination.write(chunk[:remaining])  # type: ignore[union-attr]
@@ -79,14 +106,14 @@ def main(argv: list[str] | None = None) -> int:
                 state["truncated"] = True
             total += len(chunk)
 
-    print(f"benchmark agent pane starting: {' '.join(command)}", flush=True)
+    print(f"benchmark agent pane starting: {shlex.join(command)}", flush=True)
     try:
         with (
             Path(options.prompt).open("rb") as prompt,
             Path(options.stdout).open("wb") as stdout_file,
             Path(options.stderr).open("wb") as stderr_file,
         ):
-            process = subprocess.Popen(
+            provider = subprocess.Popen(
                 command,
                 cwd=options.cwd,
                 env=environment,
@@ -98,30 +125,34 @@ def main(argv: list[str] | None = None) -> int:
             stdout_state = {"truncated": False}
             stderr_state = {"truncated": False}
             stdout_thread = threading.Thread(
-                target=drain, args=(process.stdout, stdout_file, options.max_stdout, stdout_state), daemon=True
+                target=drain,
+                args=(provider.stdout, stdout_file, sys.stdout.buffer, options.max_stdout, stdout_state),
+                daemon=True,
             )
             stderr_thread = threading.Thread(
-                target=drain, args=(process.stderr, stderr_file, options.max_stderr, stderr_state), daemon=True
+                target=drain,
+                args=(provider.stderr, stderr_file, sys.stderr.buffer, options.max_stderr, stderr_state),
+                daemon=True,
             )
             stdout_thread.start()
             stderr_thread.start()
             try:
-                returncode = process.wait(timeout=options.timeout)
+                returncode = provider.wait(timeout=options.timeout)
             except subprocess.TimeoutExpired:
                 timed_out = True
                 error_category = "timeout"
                 try:
-                    os.killpg(process.pid, signal.SIGTERM)
+                    os.killpg(provider.pid, signal.SIGTERM)
                 except ProcessLookupError:
                     pass
                 try:
-                    returncode = process.wait(timeout=5)
+                    returncode = provider.wait(timeout=5)
                 except subprocess.TimeoutExpired:
                     try:
-                        os.killpg(process.pid, signal.SIGKILL)
+                        os.killpg(provider.pid, signal.SIGKILL)
                     except ProcessLookupError:
                         pass
-                    returncode = process.wait()
+                    returncode = provider.wait()
             stdout_thread.join(timeout=5)
             stderr_thread.join(timeout=5)
     except OSError as exc:
@@ -136,8 +167,11 @@ def main(argv: list[str] | None = None) -> int:
         "duration_seconds": duration,
         "stdout_truncated": stdout_state["truncated"] if "stdout_state" in locals() else False,
         "stderr_truncated": stderr_state["truncated"] if "stderr_state" in locals() else False,
+        "forwarded_signal": forwarded_signal,
     }
-    result_path.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+    temporary = result_path.with_name(result_path.name + f".tmp-{os.getpid()}")
+    temporary.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+    os.replace(temporary, result_path)
     print(f"benchmark agent pane finished: returncode={returncode} duration={duration}s", flush=True)
     return 0
 

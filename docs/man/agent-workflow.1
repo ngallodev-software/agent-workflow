@@ -68,10 +68,16 @@ Suppress all configured plugin imports and expose the core-only command parser f
 Print the release version.
 .SH COMPARATIVE BENCHMARK
 The benchmark subsystem runs a paired experiment that compares the same software task under two prompt treatments. Both arms use the same frozen source revision, fixture, canonical task, executor/model configuration, and benchmark-neutral safety envelope. They run in separate Git worktrees and their evidence is consolidated without writing to the original checkout.
-.SS 0.7.8 ownership and plugin boundary
-The comparative benchmark is a built-in feature. CLI grammar is owned by src/agent_workflow/cli_parser.py, dispatch by src/agent_workflow/cli_handlers/benchmark.py, and behavior by src/agent_workflow/benchmarking. The repository suite is authored under benchmarks/specs/priority-picker-v1 and mirrored under src/agent_workflow/assets/benchmarks/priority-picker-v1 for installed export. Versioned evidence schemas remain under schemas.
+.SS 0.7.9 ownership and plugin boundary
+The comparative benchmark is a built-in feature. CLI grammar is owned by src/agent_workflow/cli_parser.py, dispatch by src/agent_workflow/cli_handlers/benchmark.py, and behavior by src/agent_workflow/benchmarking. Built-in suite sources are under benchmarks/specs and exact installed/exported mirrors are under src/agent_workflow/assets/benchmarks. Versioned evidence schemas remain under schemas.
 .PP
 The trusted plugin API registers explicitly enabled top-level commands and digest-bound package schema/asset resources. It does not expose benchmark scorer or evaluator hooks. Scoring corrections must remain in the built-in feature, must not create a second plugin registry, and must defer any distribution extraction to the separately gated ARC-004 program.
+.SS Built-in suites and operator lifecycle
+priority-picker-v1 preserves historical evaluator meaning. priority-picker-v2 is the corrected full task with an explicit versioned per-check 100-point contract. priority-picker-fast-v1 retains the corrected paired, browser, and blinded-review lifecycle in one model phase capped at 150 seconds. Cohorts with different suite identities are not comparable.
+.PP
+benchmark run must be invoked inside tmux. It preflights capacity and creates exactly two additional panes in the invoking window, one for control_raw and one for workflow_full. The same stable pane IDs are reused across phases and retries. Provider standard output and error are visible in those panes while bounded copies and an atomic terminal result are retained as evidence. Pane termination is forwarded to the provider process group.
+.PP
+After model execution, one live application server is started for every selected pair and arm. Browser capture uses those live URLs, and the servers remain active after scoring while the run awaits human review. benchmark status reports pane IDs and live URLs. benchmark live-start restores the servers; benchmark live-stop stops them without deleting evidence. Blinded assignments expose only left/right URLs. Default cleanup preserves servers and worktrees; destructive cleanup requires --stop-live-apps, --remove-worktrees, and verified consolidated evidence.
 .SS Experimental arms
 .TP
 .B control_raw
@@ -179,11 +185,11 @@ The benchmark records phase wall time, active process time, provider elapsed tim
 .PP
 Subscription-backed CLI sessions are the default real-executor authentication path. API-key adapters are optional and explicit. Missing attributable subscription billing is reported as unavailable, not zero. Efficiency is currently descriptive and does not change the quality score or winner threshold.
 .SS Known scoring-contract drift
-The frozen requirement matrix and implemented evaluator do not fully agree. The named hidden allocations in the matrix total 43 while the dimension declares 45. The matrix also assigns 14 named accessibility points while the accessibility dimension declares 10. The implementation instead equal-weights checks within each dimension. Public tests are all-or-nothing and are also counted as a two-point engineering signal. Validation and browser interaction coverage are narrower than the matrix wording suggests. The 0.7.8 benchmark specification declares version 1.1.0 while the matrix says it is frozen for 1.0.0; corrected runs must seal separate benchmark, scoring-contract, evaluator, fixture, policy, runtime, and report identities.
+The frozen requirement matrix and implemented evaluator do not fully agree. The named hidden allocations in the matrix total 43 while the dimension declares 45. The matrix also assigns 14 named accessibility points while the accessibility dimension declares 10. The implementation instead equal-weights checks within each dimension. Public tests are all-or-nothing and are also counted as a two-point engineering signal. Validation and browser interaction coverage are narrower than the matrix wording suggests. The legacy benchmark specification declares version 1.1.0 while the matrix says it is frozen for 1.0.0; corrected runs must seal separate benchmark, scoring-contract, evaluator, fixture, policy, runtime, and report identities.
 .PP
 Do not change the meaning of an existing benchmark version in place. Corrective work must preserve historical v1 scoring, freeze an exact machine-readable per-check contract, use a new major benchmark version for changed semantics, add golden and mutation calibration, reject mixed-version comparisons by default, and generate or validate documentation and packaged assets from the same authoritative contract.
 .PP
-See docs/COMPARATIVE_BENCHMARK_EXPLAINED.md for the complete requirement, evaluation, scoring, and correction analysis, and docs/COMPARATIVE_BENCHMARK_CORRECTION_BACKLOG.md for the 0.7.8-specific correction sequence.
+See docs/COMPARATIVE_BENCHMARK_EXPLAINED.md for the complete requirement, evaluation, scoring, and correction analysis, and docs/COMPARATIVE_BENCHMARK_CORRECTION_BACKLOG.md for the 0.7.9-specific correction and operator-experience sequence.
 .SH EVIDENCE
 Run evidence is normally stored below ~/.local/state/agent-workflow/runs/SESSION. final-receipt.json seals required and optional artifacts. Review dispositions are separate read-only receipts. Structured provider evidence is bounded and sealed before trial extraction. The host-local SQLite index stores normalized searchable fields and source provenance but excludes raw prompt, terminal, message, and log bodies.
 .SH PLUGINS

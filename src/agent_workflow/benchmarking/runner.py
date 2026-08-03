@@ -18,6 +18,7 @@ from .contracts import BENCHMARK_ARM_SCHEMA, BENCHMARK_PAIR_SCHEMA, validate_val
 from .events import append_event
 from .metrics import aggregate_usage, load_usage
 from .pairing import attempts_for
+from .operator_panes import ensure_operator_panes, pane_runtime, respawn
 
 TERMINAL_PHASE_STATES = {"completed", "task_failed", "infrastructure_failed", "timed_out"}
 
@@ -80,7 +81,7 @@ def _render_command(
 def _run_phase_arm(
     plan: Mapping[str, Any], pair: Mapping[str, Any], attempt: Mapping[str, Any],
     arm: Mapping[str, Any], phase: Mapping[str, Any], barrier: threading.Barrier,
-    release: dict[str, float],
+    release: dict[str, float], panes: Mapping[str, Any],
 ) -> dict[str, Any]:
     run_dir = Path(plan["coordinator"]["run_dir"])
     argv, environment, phase_dir, _ = _render_command(plan, pair, attempt, arm, phase)
@@ -97,9 +98,6 @@ def _run_phase_arm(
     )
     if shutil.which("tmux") is None:
         raise WorkflowError("benchmark agents require tmux; no interactive pane backend is available")
-    session_id = "aw-bench-" + hashlib.sha256(
-        f"{plan['run_id']}:{pair['pair_id']}:{attempt['attempt']}:{arm['arm']}:{phase['id']}".encode()
-    ).hexdigest()[:20]
     credential_names = tuple(
         str(name)
         for name in plan["executor"].get("authentication", {}).get("credential_environment", [])
@@ -111,11 +109,6 @@ def _run_phase_arm(
         [str(name) for name in plan["executor"].get("environment_allowlist", [])]
         + list(credential_names)
     ))
-    tmux_environment = EnvironmentPolicy(
-        allowlist=allowlist,
-        values=environment,
-        unsafe_inherit=bool(plan["executor"].get("unsafe_inherit_environment", False)),
-    )
     helper = Path(__file__).with_name("tmux_runner.py")
     helper_argv = [
         sys.executable, str(helper), "--cwd", str(arm["worktree"]),
@@ -128,29 +121,43 @@ def _run_phase_arm(
     helper_argv.extend(item for name in allowlist for item in ("--allow-env", name))
     helper_argv.extend(item for key, value in environment.items() for item in ("--set-env", f"{key}={value}"))
     helper_argv.extend(["--", *argv])
-    launch = run(
-        ["tmux", "new-session", "-d", "-P", "-F", "#{pane_id}", "-s", session_id,
-         "-c", str(arm["worktree"]), *helper_argv],
-        check=False,
-        timeout_seconds=30,
-        max_stdout_bytes=4096,
-        max_stderr_bytes=4096,
-        environment=tmux_environment,
-        secret_values=tuple(os.environ[name] for name in credential_names if os.environ.get(name)),
+    pane_id = respawn(
+        panes,
+        str(arm["arm"]),
+        worktree=Path(arm["worktree"]),
+        argv=helper_argv,
+        title=f"benchmark {arm['arm']}: {phase['id']}",
     )
-    if launch.returncode != 0:
-        raise WorkflowError(f"failed to launch benchmark agent tmux pane: {launch.stderr or launch.stdout}")
     deadline = time.monotonic() + float(phase["timeout_seconds"]) + 15.0
     while not result_path.is_file() and time.monotonic() < deadline:
         time.sleep(0.1)
     if result_path.is_file():
         result_value = read_object(result_path)
     else:
+        # A missing result means the pane helper itself failed to seal evidence.
+        # Terminate that pane command before continuing so retries and later
+        # phases cannot overlap with an orphaned provider process.
+        timeout_banner = [
+            sys.executable,
+            "-c",
+            (
+                "print('benchmark phase failed: pane result evidence was not sealed', flush=True); "
+                "print('the pane was stopped to prevent an orphaned provider process', flush=True)"
+            ),
+        ]
+        respawn(
+            panes,
+            str(arm["arm"]),
+            worktree=Path(arm["worktree"]),
+            argv=timeout_banner,
+            title=f"benchmark {arm['arm']}: {phase['id']} evidence failure",
+        )
         result_value = {
-            "returncode": 124, "timed_out": True,
-            "error_category": "timeout", "duration_seconds": float(phase["timeout_seconds"]),
+            "returncode": 124,
+            "timed_out": True,
+            "error_category": "evidence_timeout",
+            "duration_seconds": float(phase["timeout_seconds"]),
         }
-    run(["tmux", "kill-session", "-t", session_id], check=False, timeout_seconds=10)
 
     class _TmuxResult:
         returncode = int(result_value.get("returncode", 127))
@@ -165,7 +172,7 @@ def _run_phase_arm(
                 "timed_out": self.timed_out,
                 "error_category": self.error_category or ("completed" if self.returncode == 0 else "task_failed"),
                 "duration_seconds": self.duration_seconds,
-                "tmux_session": session_id,
+                **pane_runtime(panes, str(arm["arm"])),
                 "stdout": str(stdout_path),
                 "stderr": str(stderr_path),
                 "include_output": include_output,
@@ -184,7 +191,7 @@ def _run_phase_arm(
         state = "timed_out"
     elif result.returncode == 0:
         state = "completed"
-    elif result.error_category in {"launch_failed", "cancelled"}:
+    elif result.error_category in {"launch_failed", "cancelled", "evidence_timeout"}:
         state = "infrastructure_failed"
     elif plan["executor"].get("nonzero_classification", "task") == "infrastructure":
         state = "infrastructure_failed"
@@ -276,6 +283,7 @@ def _finalize_arm(
 
 def _execute_attempt(plan: Mapping[str, Any], pair: Mapping[str, Any], attempt: Mapping[str, Any]) -> dict[str, Any]:
     run_dir = Path(plan["coordinator"]["run_dir"])
+    panes = plan.get("_operator_panes") if isinstance(plan.get("_operator_panes"), Mapping) else ensure_operator_panes(plan)
     started = time.monotonic()
     records: dict[str, list[dict[str, Any]]] = {"control_raw": [], "workflow_full": []}
     start_skews: list[float] = []
@@ -287,7 +295,7 @@ def _execute_attempt(plan: Mapping[str, Any], pair: Mapping[str, Any], attempt: 
         barrier = threading.Barrier(2, action=lambda: release.__setitem__("monotonic", time.monotonic()))
         starts: dict[str, float] = {}
         def invoke(arm_name: str) -> dict[str, Any]:
-            result = _run_phase_arm(plan, pair, attempt, attempt["arms"][arm_name], phase, barrier, release)
+            result = _run_phase_arm(plan, pair, attempt, attempt["arms"][arm_name], phase, barrier, release, panes)
             starts[arm_name] = float(result["start_offset_seconds"])
             return result
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
@@ -362,7 +370,14 @@ def execute_run(plan_path: Path) -> dict[str, Any]:
     state = read_object(state_path)
     if state["state"] in {"executed", "awaiting_human_review", "completed"}:
         return state
-    state.update(state="running", started_at=state.get("started_at") or utc_now(), updated_at=utc_now())
+    plan["_operator_panes"] = ensure_operator_panes(plan)
+    state.update(
+        state="running",
+        started_at=state.get("started_at") or utc_now(),
+        updated_at=utc_now(),
+        operator_window=plan["_operator_panes"].get("window"),
+        operator_panes=plan["_operator_panes"].get("panes"),
+    )
     atomic_write_json(state_path, state)
     append_event(run_dir, event_type="run_started", run_id=str(plan["run_id"]))
     started = time.monotonic()

@@ -1,4 +1,4 @@
-# Current 0.7.8 benchmark behavior and correction targets
+# Current 0.7.9 benchmark behavior and correction targets
 
 ## Current task
 

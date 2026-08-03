@@ -4,7 +4,7 @@
 **Priority:** P0 / Critical
 **Dependencies:** BENCH-CORR-006, BENCH-CORR-009, and BENCH-CORR-010
 **Parallel lane:** independent review gate
-**Baseline:** `agent-workflow` 0.7.8
+**Baseline:** `agent-workflow` 0.7.9
 
 ## Objective
 
@@ -41,7 +41,7 @@ The gate report explicitly accepts or rejects development, internal, and publica
 
 Reject the gate if any check lacks a controlled mutation, if source and package results differ, if treatment identity leaks to reviewers, if mixed versions can be compared, or if docs/man tables disagree with the contract.
 
-## 0.7.8 implementation ownership
+## 0.7.9 implementation ownership
 
 - Writable scope is review evidence and the phase-gate report only unless a separate corrective ticket is authorized.
 - Review the built-in feature, corrected suite source, installed mirror, schemas, tests, docs/man, release audit, and prompt-pack state.

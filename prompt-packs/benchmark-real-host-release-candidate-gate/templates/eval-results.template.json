@@ -1,0 +1,26 @@
+{
+  "schema": "agent-workflow/benchmark-host-gate-evidence/v1",
+  "candidate": {
+    "version": "0.7.9",
+    "source_sha256": "REPLACE",
+    "archive_sha256": "REPLACE"
+  },
+  "host": {
+    "platform": "REPLACE",
+    "python": "REPLACE",
+    "tmux": "REPLACE",
+    "chromium": "REPLACE"
+  },
+  "runs": {
+    "codex_fast": null,
+    "claude_fast": null,
+    "full_v2": null,
+    "cancellation": null
+  },
+  "independent_gate": {
+    "decision": "blocked",
+    "reviewer": "REPLACE",
+    "report": "final-gate-review.md"
+  },
+  "checks": []
+}

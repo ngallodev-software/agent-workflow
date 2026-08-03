@@ -10,7 +10,7 @@ Produce one accepted, machine-readable, internally consistent contract for the c
 
 ## Rules
 
-1. Confirm the exact 0.7.8 ownership map and source/mirror parity before edits.
+1. Confirm the exact 0.7.9 ownership map and source/mirror parity before edits.
 2. Preserve v1 behavior and receipts.
 3. Do not implement scorer changes in this phase.
 4. Reconcile every point to an exact dimension and check.
@@ -25,6 +25,6 @@ Add contract validators and compatibility tests only as required to prove arithm
 
 Produce ticket completion reports and an independent phase-gate report that either accepts the contract or blocks phase 1.
 
-## 0.7.8 boundary
+## 0.7.9 boundary
 
 Use the dedicated benchmark CLI handler, built-in `agent_workflow.benchmarking` owners, source suite, installed asset mirror, and versioned schemas listed in the ownership map. Resolve the current spec `1.1.0` versus matrix `1.0.0` contradiction. Do not change v1 behavior or add plugin hooks.

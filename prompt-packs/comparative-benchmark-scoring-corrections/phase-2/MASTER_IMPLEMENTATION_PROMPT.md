@@ -16,6 +16,6 @@ Coordinate reviewer-integrity, scorer-calibration, and single-source-of-truth wo
 
 Produce exact calibration tables, blind-leak evidence, package/source digests, and an independent phase gate.
 
-## 0.7.8 boundary
+## 0.7.9 boundary
 
 Use `review.py`, `reporting.py`, the corrected suite assets, packaged mirror, and `scripts/audit-release-assets.py`. Prove the benchmark remains usable without enabled plugins and that source/exported suite bytes agree.

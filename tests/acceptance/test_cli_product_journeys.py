@@ -108,6 +108,8 @@ def test_installed_config_doctor_and_provenance_trust_journey(
         "codex",
         "--agent-class",
         "review",
+        "--tier",
+        "low",
         "--structured",
         env=env,
     )

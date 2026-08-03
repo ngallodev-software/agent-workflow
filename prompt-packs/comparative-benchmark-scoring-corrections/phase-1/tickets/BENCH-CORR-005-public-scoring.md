@@ -4,7 +4,7 @@
 **Priority:** P1 / High
 **Dependencies:** BENCH-CORR-001 and BENCH-CORR-002
 **Parallel lane:** public scoring lane
-**Baseline:** `agent-workflow` 0.7.8
+**Baseline:** `agent-workflow` 0.7.9
 
 ## Objective
 
@@ -33,7 +33,7 @@ Code, contract, matrix, and documentation agree exactly on public-test points an
 
 Stop if the scorer parses brittle human-formatted test output when structured results are available, or if v1 semantics would change.
 
-## 0.7.8 implementation ownership
+## 0.7.9 implementation ownership
 
 - Corrected visible tests: `benchmarks/specs/priority-picker-v2/fixture/starter/tests/public/`.
 - Corrected public evaluator/scoring map: corrected suite `evaluation/evaluate.py` and the accepted scoring contract.

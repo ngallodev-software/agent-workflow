@@ -16,6 +16,7 @@ from .contracts import (
     validate_value,
 )
 from .events import append_event
+from .live_review import live_url_for
 
 
 def _stage_blinded_visuals(arm_dir: Path, destination: Path) -> list[str]:
@@ -40,6 +41,45 @@ def _stage_blinded_visuals(arm_dir: Path, destination: Path) -> list[str]:
     return staged
 
 
+def _refresh_assignment_live_urls(
+    plan: dict[str, Any], assignment_path: Path, mapping_path: Path
+) -> bool:
+    """Refresh review conveniences without changing the blinded label mapping."""
+    if not mapping_path.is_file():
+        return False
+    assignment = read_object(assignment_path)
+    mapping = read_object(mapping_path)
+    labels_by_pair = {
+        str(item["pair_id"]): item["labels"]
+        for item in mapping.get("mappings", [])
+        if isinstance(item, dict) and isinstance(item.get("labels"), dict)
+    }
+    changed = False
+    for pair in assignment.get("pairs", []):
+        if not isinstance(pair, dict):
+            continue
+        pair_id = str(pair.get("pair_id") or "")
+        labels = labels_by_pair.get(pair_id)
+        if not isinstance(labels, dict):
+            continue
+        assignment_labels = pair.get("labels")
+        if not isinstance(assignment_labels, dict):
+            continue
+        for label in ("left", "right"):
+            arm = labels.get(label)
+            value = assignment_labels.get(label)
+            if not isinstance(arm, str) or not isinstance(value, dict):
+                continue
+            current = live_url_for(plan, pair_id, arm)
+            if value.get("live_url") != current:
+                value["live_url"] = current
+                changed = True
+    if changed:
+        validate_value(assignment, BENCHMARK_REVIEW_ASSIGNMENT_SCHEMA, "benchmark review assignment")
+        atomic_write_json(assignment_path, assignment)
+    return changed
+
+
 def prepare_assignment(plan_path: Path, reviewer: str) -> dict[str, Any]:
     reviewer = validate_id(reviewer, "reviewer ID")
     plan = read_object(plan_path.resolve())
@@ -49,7 +89,16 @@ def prepare_assignment(plan_path: Path, reviewer: str) -> dict[str, Any]:
     if root.exists():
         assignment = root / "assignment.json"
         if assignment.is_file():
-            return {"reviewer": reviewer, "assignment": str(assignment), "existing": True}
+            mapping = run_dir / "human-review" / ".blinding" / f"{reviewer}.json"
+            refreshed = _refresh_assignment_live_urls(plan, assignment, mapping)
+            if refreshed:
+                write_manifest(run_dir)
+            return {
+                "reviewer": reviewer,
+                "assignment": str(assignment),
+                "existing": True,
+                "live_urls_refreshed": refreshed,
+            }
         raise WorkflowError(f"review assignment directory already exists: {root}")
     root.mkdir(parents=True)
     blind_root = run_dir / "human-review" / ".blinding"
@@ -69,6 +118,7 @@ def prepare_assignment(plan_path: Path, reviewer: str) -> dict[str, Any]:
             assignment_labels[label] = {
                 "evidence": files,
                 "evidence_sha256": canonical_json_sha256(files),
+                "live_url": live_url_for(plan, str(pair["pair_id"]), arm),
             }
         assignments.append(
             {

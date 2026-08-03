@@ -2,11 +2,11 @@
 
 ## Purpose
 
-Correct the `priority-picker-v1` scoring and evaluation contract without rewriting historical evidence. The work freezes an exact per-check contract, creates a new major benchmark version for changed semantics, expands machine and browser evaluation, calibrates scoring with golden and mutated fixtures, hardens human review, prevents source/package/documentation drift, and rejects mixed-version comparisons.
+Correct the `priority-picker-v1` scoring and evaluation contract without rewriting historical evidence, then repair the benchmark operator experience. The work freezes an exact per-check contract, creates a new major benchmark version for changed semantics, expands machine and browser evaluation, calibrates scoring, hardens human review, prevents source/package/documentation drift, rejects mixed-version comparisons, runs both arms visibly in two panes in the invoking tmux window, preserves live applications for human assessment, and adds a compact sub-three-minute model task.
 
-This pack is rebased to `agent-workflow` 0.7.8 and its current built-in feature/plugin architecture.
+This pack is rebased to `agent-workflow` 0.7.9 and its current built-in feature/plugin architecture.
 
-## 0.7.8 architecture boundary
+## 0.7.9 architecture boundary
 
 The benchmark is a built-in feature under DEC-009:
 
@@ -19,7 +19,7 @@ The benchmark is a built-in feature under DEC-009:
 - acceptance/invariants: the comparative-benchmark tests under `tests/acceptance/` and `tests/invariants/`;
 - release drift: `scripts/audit-release-assets.py`.
 
-The trusted plugin host in 0.7.8 supports explicitly enabled top-level plugin commands and digest-bound schema/asset resources. It does not expose scorer/evaluator hooks. Do not create a benchmark-specific plugin registry, modify the public plugin API merely to complete this work, or extract the benchmark distribution during this pack. Keep authority-bearing execution, evidence, review, and comparison inside the built-in feature while making pure corrected contracts/evaluator interpretation separable for a later evidence-gated ARC-004 extraction.
+The trusted plugin host in 0.7.9 supports explicitly enabled top-level plugin commands and digest-bound schema/asset resources. It does not expose scorer/evaluator hooks. Do not create a benchmark-specific plugin registry, modify the public plugin API merely to complete this work, or extract the benchmark distribution during this pack. Keep authority-bearing execution, evidence, review, and comparison inside the built-in feature while making pure corrected contracts/evaluator interpretation separable for a later evidence-gated ARC-004 extraction.
 
 ## Source-of-truth hierarchy
 
@@ -51,14 +51,15 @@ The v1 evaluator is authoritative for old reports. It is not permission to prese
 | 1 | Implement weighted and expanded machine/browser evaluation | BENCH-CORR-002 through BENCH-CORR-005 | 003/004/005 may run in parallel after 002 |
 | 2 | Harden review, calibration, and drift prevention | BENCH-CORR-006 through BENCH-CORR-008 | Parallel where dependencies permit |
 | 3 | Preserve comparability and independently accept the new version | BENCH-CORR-009, BENCH-CORR-GATE | Sequential |
+| 4 | Make execution observable, preserve live review, and add the compact suite | BENCH-OPS-001 through BENCH-OPS-003, BENCH-OPS-GATE | Sequential integration; independent final gate |
 
 ## Non-targets
 
 - Do not modify the semantics of the existing v1 suite or old receipts.
 - Do not run or publish a real-provider cohort as part of scorer correction.
 - Do not merge efficiency into quality points without the phase-0 policy decision.
-- Do not redesign subscription/API authentication, worktree orchestration, or publication runtime trust.
-- Do not add a framework, database, network service, plugin hook system, or unrelated UI.
+- Do not redesign subscription/API authentication or publication runtime trust. The phase-4 pane and live-review changes are narrowly scoped benchmark orchestration corrections.
+- Do not add a framework, database, generic hosting service, plugin hook system, or unrelated UI. A benchmark-owned loopback live server is required only to preserve the completed application for review.
 - Do not weaken eligibility guardrails to make calibration pass.
 - Do not extract the benchmark into a separate distribution during this pack.
 
@@ -66,6 +67,7 @@ The v1 evaluator is authoritative for old reports. It is not permission to prese
 
 - `references/CURRENT_BEHAVIOR_AND_GAPS.md`
 - `references/LOCATION_DISCOVERY_AND_MAPPING.md`
+- `references/OPERATOR_EXPERIENCE_AND_FAST_SUITE.md`
 - `docs/COMPARATIVE_BENCHMARK_EXPLAINED.md`
 - `docs/COMPARATIVE_BENCHMARK_CORRECTION_BACKLOG.md`
 - `docs/FEATURE_MODULE_ARCHITECTURE.md`

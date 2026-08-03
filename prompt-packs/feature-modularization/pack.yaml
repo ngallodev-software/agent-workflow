@@ -6,7 +6,7 @@ backlog_items:
   - "ARC-004"
 workflow:
   name: agent-workflow
-  minimum_version: "0.7.8"
+  minimum_version: "0.7.9"
   terminal_backend: tmux
   requires:
     - isolated_worktree

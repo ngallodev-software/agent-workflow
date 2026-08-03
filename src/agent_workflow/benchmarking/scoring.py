@@ -8,7 +8,13 @@ from ..errors import WorkflowError
 from ..process import EnvironmentPolicy, run
 from ..util import atomic_write_json, sha256_file, utc_now
 from .common import format_argv, read_object
-from .contracts import BENCHMARK_MACHINE_SCORE_SCHEMA, validate_spec, validate_value
+from .contracts import (
+    BENCHMARK_MACHINE_SCORE_SCHEMA,
+    BENCHMARK_MACHINE_SCORE_V2_SCHEMA,
+    load_scoring_contract,
+    validate_spec,
+    validate_value,
+)
 from .events import append_event
 from .pairing import selected_arms
 
@@ -117,11 +123,81 @@ def _core_guardrails(
     return values
 
 
+def _contract_dimension(contract: Mapping[str, Any], dimension: str) -> Mapping[str, Any]:
+    for item in contract["dimensions"]:
+        if item["id"] == dimension:
+            return item
+    raise WorkflowError(f"scoring contract has no dimension {dimension}")
+
+
+def _contract_checks(
+    scorer: Mapping[str, Any],
+    result: Mapping[str, Any],
+    contract: Mapping[str, Any],
+) -> tuple[list[dict[str, Any]], float]:
+    dimension = _contract_dimension(contract, str(scorer["dimension"]))
+    expected = {str(item["id"]): item for item in dimension["checks"]}
+    raw = result.get("checks")
+    if not isinstance(raw, list):
+        raise WorkflowError(f"scorer {scorer['id']} did not provide a checks array")
+    observed: dict[str, Mapping[str, Any]] = {}
+    for item in raw:
+        if not isinstance(item, Mapping) or not isinstance(item.get("id"), str):
+            raise WorkflowError(f"scorer {scorer['id']} returned a malformed check")
+        check_id = str(item["id"])
+        if check_id in observed:
+            raise WorkflowError(f"scorer {scorer['id']} returned duplicate check {check_id}")
+        if check_id not in expected:
+            raise WorkflowError(f"scorer {scorer['id']} returned unknown check {check_id}")
+        observed[check_id] = item
+    missing = sorted(set(expected) - set(observed))
+    if missing:
+        raise WorkflowError(f"scorer {scorer['id']} omitted checks: {', '.join(missing)}")
+    checks: list[dict[str, Any]] = []
+    earned_total = 0.0
+    for check_id, definition in expected.items():
+        item = observed[check_id]
+        passed = item.get("passed")
+        if not isinstance(passed, bool):
+            raise WorkflowError(f"scorer {scorer['id']} check {check_id} did not provide boolean passed")
+        maximum = float(definition["max_points"])
+        partial = str(definition["partial_credit"])
+        raw_earned = item.get("earned_points", maximum if passed else 0.0)
+        if isinstance(raw_earned, bool) or not isinstance(raw_earned, (int, float)):
+            raise WorkflowError(f"scorer {scorer['id']} check {check_id} did not provide numeric earned_points")
+        earned = float(raw_earned)
+        if earned < 0 or earned > maximum:
+            raise WorkflowError(f"scorer {scorer['id']} check {check_id} points {earned:g} exceed 0..{maximum:g}")
+        if partial == "none" and earned not in {0.0, maximum}:
+            raise WorkflowError(f"scorer {scorer['id']} check {check_id} does not permit partial credit")
+        if passed != (earned == maximum):
+            raise WorkflowError(f"scorer {scorer['id']} check {check_id} passed state disagrees with earned points")
+        evidence = item.get("evidence_reference")
+        if not isinstance(evidence, str) or not evidence:
+            raise WorkflowError(f"scorer {scorer['id']} check {check_id} has no evidence reference")
+        if evidence != definition["evidence_reference"]:
+            raise WorkflowError(f"scorer {scorer['id']} check {check_id} evidence reference does not match the scoring contract")
+        checks.append({
+            "id": check_id,
+            "passed": passed,
+            "max_points": maximum,
+            "earned_points": round(earned, 4),
+            "partial_credit": partial,
+            "evidence_reference": evidence,
+            "detail": str(item.get("detail", "")),
+        })
+        earned_total += earned
+    if abs(float(dimension["max_points"]) - float(scorer["max_points"])) > 1e-9:
+        raise WorkflowError(f"scorer {scorer['id']} maximum does not match the scoring contract")
+    return checks, round(earned_total, 4)
+
+
 def _run_scorer(
     plan: Mapping[str, Any],
     pair: Mapping[str, Any],
     arm: Mapping[str, Any],
     scorer: Mapping[str, Any],
+    contract: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     stage = Path(arm["stage_dir"])
     scores_dir = stage / "scores"
@@ -141,6 +217,7 @@ def _run_scorer(
         "max_points": str(scorer["max_points"]),
         "dimension": str(scorer["dimension"]),
         "scorer_id": str(scorer["id"]),
+        "scoring_contract": str(suite / str(plan.get("scoring_identity", {}).get("contract_path", "scoring-contract.json"))),
     }
     argv = format_argv(scorer["argv"], values)
     process = run(
@@ -179,20 +256,29 @@ def _run_scorer(
         raise WorkflowError(f"invalid scorer result {result_path}: {exc}") from exc
     if not isinstance(result, dict):
         raise WorkflowError(f"scorer result must be an object: {result_path}")
-    earned = result.get("earned_points")
-    if isinstance(earned, bool) or not isinstance(earned, (int, float)):
-        raise WorkflowError(f"scorer {scorer['id']} did not provide numeric earned_points")
     maximum = float(scorer["max_points"])
-    if earned < 0 or earned > maximum:
-        raise WorkflowError(f"scorer {scorer['id']} points {earned} exceed 0..{maximum}")
+    if contract is not None:
+        checks, earned = _contract_checks(scorer, result, contract)
+        claimed = result.get("earned_points")
+        if isinstance(claimed, bool) or not isinstance(claimed, (int, float)):
+            raise WorkflowError(f"scorer {scorer['id']} did not provide numeric earned_points")
+        if abs(float(claimed) - earned) > 1e-9:
+            raise WorkflowError(f"scorer {scorer['id']} earned_points do not equal contracted check points")
+    else:
+        earned = result.get("earned_points")
+        if isinstance(earned, bool) or not isinstance(earned, (int, float)):
+            raise WorkflowError(f"scorer {scorer['id']} did not provide numeric earned_points")
+        if earned < 0 or earned > maximum:
+            raise WorkflowError(f"scorer {scorer['id']} points {earned} exceed 0..{maximum}")
+        checks = result.get("checks", [])
     return {
         "id": scorer["id"],
         "dimension": scorer["dimension"],
         "max_points": maximum,
         "earned_points": round(float(earned), 4),
-        "state": str(result.get("state", "pass" if earned == maximum else "partial")),
+        "state": str(result.get("state", "pass" if earned == maximum else ("partial" if earned else "fail"))),
         "details": [str(item) for item in result.get("details", [])],
-        "checks": result.get("checks", []),
+        "checks": checks,
         "result_sha256": sha256_file(result_path),
         "duration_seconds": process.duration_seconds,
     }
@@ -209,7 +295,9 @@ def score_run(plan_path: Path) -> dict[str, Any]:
     summary_path = run_dir / "machine-scores.json"
     if summary_path.is_file():
         return read_object(summary_path)
-    spec = validate_spec(Path(plan["coordinator"]["spec_path"]))
+    spec_path = Path(plan["coordinator"]["spec_path"])
+    spec = validate_spec(spec_path)
+    contract = load_scoring_contract(spec_path, spec)
     append_event(run_dir, event_type="machine_scoring_started", run_id=str(plan["run_id"]))
     scored: list[dict[str, Any]] = []
     for pair in plan["pairs"]:
@@ -226,7 +314,7 @@ def score_run(plan_path: Path) -> dict[str, Any]:
             capture_path = stage / "visual" / "capture.json"
             capture = read_object(capture_path) if capture_path.is_file() else None
             guardrails = _core_guardrails(plan, selected_pair, pair_state, arm_value, capture, spec)
-            components = [_run_scorer(plan, pair, arm, item) for item in spec["machine_scoring"]["scorers"]]
+            components = [_run_scorer(plan, pair, arm, item, contract) for item in spec["machine_scoring"]["scorers"]]
             required_failures = [
                 item["id"]
                 for item in guardrails
@@ -239,8 +327,9 @@ def score_run(plan_path: Path) -> dict[str, Any]:
             # the observed score for diagnostics and reporting, while the
             # eligibility projection remains the authority for composites.
             score = _observed_machine_score(components)
+            score_schema = BENCHMARK_MACHINE_SCORE_V2_SCHEMA if contract is not None else BENCHMARK_MACHINE_SCORE_SCHEMA
             value = {
-                "schema": BENCHMARK_MACHINE_SCORE_SCHEMA,
+                "schema": score_schema,
                 "run_id": plan["run_id"],
                 "benchmark_id": plan["benchmark_id"],
                 "pair_id": pair["pair_id"],
@@ -265,7 +354,20 @@ def score_run(plan_path: Path) -> dict[str, Any]:
                 ),
                 "scored_at": utc_now(),
             }
-            validate_value(value, BENCHMARK_MACHINE_SCORE_SCHEMA, f"machine score {pair['pair_id']} {arm_name}")
+            if contract is not None:
+                suite = Path(plan["coordinator"]["suite_dir"])
+                contract_path = suite / str(spec["scoring_contract_path"])
+                evaluator_path = suite / str(contract["evaluator_path"])
+                value.update(
+                    benchmark_version=spec["version"],
+                    scoring_identity={
+                        "scorer_version": contract["scorer_version"],
+                        "evaluator_version": contract["evaluator_version"],
+                        "scoring_contract_sha256": sha256_file(contract_path),
+                        "evaluator_sha256": sha256_file(evaluator_path),
+                    },
+                )
+            validate_value(value, score_schema, f"machine score {pair['pair_id']} {arm_name}")
             atomic_write_json(stage / "score.json", value)
             scored.append(value)
     summary = {

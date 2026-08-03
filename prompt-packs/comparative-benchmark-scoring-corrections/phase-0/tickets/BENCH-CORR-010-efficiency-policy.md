@@ -4,7 +4,7 @@
 **Priority:** P1 / Medium
 **Dependencies:** none; may analyze in parallel with BENCH-CORR-001
 **Parallel lane:** policy lane
-**Baseline:** `agent-workflow` 0.7.8
+**Baseline:** `agent-workflow` 0.7.9
 
 ## Objective
 
@@ -41,7 +41,7 @@ The policy states exactly how efficiency can and cannot change a verdict, is mac
 
 Stop if the proposal hides cost inside quality points, treats subscription usage as zero cost, or compares incomparable timing definitions.
 
-## 0.7.8 implementation ownership
+## 0.7.9 implementation ownership
 
 - Operating-policy authority: `src/agent_workflow/benchmarking/policy.py`.
 - Metrics/cost definitions: `metrics.py`, `reporting.py`, and `statistics.py`.

@@ -18,6 +18,7 @@ from .common import canonical_json_sha256, child, copy_tree, read_object, text_s
 from .contracts import (
     BENCHMARK_RUN_SCHEMA,
     contract_sha256,
+    load_scoring_contract,
     validate_executor_config,
     validate_spec,
     validate_value,
@@ -244,6 +245,19 @@ def create_run_plan(
         spec["visual"]["runtime_lock_path"] = runtime_lock_name
         atomic_write_json(suite_spec, spec)
         validate_spec(suite_spec)
+        scoring_contract = load_scoring_contract(suite_spec, spec)
+        scoring_identity = None
+        if scoring_contract is not None:
+            scoring_contract_path = suite_dir / str(spec["scoring_contract_path"])
+            evaluator_path = suite_dir / str(scoring_contract["evaluator_path"])
+            scoring_identity = {
+                "contract_path": str(spec["scoring_contract_path"]),
+                "benchmark_version": str(spec["version"]),
+                "scorer_version": str(scoring_contract["scorer_version"]),
+                "evaluator_version": str(scoring_contract["evaluator_version"]),
+                "scoring_contract_sha256": sha256_file(scoring_contract_path),
+                "evaluator_sha256": sha256_file(evaluator_path),
+            }
         executor_snapshot = run_dir / "executor-config.json"
         policy_snapshot = run_dir / "operating-policy.json"
         run_dir.mkdir(parents=True, exist_ok=True)
@@ -375,6 +389,8 @@ def create_run_plan(
             },
             "authentication_evidence": authentication_evidence,
         }
+        if scoring_identity is not None:
+            plan["scoring_identity"] = scoring_identity
         validate_value(plan, BENCHMARK_RUN_SCHEMA, "benchmark run plan")
         atomic_write_json(run_dir / "run-plan.json", plan)
         atomic_write_json(run_dir / "environment.json", environment)

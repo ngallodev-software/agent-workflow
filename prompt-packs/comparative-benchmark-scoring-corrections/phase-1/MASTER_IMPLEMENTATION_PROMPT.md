@@ -20,6 +20,6 @@ Prefer exported-suite and installed-product scoring journeys plus compact arithm
 
 Integrate in dependency order and produce an independent phase gate with exact expected scores for controlled fixtures.
 
-## 0.7.8 boundary
+## 0.7.9 boundary
 
 Implement generic corrected-version support in `src/agent_workflow/benchmarking/`; implement task-specific checks in a new `benchmarks/specs/priority-picker-v2/` suite and synchronize its installed asset mirror. Keep `cli_handlers/benchmark.py` thin and do not modify the trusted plugin API.

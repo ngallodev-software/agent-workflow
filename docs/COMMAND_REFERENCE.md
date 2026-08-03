@@ -203,7 +203,7 @@ agent-workflow ledger PACK [--runs-root PATH] [--output PATH]
 ## Paired comparative benchmarks
 
 ```text
-agent-workflow benchmark suite-export DEST [--benchmark-id priority-picker-v1] [--force]
+agent-workflow benchmark suite-export DEST [--benchmark-id priority-picker-v1|priority-picker-v2|priority-picker-fast-v1] [--force]
 agent-workflow benchmark validate SPEC [--executor CONFIG]
 agent-workflow benchmark auth-check CONFIG
 agent-workflow benchmark readiness SPEC --executor CONFIG [--policy FILE] [--runtime-lock FILE]
@@ -218,16 +218,20 @@ agent-workflow benchmark plan SPEC --executor CONFIG --repo REPO
 agent-workflow benchmark run RUN
 agent-workflow benchmark resume RUN
 agent-workflow benchmark status RUN
+agent-workflow benchmark live-start RUN
+agent-workflow benchmark live-stop RUN
 agent-workflow benchmark visual-capture RUN
 agent-workflow benchmark score RUN
 agent-workflow benchmark consolidate RUN
 agent-workflow benchmark review RUN --reviewer ID [--input FILE]
 agent-workflow benchmark report RUN
 agent-workflow benchmark verify RUN
-agent-workflow benchmark cleanup RUN [--remove-worktrees]
+agent-workflow benchmark cleanup RUN [--stop-live-apps] [--remove-worktrees]
 ```
 
-The built-in `priority-picker-v1` suite compares identical canonical phases through concurrent `control_raw/v1` and `workflow_full/v1` worktrees. Subscription-backed Codex/Claude CLI sessions are the default real-executor authentication; API credentials are optional explicit profiles. `readiness` checks authentication, policy thresholds, retry isolation, tmux availability, and visual runtime without creating worktrees. `run` performs execution, visual capture, machine scoring, consolidation, and reporting, then waits for blinded human review. Reports preserve tokens, provider-billed cost, API-equivalent/local estimates, optional subscription allocation, phase and process timing, pair wall/critical-path/start-skew timing, visual and verification timing, human active-review time, separate observed/eligible machine scores, paired confidence intervals, and the adopted 70/30 composite. `cleanup` preserves arm worktrees by default so built apps remain viewable; `--remove-worktrees` is explicit and requires valid consolidated evidence. See the [implementation](COMPARATIVE_BENCHMARK_IMPLEMENTATION.md) and [operations guide](COMPARATIVE_BENCHMARK_OPERATIONS.md).
+`readiness` now performs the same non-mutating two-pane capacity check used by execution, so a crowded invoking window fails before planning or layout changes.
+
+The built-in suite family includes historical `priority-picker-v1`, corrected full `priority-picker-v2`, and compact `priority-picker-fast-v1`. Subscription-backed Codex/Claude CLI sessions are the default; API credentials are optional explicit profiles. `run` must start inside tmux, creates exactly two additional panes in the invoking window, reuses one stable pane per arm, and streams provider output visibly. It then starts one live server per selected arm, captures browser evidence from those URLs, scores, consolidates, reports, and preserves the applications while awaiting blinded human review. `status` reports pane IDs and live URLs; `live-start`/`live-stop` manage review servers without deleting evidence. Default `cleanup` preserves apps and worktrees. Destructive removal requires verified evidence and stopped apps. Reports retain timing, usage/cost semantics, eligibility, confidence intervals, human review, and the 70/30 composite. See the [implementation](COMPARATIVE_BENCHMARK_IMPLEMENTATION.md) and [operations guide](COMPARATIVE_BENCHMARK_OPERATIONS.md).
 
 ## Prompt packs
 

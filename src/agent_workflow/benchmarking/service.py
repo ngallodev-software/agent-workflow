@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
 import shutil
 import time
 from typing import Any
@@ -13,6 +14,7 @@ from ..util import atomic_write_json, utc_now
 from .common import read_object, write_manifest
 from .auth import preflight_authentication
 from .policy import apply_operating_policy, implicit_operating_policy, load_operating_policy
+from .operator_panes import close_operator_panes, operator_pane_preflight
 from .pairing import attempts_for
 from .runtime import attest_runtime, seal_runtime_lock, validate_runtime_lock
 from .consolidation import consolidate_run, verify_consolidated_run
@@ -23,6 +25,7 @@ from .review import prepare_assignment, submit_review
 from .runner import execute_run
 from .scoring import score_run
 from .visual import capture_run
+from .live_review import live_review_status, start_live_review, stop_live_review
 
 
 def _resolve_plan(settings: Settings, value: str | Path) -> Path:
@@ -67,11 +70,11 @@ def export_builtin_suite(
     benchmark_id: str = "priority-picker-v1",
     force: bool = False,
 ) -> dict[str, Any]:
-    if benchmark_id != "priority-picker-v1":
-        raise WorkflowError(f"unknown built-in benchmark suite: {benchmark_id}")
+    if not benchmark_id or any(part in {"", ".", ".."} for part in Path(benchmark_id).parts) or Path(benchmark_id).name != benchmark_id:
+        raise WorkflowError(f"invalid built-in benchmark suite ID: {benchmark_id}")
     source = asset_path(f"benchmarks/{benchmark_id}")
     if not source.is_dir():
-        raise WorkflowError(f"built-in benchmark suite is unavailable: {benchmark_id}")
+        raise WorkflowError(f"unknown built-in benchmark suite: {benchmark_id}")
     destination = destination.expanduser().resolve()
     if destination.exists():
         if not force:
@@ -145,7 +148,20 @@ def _finalize_automated(settings: Settings, plan: Path) -> dict[str, Any]:
 
     def timed(field: str, operation: Any) -> Any:
         started = time.monotonic()
-        result = operation(plan)
+        stage = field.removesuffix("_stage_wall_seconds")
+        try:
+            result = operation(plan)
+        except Exception as exc:
+            state_value = read_object(run_dir / "run.json")
+            state_value.update(
+                state="failed",
+                failed_stage=stage,
+                error=str(exc),
+                updated_at=utc_now(),
+                **{field: round(time.monotonic() - started, 6)},
+            )
+            atomic_write_json(run_dir / "run.json", state_value)
+            raise
         state_value = read_object(run_dir / "run.json")
         state_value[field] = round(time.monotonic() - started, 6)
         state_value["updated_at"] = utc_now()
@@ -153,6 +169,7 @@ def _finalize_automated(settings: Settings, plan: Path) -> dict[str, Any]:
         return result
 
     timed("execution_stage_wall_seconds", execute_run)
+    live_review = timed("live_review_stage_wall_seconds", start_live_review)
     timed("visual_capture_stage_wall_seconds", capture_run)
     timed("machine_scoring_stage_wall_seconds", score_run)
     consolidated = timed("consolidation_stage_wall_seconds", consolidate_run)
@@ -181,6 +198,7 @@ def _finalize_automated(settings: Settings, plan: Path) -> dict[str, Any]:
         "report": str(run_dir / "report.json"),
         "markdown": str(run_dir / "report.md"),
         "consolidation": consolidated,
+        "live_review": live_review,
         "automated_pipeline_wall_seconds": state["automated_pipeline_wall_seconds"],
     }
 
@@ -200,6 +218,9 @@ def _existing_automated_result(plan_path: Path) -> dict[str, Any] | None:
     verification = verify_consolidated_run(run_dir)
     if not verification["valid"]:
         return None
+    live = live_review_status(plan_path)
+    if live["total"] == 0 or live["ready"] != live["total"]:
+        return None
     state = read_object(run_dir / "run.json")
     return {
         "run_id": plan["run_id"],
@@ -213,6 +234,7 @@ def _existing_automated_result(plan_path: Path) -> dict[str, Any] | None:
             "existing": True,
         },
         "automated_pipeline_wall_seconds": state.get("automated_pipeline_wall_seconds"),
+        "live_review": live,
         "existing": True,
     }
 
@@ -225,6 +247,15 @@ def run_benchmark(settings: Settings, run: str | Path) -> dict[str, Any]:
 def resume_benchmark(settings: Settings, run: str | Path) -> dict[str, Any]:
     plan = _resolve_plan(settings, run)
     return _existing_automated_result(plan) or _finalize_automated(settings, plan)
+
+
+
+def start_live_benchmark(settings: Settings, run: str | Path) -> dict[str, Any]:
+    return start_live_review(_resolve_plan(settings, run))
+
+
+def stop_live_benchmark(settings: Settings, run: str | Path) -> dict[str, Any]:
+    return stop_live_review(_resolve_plan(settings, run))
 
 
 def visual_capture_benchmark(settings: Settings, run: str | Path) -> dict[str, Any]:
@@ -274,7 +305,11 @@ def verify_benchmark(settings: Settings, run: str | Path) -> dict[str, Any]:
 
 
 def cleanup_benchmark(
-    settings: Settings, run: str | Path, *, remove_worktrees: bool = False
+    settings: Settings,
+    run: str | Path,
+    *,
+    remove_worktrees: bool = False,
+    stop_live_apps: bool = False,
 ) -> dict[str, Any]:
     plan_path = _resolve_plan(settings, run)
     plan = read_object(plan_path)
@@ -282,6 +317,19 @@ def cleanup_benchmark(
     verification = verify_consolidated_run(run_dir)
     if remove_worktrees and not verification["valid"]:
         raise WorkflowError("benchmark evidence must verify before arm worktrees are removed")
+    live_cleanup = stop_live_review(plan_path) if stop_live_apps else live_review_status(plan_path)
+    remaining_live = int(
+        live_cleanup.get("remaining", live_cleanup.get("ready", 0))
+    )
+    if remove_worktrees and remaining_live:
+        raise WorkflowError(
+            "benchmark live applications remain active; worktrees were preserved"
+        )
+    pane_cleanup = (
+        close_operator_panes(plan)
+        if stop_live_apps and remaining_live == 0
+        else {"run_id": plan["run_id"], "closed": 0, "already_closed": 0, "preserved": 0}
+    )
     repository = Path(plan["source"]["repository"])
     removed: list[dict[str, Any]] = []
     preserved: list[dict[str, Any]] = []
@@ -318,6 +366,7 @@ def cleanup_benchmark(
         "schema": "agent-workflow/benchmark-cleanup/v1", "run_id": plan["run_id"],
         "completed_at": utc_now(), "verification": verification, "removed": removed,
         "preserved": preserved, "remove_worktrees": remove_worktrees,
+        "stop_live_apps": stop_live_apps, "live_review": live_cleanup, "operator_panes": pane_cleanup,
         "coordinator_preserved": plan["coordinator"]["worktree"],
     }
     atomic_write_json(run_dir / "cleanup.json", cleanup_value)
@@ -383,8 +432,12 @@ def benchmark_readiness(
     checks.extend([
         {
             "id": "interactive-tmux",
-            "passed": shutil.which("tmux") is not None,
-            "detail": "benchmark agents launch in dedicated interactive tmux panes",
+            "passed": shutil.which("tmux") is not None and bool(os.environ.get("TMUX")) and bool(os.environ.get("TMUX_PANE")),
+            "detail": "run from inside tmux; two new observable arm panes are created in the launching window",
+        },
+        {
+            "id": "pane-capacity",
+            **operator_pane_preflight(),
         },
         {
             "id": "paired-repetitions",
@@ -445,9 +498,11 @@ def status_benchmark(settings: Settings, run: str | Path) -> dict[str, Any]:
     run_dir = Path(plan["coordinator"]["run_dir"])
     state = read_object(run_dir / "run.json")
     reviews = list((run_dir / "human-review" / "reviews").glob("*.json")) if (run_dir / "human-review" / "reviews").is_dir() else []
+    live = live_review_status(_resolve_plan(settings, run))
     return {
         **state,
         "run_dir": str(run_dir),
+        "live_review": live,
         "run_plan": str(run_dir / "run-plan.json"),
         "visual_capture": (run_dir / "visual-capture-summary.json").is_file(),
         "machine_scores": (run_dir / "machine-scores.json").is_file(),

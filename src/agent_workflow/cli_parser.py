@@ -587,7 +587,9 @@ def build_parser(plugin_registry: PluginRegistry | None = None) -> argparse.Argu
     for name, help_text in (
         ("run", "execute, capture, score, consolidate, and report a benchmark run"),
         ("resume", "resume an idempotent benchmark pipeline"),
-        ("status", "show benchmark state and evidence availability"),
+        ("status", "show benchmark state, pane identity, evidence, and live review URLs"),
+        ("live-start", "start or restore preserved live applications for human review"),
+        ("live-stop", "stop preserved live applications without deleting evidence"),
         ("visual-capture", "capture pinned visual evidence for all arms"),
         ("score", "run deterministic machine scorers"),
         ("consolidate", "copy and digest-verify arm evidence into the coordinator"),
@@ -599,6 +601,7 @@ def build_parser(plugin_registry: PluginRegistry | None = None) -> argparse.Argu
         command.add_argument("run")
         if name == "cleanup":
             command.add_argument("--remove-worktrees", action="store_true")
+            command.add_argument("--stop-live-apps", action="store_true")
     benchmark_human = benchmark_commands.add_parser("review", help="create a blinded review assignment or submit a completed review")
     benchmark_human.add_argument("run")
     benchmark_human.add_argument("--reviewer", required=True)

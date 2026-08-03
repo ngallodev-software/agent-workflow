@@ -4,7 +4,7 @@
 **Priority:** P0 / Critical
 **Dependencies:** BENCH-CORR-003, BENCH-CORR-004, and BENCH-CORR-005
 **Parallel lane:** calibration lane
-**Baseline:** `agent-workflow` 0.7.8
+**Baseline:** `agent-workflow` 0.7.9
 
 ## Objective
 
@@ -35,7 +35,7 @@ Every point is mutation-tested, full score is exactly 100, no mutation changes u
 
 Stop if calibration depends on live model behavior, if fixtures are visible to benchmark arms, or if expected scores are computed by the same unverified logic under test.
 
-## 0.7.8 implementation ownership
+## 0.7.9 implementation ownership
 
 - Golden and mutation assets: corrected-suite-owned `calibration/` or equivalent non-agent-visible tree under `benchmarks/specs/priority-picker-v2/`.
 - Installed mirror: exact equivalent under `src/agent_workflow/assets/benchmarks/priority-picker-v2/`.

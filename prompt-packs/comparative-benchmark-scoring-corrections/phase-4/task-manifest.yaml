@@ -1,0 +1,28 @@
+phase: "4"
+name: "operator-experience-live-review-and-fast-suite"
+mandatory_order: ["BENCH-OPS-001", "BENCH-OPS-002", "BENCH-OPS-003", "BENCH-OPS-GATE"]
+tasks:
+  - id: "BENCH-OPS-001"
+    tier: B
+    session: "benchmark-operator-panes"
+    prompt: "tickets/BENCH-OPS-001-observable-paired-panes.md"
+    backlog_id: "BENCH-OPS-001"
+    dependencies: ["BENCH-CORR-001"]
+  - id: "BENCH-OPS-002"
+    tier: B
+    session: "benchmark-live-review-lifecycle"
+    prompt: "tickets/BENCH-OPS-002-live-review-lifecycle.md"
+    backlog_id: "BENCH-OPS-002"
+    dependencies: ["BENCH-OPS-001", "BENCH-CORR-004", "BENCH-CORR-006"]
+  - id: "BENCH-OPS-003"
+    tier: B
+    session: "benchmark-fast-suite"
+    prompt: "tickets/BENCH-OPS-003-fast-benchmark-suite.md"
+    backlog_id: "BENCH-OPS-003"
+    dependencies: ["BENCH-CORR-002", "BENCH-CORR-003", "BENCH-CORR-004", "BENCH-CORR-005", "BENCH-OPS-002"]
+  - id: "BENCH-OPS-GATE"
+    tier: C
+    session: "benchmark-operator-experience-gate"
+    prompt: "tickets/BENCH-OPS-GATE-independent-review.md"
+    dependencies: ["BENCH-OPS-001", "BENCH-OPS-002", "BENCH-OPS-003"]
+    task_type: gate

@@ -4,7 +4,7 @@
 **Priority:** P1 / High
 **Dependencies:** BENCH-CORR-001
 **Parallel lane:** human review lane
-**Baseline:** `agent-workflow` 0.7.8
+**Baseline:** `agent-workflow` 0.7.9
 
 ## Objective
 
@@ -36,7 +36,7 @@ Reviewer identity and treatment mapping remain protected, aggregation is determi
 
 Stop if treatment identity must be exposed to score, if reviewer edits overwrite prior submissions, or if disagreement can silently erase a blocking defect.
 
-## 0.7.8 implementation ownership
+## 0.7.9 implementation ownership
 
 - Review assignment/submission/aggregation: `src/agent_workflow/benchmarking/review.py`.
 - Report rendering and review-completeness state: `reporting.py`.

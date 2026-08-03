@@ -283,25 +283,29 @@ Public distribution remains blocked on release-governance and security decisions
 
 ## Paired comparative benchmark
 
-The built-in `priority-picker-v1` benchmark runs the same canonical three-phase task concurrently through isolated `control_raw/v1` and `workflow_full/v1` worktrees. It records phase, arm, pair, and run timing; tokens and truthful billed/estimated/subscription-allocation cost; deterministic machine scores; and blinded human visual review before producing the adopted 70/30 composite.
-
-Subscription-backed Codex or Claude CLI sessions are the default real-executor path. API-key and access-token adapters are optional explicit cohort profiles and never silent fallbacks. A synthetic executor remains available only for development validation.
+The built-in benchmark family runs the same task concurrently through isolated `control_raw` and `workflow_full` worktrees. `priority-picker-v1` preserves historical scoring, `priority-picker-v2` provides the corrected full task, and `priority-picker-fast-v1` retains the same paired scoring/browser/human-review lifecycle in one model phase capped at 150 seconds.
 
 ```bash
-agent-workflow benchmark suite-export /tmp/priority-picker-v1
-agent-workflow benchmark readiness /tmp/priority-picker-v1/benchmark-spec.json \
-  --executor /tmp/priority-picker-v1/executors/codex-subscription.json \
-  --policy /tmp/priority-picker-v1/policies/development.json
-agent-workflow benchmark fixture-create /tmp/priority-picker-v1/benchmark-spec.json /tmp/priority-picker-fixture
-agent-workflow benchmark plan /tmp/priority-picker-v1/benchmark-spec.json \
-  --executor /tmp/priority-picker-v1/executors/codex-subscription.json \
-  --policy /tmp/priority-picker-v1/policies/development.json \
-  --repo /tmp/priority-picker-fixture \
-  --run-id priority-picker-smoke
+agent-workflow benchmark suite-export /tmp/priority-picker-fast-v1 \
+  --benchmark-id priority-picker-fast-v1
+agent-workflow benchmark readiness /tmp/priority-picker-fast-v1/benchmark-spec.json \
+  --executor /tmp/priority-picker-fast-v1/executors/codex-subscription.json \
+  --policy /tmp/priority-picker-fast-v1/policies/development.json
+agent-workflow benchmark fixture-create \
+  /tmp/priority-picker-fast-v1/benchmark-spec.json /tmp/priority-picker-fixture
+agent-workflow benchmark plan /tmp/priority-picker-fast-v1/benchmark-spec.json \
+  --executor /tmp/priority-picker-fast-v1/executors/codex-subscription.json \
+  --policy /tmp/priority-picker-fast-v1/policies/development.json \
+  --repo /tmp/priority-picker-fixture --run-id priority-picker-smoke
+
+# Run this command from inside an existing tmux pane.
 agent-workflow benchmark run priority-picker-smoke
+agent-workflow benchmark status priority-picker-smoke
 ```
 
-The automated pipeline stops for blinded human review, then preserves digest-verified evidence in the coordinator worktree under `benchmarks/runs/<run-id>`. See the [implementation](docs/COMPARATIVE_BENCHMARK_IMPLEMENTATION.md), [operations guide](docs/COMPARATIVE_BENCHMARK_OPERATIONS.md), and [exhaustive task/evaluation/scoring explanation](docs/COMPARATIVE_BENCHMARK_EXPLAINED.md). The current v1 scorer remains authoritative for historical reports; its documented scoring-contract discrepancies and the 0.7.8 correction sequence are tracked in the [correction backlog](docs/COMPARATIVE_BENCHMARK_CORRECTION_BACKLOG.md) and [owned prompt pack](prompt-packs/comparative-benchmark-scoring-corrections/).
+A run adds exactly two panes to the invoking tmux window, reuses them for both arms, and streams provider progress visibly. Automated evaluation starts one LAN-reachable live application per selected arm on a distinct ephemeral port, then preserves those apps and panes for browser capture and blinded human assessment. Default cleanup preserves those apps and worktrees; explicit `benchmark live-stop` or `cleanup --stop-live-apps --remove-worktrees` performs teardown. Destructive cleanup refuses to remove worktrees when any live process cannot be confirmed stopped, and benchmark-owned panes remain available for diagnosis. Digest-verified evidence remains in the coordinator under `benchmarks/runs/<run-id>`.
+
+See the [operations guide](docs/COMPARATIVE_BENCHMARK_OPERATIONS.md), [implementation](docs/COMPARATIVE_BENCHMARK_IMPLEMENTATION.md), [task/evaluation/scoring explanation](docs/COMPARATIVE_BENCHMARK_EXPLAINED.md), and [owned corrective prompt pack](prompt-packs/comparative-benchmark-scoring-corrections/).
 
 ## Development
 

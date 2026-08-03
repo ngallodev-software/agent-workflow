@@ -4,9 +4,9 @@
 
 This backlog corrects the mismatch between the benchmark's frozen requirement matrix, implemented evaluator behavior, browser coverage, and published scoring explanation.
 
-This backlog is rebased to the 0.7.8 repository layout. Ticket prompts name the current relative owners while still requiring a bounded preflight so later behavior-preserving moves do not cause edits to stale compatibility facades.
+This backlog is rebased to the 0.7.9 repository layout and records the implementation state reached by the benchmark-corrections checkpoints. Ticket prompts name the current relative owners while still requiring a bounded preflight so later behavior-preserving moves do not cause edits to stale compatibility facades.
 
-## 0.7.8 implementation map
+## 0.7.9 implementation map
 
 - CLI grammar: `src/agent_workflow/cli_parser.py`.
 - Benchmark dispatch: `src/agent_workflow/cli_handlers/benchmark.py`.
@@ -18,7 +18,7 @@ This backlog is rebased to the 0.7.8 repository layout. Ticket prompts name the 
 - Release drift: `scripts/audit-release-assets.py`.
 - Documentation and operations: `docs/COMPARATIVE_BENCHMARK_*.md`, `docs/man/agent-workflow.1`, `README.md`, and `docs/COMMAND_REFERENCE.md`.
 
-Under DEC-009, benchmarking remains a built-in feature. The 0.7.8 trusted plugin host exposes top-level plugin commands and digest-bound schema/asset resources, but no benchmark evaluator hook. This correction program must preserve the built-in authority boundary, avoid creating a second plugin registry, and make pure contract/evaluator surfaces extractable only for the later evidence-gated ARC-004 decision.
+Under DEC-009, benchmarking remains a built-in feature. The 0.7.9 trusted plugin host exposes top-level plugin commands and digest-bound schema/asset resources, but no benchmark evaluator hook. This correction program must preserve the built-in authority boundary, avoid creating a second plugin registry, and make pure contract/evaluator surfaces extractable only for the later evidence-gated ARC-004 decision.
 
 ## Non-negotiable rules
 
@@ -34,17 +34,41 @@ Under DEC-009, benchmarking remains a built-in feature. The 0.7.8 trusted plugin
 
 | ID | Priority | Risk | State | Objective | Dependencies |
 |---|---:|---:|---|---|---|
-| BENCH-CORR-001 | P0 | Critical | ready | Freeze an exact corrected scoring contract and version boundary | — |
-| BENCH-CORR-002 | P0 | Critical | blocked | Implement explicit per-check weights and deterministic score receipts | BENCH-CORR-001 |
-| BENCH-CORR-003 | P0 | High | blocked | Expand hidden functional and validation coverage | BENCH-CORR-001, BENCH-CORR-002 |
-| BENCH-CORR-004 | P0 | High | blocked | Expand browser, keyboard, export, responsive, and accessibility evaluation | BENCH-CORR-001, BENCH-CORR-002 |
-| BENCH-CORR-005 | P1 | High | blocked | Resolve public-suite scoring and duplicate-credit semantics | BENCH-CORR-001, BENCH-CORR-002 |
-| BENCH-CORR-006 | P1 | High | blocked | Harden blinded human-review reliability and adjudication | BENCH-CORR-001 |
-| BENCH-CORR-007 | P0 | Critical | blocked | Add golden calibration, mutation, and scorer-isolation acceptance journeys | BENCH-CORR-002, BENCH-CORR-003, BENCH-CORR-004, BENCH-CORR-005 |
-| BENCH-CORR-008 | P1 | High | blocked | Establish one authoritative scoring source and prevent docs/package drift | BENCH-CORR-001, BENCH-CORR-002 |
-| BENCH-CORR-009 | P1 | High | blocked | Protect historical comparability and define v1-to-v2 migration/reporting | BENCH-CORR-001, BENCH-CORR-007, BENCH-CORR-008 |
-| BENCH-CORR-010 | P1 | Medium | ready | Decide whether efficiency remains descriptive or becomes a winner/value guardrail | — |
-| BENCH-CORR-GATE | P0 | Critical | blocked | Independently verify the corrected benchmark before real comparative use | BENCH-CORR-006, BENCH-CORR-007, BENCH-CORR-009, BENCH-CORR-010 |
+| BENCH-CORR-001 | P0 | Critical | implemented | Corrected v2 contract and immutable v1 boundary are present | — |
+| BENCH-CORR-002 | P0 | Critical | implemented | Explicit weighted scoring and deterministic receipts are enforced | BENCH-CORR-001 |
+| BENCH-CORR-003 | P0 | High | implemented | Hidden functional and validation coverage is mapped to weighted checks | BENCH-CORR-001, BENCH-CORR-002 |
+| BENCH-CORR-004 | P0 | High | implemented | Browser, keyboard, export, responsive, and accessibility evaluation is expanded | BENCH-CORR-001, BENCH-CORR-002 |
+| BENCH-CORR-005 | P1 | High | implemented | Public-suite gate semantics and duplicate-credit policy are frozen | BENCH-CORR-001, BENCH-CORR-002 |
+| BENCH-CORR-006 | P1 | High | implemented | Blinded human-review aggregation and adjudication contracts are hardened | BENCH-CORR-001 |
+| BENCH-CORR-007 | P0 | Critical | implemented | Golden, mutation, scorer-isolation, and compact timing calibration exist | BENCH-CORR-002 through BENCH-CORR-005 |
+| BENCH-CORR-008 | P1 | High | implemented | Contract, packaged assets, generated docs, and release drift checks share one authority | BENCH-CORR-001, BENCH-CORR-002 |
+| BENCH-CORR-009 | P1 | High | implemented | v1 evidence remains immutable and mixed-version comparison fails closed | BENCH-CORR-001, BENCH-CORR-007, BENCH-CORR-008 |
+| BENCH-CORR-010 | P1 | Medium | implemented | Efficiency remains separately reported and is not hidden in quality points | — |
+| BENCH-OPS-001 | P0 | High | implemented; real-host verification pending | Paired arms run visibly in exactly two new panes in the invoking tmux window | benchmark lifecycle |
+| BENCH-OPS-002 | P0 | High | implemented; real-host verification pending | Provider output streams interactively while bounded evidence is retained | BENCH-OPS-001 |
+| BENCH-OPS-003 | P0 | High | implemented; real-host verification pending | Live applications persist for capture and blinded human scoring until explicit cleanup | BENCH-OPS-001 |
+| BENCH-FAST-001 | P1 | Medium | implemented; provider timing pending | Compact one-phase suite has a 150-second model limit and paired synthetic calibration | BENCH-CORR-007 |
+| BENCH-CORR-GATE | P0 | Critical | partially verified | Deterministic/source/package gates pass; independent real-host and publication review remain | all rows above |
+
+---
+
+## Implementation evidence and remaining gates
+
+Implementation evidence is recorded in:
+
+- [`COMPARATIVE_BENCHMARK_IMPLEMENTATION.md`](COMPARATIVE_BENCHMARK_IMPLEMENTATION.md) for the authoritative command, evidence, scoring, pane, and live-review behavior;
+- [`BENCHMARK_ENHANCEMENTS_CHECKPOINT_04_VALIDATION.md`](BENCHMARK_ENHANCEMENTS_CHECKPOINT_04_VALIDATION.md) through [`BENCHMARK_ENHANCEMENTS_CHECKPOINT_07_VALIDATION.md`](BENCHMARK_ENHANCEMENTS_CHECKPOINT_07_VALIDATION.md) for focused acceptance, release, installer, and compact-suite timing evidence;
+- `tests/invariants/test_comparative_benchmark_contracts.py`, `tests/invariants/test_comparative_benchmark_operating_policy.py`, and `tests/acceptance/test_comparative_benchmark_journey.py` for executable contracts.
+
+The following gates remain intentionally open and must not be described as locally verified:
+
+1. an authenticated Codex/Claude subscription run on a real tmux host;
+2. confirmation that exactly two panes are added to the invoking window and remain observable through completion;
+3. Playwright/Chromium capture against both preserved live applications;
+4. blinded multi-reviewer human scoring and adjudication on the preserved URLs;
+5. independent acceptance for publication claims, including a content-addressed browser runtime and verified font manifest.
+
+Development and internal deterministic use are supported by the implemented contracts. Publication use remains blocked until the five gates above are independently evidenced.
 
 ---
 
@@ -52,7 +76,7 @@ Under DEC-009, benchmarking remains a built-in feature. The 0.7.8 trusted plugin
 
 **Priority:** P0
 **Risk:** Critical
-**State:** Ready
+**State:** Implemented
 
 ### Problem
 
@@ -60,7 +84,7 @@ The current requirement matrix is not arithmetically self-consistent, and the ev
 
 ### Required work
 
-- Inventory the 0.7.8 owners listed above, including the split CLI handler, built-in benchmarking modules, source suite, installed asset mirror, schemas, focused tests, release audit, documentation, and man page.
+- Inventory the 0.7.9 owners listed above, including the split CLI handler, built-in benchmarking modules, source suite, installed asset mirror, schemas, focused tests, release audit, documentation, and man page.
 - Define one machine-readable scoring contract containing:
   - dimension IDs and maximums;
   - check IDs;
@@ -96,7 +120,7 @@ Stop if the proposed correction edits v1 scores in place, changes old report int
 
 **Priority:** P0
 **Risk:** Critical
-**State:** Blocked by BENCH-CORR-001
+**State:** Implemented
 
 ### Problem
 
@@ -129,7 +153,7 @@ The current generic outcome calculation assigns equal value to every check in a 
 
 **Priority:** P0
 **Risk:** High
-**State:** Blocked by BENCH-CORR-001 and BENCH-CORR-002
+**State:** Implemented and BENCH-CORR-002
 
 ### Required coverage
 
@@ -170,7 +194,7 @@ Add explicit checks for the corrected version covering at least:
 
 **Priority:** P0
 **Risk:** High
-**State:** Blocked by BENCH-CORR-001 and BENCH-CORR-002
+**State:** Implemented and BENCH-CORR-002
 
 ### Required coverage
 
@@ -211,7 +235,7 @@ For the corrected benchmark version, add deterministic browser journeys for:
 
 **Priority:** P1
 **Risk:** High
-**State:** Blocked by BENCH-CORR-001 and BENCH-CORR-002
+**State:** Implemented and BENCH-CORR-002
 
 ### Required decision
 
@@ -234,7 +258,7 @@ Also decide whether public-suite success remains an engineering-quality check. I
 
 **Priority:** P1
 **Risk:** High
-**State:** Blocked by BENCH-CORR-001
+**State:** Implemented
 
 ### Required work
 
@@ -259,7 +283,7 @@ Also decide whether public-suite success remains an engineering-quality check. I
 
 **Priority:** P0
 **Risk:** Critical
-**State:** Blocked by BENCH-CORR-002 through BENCH-CORR-005
+**State:** Implemented
 
 ### Required work
 
@@ -285,7 +309,7 @@ Create deterministic calibration fixtures including:
 
 **Priority:** P1
 **Risk:** High
-**State:** Blocked by BENCH-CORR-001 and BENCH-CORR-002
+**State:** Implemented and BENCH-CORR-002
 
 ### Required work
 
@@ -315,7 +339,7 @@ Create deterministic calibration fixtures including:
 
 **Priority:** P1
 **Risk:** High
-**State:** Blocked by BENCH-CORR-001, BENCH-CORR-007, and BENCH-CORR-008
+**State:** Implemented, BENCH-CORR-007, and BENCH-CORR-008
 
 ### Required work
 
@@ -337,7 +361,7 @@ Create deterministic calibration fixtures including:
 
 **Priority:** P1
 **Risk:** Medium
-**State:** Ready
+**State:** Implemented
 
 ### Decision required
 
@@ -363,7 +387,7 @@ Do not hide efficiency inside the 100-point quality score unless the benchmark's
 
 **Priority:** P0
 **Risk:** Critical
-**State:** Blocked by all correction implementation work
+**State:** Partially verified; independent real-host/publication acceptance remains
 
 ### Required review
 
@@ -377,7 +401,7 @@ An independent reviewer must verify:
 - source/package asset equality;
 - mixed-version comparison rejection;
 - eligibility invalidation behavior;
-- installed-product benchmark export/calibration journey through the public 0.7.8 CLI and `agent_workflow.cli_handlers.benchmark` dispatch boundary;
+- installed-product benchmark export/calibration journey through the public 0.7.9 CLI and `agent_workflow.cli_handlers.benchmark` dispatch boundary;
 - documentation and man-page agreement with the authoritative contract.
 
 ### Exit evidence

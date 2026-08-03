@@ -4,7 +4,7 @@
 **Priority:** P0 / High
 **Dependencies:** BENCH-CORR-001 and BENCH-CORR-002
 **Parallel lane:** functional evaluator lane
-**Baseline:** `agent-workflow` 0.7.8
+**Baseline:** `agent-workflow` 0.7.9
 
 ## Objective
 
@@ -30,7 +30,7 @@ Every corrected contract requirement has traceable hidden evidence and no hidden
 
 Stop if hidden oracle files become accessible to either arm, timing is unsealed/unrepeatable, or one broad check obscures multiple independently weighted requirements.
 
-## 0.7.8 implementation ownership
+## 0.7.9 implementation ownership
 
 - Corrected hidden evaluator and deterministic oracles: `benchmarks/specs/priority-picker-v2/evaluation/` and benchmark-owned hidden/calibration fixtures beneath the corrected suite.
 - Installed mirror: `src/agent_workflow/assets/benchmarks/priority-picker-v2/`.

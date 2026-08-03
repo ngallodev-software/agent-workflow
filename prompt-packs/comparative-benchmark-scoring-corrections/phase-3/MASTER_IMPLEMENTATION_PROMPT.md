@@ -16,6 +16,6 @@ Coordinate version migration and independent acceptance.
 
 Produce migration documentation, compatibility tests, and an independent acceptance report.
 
-## 0.7.8 boundary
+## 0.7.9 boundary
 
-Enforce version compatibility in the built-in contracts/scoring/reporting/statistics path. The independent gate must exercise the installed 0.7.8 command surface, `--no-plugins` recovery, suite export, calibration, review, reporting, and release drift.
+Enforce version compatibility in the built-in contracts/scoring/reporting/statistics path. The independent gate must exercise the installed 0.7.9 command surface, `--no-plugins` recovery, suite export, calibration, review, reporting, and release drift.

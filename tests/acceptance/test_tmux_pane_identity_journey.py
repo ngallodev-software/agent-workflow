@@ -77,6 +77,7 @@ def test_shared_window_uses_stable_pane_id_through_layout_churn(
     completed = installed_product.json(
         "agent", "task-complete", "stable-pane", "--config", config,
         "--actor", "acceptance-worker", "--summary", "Layout changed but the bound pane remained live.",
+        "--keep-alive",
         env=env,
     )
     assert completed["state"] == "idle_reusable"

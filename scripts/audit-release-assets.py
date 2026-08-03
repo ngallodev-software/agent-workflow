@@ -241,6 +241,42 @@ def _audit_backlog_and_prompt_pack_ownership() -> None:
             fail(f"{path.relative_to(ROOT)}: unknown backlog IDs {unknown}")
 
 
+
+def _audit_builtin_benchmark_parity() -> None:
+    """Require packaged built-in suites to be exact copies of authoring sources."""
+    source_root = ROOT / "benchmarks" / "specs"
+    package_root = ROOT / "src" / "agent_workflow" / "assets" / "benchmarks"
+    for source in sorted(path for path in source_root.iterdir() if path.is_dir()):
+        mirror = package_root / source.name
+        if not mirror.is_dir():
+            fail(f"{mirror.relative_to(ROOT)}: missing packaged mirror of {source.relative_to(ROOT)}")
+            continue
+        source_files = {
+            path.relative_to(source): path
+            for path in source.rglob("*")
+            if path.is_file() and not path.is_symlink()
+        }
+        mirror_files = {
+            path.relative_to(mirror): path
+            for path in mirror.rglob("*")
+            if path.is_file() and not path.is_symlink()
+        }
+        if source_files.keys() != mirror_files.keys():
+            missing = sorted(str(item) for item in source_files.keys() - mirror_files.keys())
+            extra = sorted(str(item) for item in mirror_files.keys() - source_files.keys())
+            fail(
+                f"{mirror.relative_to(ROOT)}: suite inventory differs from authoring source; "
+                f"missing={missing}, extra={extra}"
+            )
+            continue
+        for relative, canonical in source_files.items():
+            if canonical.read_bytes() != mirror_files[relative].read_bytes():
+                fail(
+                    f"{(mirror / relative).relative_to(ROOT)}: differs from canonical "
+                    f"{(source / relative).relative_to(ROOT)}"
+                )
+
+
 def main(argv: list[str] | None = None) -> int:
     global errors
     errors = []
@@ -502,7 +538,8 @@ def main(argv: list[str] | None = None) -> int:
                 fail(f"{path.relative_to(ROOT)}: broken local link: {target}")
 
 
-    # Canonical backlog/prompt-pack ownership and drift policy.
+    # Canonical benchmark package parity and backlog/prompt-pack ownership.
+    _audit_builtin_benchmark_parity()
     _audit_backlog_and_prompt_pack_ownership()
 
     if errors:

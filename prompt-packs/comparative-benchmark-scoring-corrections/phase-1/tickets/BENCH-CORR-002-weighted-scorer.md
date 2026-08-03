@@ -4,7 +4,7 @@
 **Priority:** P0 / Critical
 **Dependencies:** BENCH-CORR-001
 **Parallel lane:** scoring engine lane
-**Baseline:** `agent-workflow` 0.7.8
+**Baseline:** `agent-workflow` 0.7.9
 
 ## Objective
 
@@ -36,7 +36,7 @@ A corrected full-pass result equals exactly 100, every point is attributable to 
 
 Stop if the implementation uses equal-share fallback, infers weights from check count, changes v1 receipts, or permits uncontracted points.
 
-## 0.7.8 implementation ownership
+## 0.7.9 implementation ownership
 
 - Built-in score authority: `src/agent_workflow/benchmarking/scoring.py`.
 - Contract parsing/validation: `src/agent_workflow/benchmarking/contracts.py` and the accepted new schema.

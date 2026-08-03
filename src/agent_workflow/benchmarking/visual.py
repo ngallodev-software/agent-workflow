@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Mapping
 
+from ..errors import WorkflowError
 from ..process import EnvironmentPolicy, run
 from ..util import atomic_write_json, sha256_file, utc_now
 from .common import child, file_inventory, format_argv, read_object
@@ -10,6 +11,7 @@ from .contracts import BENCHMARK_VISUAL_EVIDENCE_SCHEMA, validate_spec, validate
 from .events import append_event
 from .pairing import selected_arms
 from .runtime import attest_runtime
+from .live_review import live_url_for
 
 
 def _capture_arm(
@@ -21,12 +23,16 @@ def _capture_arm(
     visual_dir.mkdir(parents=True, exist_ok=True)
     suite = Path(plan["coordinator"]["suite_dir"])
     runtime_lock = child(suite, spec["visual"]["runtime_lock_path"], "visual runtime lock")
+    live_url = live_url_for(plan, str(pair["pair_id"]), str(arm["arm"]))
     values = {
         "run_id": str(plan["run_id"]), "pair_id": str(pair["pair_id"]),
         "case_id": str(pair["case_id"]), "arm": str(arm["arm"]),
         "worktree": str(arm["worktree"]), "stage_dir": str(stage),
         "visual_dir": str(visual_dir), "suite": str(suite), "runtime_lock": str(runtime_lock),
+        "live_url": live_url or "unavailable",
     }
+    if any("{live_url}" in str(item) for item in spec["visual"]["capture_argv"]) and not live_url:
+        raise WorkflowError(f"live review application is not ready for {pair['pair_id']} {arm['arm']}")
     argv = format_argv(spec["visual"]["capture_argv"], values)
     started = utc_now()
     result = run(
@@ -82,6 +88,7 @@ def _capture_arm(
         "runtime_state": attestation["runtime_state"],
         "runtime_attestation": str(visual_dir / "visual-evidence.json"),
         "assessment": str(assessment) if assessment.is_file() else None,
+        "live_url": live_url,
         "assessment_sha256": sha256_file(assessment) if assessment.is_file() else None,
         "stdout": str(visual_dir / "capture.stdout.log"), "stderr": str(visual_dir / "capture.stderr.log"),
     }

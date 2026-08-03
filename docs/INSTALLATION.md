@@ -60,8 +60,8 @@ missing or non-semantic release references, downloads only from that tag's
 release assets, and verifies `SHA256SUMS` before extracting or invoking pip:
 
 ```sh
-curl -fsSL https://github.com/ngallodev-software/agent-workflow/raw/v0.7.8/install.sh \
-  | sh -s -- --version v0.7.8
+curl -fsSL https://github.com/ngallodev-software/agent-workflow/raw/v0.7.9/install.sh \
+  | sh -s -- --version v0.7.9
 ```
 
 The release contract requires Python 3.11+, `curl`, a SHA-256 tool, and `tar`.
@@ -77,9 +77,9 @@ installer, then use the matching `uninstall.sh` to remove the wheel and owned
 assets:
 
 ```sh
-tar -xzf agent-workflow-0.7.8-linux.tar.gz
-cd agent-workflow-0.7.8-linux
-./install.sh --wheel agent_workflow-0.7.8-py3-none-any.whl
+tar -xzf agent-workflow-0.7.9-linux.tar.gz
+cd agent-workflow-0.7.9-linux
+./install.sh --wheel agent_workflow-0.7.9-py3-none-any.whl
 ./uninstall.sh
 ```
 
