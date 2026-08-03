@@ -254,12 +254,18 @@ def _audit_builtin_benchmark_parity() -> None:
         source_files = {
             path.relative_to(source): path
             for path in source.rglob("*")
-            if path.is_file() and not path.is_symlink()
+            if path.is_file()
+            and not path.is_symlink()
+            and "__pycache__" not in path.relative_to(source).parts
+            and path.suffix != ".pyc"
         }
         mirror_files = {
             path.relative_to(mirror): path
             for path in mirror.rglob("*")
-            if path.is_file() and not path.is_symlink()
+            if path.is_file()
+            and not path.is_symlink()
+            and "__pycache__" not in path.relative_to(mirror).parts
+            and path.suffix != ".pyc"
         }
         if source_files.keys() != mirror_files.keys():
             missing = sorted(str(item) for item in source_files.keys() - mirror_files.keys())
@@ -305,6 +311,7 @@ def main(argv: list[str] | None = None) -> int:
             or str(rel).startswith("src/agent_workflow/assets/")
             or rel == Path("src/agent_workflow/pack.py")
             or rel == Path("scripts/audit-release-assets.py")
+            or rel == Path("HANDOFF_SOURCE_MANIFEST.json")
         ):
             fail(
                 f"{rel}: unresolved template placeholders outside template assets: "
@@ -421,6 +428,7 @@ def main(argv: list[str] | None = None) -> int:
         ROOT / "docs/man/agent-workflow-workflow.1": f"agent-workflow {EXPECTED_VERSION}",
         ROOT / "docs/man/agent-workflow-mcp.1": f"agent-workflow {EXPECTED_VERSION}",
         ROOT / "docs/man/agent-workflow-index.1": f"agent-workflow {EXPECTED_VERSION}",
+        ROOT / "docs/man/agent-workflow-evidence.1": f"agent-workflow {EXPECTED_VERSION}",
         ROOT / "docs/diagrams/REPOSITORY_CHART_PACK.md": f"**Release:** {EXPECTED_VERSION}",
     }
     for path, needle in version_locations.items():
