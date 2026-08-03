@@ -17,7 +17,11 @@ from typing import Any, BinaryIO
 from . import tmux
 from .errors import WorkflowError
 from .contracts import read_launch_contract
-from .completion import completion_revision_errors, substantive_completion_errors
+from .completion import (
+    completion_revision_errors,
+    substantive_completion_errors,
+    validate_completion_repository_closeout,
+)
 from .events import append_lifecycle_event
 from .diagnostics import classify_failure
 from .health import (
@@ -32,6 +36,7 @@ from .eval.commands import collect_commands, specs_from_data
 from .eval.scope import ScopePolicy, collect_scope
 from .executors import accumulate_usage, event_text, parse_event, usage_update
 from .receipts import final_receipt_sha256, make_read_only, seal_run, update_provenance
+from .eval.attempts import emit_attempt_artifacts
 from .metrics import write_execution_evidence
 from .agent_context import apply_bridged_completion
 from .messages import (
@@ -60,6 +65,7 @@ from .process import (
 )
 from .util import atomic_write_json, sha256_file, utc_now
 from .path import read_regular_file
+from .policy import evaluate_budgets
 
 
 MAX_COMPLETION_HANDOFF_BYTES = 1024 * 1024
@@ -90,7 +96,9 @@ _RUNTIME_ENVIRONMENT = (
 )
 
 
-def _drain_control_bridge(run_dir: Path, *, active: bool) -> bool:
+def _drain_control_bridge(
+    run_dir: Path, *, active: bool, allow_terminal_at_exit: bool = False
+) -> bool:
     """Consume bounded child intents using host-owned state and tmux authority."""
     launch = read_launch_contract(run_dir / "launch-contract.json")
     session_id = str(launch["session"]["id"])
@@ -162,11 +170,9 @@ def _drain_control_bridge(run_dir: Path, *, active: bool) -> bool:
             if value.get("session_id") != session_id or value.get("digest") != digest:
                 raise WorkflowError("control intent identity or digest mismatch")
             intent_kind = str(value["kind"])
-            # A cooperative child may persist its already-validated completion
-            # intent immediately before exiting.  The one final drain after
-            # process exit may consume that completion, but no other control
-            # intent is allowed after the executor is gone.
-            if not active and intent_kind != "task_complete":
+            if intent_kind not in {"progress", "ack", "task_complete"}:
+                raise WorkflowError("unsupported control intent kind")
+            if not active and not (allow_terminal_at_exit and intent_kind == "task_complete"):
                 raise WorkflowError("request arrived after executor exit")
             acknowledgement_outcome = value.get("outcome", "applied")
             if intent_kind == "ack" and acknowledgement_outcome not in {"applied", "rejected"}:
@@ -357,6 +363,11 @@ def _collect_completion(
         "validation_errors": [],
         "collected_at": utc_now(),
         "stored_path": None,
+        "repository_closeout_source_path": None,
+        "repository_closeout_source_sha256": None,
+        "repository_closeout_stored_path": None,
+        "repository_closeout_payload_sha256": None,
+        "repository_closeout_claims": None,
     }
     try:
         if handoff is None:
@@ -408,10 +419,29 @@ def _collect_completion(
             )
             if revision_errors:
                 raise WorkflowError("; ".join(revision_errors))
+            repository_summary = validate_completion_repository_closeout(
+                value,
+                handoff=handoff,
+                expected_worktree=contract_workdir,
+            )
+            repository_data = None
+            if repository_summary is not None:
+                repository_source = handoff / "repository-closeout.json"
+                repository_data = _read_handoff_completion(repository_source)
+                receipt["repository_closeout_source_path"] = str(repository_source)
+                receipt["repository_closeout_source_sha256"] = hashlib.sha256(repository_data).hexdigest()
             completion_path = run_dir / "completion.json"
             temporary = completion_path.with_name(f".{completion_path.name}.handoff")
             temporary.write_bytes(data)
             os.replace(temporary, completion_path)
+            if repository_data is not None and repository_summary is not None:
+                repository_path = run_dir / "repository-closeout.json"
+                repository_temporary = repository_path.with_name(f".{repository_path.name}.handoff")
+                repository_temporary.write_bytes(repository_data)
+                os.replace(repository_temporary, repository_path)
+                receipt["repository_closeout_stored_path"] = "repository-closeout.json"
+                receipt["repository_closeout_payload_sha256"] = repository_summary["payload_sha256"]
+                receipt["repository_closeout_claims"] = repository_summary["claims"]
             receipt["stored_path"] = "completion.json"
             receipt["canonical_mapping"] = "identity"
             receipt["canonical_sha256"] = hashlib.sha256(completion_path.read_bytes()).hexdigest()
@@ -901,6 +931,11 @@ def execute(
             sealed_artifact_count=len(receipt["artifacts"]),
         )
         make_read_only(run_dir)
+        try:
+            attempt = emit_attempt_artifacts(run_dir)
+            _update_status(status_path, **attempt)
+        except Exception as eval_exc:
+            _update_status(status_path, evaluation_state="not_verified", evaluation_error=str(eval_exc))
         return 127
     if not interactive:
         assert process.process.stdin is not None
@@ -1023,6 +1058,24 @@ def execute(
                 tmux_pane_id=pane_id,
             )
             last_health_at = now
+        # Drain child intents before acting on executor exit. A cooperative
+        # child can write its terminal intent and exit between polling cycles;
+        # rejecting that already-present intent would leave the sealed run
+        # completed while durable assignment state incorrectly remains busy.
+        # The later active=False drain still rejects intents that arrive only
+        # after this exit boundary has been observed.
+        if _drain_control_bridge(
+            run_dir, active=active, allow_terminal_at_exit=not active
+        ):
+            # A valid terminal handoff is authoritative completion, not an
+            # operator cancellation. Close the live interactive executor when
+            # it is still present so the runner can seal the run and retire
+            # its pane.
+            completed_by_child = True
+            if active:
+                process.close_after_completion()
+            return_code = 0
+            break
         if not active:
             return_code = process.returncode
             if return_code is None:
@@ -1030,14 +1083,6 @@ def execute(
             break
         # Control delivery is intentionally more responsive than observability
         # sampling so short-lived cooperative executors can consume steering.
-        if _drain_control_bridge(run_dir, active=True):
-            # A valid terminal handoff is authoritative completion, not an
-            # operator cancellation. Close the live interactive executor so
-            # the runner can seal the run and tmux can retire its pane.
-            completed_by_child = True
-            process.close_after_completion()
-            return_code = 0
-            break
         deliver_pending(run_dir, active=True)
         wait_seconds = min(max(0.1, heartbeat_seconds), CONTROL_POLL_SECONDS)
         if deadline is not None:
@@ -1052,7 +1097,16 @@ def execute(
             wait_seconds = min(wait_seconds, remaining)
         waited = process.wait_for(wait_seconds)
         if waited is not None:
-            return_code = waited
+            # The child may emit its final control intent immediately before
+            # exiting. Consume any intent already present at the observed exit
+            # boundary before treating the process return code as completion.
+            if _drain_control_bridge(
+                run_dir, active=False, allow_terminal_at_exit=True
+            ):
+                completed_by_child = True
+                return_code = 0
+            else:
+                return_code = waited
             break
     for thread in threads:
         thread.join(timeout=5)
@@ -1154,53 +1208,24 @@ def execute(
         pump_errors.append("provider evidence capture limit exceeded")
         return_code = return_code or 1
 
-    terminal_status = (
+    executor_status = (
         "completed"
         if return_code == 0
         else "interrupted"
         if return_code in {130, 143}
         else "failed"
     )
-    budget_exceeded: list[str] = []
-    budgets = provenance_initial.get("budgets", {})
-    if isinstance(usage, dict) and isinstance(budgets, dict):
-        for usage_key, budget_key in (
-            ("input_tokens", "max_input_tokens"),
-            ("output_tokens", "max_output_tokens"),
-        ):
-            used = usage.get(usage_key)
-            limit = budgets.get(budget_key)
-            if isinstance(used, (int, float)) and isinstance(limit, (int, float)):
-                if used > limit:
-                    budget_exceeded.append(f"{usage_key}:{used}>{limit}")
-        cost = usage.get("provider_billed_cost")
-        if cost is None:
-            cost = usage.get("local_estimated_cost")
-        if cost is None:
-            cost = usage.get("cost", usage.get("total_cost"))
-        max_cost = budgets.get("max_cost")
-        if isinstance(cost, (int, float)) and isinstance(max_cost, (int, float)):
-            if cost > max_cost:
-                budget_exceeded.append(f"cost:{cost}>{max_cost}")
-        expected_currency = budgets.get("currency")
-        actual_currency = usage.get("currency")
-        if expected_currency and actual_currency and expected_currency != actual_currency:
-            budget_exceeded.append(
-                f"currency:{actual_currency}!={expected_currency}"
-            )
     wall_seconds = time.monotonic() - wall_started
-    if isinstance(budgets, dict) and isinstance(
-        budgets.get("max_wall_seconds"), (int, float)
-    ):
-        if wall_seconds > budgets["max_wall_seconds"]:
-            budget_exceeded.append(
-                f"wall_seconds:{wall_seconds:.6f}>{budgets['max_wall_seconds']}"
-            )
-    if budget_exceeded:
-        terminal_status = "failed"
-        return_code = return_code or 1
+    policy = evaluate_budgets(
+        usage if isinstance(usage, dict) else None,
+        provenance_initial.get("budgets")
+        if isinstance(provenance_initial.get("budgets"), dict)
+        else None,
+        wall_seconds=wall_seconds,
+    )
+    budget_exceeded = list(policy["budget_exceeded"])
     if timed_out:
-        terminal_status = "failed"
+        executor_status = "failed"
         return_code = 124
     finished_at = utc_now()
     update_provenance(
@@ -1224,9 +1249,7 @@ def execute(
     if terminal_event and isinstance(terminal_event.get("content"), str):
         diagnostic_stderr += "\n" + str(terminal_event["content"])[-8192:]
     failure_category = (
-        "budget_exhausted"
-        if budget_exceeded
-        else "timeout"
+        "timeout"
         if timed_out
         else classify_failure(
             exit_code=return_code,
@@ -1236,7 +1259,17 @@ def execute(
     )
     final_status = {
         **_authoritative_projection(launch, run_dir, current),
-        "status": terminal_status,
+        "status": executor_status,
+        "executor_result": executor_status,
+        "completion_result": current.get("completion_validation_status"),
+        "policy_result": policy["policy_result"],
+        "policy_failures": policy["policy_failures"],
+        "policy_failure_category": policy["policy_failure_category"],
+        "acceptance_eligible": bool(
+            executor_status == "completed"
+            and current.get("completion_validation_status") == "valid"
+            and policy["policy_result"] != "failed"
+        ),
         "finished_at": finished_at,
         "exit_code": return_code,
         "pump_errors": pump_errors,
@@ -1271,6 +1304,18 @@ def execute(
                 "stderr_truncated": process_result.stderr_truncated,
             },
         )
+    if policy["policy_result"] == "failed":
+        record_incident(
+            run_dir,
+            session_id=str(launch["session"]["id"]),
+            category="budget_policy_failed",
+            severity="medium",
+            summary="executor completed with one or more budget-policy violations",
+            evidence={
+                "executor_result": executor_status,
+                "policy_failures": policy["policy_failures"],
+            },
+        )
     atomic_write_json(run_dir / "final-status.json", final_status)
     write_execution_evidence(run_dir, elapsed_seconds=wall_seconds)
     try:
@@ -1286,6 +1331,11 @@ def execute(
             },
         )
         make_read_only(run_dir)
+        try:
+            attempt = emit_attempt_artifacts(run_dir)
+            _update_status(status_path, **attempt)
+        except Exception as eval_exc:
+            _update_status(status_path, evaluation_state="not_verified", evaluation_error=str(eval_exc))
     except Exception as exc:
         _update_status(
             status_path,
