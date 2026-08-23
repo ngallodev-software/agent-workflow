@@ -1,0 +1,27 @@
+phase: "2"
+name: "terminal-neutral-adapter-and-plugin"
+tasks:
+  - id: "HERDR-003"
+    tier: A
+    session: "herdr-terminal-neutral-adapter"
+    prompt: "tickets/HERDR-003-adapter.md"
+    backlog_id: "HERDR-003"
+    dependencies: ["HERDR-GATE-1"]
+  - id: "HERDR-GATE-2"
+    tier: A
+    session: "herdr-terminal-neutral-adapter-gate"
+    prompt: "tickets/HERDR-GATE-2.md"
+    task_type: gate
+    dependencies: ["HERDR-003"]
+  - id: "HERDR-004"
+    tier: A
+    session: "herdr-agent-workflow-plugin"
+    prompt: "tickets/HERDR-004-plugin.md"
+    backlog_id: "HERDR-004"
+    dependencies: ["HERDR-GATE-2"]
+  - id: "HERDR-GATE-3"
+    tier: A
+    session: "herdr-agent-workflow-plugin-gate"
+    prompt: "tickets/HERDR-GATE-3.md"
+    task_type: gate
+    dependencies: ["HERDR-004"]

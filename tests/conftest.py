@@ -4,8 +4,10 @@ import json
 import importlib.metadata
 import os
 import shutil
+import signal
 import subprocess
 import sys
+import tempfile
 import time
 import venv
 from dataclasses import dataclass
@@ -37,15 +39,27 @@ class InstalledProduct:
         timeout: float = 30,
     ) -> subprocess.CompletedProcess[str]:
         command = [str(self.cli), *(str(value) for value in args)]
-        result = subprocess.run(
-            command,
-            cwd=cwd,
-            env=env,
-            text=True,
-            capture_output=True,
-            timeout=timeout,
-            check=False,
-        )
+        # Regular files, unlike capture_output pipes, are safe when an installed
+        # command launches descendants that briefly outlive the parent process.
+        # This keeps assertion-dense multi-command journeys deterministic.
+        with tempfile.TemporaryFile() as stdout_file, tempfile.TemporaryFile() as stderr_file:
+            completed = subprocess.run(
+                command,
+                cwd=cwd,
+                env=env,
+                stdout=stdout_file,
+                stderr=stderr_file,
+                timeout=timeout,
+                check=False,
+            )
+            stdout_file.seek(0)
+            stderr_file.seek(0)
+            result = subprocess.CompletedProcess(
+                command,
+                completed.returncode,
+                stdout_file.read().decode("utf-8", errors="replace"),
+                stderr_file.read().decode("utf-8", errors="replace"),
+            )
         if check and result.returncode:
             raise AssertionError(
                 f"command failed ({result.returncode}): {' '.join(command)}\n"
@@ -381,6 +395,7 @@ import hashlib
 import os
 import subprocess
 import sys
+import tempfile
 import time
 import uuid
 from pathlib import Path
@@ -575,7 +590,45 @@ if mode == "fail":
             "PYTHONPATH": "",
         }
     )
-    return environment
+    try:
+        yield environment
+    finally:
+        # Acceptance commands intentionally create detached process groups.
+        # Reap every fixture-owned group so one assertion-dense journey cannot
+        # leak lifecycle state into the next journey.
+        pids: set[int] = set()
+        for marker_path in tmux_state.glob("*.json"):
+            try:
+                marker_value = json.loads(marker_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            for candidate in [
+                marker_value.get("pid"),
+                *(pane.get("pid") for pane in marker_value.get("panes", []) if isinstance(pane, dict)),
+            ]:
+                if isinstance(candidate, int) and candidate > 1:
+                    pids.add(candidate)
+        runs_root = Path(environment["XDG_STATE_HOME"]) / "agent-workflow" / "runs"
+        for heartbeat_path in runs_root.glob("*/heartbeat.json"):
+            try:
+                heartbeat = json.loads(heartbeat_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            for key in ("runner_pid", "executor_pid", "pid"):
+                candidate = heartbeat.get(key)
+                if isinstance(candidate, int) and candidate > 1:
+                    pids.add(candidate)
+        own_group = os.getpgrp()
+        for sig in (signal.SIGTERM, signal.SIGKILL):
+            for pid in sorted(pids):
+                try:
+                    group = os.getpgid(pid)
+                    if group != own_group:
+                        os.killpg(group, sig)
+                except (ProcessLookupError, PermissionError):
+                    pass
+            if sig == signal.SIGTERM:
+                time.sleep(0.05)
 
 
 def git_repo(path: Path) -> str:

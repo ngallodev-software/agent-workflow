@@ -1,0 +1,14 @@
+phase: "0"
+name: "inventory-and-seam-contract"
+tasks:
+  - id: "HERDR-001"
+    tier: A
+    session: "herdr-boundary-inventory"
+    prompt: "tickets/HERDR-001-inventory.md"
+    backlog_id: "HERDR-001"
+  - id: "HERDR-GATE-0"
+    tier: A
+    session: "herdr-boundary-inventory-gate"
+    prompt: "tickets/HERDR-GATE-0.md"
+    task_type: gate
+    dependencies: ["HERDR-001"]

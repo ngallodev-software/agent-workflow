@@ -22,17 +22,6 @@ def pane(pane_id: str, *, run_id: str | None = None) -> tmux.PaneInfo:
     )
 
 
-def test_stable_pane_id_survives_layout_churn(monkeypatch) -> None:
-    current = pane("%112", run_id="run-1")
-    monkeypatch.setattr(tmux, "pane_info", lambda target: current if target == "%112" else None)
-    monkeypatch.setattr(tmux, "list_panes", lambda target: [current])
-
-    resolved = tmux.resolve_pane(
-        "%112", host_session="shared", run_id="run-1", require_binding=True
-    )
-    assert resolved is current
-
-
 def test_binding_mismatch_fails_closed_even_when_pane_is_live(monkeypatch) -> None:
     current = pane("%112", run_id="other-run")
     monkeypatch.setattr(tmux, "pane_info", lambda target: current)
@@ -184,11 +173,3 @@ def test_dedicated_session_target_remains_compatible_without_metadata(monkeypatc
     assert resolved is current
 
 
-def test_destroyed_stable_pane_is_not_rebound(monkeypatch) -> None:
-    monkeypatch.setattr(tmux, "pane_info", lambda target: None)
-    replacement = pane("%113", run_id=None)
-    monkeypatch.setattr(tmux, "list_panes", lambda target: [replacement])
-
-    assert tmux.resolve_pane(
-        "%112", host_session="shared", run_id="run-1", require_binding=True
-    ) is None

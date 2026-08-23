@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 from pathlib import Path
 
-import pytest
 
 from tests.conftest import InstalledProduct, git_repo, wait_for_status
 
@@ -13,130 +11,11 @@ def _write_json(path: Path, value: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, sort_keys=True) + "\n", encoding="utf-8")
 
-
-def test_installed_review_scoped_verify_preserves_global_blockers_and_legacy_ledger(
+def test_installed_index_lifecycle_rebuilds_recovers_classifies_and_verifies_review_scope(
     installed_product: InstalledProduct,
     product_env: dict[str, str],
     fake_agent_path: Path,
     tmp_path: Path,
-) -> None:
-    repo = tmp_path / "review-repo"
-    git_repo(repo)
-    prompt = tmp_path / "review.md"
-    prompt.write_text("Review the sealed evidence.\n", encoding="utf-8")
-    def launch_reviewed(session_id: str) -> Path:
-        installed_product.json(
-            "launch", session_id, repo, prompt, "--agent-class", "review",
-            "--tier", "low", "--no-interactive", "--", fake_agent_path, env=product_env,
-        )
-        assert wait_for_status(product_env, session_id)["status"] == "completed"
-        installed_product.json(
-            "review", session_id, "--actor", "reviewer", "--reason", "gate checked",
-            env=product_env,
-        )
-        return Path(product_env["XDG_STATE_HOME"]) / "agent-workflow" / "runs" / session_id
-
-    run = launch_reviewed("review-index-target")
-    invalid_receipt_run = launch_reviewed("review-invalid-receipt")
-    missing_collection_run = launch_reviewed("review-missing-collection")
-    missing_review_run = launch_reviewed("review-missing-reviewed-receipt")
-    active_run = Path(product_env["XDG_STATE_HOME"]) / "agent-workflow" / "runs" / "review-active-run"
-    _write_json(
-        active_run / "status.json",
-        {
-            "schema": "agent-workflow/session-status/v2",
-            "session_id": "review-active-run",
-            "status": "running",
-            "created_at": "2026-07-30T00:00:00+00:00",
-            "updated_at": "2026-07-30T00:01:00+00:00",
-            "workdir": str(repo),
-            "prompt_path": str(active_run / "prompt.md"),
-            "log_path": str(active_run / "output.log"),
-            "disposition": None,
-            "failure_category": None,
-        },
-    )
-    state = Path(product_env["XDG_STATE_HOME"]) / "agent-workflow"
-    installed_product.json("index", "rebuild", env=product_env)
-    legacy_ledger = state / "index" / "integrity-incidents.jsonl"
-    legacy_ledger.write_text('{"legacy":"sentinel"}\n', encoding="utf-8")
-    unrelated = state / "runs" / "unrelated-integrity-incident"
-    unrelated.mkdir(parents=True)
-    (unrelated / "status.json").write_text("{not-json\n", encoding="utf-8")
-    installed_product.json("index", "rebuild", env=product_env)
-
-    verified = installed_product.json(
-        "index", "verify", "--full", "--review", "review-index-target", env=product_env
-    )
-    assert verified["valid"] is False
-    assert verified["review_scope"] == "review-index-target"
-    assert verified["review_valid"] is True
-    assert verified["review_evidence"]["review_receipt_sha256"]
-    assert legacy_ledger.read_text(encoding="utf-8") == '{"legacy":"sentinel"}\n'
-
-    completion = run / "completion.json"
-    completion.chmod(0o600)
-    completion.write_text(completion.read_text(encoding="utf-8").replace("completed", "partial", 1), encoding="utf-8")
-    completion.chmod(0o444)
-    tampered = installed_product.json(
-        "index", "verify", "--full", "--review", "review-index-target", env=product_env
-    )
-    assert tampered["valid"] is False
-    assert tampered["review_valid"] is False
-    completion.unlink()
-    missing = installed_product.json(
-        "index", "verify", "--review", "review-index-target", env=product_env
-    )
-    assert missing["valid"] is False
-    assert missing["review_valid"] is False
-    assert legacy_ledger.read_text(encoding="utf-8") == '{"legacy":"sentinel"}\n'
-
-    invalid_receipt = invalid_receipt_run / "final-receipt.json"
-    invalid_receipt.chmod(0o644)
-    invalid_receipt_report = installed_product.json(
-        "index", "verify", "--review", "review-invalid-receipt", env=product_env
-    )
-    assert invalid_receipt_report["valid"] is False
-    assert invalid_receipt_report["review_valid"] is False
-    invalid_receipt.chmod(0o444)
-
-    (missing_collection_run / "collections" / "completion.json").unlink()
-    missing_collection_report = installed_product.json(
-        "index", "verify", "--review", "review-missing-collection", env=product_env
-    )
-    assert missing_collection_report["valid"] is False
-    assert missing_collection_report["review_valid"] is False
-
-    (missing_review_run / "receipts" / "000001-reviewed.json").unlink()
-    missing_review_report = installed_product.json(
-        "index", "verify", "--review", "review-missing-reviewed-receipt", env=product_env
-    )
-    assert missing_review_report["valid"] is False
-    assert missing_review_report["review_valid"] is False
-
-    active_report = installed_product.json(
-        "index", "verify", "--review", "review-active-run", env=product_env
-    )
-    assert active_report["valid"] is False
-    assert active_report["review_valid"] is False
-
-    database = state / "index" / "agent-workflow.sqlite3"
-    with sqlite3.connect(database) as connection:
-        connection.execute(
-            "UPDATE runs SET source_dir=? WHERE session_id=?",
-            (str(state / "outside-trusted-root"), "review-index-target"),
-        )
-        connection.commit()
-    escaped_report = installed_product.json(
-        "index", "verify", "--review", "review-index-target", env=product_env
-    )
-    assert escaped_report["valid"] is False
-    assert escaped_report["review_valid"] is False
-
-
-def test_installed_index_rebuilds_and_preserves_query_results_after_database_loss(
-    installed_product: InstalledProduct,
-    product_env: dict[str, str],
 ) -> None:
     state = Path(product_env["XDG_STATE_HOME"]) / "agent-workflow"
     run = state / "runs" / "index-product"
@@ -176,9 +55,28 @@ def test_installed_index_rebuilds_and_preserves_query_results_after_database_los
         + "\n",
         encoding="utf-8",
     )
+    for storage_root in ("runs", "archive"):
+        legacy = state / storage_root / f"legacy-installed-{storage_root}"
+        _write_json(
+            legacy / "status.json",
+            {
+                "schema": "agent-workflow/session-status/v2",
+                "session_id": f"legacy-installed-{storage_root}",
+                "status": "completed",
+                "created_at": "2025-01-01T00:00:00+00:00",
+                "workdir": f"/tmp/legacy-installed-{storage_root}",
+                "prompt_path": str(legacy / "prompt.md"),
+                "log_path": str(legacy / "output.log"),
+            },
+        )
+        _write_json(
+            legacy / "execution-metrics.json",
+            {"schema": "agent-workflow/execution-metrics/retired-v1"},
+        )
 
     first = installed_product.json("index", "rebuild", env=product_env)
-    assert first["indexed_count"] == 1
+    assert first["indexed_count"] >= 1
+    assert first["quarantined_count"] == 2
     status = installed_product.json("index", "status", env=product_env)
     assert status["freshness"] == "current"
     assert status["journal_mode"] == "wal"
@@ -186,12 +84,7 @@ def test_installed_index_rebuilds_and_preserves_query_results_after_database_los
         "index", "query", "runs", "--session", "index-product", env=product_env
     )
     incidents_query_before = installed_product.json(
-        "index",
-        "query",
-        "incidents",
-        "--category",
-        "process_alive_no_progress",
-        env=product_env,
+        "index", "query", "incidents", "--category", "process_alive_no_progress", env=product_env
     )
     assert runs_query_before["freshness"] == "current"
     assert incidents_query_before["freshness"] == "current"
@@ -199,30 +92,42 @@ def test_installed_index_rebuilds_and_preserves_query_results_after_database_los
     incidents_before = incidents_query_before["rows"]
     assert rows_before[0]["source_dir"] == str(run)
     assert incidents_before[0]["relative_path"] == "incident-events.jsonl"
-    assert installed_product.json("index", "verify", "--full", env=product_env)["valid"] is True
+    verification = installed_product.json("index", "verify", "--full", env=product_env)
+    assert verification["valid"] is True
+    classifications = {
+        item["session_id"]: item["classification"]
+        for item in verification["historical_artifacts"]
+    }
+    assert classifications == {
+        "legacy-installed-archive": "quarantined",
+        "legacy-installed-runs": "quarantined",
+    }
+
+    authority = Path(first["database"]).parent / "integrity-authority-v2.jsonl"
+    assert not authority.exists()
+    migration = installed_product.json("index", "integrity", "migrate", env=product_env)
+    assert migration["legacy_trust"] == "none"
+    record = installed_product.json(
+        "index", "integrity", "record", "index-product", "status.json", "1",
+        "run_index_failed", "installed test error", env=product_env,
+    )
+    assert record["authority"] == "v2-append-only"
+    assert len(authority.read_text(encoding="utf-8").splitlines()) == 2
 
     database = Path(status["database"])
     for candidate in (database, Path(f"{database}-wal"), Path(f"{database}-shm")):
         if candidate.exists():
             candidate.unlink()
-
-    missing = installed_product.json("index", "status", env=product_env)
-    assert missing["freshness"] == "missing"
+    assert installed_product.json("index", "status", env=product_env)["freshness"] == "missing"
     second = installed_product.json("index", "rebuild", env=product_env)
-    assert second["indexed_count"] == 1
+    assert second["indexed_count"] >= 1
     runs_query_after = installed_product.json(
         "index", "query", "runs", "--session", "index-product", env=product_env
     )
     incidents_query_after = installed_product.json(
-        "index",
-        "query",
-        "incidents",
-        "--category",
-        "process_alive_no_progress",
-        env=product_env,
+        "index", "query", "incidents", "--category", "process_alive_no_progress", env=product_env
     )
     rows_after = runs_query_after["rows"]
-    incidents_after = incidents_query_after["rows"]
     comparable_before = [
         {key: value for key, value in row.items() if key != "indexed_at"}
         for row in rows_before
@@ -233,76 +138,50 @@ def test_installed_index_rebuilds_and_preserves_query_results_after_database_los
     ]
     assert comparable_after == comparable_before
     assert rows_after[0]["indexed_at"] != rows_before[0]["indexed_at"]
-    assert incidents_after == incidents_before
+    assert incidents_query_after["rows"] == incidents_before
 
-
-def test_installed_integrity_authority_is_explicit_and_legacy_is_untrusted(
-    installed_product: InstalledProduct,
-    product_env: dict[str, str],
-) -> None:
+    repo = tmp_path / "review-repo"
+    git_repo(repo)
+    prompt = tmp_path / "review.md"
+    prompt.write_text("Review the sealed evidence.\n", encoding="utf-8")
+    installed_product.json(
+        "launch", "review-index-target", repo, prompt, "--agent-class", "review",
+        "--tier", "low", "--no-interactive", "--", fake_agent_path, env=product_env,
+    )
+    assert wait_for_status(product_env, "review-index-target")["status"] == "completed"
+    installed_product.json(
+        "review", "review-index-target", "--actor", "reviewer", "--reason", "gate checked",
+        env=product_env,
+    )
+    run = Path(product_env["XDG_STATE_HOME"]) / "agent-workflow" / "runs" / "review-index-target"
     state = Path(product_env["XDG_STATE_HOME"]) / "agent-workflow"
-    run = state / "runs" / "integrity-product"
-    _write_json(
-        run / "status.json",
-        {
-            "schema": "agent-workflow/session-status/v2",
-            "session_id": "integrity-product",
-            "status": "running",
-            "created_at": "2026-07-30T00:00:00+00:00",
-            "updated_at": "2026-07-30T00:01:00+00:00",
-            "workdir": "/tmp/integrity-product",
-            "prompt_path": str(run / "prompt.md"),
-            "log_path": str(run / "output.log"),
-            "ticket_id": "MAINT-007-A",
-            "pack_id": "delegation-communication-reliability",
-            "disposition": None,
-            "failure_category": None,
-        },
-    )
-    rebuilt = installed_product.json("index", "rebuild", env=product_env)
-    assert rebuilt["error_count"] == 0
-    authority = Path(rebuilt["database"]).parent / "integrity-authority-v2.jsonl"
-    assert not authority.exists()
-    assert installed_product.json("index", "verify", "--full", env=product_env)["valid"] is True
-    assert not authority.exists()
-    migration = installed_product.json("index", "integrity", "migrate", env=product_env)
-    assert migration["legacy_trust"] == "none"
-    record = installed_product.json(
-        "index", "integrity", "record", "integrity-product", "status.json", "1",
-        "run_index_failed", "installed test error", env=product_env
-    )
-    assert record["authority"] == "v2-append-only"
-    assert len(authority.read_text(encoding="utf-8").splitlines()) == 2
+    installed_product.json("index", "rebuild", env=product_env)
+    legacy_ledger = state / "index" / "integrity-incidents.jsonl"
+    legacy_ledger.write_text('{"legacy":"sentinel"}\n', encoding="utf-8")
+    unrelated = state / "runs" / "unrelated-integrity-incident"
+    unrelated.mkdir(parents=True)
+    (unrelated / "status.json").write_text("{not-json\n", encoding="utf-8")
+    installed_product.json("index", "rebuild", env=product_env)
 
-
-@pytest.mark.parametrize("storage_root", ["runs", "archive"])
-def test_installed_full_verify_classifies_legacy_retired_record_without_accepting_it(
-    installed_product: InstalledProduct,
-    product_env: dict[str, str],
-    storage_root: str,
-) -> None:
-    state = Path(product_env["XDG_STATE_HOME"]) / "agent-workflow"
-    legacy = state / storage_root / "legacy-installed"
-    _write_json(
-        legacy / "status.json",
-        {
-            "schema": "agent-workflow/session-status/v2",
-            "session_id": "legacy-installed",
-            "status": "completed",
-            "created_at": "2025-01-01T00:00:00+00:00",
-            "workdir": "/tmp/legacy-installed",
-            "prompt_path": str(legacy / "prompt.md"),
-            "log_path": str(legacy / "output.log"),
-        },
+    verified = installed_product.json(
+        "index", "verify", "--full", "--review", "review-index-target", env=product_env
     )
-    _write_json(
-        legacy / "execution-metrics.json",
-        {"schema": "agent-workflow/execution-metrics/retired-v1"},
-    )
+    assert verified["valid"] is False
+    assert verified["review_scope"] == "review-index-target"
+    assert verified["review_valid"] is True
+    assert verified["review_evidence"]["review_receipt_sha256"]
+    assert legacy_ledger.read_text(encoding="utf-8") == '{"legacy":"sentinel"}\n'
 
-    rebuilt = installed_product.json("index", "rebuild", env=product_env)
-    assert rebuilt["error_count"] == 0
-    assert rebuilt["quarantined_count"] == 1
-    verification = installed_product.json("index", "verify", "--full", env=product_env)
-    assert verification["valid"] is True
-    assert verification["historical_artifacts"][0]["classification"] == "quarantined"
+    completion = run / "completion.json"
+    completion_bytes = completion.read_bytes()
+    completion.chmod(0o600)
+    completion.write_text(completion.read_text(encoding="utf-8").replace("completed", "partial", 1), encoding="utf-8")
+    completion.chmod(0o444)
+    tampered = installed_product.json(
+        "index", "verify", "--full", "--review", "review-index-target", env=product_env
+    )
+    assert tampered["valid"] is False
+    assert tampered["review_valid"] is False
+    completion.chmod(0o600)
+    completion.write_bytes(completion_bytes)
+    completion.chmod(0o444)

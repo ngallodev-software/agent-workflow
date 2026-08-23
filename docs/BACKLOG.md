@@ -285,6 +285,20 @@ These tasks are designed under decided `DEC-004` and the host boundary in `DEC-0
 | SPEC-005 | P2 | Medium | blocked | After `SPEC-004`, add an optional LangGraph adapter implementing the same authoring-engine interface while canonical events, approved JSON, and compiler receipts remain authoritative. | [LangGraph placement](SPEC_AUTHORING_PLUGIN_ARCHITECTURE.md#langgraph-placement) |
 | ARC-004 | P2 | High | blocked | After stable real-world evidence from `PLUG-001` and the spec plugin, evaluate extracting exactly one existing optional subsystem; do not perform a broad simultaneous repository split. | [Core decomposition roadmap](SPEC_AUTHORING_PLUGIN_ARCHITECTURE.md#core-decomposition-roadmap) |
 
+## Herdr terminal-boundary migration
+
+These tickets are owned exclusively by the `herdr-boundary-migration` prompt
+pack. They supersede new agent-workflow tmux/pane feature work once HERDR-GATE-0
+accepts the inventory; existing tmux tickets remain historical/currently
+in-review until the migration is accepted.
+
+| ID | Priority | Risk | State | Work and exit evidence | Reference |
+|---|---|---:|---|---|---|
+| HERDR-001 | P0 | Critical | ready | Inventory both indexed repositories, map every tmux/pane caller and authority boundary, verify Herdr plugin APIs, and define disjoint migration scopes. | [Migration plan](HERDR_BOUNDARY_MIGRATION_PLAN.md) |
+| HERDR-002 | P0 | Critical | blocked | Remove agent-workflow tmux/pane topology and terminal ownership behind a typed host boundary while preserving durable workflow authority. Blocked on HERDR-GATE-0. | [Ticket](../prompt-packs/herdr-boundary-migration/phase-1/tickets/HERDR-002-remove-tmux.md) |
+| HERDR-003 | P0 | High | blocked | Implement a terminal-neutral workflow/host adapter and headless installed journeys. Blocked on HERDR-GATE-1. | [Ticket](../prompt-packs/herdr-boundary-migration/phase-2/tickets/HERDR-003-adapter.md) |
+| HERDR-004 | P1 | High | blocked | Build the first-party `herdr-agent-workflow` plugin with actions, durable-state presentation, event refresh, and reversible installation. Blocked on HERDR-GATE-2. | [Ticket](../prompt-packs/herdr-boundary-migration/phase-2/tickets/HERDR-004-plugin.md) |
+
 ## Deferred architecture
 
 These existing items already own the assessment's P2 recommendations. The hardening packs must not create competing tickets for them.

@@ -60,17 +60,6 @@ def _install_candidates(monkeypatch: pytest.MonkeyPatch, *entries: _EntryPoint) 
     monkeypatch.setattr("agent_workflow.plugins.metadata.entry_points", entry_points)
 
 
-def test_disabled_candidates_are_discovered_without_import(monkeypatch: pytest.MonkeyPatch) -> None:
-    entry = _EntryPoint("fixture", "fixture:plugin", lambda: _descriptor("fixture"))
-    _install_candidates(monkeypatch, entry)
-
-    registry = load_plugin_registry(())
-
-    assert entry.load_count == 0
-    assert registry.inventory()[0]["name"] == "fixture"
-    assert registry.inventory()[0]["loaded"] is False
-
-
 def test_incompatible_enabled_plugin_fails_strictly(monkeypatch: pytest.MonkeyPatch) -> None:
     entry = _EntryPoint(
         "fixture",
@@ -94,16 +83,6 @@ def test_duplicate_registration_rolls_back_atomically(monkeypatch: pytest.Monkey
     # No global registry was mutated by the failed transaction.
     registry = load_plugin_registry(("first",))
     assert [command.name for _, command in registry.commands] == ["shared"]
-
-
-def test_no_plugins_suppresses_enabled_imports(monkeypatch: pytest.MonkeyPatch) -> None:
-    entry = _EntryPoint("fixture", "fixture:plugin", lambda: _descriptor("fixture"))
-    _install_candidates(monkeypatch, entry)
-
-    registry = load_plugin_registry(("fixture",), suppress=True)
-
-    assert entry.load_count == 0
-    assert registry.inventory()[0]["suppressed"] is True
 
 
 def test_plugin_command_cannot_shadow_core_command(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -140,7 +119,6 @@ def test_enabled_plugin_provenance_is_bound_into_launch_command_artifacts(
     assert "`fixture-command`" in card
 
 
-
 def _install_resource_package(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
@@ -158,38 +136,6 @@ def _install_resource_package(
     importlib.invalidate_caches()
     sys.modules.pop(package, None)
     return package, hashlib.sha256(content).hexdigest()
-
-
-def test_enabled_plugin_resolves_and_reads_digest_bound_package_resource(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path,
-) -> None:
-    package, digest = _install_resource_package(monkeypatch, tmp_path)
-    resource = PluginPackageResource(
-        kind="schema",
-        identifier="fixture.schema",
-        package=package,
-        path="schemas/example.json",
-        sha256=digest,
-    )
-    entry = _EntryPoint(
-        "fixture",
-        "fixture:plugin",
-        lambda: PluginDescriptor(
-            name="fixture",
-            version="1.0",
-            package_resources=(resource,),
-        ),
-    )
-    _install_candidates(monkeypatch, entry)
-
-    registry = load_plugin_registry(("fixture",))
-
-    assert registry.read_package_resource("schema", "fixture.schema") == b'{"type":"object"}\n'
-    assert registry.package_resources[0].size == len(b'{"type":"object"}\n')
-    inventory = registry.inventory()[0]["package_resources"]
-    assert inventory[0]["identifier"] == "fixture.schema"
-    assert inventory[0]["sha256"] == digest
 
 
 def test_package_resource_traversal_is_rejected_before_resolution(
@@ -214,33 +160,6 @@ def test_package_resource_traversal_is_rejected_before_resolution(
     _install_candidates(monkeypatch, entry)
 
     with pytest.raises(WorkflowError, match="invalid plugin package resource path"):
-        load_plugin_registry(("fixture",))
-
-
-def test_package_resource_digest_mismatch_fails_activation(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path,
-) -> None:
-    package, _ = _install_resource_package(monkeypatch, tmp_path)
-    resource = PluginPackageResource(
-        kind="schema",
-        identifier="fixture.schema",
-        package=package,
-        path="schemas/example.json",
-        sha256="0" * 64,
-    )
-    entry = _EntryPoint(
-        "fixture",
-        "fixture:plugin",
-        lambda: PluginDescriptor(
-            name="fixture",
-            version="1.0",
-            package_resources=(resource,),
-        ),
-    )
-    _install_candidates(monkeypatch, entry)
-
-    with pytest.raises(WorkflowError, match="package resource digest mismatch"):
         load_plugin_registry(("fixture",))
 
 

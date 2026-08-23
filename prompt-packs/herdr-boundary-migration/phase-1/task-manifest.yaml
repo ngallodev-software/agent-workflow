@@ -1,0 +1,15 @@
+phase: "1"
+name: "terminal-ownership-removal"
+tasks:
+  - id: "HERDR-002"
+    tier: A
+    session: "herdr-remove-terminal-ownership"
+    prompt: "tickets/HERDR-002-remove-tmux.md"
+    backlog_id: "HERDR-002"
+    dependencies: ["HERDR-GATE-0"]
+  - id: "HERDR-GATE-1"
+    tier: A
+    session: "herdr-remove-terminal-ownership-gate"
+    prompt: "tickets/HERDR-GATE-1.md"
+    task_type: gate
+    dependencies: ["HERDR-002"]

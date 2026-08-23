@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import signal
 import time
 from pathlib import Path
 
@@ -15,15 +17,17 @@ def _write_fake_session(path: Path, data: dict) -> None:
     path.write_text(json.dumps(data), encoding="utf-8")
 
 
-def test_shared_window_uses_stable_pane_id_through_layout_churn(
+def _assert_stable_pane_through_layout_churn(
     installed_product: InstalledProduct,
     product_env: dict[str, str],
     fake_agent_path: Path,
     tmp_path: Path,
 ) -> None:
-    repo = tmp_path / "repo"
+    case_root = tmp_path / "stable"
+    case_root.mkdir()
+    repo = case_root / "repo"
     head = git_repo(repo)
-    prompt = tmp_path / "prompt.md"
+    prompt = case_root / "prompt.md"
     prompt.write_text("Remain available while the window layout changes.\n", encoding="utf-8")
     config = write_config(product_env, fake_agent=fake_agent_path)
     env = dict(product_env)
@@ -84,15 +88,17 @@ def test_shared_window_uses_stable_pane_id_through_layout_churn(
     assert target["id"] == pane_id
 
 
-def test_destroyed_stable_pane_is_not_rebound_to_replacement(
+def _assert_destroyed_pane_is_not_rebound(
     installed_product: InstalledProduct,
     product_env: dict[str, str],
     fake_agent_path: Path,
     tmp_path: Path,
 ) -> None:
-    repo = tmp_path / "repo"
+    case_root = tmp_path / "destroyed"
+    case_root.mkdir()
+    repo = case_root / "repo"
     git_repo(repo)
-    prompt = tmp_path / "prompt.md"
+    prompt = case_root / "prompt.md"
     prompt.write_text("The pane may be destroyed.\n", encoding="utf-8")
     config = write_config(product_env, fake_agent=fake_agent_path)
     env = dict(product_env)
@@ -106,6 +112,7 @@ def test_destroyed_stable_pane_is_not_rebound_to_replacement(
     pane_id = launched["tmux_pane_id"]
     state_path = Path(env["FAKE_TMUX_STATE"]) / "fake.json"
     state = _fake_session(state_path)
+    destroyed = next(item for item in state["panes"] if item["id"] == pane_id)
     state["panes"] = [item for item in state["panes"] if item["id"] != pane_id]
     state["panes"].append({"id": "%98", "pid": 0, "index": 1, "role": "agent"})
     _write_fake_session(state_path, state)
@@ -116,17 +123,23 @@ def test_destroyed_stable_pane_is_not_rebound_to_replacement(
     )
     assert result.returncode != 0
     assert "live agent pane" in result.stderr
+    try:
+        os.killpg(int(destroyed["pid"]), signal.SIGTERM)
+    except (ProcessLookupError, PermissionError, ValueError):
+        pass
 
 
-def test_completed_shared_window_run_closes_bound_pane(
+def _assert_completed_run_closes_bound_pane(
     installed_product: InstalledProduct,
     product_env: dict[str, str],
     fake_agent_path: Path,
     tmp_path: Path,
 ) -> None:
-    repo = tmp_path / "repo"
+    case_root = tmp_path / "closeout"
+    case_root.mkdir()
+    repo = case_root / "repo"
     git_repo(repo)
-    prompt = tmp_path / "prompt.md"
+    prompt = case_root / "prompt.md"
     prompt.write_text("Complete and close the shared pane.\n", encoding="utf-8")
     config = write_config(product_env, fake_agent=fake_agent_path)
     env = dict(product_env)
@@ -159,3 +172,20 @@ def test_completed_shared_window_run_closes_bound_pane(
     assert all(item["id"] != pane_id for item in state.get("panes", []))
     observed = installed_product.json("status", "closeout-pane", env=env)
     assert observed["tmux_alive"] is False
+
+
+def test_installed_tmux_pane_identity_lifecycle_is_stable_and_fail_closed(
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+    fake_agent_path: Path,
+    tmp_path: Path,
+) -> None:
+    _assert_stable_pane_through_layout_churn(
+        installed_product, product_env, fake_agent_path, tmp_path
+    )
+    _assert_destroyed_pane_is_not_rebound(
+        installed_product, product_env, fake_agent_path, tmp_path
+    )
+    _assert_completed_run_closes_bound_pane(
+        installed_product, product_env, fake_agent_path, tmp_path
+    )

@@ -10,7 +10,7 @@ from pathlib import Path
 from tests.conftest import InstalledProduct
 
 
-def _build_and_install_fixture(installed_product: InstalledProduct, tmp_path: Path) -> None:
+def _build_and_install_fixture(installed_product: InstalledProduct, tmp_path: Path) -> dict[str, str]:
     package = tmp_path / "fixture-plugin"
     module = package / "aw_fixture_plugin"
     resource_dir = module / "resources"
@@ -116,6 +116,10 @@ def plugin():
         timeout=120,
     )
     assert installed.returncode == 0, installed.stdout + installed.stderr
+    return {
+        "fixture.schema": hashlib.sha256(schema_content).hexdigest(),
+        "fixture.asset": hashlib.sha256(asset_content).hexdigest(),
+    }
 
 
 def _config(path: Path, *, enabled: bool) -> Path:
@@ -131,7 +135,7 @@ def test_installed_trusted_plugin_is_explicit_atomic_and_recoverable(
     installed_product: InstalledProduct,
     tmp_path: Path,
 ) -> None:
-    _build_and_install_fixture(installed_product, tmp_path)
+    expected_digests = _build_and_install_fixture(installed_product, tmp_path)
     marker = tmp_path / "plugin-imported"
     env = {**os.environ, "FIXTURE_PLUGIN_IMPORT_MARKER": str(marker)}
     disabled = _config(tmp_path / "disabled.toml", enabled=False)
@@ -170,6 +174,7 @@ def test_installed_trusted_plugin_is_explicit_atomic_and_recoverable(
         ("asset", "fixture.asset"),
     }
     assert all(item["size"] > 0 for item in package_resources)
+    assert {item["identifier"]: item["sha256"] for item in package_resources} == expected_digests
 
     marker.unlink()
     suppressed = installed_product.run(

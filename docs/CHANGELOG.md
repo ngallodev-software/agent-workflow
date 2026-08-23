@@ -1,4 +1,6 @@
 # Changelog
+- Consolidate test authority a third time: move plugin, MCP, pane-identity, orchestrator-inbox, Luna-policy, ledger, and release-evidence positive paths into installed or release journeys; reduce invariants from 228 to 201 cases and the complete collection from 316 to 288 cases while retaining adversarial matrices.
+- Consolidate the test authority a second time around assertion-dense installed journeys: merge hierarchy contract/journal/receipt coverage, move the complete fast synthetic benchmark package/runtime/scoring path into one installed journey, combine SQLite rebuild/recovery/integrity/history behavior, remove duplicated positive-path invariants, and reduce the default collection from 340 to 316 cases and invariants from 247 to 228 cases; the SQLite installed-product authority is now one lifecycle rather than multiple tests.
 - Consolidate the test suite around installed-product journeys and explicit invariant authority: remove private CLI/decomposition tests, reduce the invariant layer from 320 to 247 collected cases and the complete default collection from 411 to 340, add `tests/test-authority.json`, and enforce layer/function/collection/subprocess/wheel-build/runtime drift ceilings in release checks.
 
 - Add immutable repository-closeout receipts with explicit offline/fetch/push

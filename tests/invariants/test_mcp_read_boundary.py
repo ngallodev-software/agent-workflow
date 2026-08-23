@@ -50,29 +50,6 @@ def _status(state: Path, session_id: str = "run-1") -> Path:
     return run
 
 
-def test_message_listing_is_metadata_only_and_bounded(tmp_path: Path) -> None:
-    service, state = _service(tmp_path)
-    run = _status(state)
-    secret = "synthetic-secret@example.test"
-    append_message(
-        run,
-        session_id="run-1",
-        direction="child_to_parent",
-        kind="progress",
-        actor="child",
-        content=secret,
-    )
-
-    result = service.list_messages("run-1")
-    encoded = json.dumps(result.as_dict())
-    assert secret not in encoded
-    item = result.items[0]
-    assert item["redaction_state"] == "body_omitted"
-    assert item["content_length"] == len(secret.encode())
-    assert "content" not in item
-    assert result.as_dict()["schema"] == "agent-workflow/mcp-page/v1"
-
-
 @pytest.mark.parametrize("selected", ["pack-link", "alias/pack"])
 def test_pack_path_symlink_components_fail_closed(tmp_path: Path, selected: str) -> None:
     service, _ = _service(tmp_path)
@@ -101,28 +78,6 @@ def test_receipt_summary_rejects_writable_or_irregular_entries_without_partial_o
         service.list_receipts("run-1")
     assert caught.value.category == "invalid_evidence"
 
-
-def test_capabilities_bind_the_parser_catalog_and_role_scope(tmp_path: Path) -> None:
-    service, _ = _service(tmp_path)
-    capabilities = service.get_capabilities()
-    catalog = service.get_command_catalog()
-    implementation = service.get_command_catalog("implementation")
-
-    encoded = (json.dumps(catalog, indent=2, sort_keys=True) + "\n").encode("utf-8")
-    assert capabilities["command_catalog"] == {
-        "schema": "agent-workflow/command-catalog/v1",
-        "sha256": hashlib.sha256(encoded).hexdigest(),
-        "leaf_command_count": len(catalog["commands"]),
-    }
-    represented = {item["command"] for item in implementation["commands"]}
-    assert {"progress", "ack", "agent task-complete"} <= represented
-    assert "launch" not in represented
-    assert capabilities["mode"] == "read-only"
-    assert "arbitrary-shell" in capabilities["excluded_operations"]
-
-    with pytest.raises(ServiceError) as caught:
-        service.get_command_catalog("unknown")
-    assert caught.value.category == "invalid_identifier"
 
 def test_pagination_and_unexpected_errors_are_stable() -> None:
     with pytest.raises(ServiceError) as caught:

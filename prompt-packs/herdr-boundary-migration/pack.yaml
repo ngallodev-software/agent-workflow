@@ -1,0 +1,19 @@
+schema: agent-workflow/pack/v1
+pack_id: "herdr-boundary-migration"
+backlog_items:
+  - "HERDR-001"
+  - "HERDR-002"
+  - "HERDR-003"
+  - "HERDR-004"
+workflow:
+  name: agent-workflow
+  minimum_version: "0.7.9"
+  terminal_backend: tmux
+  requires:
+    - isolated_worktree
+    - foregroundable_session
+    - persistent_log
+    - source_baseline
+    - completion_report
+    - independent_phase_gate
+    - release_drift_audit

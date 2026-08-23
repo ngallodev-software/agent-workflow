@@ -77,6 +77,7 @@ def test_installed_stdio_mcp_reads_bounded_metadata_only(
         read_resources(
             "agent-workflow://capabilities",
             "agent-workflow://commands/implementation",
+            "agent-workflow://commands/unknown",
             "agent-workflow://runs",
             "agent-workflow://runs/mcp-run/status",
             "agent-workflow://runs/mcp-run/messages",
@@ -90,12 +91,14 @@ def test_installed_stdio_mcp_reads_bounded_metadata_only(
     assert str(repo) not in encoded
     assert all(response.get("schema") for response in responses)
 
-    capabilities, commands, runs, _, messages, _, context, card = responses
+    capabilities, commands, unknown_commands, runs, _, messages, _, context, card = responses
     assert capabilities["mode"] == "read-only"
     assert capabilities["command_catalog"]["leaf_command_count"] >= len(commands["commands"])
     represented = {item["command"] for item in commands["commands"]}
     assert {"progress", "ack", "agent task-complete"} <= represented
     assert "worktree create" not in represented
+    assert unknown_commands["schema"] == "agent-workflow/mcp-error/v1"
+    assert unknown_commands["error"] == "invalid_identifier"
     assert context["verification"] == "verified"
     assert context["role"] == "implementation"
     assert context["catalog_sha256"] == capabilities["command_catalog"]["sha256"]
@@ -106,6 +109,7 @@ def test_installed_stdio_mcp_reads_bounded_metadata_only(
     assert "agent-workflow worktree create" not in card["markdown"]
     item = messages["items"][0]
     assert item["redaction_state"] == "body_omitted"
+    assert item["content_length"] == len(secret.encode())
     assert "content" not in item
     assert runs["items"][0]["session_id"] == "mcp-run"
 

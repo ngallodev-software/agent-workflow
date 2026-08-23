@@ -80,6 +80,8 @@ Start with the intended installed-product outcome or future acceptance journey. 
 3. an opt-in live compatibility journey for real tmux/provider/MCP behavior;
 4. a narrowly matched strict future xfail tied to one approved backlog item.
 
+A supported capability should normally have one assertion-dense installed journey that reuses a single lifecycle to verify related commands, durable artifacts, state transitions, and cleanup. Extend that journey instead of adding one test per command, module, or helper. Keep destructive, tamper, race, and invalid-input permutations in a compact invariant matrix when folding them into the live journey would make execution order-dependent or obscure the failing authority.
+
 Do not add tests for line coverage, private parser shape, mock-call choreography, exact internal dictionaries, duplicated CLI help, prose wording, user-created local files, or broad snapshots. A low-level test must state why an end-to-end journey cannot protect the same boundary efficiently.
 
 ## 7. Completion evidence

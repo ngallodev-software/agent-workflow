@@ -8,6 +8,8 @@ The test suite is organized around behavior that an operator can observe. Test c
 
 `tests/acceptance/` builds a wheel from a clean source copy, installs it into an isolated virtual environment, and invokes the installed `agent-workflow` or `agent-workflow-mcp` executable as an external process.
 
+Acceptance journeys are assertion-dense. One installed lifecycle should normally prove the related public contract, durable evidence, state transitions, read-only follow-up commands, and cleanup behavior together. Do not split a journey merely because it crosses several commands or modules. Reuse the same installed run, repository, or projection when isolation is not part of the behavior being tested.
+
 The acceptance layer covers:
 
 - installed CLI discovery, configuration, doctor, and actionable failures;
@@ -85,7 +87,9 @@ A proposed test should answer at least one of these questions:
 
 Do not add a test merely because a function, branch, parser field, dictionary shape, or prose fragment exists. Avoid private imports and mocks unless the test is an invariant that cannot be exercised deterministically through a public boundary.
 
-When a defect is discovered, first extend the nearest end-to-end journey. Add a narrow invariant only when the defect belongs to a general security/state matrix.
+When a defect is discovered, first extend the nearest end-to-end journey. Add a narrow invariant only when the defect belongs to a general security/state matrix. A new public assertion should usually be added to an existing installed lifecycle rather than placed in a new test function or file.
+
+Do not force every negative permutation into an end-to-end journey. Destructive, tamper, race, and invalid-schema cases remain compact invariants when exercising them inside one live lifecycle would make the journey order-dependent, hide the failing authority, or couple process cleanup to later read-only assertions.
 
 ## Test authority and drift budgets
 
@@ -99,9 +103,20 @@ python3 scripts/audit-test-suite.py
 
 The policy is a drift ceiling, not a coverage target. Deleting redundant coverage does not require restoring the old count. Raising any ceiling requires a reviewable explanation of the complete user journey or isolated invariant that cannot be protected by existing authority. New invariant files fail until they are explicitly inventoried. Direct imports from `agent_workflow.cli_handlers`, `agent_workflow.cli_parser`, or `agent_workflow.cli_runtime` are forbidden in invariants; those behaviors belong at the installed executable boundary.
 
-The 2026-08-02 consolidation removed private CLI dispatch/decomposition tests and moved manifest-native pack validation, repository closeout, evidence repair, and parser/runtime routing to installed-product journeys. The invariant layer decreased from 52 files and 320 collected cases to 35 files and 247 collected cases; preserving the LAN live-review regression adds one accepted default-suite case, so the current default ceiling is 341 cases. The retained ceilings are intentionally below the prior shape and are enforced mechanically.
+The first 2026-08-02 consolidation removed private CLI dispatch/decomposition tests and moved manifest-native pack validation, repository closeout, evidence repair, and parser/runtime routing to installed-product journeys. The invariant layer decreased from 52 files and 320 collected cases to 35 files and 247 collected cases; the complete default collection decreased from 411 to 340 cases.
+
+The second consolidation pass made the remaining journeys denser instead of creating replacement tests. Three hierarchy acceptance files became one installed contract/journal/receipt lifecycle; the installed fast-benchmark journey now verifies packaged-source identity, parallel synthetic execution, the wall-time contract, and exact 100-point scoring; and one installed SQLite lifecycle now verifies rebuild, query, integrity authority, database-loss recovery, retired-artifact classification, review-scoped validity in the presence of global blockers, and representative sealed-evidence tamper rejection. Positive-path hierarchy, benchmark, completion, Git, status-projection, and SQLite invariants duplicated by those journeys were removed, along with repetitive SQLite artifact-removal permutations that did not establish a distinct authority boundary. The invariant layer is now 35 files and 228 collected cases, the acceptance layer is 18 files and 58 collected cases, and the complete default collection is 316 cases. The negative evaluation matrix was deliberately retained after consolidation showed that combining destructive evaluation permutations with live fixture processes made the journey order-dependent.
+
+The third consolidation pass moved additional positive-path authority out of isolated invariants and into assertion-dense installed or release journeys. Plugin resource binding, MCP catalog/error behavior, pane identity, orchestrator inbox lifecycle, Luna execution policy, ledger projection, and release-evidence behavior now share their nearest public lifecycle. Three invariant files were removed entirely, the tmux pane lifecycle collapsed from three acceptance cases to one, and eight release-evidence invariant cases became one release-layer contract gate. The invariant layer is now 32 files, 186 test functions, and 201 collected cases; acceptance is 18 files, 55 functions, and 56 cases; release is 3 files, 16 functions, and 16 cases. The complete collection is 288 cases, including two opt-in live cases that remain skipped by default, a net reduction of 28 cases from the second-pass shape while retaining destructive, tamper, race, replay, path-security, and invalid-schema matrices as isolated invariants.
+
+The pass also hardened installed-product capture and fixture cleanup so broad journeys can safely make many CLI assertions without relying on inherited stdout/stderr pipes. A residual order-dependent process stall remains reproducible only when several process-heavy acceptance scenarios share one pytest interpreter; each affected installed journey passes independently. Until that harness boundary is eliminated, release evidence must report bounded partition results rather than claim an unobserved monolithic pass.
+
+The retained ceilings are intentionally below both prior shapes and are enforced mechanically.
 
 `release-check.sh` runs the authority audit before pytest, then re-runs it against JUnit evidence. The post-run audit records total test count and duration in `build/release-evidence/test-suite-audit.json`; the current default-suite runtime ceiling is 420 seconds, based on a measured 332.98-second successful full gate plus bounded scheduling headroom. Static budgets also prevent silent multiplication of subprocess call sites or wheel builds.
+
+
+The JUnit collection budget is derived from the sum of the reviewed per-layer collection ceilings. Jenkins therefore has no separate aggregate test-count value that can drift behind optional-dependency or environment-specific collection.
 
 ## Commands
 
@@ -143,7 +158,7 @@ executors; no paid provider task is part of the default suite.
 Focused invariant and installed-wheel journeys cover:
 
 - trusted-plugin import suppression, atomic registration, collision handling, digest-bound package resources, traversal/tamper rejection, and a separately installed fixture plugin;
-- hierarchy contracts, capability/budget narrowing, append-only journals, idempotent imports, deterministic replay, and mutation-sensitive team/root receipts;
+- one installed hierarchy lifecycle covering contract identity and read-only installation, append-only journal import/replay, and team/root receipt sealing, with compact adversarial matrices for narrowing, tamper, identity, budget, and filesystem attacks;
 - installed CLI routing and stable public behavior without private handler/parser tests;
 - SQLite source/query, session-control, and evidence boundaries only where adversarial state matrices are cheaper than installed journeys;
 - distribution exclusion of Jenkins/GitHub CI assets and fail-safe optional MCP installation.

@@ -275,6 +275,29 @@ def test_prompt_pack_scaffold_validate_and_archive_round_trip_is_deterministic(
     installed_product.json("pack", "archive", native, native_second, env=product_env)
     assert native_first.read_bytes() == native_second.read_bytes()
 
+    ledger_pack = tmp_path / "ledger-pack"
+    ledger_phase = ledger_pack / "phase-0"
+    ledger_phase.mkdir(parents=True)
+    (ledger_phase / "task-manifest.yaml").write_text(
+        'phase: "0"\ntasks:\n  - id: T-1\n    session: run-1\n    prompt: ticket.md\n',
+        encoding="utf-8",
+    )
+    ledger_runs = tmp_path / "ledger-runs"
+    ledger_run = ledger_runs / "run-1"
+    ledger_run.mkdir(parents=True)
+    (ledger_run / "status.json").write_text(
+        json.dumps({"status": "completed", "evaluation_path": None}) + "\n",
+        encoding="utf-8",
+    )
+    ledger = installed_product.json(
+        "ledger", ledger_pack, "--runs-root", ledger_runs, env=product_env
+    )
+    row = ledger["rows"][0]
+    assert row["ticket"] == "T-1"
+    assert row["evaluation_required"] is False
+    assert row["evaluation_state"] == "not-planned"
+    assert "eval score" not in row["next_action"]
+
 
 def test_worktree_create_list_and_remove_uses_real_git(
     installed_product: InstalledProduct, product_env: dict[str, str], tmp_path: Path

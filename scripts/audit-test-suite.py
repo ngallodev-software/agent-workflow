@@ -289,7 +289,11 @@ def audit(
                 "collection_skips": collection_skips,
                 "duration_seconds": duration,
             }
-            expected_total = policy["default_suite"]["max_collected_cases"]
+            expected_total = sum(
+                int(layer["max_collected_cases"])
+                for layer in policy["layers"].values()
+            )
+            report["junit"]["collection_budget"] = expected_total
             if tests > expected_total:
                 errors.append(f"JUnit test count grew to {tests} (budget {expected_total})")
             runtime_budget = float(policy["default_suite"]["max_runtime_seconds"])

@@ -119,17 +119,6 @@ def valid_contracts() -> tuple[dict, tuple[dict, dict]]:
     return hierarchy, teams  # type: ignore[return-value]
 
 
-def test_valid_contracts_are_digest_bound_and_capability_narrowed() -> None:
-    hierarchy, teams = valid_contracts()
-
-    validate_hierarchy_contract(hierarchy)
-    for team in teams:
-        validate_team_delegation_contract(team, hierarchy)
-
-    assert hierarchy["identity_sha256"].startswith("sha256:")
-    assert all(team["hierarchy_identity_sha256"] == hierarchy["identity_sha256"] for team in teams)
-
-
 @pytest.mark.parametrize(
     ("field", "value", "match"),
     [
@@ -202,26 +191,6 @@ def test_scope_traversal_and_digest_tamper_fail_closed() -> None:
     sealed["objective"] = "tampered"
     with pytest.raises(WorkflowError, match="digest mismatch"):
         validate_team_delegation_contract(sealed, hierarchy)
-
-
-def test_contract_set_installs_read_only_and_replays_idempotently(tmp_path: Path) -> None:
-    hierarchy, teams = valid_contracts()
-    root = tmp_path / "orchestration"
-
-    manifest = install_contract_set(root, hierarchy, teams)
-    second = install_contract_set(root, hierarchy, teams)
-    installed_hierarchy, installed_teams, installed_manifest = read_contract_set(root)
-
-    assert manifest == second == installed_manifest
-    assert installed_hierarchy == hierarchy
-    assert {item["team_id"] for item in installed_teams} == {"implementation", "review"}
-    for path in (
-        root / "hierarchy.json",
-        root / "contract-set.json",
-        root / "teams/implementation/delegation-contract.json",
-        root / "teams/review/delegation-contract.json",
-    ):
-        assert stat.S_IMODE(path.stat().st_mode) == 0o400
 
 
 def test_conflicting_reinstall_and_symlink_root_fail_closed(tmp_path: Path) -> None:

@@ -103,18 +103,6 @@ def test_review_ticket_identity_requires_explicit_match_or_omission() -> None:
     ) == ["completion ticket_id does not match launch contract"]
 
 
-def test_launch_ticket_identity_is_bound_to_top_level_ticket() -> None:
-    valid = {
-        "schema": "agent-workflow/launch-contract/v2",
-        "ticket": "REVIEW-1",
-        "ticket_identity": {"mode": "explicit", "value": "REVIEW-1"},
-    }
-    with pytest.raises(WorkflowError, match="ticket identity does not match"):
-        validate_ticket_identity(
-            {**valid, "ticket_identity": {"mode": "omitted", "value": None}}
-        )
-
-
 def test_substantive_completion_accepts_failure_with_real_unresolved_evidence() -> None:
     value = _completion(
         result="failed",
@@ -175,18 +163,6 @@ def test_substantive_completion_rejects_missing_command_exit_code() -> None:
     assert "commands[0].exit_code is missing or invalid" in errors
 
 
-def test_completed_revisions_bind_to_launch_baseline_and_current_head() -> None:
-    value = _completion(base_revision="launch", head_revision="old-head")
-    assert completion_revision_errors(
-        value, expected_base_revision="launch", actual_head_revision="current-head"
-    ) == ["completed head_revision does not match the worktree Git HEAD"]
-    assert completion_revision_errors(
-        _completion(base_revision="wrong-base", head_revision="current-head"),
-        expected_base_revision="launch",
-        actual_head_revision="current-head",
-    ) == ["completed base_revision does not match the launch source revision"]
-
-
 def test_completion_repository_closeout_binds_digest_root_and_head(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -238,52 +214,6 @@ def test_completion_repository_closeout_binds_digest_root_and_head(tmp_path: Pat
             handoff=handoff,
             expected_worktree=repo,
         )
-
-
-def test_git_snapshot_matches_operator_global_excludes_and_records_provenance(
-    tmp_path: Path, monkeypatch,
-) -> None:
-    home = tmp_path / "home"
-    repo = tmp_path / "repo"
-    excludes = home / "global-excludes"
-    home.mkdir()
-    repo.mkdir()
-    excludes.write_text(".operator-cache/\n", encoding="utf-8")
-    (home / ".gitconfig").write_text(
-        f"[core]\n\texcludesfile = {excludes}\n", encoding="utf-8"
-    )
-    monkeypatch.setenv("HOME", str(home))
-    for name in ("GIT_CONFIG_NOSYSTEM", "GIT_CONFIG_SYSTEM", "GIT_CONFIG_GLOBAL"):
-        monkeypatch.delenv(name, raising=False)
-    subprocess.run(["git", "init", "-q", str(repo)], check=True)
-    subprocess.run(["git", "-C", str(repo), "config", "user.email", "tests@example.invalid"], check=True)
-    subprocess.run(["git", "-C", str(repo), "config", "user.name", "Tests"], check=True)
-    (repo / "tracked.txt").write_text("tracked\n", encoding="utf-8")
-    subprocess.run(["git", "-C", str(repo), "add", "tracked.txt"], check=True)
-    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "initial"], check=True)
-    ignored = repo / ".operator-cache"
-    ignored.mkdir()
-    (ignored / "state.json").write_text("{}", encoding="utf-8")
-
-    native = subprocess.run(
-        ["git", "-C", str(repo), "status", "--porcelain"],
-        env={**os.environ, "HOME": str(home)},
-        text=True,
-        capture_output=True,
-        check=True,
-    )
-    snap = snapshot(repo)
-    assert native.stdout == ""
-    assert snap.dirty is False
-    assert snap.cleanliness["argv"] == [
-        "git", "-C", str(repo.resolve()), "status", "--porcelain"
-    ]
-    assert snap.cleanliness["environment_policy"] == "unsafe-inherit+operator-git-config"
-    assert snap.cleanliness["stdout_bytes"] == 0
-    assert len(snap.cleanliness["stdout_sha256"]) == 64
-
-    (repo / "real-change.txt").write_text("dirty\n", encoding="utf-8")
-    assert snapshot(repo).dirty is True
 
 
 def test_acknowledgement_supersedes_unsupported_delivery_but_expiry_is_immutable(
@@ -413,38 +343,6 @@ def test_observe_tracks_executor_event_growth_independently(
     assert stale["safe_actions"][-1] == "agent-workflow interrupt observe-run"
 
 
-def test_review_disposition_is_separate_from_execution_result() -> None:
-    value = _completion(
-        review_disposition="changes_requested",
-        criteria=[
-            {
-                "id": "durability",
-                "result": "fail",
-                "evidence": ["restart persistence is not implemented"],
-            }
-        ],
-        commands=[
-            {
-                "argv": ["pytest", "-q", "tests/review"],
-                "cwd": "/worktree",
-                "exit_code": 1,
-                "receipt": "1 failed, 4 passed",
-            },
-            {
-                "argv": ["pytest", "-q", "tests/unit"],
-                "cwd": "/worktree",
-                "exit_code": 0,
-                "receipt": "17 passed",
-            },
-        ],
-        unresolved=["durable review state is missing"],
-    )
-    validate_instance(value, "agent-workflow/completion/v1")
-    assert substantive_completion_errors(
-        value, session_id="run-1", ticket_id="T-1", pack_id="pack-1"
-    ) == []
-
-
 def test_approved_review_requires_green_evidence_and_no_unresolved() -> None:
     value = _completion(
         review_disposition="approved",
@@ -470,58 +368,3 @@ def test_review_schema_rejects_disposition_as_result() -> None:
         validate_instance(value, "agent-workflow/completion/v1")
 
 
-def test_observe_refreshes_mutable_status_projection(tmp_path: Path, monkeypatch) -> None:
-    from dataclasses import replace
-
-    from agent_workflow import sessions
-    from agent_workflow.config import defaults
-    from agent_workflow.state import read_status
-    from agent_workflow.tmux import PaneInfo
-    from agent_workflow.util import atomic_write_json
-
-    settings = replace(
-        defaults(tmp_path / "missing-config.toml"),
-        state_root=tmp_path / "state",
-        stall_minutes=1,
-    )
-    run = settings.state_root / "runs" / "projection-run"
-    run.mkdir(parents=True)
-    log = run / "output.log"
-    log.write_text("progress\n", encoding="utf-8")
-    atomic_write_json(
-        run / "status.json",
-        {
-            "schema": "agent-workflow/session-status/v2",
-            "session_id": "projection-run",
-            "status": "running",
-            "created_at": "2026-08-02T00:00:00+00:00",
-            "workdir": str(tmp_path),
-            "prompt_path": str(run / "prompt.md"),
-            "log_path": str(log),
-            "tmux_session": "projection-run",
-            "tmux_target": "projection-run",
-            "tmux_mode": "dedicated_session",
-            "interactive": False,
-            "failure_category": None,
-        },
-    )
-    monkeypatch.setattr(sessions.tmux, "session_exists", lambda _target: True)
-    monkeypatch.setattr(
-        sessions.tmux,
-        "resolve_status_pane",
-        lambda _status: PaneInfo(pid=456, dead=False, command="python", pane_id="%2"),
-    )
-
-    observed = sessions.observe(settings, "projection-run")
-    persisted = read_status(settings, "projection-run")
-
-    assert observed["observed_state"] == "running"
-    assert persisted["observed_state"] == "running"
-    assert persisted["tmux_alive"] is True
-    assert persisted["pane_pid"] == 456
-    assert persisted["projection_source"] == "observe"
-    assert persisted["projection_freshness"] == "live"
-    assert persisted["projection_authority"] == "cache"
-    assert persisted["projection_generated_at"]
-    assert persisted["failure_category"] is None
-    assert persisted["observed_failure_category"] is None

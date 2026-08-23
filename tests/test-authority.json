@@ -1,19 +1,18 @@
 {
   "default_suite": {
-    "max_collected_cases": 341,
     "max_runtime_seconds": 420
   },
   "invariants": [
     {
       "authority": "durability",
-      "max_test_functions": 6,
+      "max_test_functions": 4,
       "mock_rationale": "Synthetic clock and lifecycle boundaries isolate deterministic retry and timeout transitions.",
       "path": "tests/invariants/test_benchmark_lifecycle_hardening.py",
       "rationale": "Exhaustive benchmark lifecycle, retry, and receipt transitions are cheaper and more deterministic than full paired-run reproduction."
     },
     {
       "authority": "process",
-      "max_test_functions": 12,
+      "max_test_functions": 8,
       "mock_rationale": "Fake runner, tmux, and timing boundaries avoid host and paid-provider dependence.",
       "path": "tests/invariants/test_benchmark_operator_experience.py",
       "rationale": "Bounded runner, pane, and synthetic fast-suite edge behavior requires deterministic process fixtures rather than paid or host-dependent runs."
@@ -47,7 +46,7 @@
     },
     {
       "authority": "durability",
-      "max_test_functions": 18,
+      "max_test_functions": 13,
       "mock_rationale": "Delivery adapters and Git observations are replaced to exercise durable binding failures deterministically.",
       "path": "tests/invariants/test_completion_git_and_steering.py",
       "rationale": "Completion binding, repository identity, and steering delivery are cross-cutting durable-state invariants."
@@ -60,7 +59,7 @@
     },
     {
       "authority": "durability",
-      "max_test_functions": 5,
+      "max_test_functions": 4,
       "path": "tests/invariants/test_durable_state.py",
       "rationale": "Append-only state, sequence, and replay boundaries require isolated deterministic coverage."
     },
@@ -108,19 +107,19 @@
     },
     {
       "authority": "scheduler",
-      "max_test_functions": 9,
+      "max_test_functions": 7,
       "path": "tests/invariants/test_hierarchy_contracts.py",
       "rationale": "Capability narrowing, budget inheritance, and hierarchy identity require exhaustive contract matrices."
     },
     {
       "authority": "replay",
-      "max_test_functions": 8,
+      "max_test_functions": 5,
       "path": "tests/invariants/test_hierarchy_journals.py",
       "rationale": "Append-only hierarchy journal ordering and replay require deterministic sequence and tamper cases."
     },
     {
       "authority": "durability",
-      "max_test_functions": 7,
+      "max_test_functions": 6,
       "path": "tests/invariants/test_hierarchy_receipts.py",
       "rationale": "Team and root receipt sealing, mutation invalidation, and budget aggregation require adversarial evidence matrices."
     },
@@ -137,18 +136,6 @@
       "rationale": "Source discovery, stable reads, symlink rejection, and fingerprints require adversarial filesystem cases."
     },
     {
-      "authority": "evaluation",
-      "max_test_functions": 1,
-      "path": "tests/invariants/test_ledger_evaluation_semantics.py",
-      "rationale": "Ledger rows must preserve non-planned evaluation semantics without conflating them with failures."
-    },
-    {
-      "authority": "accounting",
-      "max_test_functions": 4,
-      "path": "tests/invariants/test_luna_effort_policy.py",
-      "rationale": "Model effort selection and fallback accounting require a compact policy matrix."
-    },
-    {
       "authority": "scheduler",
       "max_test_functions": 1,
       "path": "tests/invariants/test_manifest_native_pack.py",
@@ -156,7 +143,7 @@
     },
     {
       "authority": "path-security",
-      "max_test_functions": 5,
+      "max_test_functions": 3,
       "path": "tests/invariants/test_mcp_read_boundary.py",
       "private_import_rationale": "Pagination and result-normalization helpers are the bounded read-only authority surfaces exercised by the MCP server.",
       "private_imports": [
@@ -167,14 +154,14 @@
     },
     {
       "authority": "replay",
-      "max_test_functions": 7,
+      "max_test_functions": 6,
       "mock_rationale": "Signal, cursor, and batch boundaries are controlled to prove replay and shutdown behavior.",
       "path": "tests/invariants/test_orchestrator_inbox.py",
       "rationale": "Inbox import, deduplication, fairness, signaling, and cursor recovery require deterministic replay matrices."
     },
     {
       "authority": "path-security",
-      "max_test_functions": 11,
+      "max_test_functions": 7,
       "mock_rationale": "Entry-point discovery and import boundaries are controlled to prove import suppression and atomic rollback.",
       "path": "tests/invariants/test_plugin_host.py",
       "rationale": "Plugin discovery and registration must fail closed for imports, collisions, traversal, tampering, and rollback."
@@ -191,12 +178,6 @@
       "max_test_functions": 3,
       "path": "tests/invariants/test_provider_and_evaluation.py",
       "rationale": "Provider accounting, duplicate identities, and evaluator semantics require exact numeric matrices."
-    },
-    {
-      "authority": "release-evidence",
-      "max_test_functions": 8,
-      "path": "tests/invariants/test_release_evidence.py",
-      "rationale": "Release-evidence generation must distinguish technical failure, governance blockers, and claim provenance."
     },
     {
       "authority": "durability",
@@ -229,13 +210,13 @@
     },
     {
       "authority": "durability",
-      "max_test_functions": 18,
+      "max_test_functions": 14,
       "path": "tests/invariants/test_sqlite_index.py",
       "rationale": "Projection rebuild, migration, tamper, freshness, and typed query behavior require generated multi-run matrices."
     },
     {
       "authority": "durability",
-      "max_test_functions": 11,
+      "max_test_functions": 9,
       "mock_rationale": "Synthetic pane listings reproduce topology races without requiring a live tmux server.",
       "path": "tests/invariants/test_tmux_pane_identity.py",
       "rationale": "Pane identity, role selection, and lifecycle reconciliation require synthetic tmux topology matrices."
@@ -253,9 +234,9 @@
   ],
   "layers": {
     "acceptance": {
-    "max_collected_cases": 64,
-      "max_files": 20,
-      "max_test_functions": 61,
+      "max_collected_cases": 56,
+      "max_files": 18,
+      "max_test_functions": 55,
       "path": "tests/acceptance"
     },
     "future": {
@@ -265,9 +246,9 @@
       "path": "tests/future"
     },
     "invariants": {
-      "max_collected_cases": 249,
-      "max_files": 35,
-      "max_test_functions": 230,
+      "max_collected_cases": 201,
+      "max_files": 32,
+      "max_test_functions": 186,
       "path": "tests/invariants"
     },
     "live": {
@@ -277,9 +258,9 @@
       "path": "tests/live"
     },
     "release": {
-      "max_collected_cases": 15,
+      "max_collected_cases": 16,
       "max_files": 3,
-      "max_test_functions": 15,
+      "max_test_functions": 16,
       "path": "tests/release"
     },
     "root": {
@@ -291,7 +272,7 @@
   },
   "schema": "agent-workflow/test-authority/v1",
   "static_budgets": {
-    "max_subprocess_calls": 72,
+    "max_subprocess_calls": 64,
     "max_wheel_build_sites": 2
   }
 }

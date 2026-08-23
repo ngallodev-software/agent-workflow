@@ -105,41 +105,6 @@ def _make_child(tmp_path: Path, settings, session_id: str, summary: str, monkeyp
     )
 
 
-def test_registry_inbox_import_restart_dedup_and_terminal_retention(tmp_path: Path, monkeypatch) -> None:
-    settings = replace(defaults(tmp_path / "config.toml"), state_root=tmp_path / "state")
-    _make_child(tmp_path, settings, "child-one", "one complete", monkeypatch)
-    _make_child(tmp_path, settings, "child-two", "two complete", monkeypatch)
-
-    create_registry(settings, "main-orchestrator")
-    register_child(settings, "main-orchestrator", "child-one")
-    register_child(settings, "main-orchestrator", "child-two")
-    first = import_registered(settings, "main-orchestrator")
-    assert first["count"] == 2
-    assert [item["sequence"] for item in read_inbox(settings, "main-orchestrator")] == [1, 2]
-    assert all("summary" not in item for item in read_inbox(settings, "main-orchestrator"))
-    assert len(read_inbox(settings, "main-orchestrator", include_content=True)[0]["summary"]) > 0
-
-    second = import_registered(settings, "main-orchestrator")
-    assert second["count"] == 2
-    assert all(item["duplicate"] for item in second["imported"])
-    assert len(read_inbox(settings, "main-orchestrator")) == 2
-
-    registry_path = settings.state_root / "orchestrators" / next(
-        path.name for path in (settings.state_root / "orchestrators").iterdir()
-        if path.is_dir()
-    ) / "registry.json"
-    registry = json.loads(registry_path.read_text(encoding="utf-8"))
-    registry["children"][0]["state"] = "completed"
-    atomic_write_json(registry_path, registry)
-    with pytest.raises(WorkflowError):
-        import_registered(settings, "main-orchestrator", session_id="child-one")
-
-    source = settings.state_root / "runs" / "child-one" / "messages.jsonl"
-    assert source.is_file()
-    unregister_child(settings, "main-orchestrator", "child-two", state="abandoned")
-    assert source.is_file()
-
-
 def test_inbox_rejects_unverified_source_claim_and_symlink(tmp_path: Path, monkeypatch) -> None:
     settings = replace(defaults(tmp_path / "config.toml"), state_root=tmp_path / "state")
     _make_child(tmp_path, settings, "child-one", "one complete", monkeypatch)

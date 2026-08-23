@@ -159,24 +159,6 @@ def _create_root(root: Path, evidence: Path) -> dict:
     )
 
 
-def test_team_and_root_receipts_bind_complete_authority_evidence(tmp_path: Path) -> None:
-    root, evidence, hierarchy, teams = _prepared_authority(tmp_path)
-    root_receipt = _create_root(root, evidence)
-
-    assert verify_root_receipt(root, evidence) == root_receipt
-    for contract in teams:
-        receipt = verify_team_receipt(root, evidence, hierarchy, contract)
-        assert receipt["team_id"] == contract["team_id"]
-        assert receipt["budget_usage"]["workers_started"] == 1
-        assert receipt["workers"][0]["artifacts"][0]["kind"] in contract["required_outputs"]
-    for path in (
-        root / "root-receipt.json",
-        root / "teams/implementation/team-receipt.json",
-        root / "teams/review/team-receipt.json",
-    ):
-        assert stat.S_IMODE(path.stat().st_mode) == 0o400
-
-
 def test_later_team_or_root_journal_append_invalidates_receipts(tmp_path: Path) -> None:
     root, evidence, hierarchy, teams = _prepared_authority(tmp_path)
     _create_root(root, evidence)
