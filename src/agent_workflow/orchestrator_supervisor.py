@@ -13,8 +13,7 @@ from typing import Any
 
 from .config import Settings
 from .errors import WorkflowError
-from .orchestrator_inbox import OrchestratorInboxError, orchestrator_dir, orchestrator_wakeup_channel, replay_registered
-from .tmux import wait_for_wakeup
+from .orchestrator_inbox import OrchestratorInboxError, orchestrator_dir, replay_registered
 from .util import utc_now
 
 LOCK_NAME = ".supervisor.lock"
@@ -85,15 +84,15 @@ def watch(
                 if max_cycles is not None and cycles >= max_cycles:
                     break
                 started = time.monotonic()
-                woke = wait_for_wakeup(orchestrator_wakeup_channel(orchestrator_id), interval)
+                stop.wait(interval)
                 elapsed = time.monotonic() - started
                 _record(
                     directory,
                     "wake",
                     cycle=cycles,
-                    wake_reason="signal" if woke else "timeout",
+                    wake_reason="poll",
                 )
-                if not woke and elapsed < poll_seconds:
+                if elapsed < poll_seconds:
                     stop.wait(poll_seconds - elapsed)
             reason = "shutdown" if stop.is_set() else "completed"
             _record(directory, reason, cycles=cycles, advanced=total_advanced, imported=total_imported)

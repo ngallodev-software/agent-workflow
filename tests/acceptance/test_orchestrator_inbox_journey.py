@@ -4,7 +4,6 @@ import json
 import subprocess
 from pathlib import Path
 
-from agent_workflow.tmux import orchestrator_wakeup_channel
 from tests.conftest import InstalledProduct, git_repo, wait_for_status
 
 
@@ -171,13 +170,8 @@ def test_installed_orchestrator_watch_replays_once_and_resumes_from_cursor(
     assert first["advanced"] >= 1
     assert first["imported"] == 1
 
-    # Duplicate best-effort hints remain harmless because source identity and
-    # the durable cursor make normalization idempotent.
+    # Durable replay remains idempotent without terminal wake hints.
     print("WATCH first done", flush=True)
-    channel = orchestrator_wakeup_channel("watcher")
-    subprocess.run(["tmux", "wait-for", "-S", channel], env=product_env, check=False)
-    subprocess.run(["tmux", "wait-for", "-S", channel], env=product_env, check=False)
-    print("WATCH hints sent", flush=True)
     second = installed_product.json(
         "orchestrator", "watch", "watcher", "--interval-seconds", "0.01",
         "--poll-seconds", "0.01", "--max-cycles", "2", env=product_env
@@ -189,5 +183,4 @@ def test_installed_orchestrator_watch_replays_once_and_resumes_from_cursor(
     installed_product.json(
         "terminate", "watch-child", "--grace-seconds", "0", env=child_env
     )
-
 

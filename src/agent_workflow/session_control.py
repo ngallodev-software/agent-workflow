@@ -44,13 +44,11 @@ def _append_control_message(
     session_id: str,
     **kwargs: Any,
 ) -> dict[str, Any]:
-    """Persist first, then issue a best-effort tmux wake hint."""
+    """Persist a durable control message before attempting adapter delivery."""
     state_dir = run_dir(settings, session_id)
-    channel = tmux.wakeup_channel(state_dir)
     return append_message(
         state_dir,
         session_id=session_id,
-        after_commit=lambda _message: tmux.signal_waiters(channel),
         **kwargs,
     )
 
@@ -203,8 +201,6 @@ def wait_for_message(
         state_dir,
         after_sequence=after_sequence,
         timeout_seconds=timeout_seconds,
-        wakeup_channel=tmux.wakeup_channel(state_dir),
-        wait_for_wakeup=tmux.wait_for_wakeup,
     )
 
 

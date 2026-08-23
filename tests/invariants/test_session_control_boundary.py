@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import ANY, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -73,7 +73,7 @@ def test_acknowledgement_rejects_invalid_outcome_before_side_effects(tmp_path: P
         )
 
 
-def test_message_replay_and_wait_preserve_cursor_and_wakeup_channel(tmp_path: Path) -> None:
+def test_message_replay_and_wait_preserve_cursor_without_terminal_wakeup(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     run = tmp_path / "run"
     rows = [{"sequence": 3}]
@@ -88,7 +88,6 @@ def test_message_replay_and_wait_preserve_cursor_and_wakeup_channel(tmp_path: Pa
     with (
         patch("agent_workflow.session_control.read_status"),
         patch("agent_workflow.session_control.run_dir", return_value=run),
-        patch("agent_workflow.session_control.tmux.wakeup_channel", return_value="wake"),
         patch("agent_workflow.session_control.wait_for_messages", return_value=rows) as wait,
     ):
         assert wait_for_message(
@@ -98,8 +97,6 @@ def test_message_replay_and_wait_preserve_cursor_and_wakeup_channel(tmp_path: Pa
         run,
         after_sequence=2,
         timeout_seconds=1.5,
-        wakeup_channel="wake",
-        wait_for_wakeup=ANY,
     )
 
 
