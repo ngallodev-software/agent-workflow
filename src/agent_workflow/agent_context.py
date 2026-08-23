@@ -204,7 +204,6 @@ def complete_task(
     append_message(
         state_dir, session_id=session_id, direction="child_to_parent",
         kind="task_complete", actor=actor, content=summary,
-        after_commit=lambda _message: tmux.signal_waiters(tmux.wakeup_channel(state_dir)),
     )
     return context
 
@@ -441,7 +440,6 @@ def request_reuse(
     message = append_message(
         state_dir, session_id=session_id, direction="parent_to_child", kind="steer",
         actor=actor, content=content,
-        after_commit=lambda _message: tmux.signal_waiters(tmux.wakeup_channel(state_dir)),
     )
     assignment = {
         "assignment_id": assignment_id,
