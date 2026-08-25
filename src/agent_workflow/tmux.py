@@ -1,14 +1,9 @@
 from __future__ import annotations
-import hashlib
-import json
 import os
-import stat
 from dataclasses import dataclass
 from pathlib import Path
 from .errors import WorkflowError
-from .path import read_regular_file
 from .process import require_command, run
-from .util import atomic_write_json, fsync_directory
 
 
 @dataclass(frozen=True)
@@ -30,7 +25,6 @@ PANE_FORMAT = (
 )
 RUN_METADATA = "@agent-workflow-session-id"
 ASSIGNMENT_METADATA = "@agent-workflow-assignment-id"
-ORCHESTRATOR_WAKE_BINDINGS = "orchestrator-wake-bindings"
 
 
 def ensure_tmux():
@@ -71,93 +65,6 @@ def set_pane_binding(
             ASSIGNMENT_METADATA, assignment_id or "",
         ]
     )
-
-
-def wakeup_channel(run_dir: Path) -> str:
-    """Return a stable, non-sensitive wait-for channel for one run directory."""
-    resolved = str(run_dir.resolve()).encode("utf-8")
-    digest = hashlib.sha256(resolved).hexdigest()
-    return f"agent-workflow/v1/{digest}"
-
-
-def orchestrator_wakeup_channel(orchestrator_id: str) -> str:
-    """Return one opaque shared channel for an orchestrator identity."""
-    if not isinstance(orchestrator_id, str) or not orchestrator_id:
-        raise WorkflowError("orchestrator identity must be non-empty text")
-    digest = hashlib.sha256(orchestrator_id.encode("utf-8")).hexdigest()
-    return f"agent-workflow/v1/orchestrator/{digest}"
-
-
-def signal_waiters(channel: str) -> None:
-    """Best-effort wake hint; durable message replay remains authoritative."""
-    try:
-        run(["tmux", "wait-for", "-S", channel], check=False)
-    except WorkflowError:
-        pass
-
-
-def wait_for_wakeup(channel: str, timeout_seconds: float) -> bool:
-    """Wait at most *timeout_seconds* for a tmux wake hint.
-
-    tmux availability, a missing server, and a timeout are ordinary fallback
-    conditions.  Callers must replay their durable log after this returns.
-    """
-    if timeout_seconds <= 0:
-        return False
-    try:
-        result = run(
-            ["tmux", "wait-for", channel],
-            check=False,
-            timeout_seconds=timeout_seconds,
-            max_stdout_bytes=0,
-            max_stderr_bytes=0,
-        )
-        return result.returncode == 0
-    except WorkflowError:
-        return False
-
-
-def register_orchestrator_wakeup(state_root: Path, orchestrator_id: str, session_id: str) -> None:
-    """Persist an opaque child-to-orchestrator wake binding outside sealed runs."""
-    root = state_root / ORCHESTRATOR_WAKE_BINDINGS
-    root.mkdir(parents=True, exist_ok=True, mode=0o700)
-    name = hashlib.sha256(f"{orchestrator_id}\0{session_id}".encode()).hexdigest()
-    atomic_write_json(
-        root / f"{name}.json",
-        {
-            "schema": "agent-workflow/orchestrator-wake-binding/v1",
-            "orchestrator_id": orchestrator_id,
-            "session_id": session_id,
-            "channel": orchestrator_wakeup_channel(orchestrator_id),
-        },
-        mode=0o600,
-    )
-    fsync_directory(root)
-
-
-def signal_registered_orchestrators(run_dir: Path) -> None:
-    """Send best-effort shared wake hints for registered child-to-parent logs."""
-    root = run_dir.parent.parent / ORCHESTRATOR_WAKE_BINDINGS
-    try:
-        bindings = list(root.iterdir())
-    except OSError:
-        return
-    session_id = run_dir.name
-    for binding in bindings[:10_000]:
-        try:
-            mode = binding.lstat().st_mode
-            if stat.S_ISLNK(mode) or not stat.S_ISREG(mode):
-                continue
-            value = json.loads(read_regular_file(binding, max_bytes=4096).data.decode("utf-8"))
-            if (
-                isinstance(value, dict)
-                and value.get("schema") == "agent-workflow/orchestrator-wake-binding/v1"
-                and value.get("session_id") == session_id
-                and isinstance(value.get("channel"), str)
-            ):
-                signal_waiters(value["channel"])
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError, WorkflowError, TypeError):
-            continue
 
 
 def current_window_target() -> str | None:

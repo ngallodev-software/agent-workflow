@@ -24,7 +24,6 @@ from .path import read_regular_file
 from .receipts import verify_seal_details
 from .state import run_dir
 from .util import atomic_write_json, fsync_directory, utc_now, validate_id
-from . import tmux
 
 
 REGISTRY_SCHEMA = "agent-workflow/orchestrator-registry/v1"
@@ -119,7 +118,11 @@ def orchestrator_key(orchestrator_id: str) -> str:
 
 
 def orchestrator_wakeup_channel(orchestrator_id: str) -> str:
-    return tmux.orchestrator_wakeup_channel(orchestrator_id)
+    """Return a stable diagnostic identifier for polling-based supervisors."""
+    validate_id(orchestrator_id, "orchestrator ID")
+    return "agent-workflow/v1/orchestrator/" + hashlib.sha256(
+        orchestrator_id.encode("utf-8")
+    ).hexdigest()
 
 
 def orchestrator_dir(settings: Settings, orchestrator_id: str, *, create: bool = False) -> Path:
@@ -365,7 +368,6 @@ def register_child(settings: Settings, orchestrator_id: str, session_id: str) ->
     if prior is not None:
         if prior["identity_digest"] != entry_identity:
             raise OrchestratorInboxError("child session is already registered with conflicting immutable evidence")
-        tmux.register_orchestrator_wakeup(settings.state_root, orchestrator_id, session_id)
         return {"registry": registry, "child": prior, "path": str(orchestrator_dir(settings, orchestrator_id) / REGISTRY_NAME)}
     if len(registry["children"]) >= MAX_CHILDREN:
         raise OrchestratorInboxError("orchestrator child registry is full")
@@ -388,7 +390,6 @@ def register_child(settings: Settings, orchestrator_id: str, session_id: str) ->
     registry["children"].append(child)
     registry["updated_at"] = now
     _write_registry(settings, registry)
-    tmux.register_orchestrator_wakeup(settings.state_root, orchestrator_id, session_id)
     return {"registry": registry, "child": child, "path": str(orchestrator_dir(settings, orchestrator_id) / REGISTRY_NAME)}
 
 
