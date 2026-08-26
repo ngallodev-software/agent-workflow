@@ -8,9 +8,6 @@ from typing import Any
 from ..agent_context import complete_task as complete_agent_task
 from ..agent_context import read as read_agent_context
 from ..config import Settings
-from ..completion import validate_completion_handoff
-from ..state import run_dir
-from ..roles import public_role_catalog
 
 
 def handle_agent_command(settings: Settings, args: argparse.Namespace) -> Any:
@@ -18,6 +15,8 @@ def handle_agent_command(settings: Settings, args: argparse.Namespace) -> Any:
     if args.agent_command == "context":
         return read_agent_context(settings, args.agent_run_id)
     if args.agent_command == "roles":
+        from ..roles import public_role_catalog
+
         catalog = public_role_catalog(settings.role_paths)
         if args.role_id is None:
             return catalog
@@ -26,6 +25,9 @@ def handle_agent_command(settings: Settings, args: argparse.Namespace) -> Any:
             raise ValueError(f"unknown agent role: {args.role_id}")
         return matches[0]
     if args.agent_command == "completion-validate":
+        from ..completion import validate_completion_handoff
+        from ..state import run_dir
+
         return validate_completion_handoff(run_dir(settings, args.agent_run_id))
     if args.agent_command == "task-complete":
         return complete_agent_task(

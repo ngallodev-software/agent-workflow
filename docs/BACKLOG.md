@@ -6,17 +6,7 @@ Priorities are ordered within each section. An identifier retained here may also
 
 ## P0 — 0.9 skill-first simplification
 
-### SURFACE-001 — Minimize the normal agent-visible command surface
-
-Make launch-scoped command catalogs role/profile scoped rather than exposing the complete parser catalog to every Agent Run. Keep implementation at <= 8 commands, review at <= 12, and introduce a normal skill/orchestrator profile at <= 20 commands / <= 5 KB while retaining the complete parser-derived catalog for explicit maintainer discovery.
-
-### FLOW-001 — Deterministic delegation fast path
-
-Add a thin `agent-workflow delegate` facade over the existing worktree, Agent Run prepare, and headless/external execution services. It must emit the same durable artifacts, support structured JSON, identify failed stages precisely, and never create a parallel lifecycle or implicitly review/accept work.
-
-### PERF-001 — Agent-efficiency baseline and regression budgets
-
-Use the committed Phase 0 baseline to drive measurable reductions without weakening correctness/evidence assertions. Highest-value targets are the 93,997-byte full machine catalog currently written into every launch, approximately 1 s repeated CLI startup for status/catalog operations, and approximately 1.994 s Agent-Workflow lifecycle overhead around a 0.086 s deterministic executor in the reference installed-product journey. Prefer role-scoped launch artifacts, lazy capability/import loading, and in-process composition of the common delegation path before adding persistent services. Do not grow the unit/invariant surface merely to measure efficiency; prefer existing installed-product journeys for dynamic timing and behavior.
+Phase 2 implementation is complete. `SURFACE-001`, `FLOW-001`, and `PERF-001` were removed from this unfinished-work register after landing the role-scoped command surface, deterministic delegation facade, and common-path startup/context reductions. Verification remains separate per project policy.
 
 ### TEST-001 — Monolithic acceptance-suite teardown reliability
 

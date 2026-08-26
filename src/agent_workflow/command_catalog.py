@@ -18,9 +18,11 @@ from .util import atomic_write_bytes
 COMMAND_CATALOG_SCHEMA = "agent-workflow/command-catalog/v1"
 COMMAND_CATALOG_FILENAME = "command-catalog.json"
 COMMAND_CARD_FILENAME = "command-card.md"
-COMMAND_ROLES = ("orchestrator", "implementation", "review")
+COMMAND_PROFILES = ("orchestrator", "implementation", "review")
+# Backward-compatible parser/export name. Command profiles are not logical AgentRole IDs.
+COMMAND_ROLES = COMMAND_PROFILES
 
-_ROLE_COMMANDS: dict[str, frozenset[str]] = {
+_PROFILE_COMMANDS: dict[str, frozenset[str]] = {
     "implementation": frozenset(
         {
             "agent-run status",
@@ -49,72 +51,43 @@ _ROLE_COMMANDS: dict[str, frozenset[str]] = {
     ),
     "orchestrator": frozenset(
         {
-            "doctor",
-            "commands",
-            "config show",
-            "orchestrator registry create",
-            "orchestrator registry inspect",
-            "orchestrator registry register",
-            "orchestrator registry unregister",
-            "orchestrator inbox import",
-            "orchestrator inbox list",
-            "orchestrator inbox read",
-            "orchestrator watch",
-            "worktree create",
+            "agent roles",
+            "delegate",
             "worktree list",
             "worktree remove",
             "worktree closeout",
-            "worktree closeout-verify",
-            "agent-run prepare",
-            "agent-run start",
             "agent-run list",
-            "agent-run archive",
             "agent-run status",
-            "agent-run repair",
             "agent-run finalize",
-            "agent-run tail",
             "agent-run steer",
-            "agent-run progress",
-            "agent-run ack",
             "agent-run watch",
-            "agent-run interrupt",
-            "agent-run terminate",
             "agent-run restart",
             "agent-run review",
             "agent-run accept",
             "agent-run reject",
-            "agent-run force-accept",
-            "supervisor once",
-            "supervisor run",
-            "index status",
-            "index sync",
-            "index rebuild",
-            "index verify",
-            "index query",
-            "agent context",
-            "agent roles",
-            "workflow validate",
             "workflow start",
             "workflow status",
             "workflow resume",
-            "workflow seal",
-            "workflow verify",
             "assess-sealed-runs",
-            "ledger",
-            "eval validate",
-            "eval validate-benchmark",
-            "eval report",
-            "eval benchmark-report",
-            "pack validate",
-            "pack checksum",
-            "pack archive",
         }
     ),
 }
 
 
+def command_profile_top_level_commands(profile: str) -> frozenset[str]:
+    """Return only the top-level parser branches needed to materialize a profile.
+
+    This is a construction optimization, not a second command authority: exact leaf
+    membership remains defined by ``_PROFILE_COMMANDS`` and enforced by
+    ``filter_catalog`` after the selected parser branches are materialized.
+    """
+    if profile not in COMMAND_ROLES:
+        raise WorkflowError(f"unknown command profile: {profile}")
+    return frozenset(command.split(" ", 1)[0] for command in _PROFILE_COMMANDS[profile])
+
 
 def role_for_agent_class(agent_class: str | None) -> str:
+    """Legacy compatibility mapping for callers that have not resolved an AgentRole."""
     value = (agent_class or "").strip().lower()
     if "orchestrat" in value or "coordinator" in value:
         return "orchestrator"
@@ -277,24 +250,13 @@ def filter_catalog(catalog: dict[str, Any], role: str | None) -> dict[str, Any]:
     if role is None or role == "all":
         return catalog
     if role not in COMMAND_ROLES:
-        raise WorkflowError(f"unknown command-card role: {role}")
-    allowed = set(_ROLE_COMMANDS[role])
+        raise WorkflowError(f"unknown command profile: {role}")
+    allowed = set(_PROFILE_COMMANDS[role])
     represented = {str(item["command"]) for item in catalog["commands"]}
-    if role == "orchestrator":
-        plugin_roots = {
-            str(command)
-            for plugin in catalog.get("plugins", [])
-            for command in plugin.get("commands", [])
-        }
-        allowed.update(
-            command
-            for command in represented
-            if command.split(" ", 1)[0] in plugin_roots
-        )
     missing = sorted(allowed - represented)
     if missing:
         raise WorkflowError(
-            f"command-card role {role!r} references missing parser commands: {missing}"
+            f"command profile {role!r} references missing parser commands: {missing}"
         )
     filtered = dict(catalog)
     filtered["role"] = role
@@ -340,19 +302,21 @@ def runtime_command_catalog(
     settings: Any | None = None,
     *,
     no_plugins: bool = False,
+    include_plugins: bool = True,
+    command_scopes: Iterable[str] | None = None,
 ) -> dict[str, Any]:
     # Imported lazily to avoid a module-import cycle while Agent Run preparation
     # writes the catalog only after the CLI module is fully initialized.
-    from .cli import build_parser
+    from .cli_parser import build_parser
     from .plugins import EMPTY_PLUGIN_REGISTRY, load_plugin_registry
 
     registry = (
         load_plugin_registry(settings.plugins_enabled, suppress=no_plugins)
-        if settings is not None
+        if include_plugins and settings is not None
         else EMPTY_PLUGIN_REGISTRY
     )
     return build_command_catalog(
-        build_parser(registry),
+        build_parser(registry, command_scopes=command_scopes),
         plugin_inventory=registry.catalog_inventory(),
     )
 
@@ -371,11 +335,21 @@ def write_launch_command_artifacts(
     settings: Any | None = None,
     agent_visible_dir: Path | None = None,
 ) -> dict[str, Any]:
-    catalog = filter_catalog(runtime_command_catalog(settings), role)
+    profile = role
+    # Launch-scoped command profiles contain only core parser commands. Avoid
+    # plugin entry-point discovery/import entirely on Agent Run preparation.
+    catalog = filter_catalog(
+        runtime_command_catalog(
+            settings,
+            include_plugins=False,
+            command_scopes=command_profile_top_level_commands(profile),
+        ),
+        profile,
+    )
     catalog_path = state_dir / COMMAND_CATALOG_FILENAME
     card_path = state_dir / COMMAND_CARD_FILENAME
     atomic_write_bytes(catalog_path, encode_command_catalog(catalog), mode=0o444)
-    card = render_command_markdown(catalog, role=role).encode("utf-8")
+    card = render_command_markdown(catalog, role=profile).encode("utf-8")
     atomic_write_bytes(card_path, card, mode=0o444)
     if agent_visible_dir is not None:
         agent_visible_dir.mkdir(parents=True, exist_ok=True)
@@ -395,7 +369,9 @@ def write_launch_command_artifacts(
     if json.loads(catalog_read.data.decode("utf-8")) != catalog:
         raise WorkflowError("command catalog changed during launch preparation")
     return {
-        "role": role,
+        # v1 launch/schema field is named ``role`` for compatibility; its value is
+        # the command profile, not the public logical AgentRole.
+        "role": profile,
         "catalog_path": COMMAND_CATALOG_FILENAME,
         "catalog_sha256": catalog_read.sha256,
         "catalog_schema": COMMAND_CATALOG_SCHEMA,

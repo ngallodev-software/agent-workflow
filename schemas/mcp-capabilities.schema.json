@@ -39,12 +39,9 @@
     },
     "launch_contracts": {
       "items": {
-        "enum": [
-          "agent-workflow/agent-run-contract/v1",
-          "agent-workflow/agent-run-contract/v1"
-        ]
+        "const": "agent-workflow/agent-run-contract/v1"
       },
-      "minItems": 2,
+      "minItems": 1,
       "type": "array",
       "uniqueItems": true
     },

@@ -11,6 +11,7 @@ pytest.importorskip("mcp", reason="install the optional mcp feature to run MCP a
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
+from agent_workflow.command_catalog import command_catalog_sha256
 from agent_workflow.messages import append_message
 from tests.conftest import (
     prepare_and_start_agent_run,
@@ -96,17 +97,17 @@ def test_installed_stdio_mcp_reads_bounded_metadata_only(
     assert capabilities["mode"] == "read-only"
     assert capabilities["command_catalog"]["leaf_command_count"] >= len(commands["commands"])
     represented = {item["command"] for item in commands["commands"]}
-    assert {"progress", "ack", "agent task-complete"} <= represented
+    assert {"agent-run progress", "agent-run ack", "agent task-complete"} <= represented
     assert "worktree create" not in represented
     assert unknown_commands["schema"] == "agent-workflow/mcp-error/v1"
     assert unknown_commands["error"] == "invalid_identifier"
     assert context["verification"] == "verified"
     assert context["role"] == "implementation"
-    assert context["catalog_sha256"] == capabilities["command_catalog"]["sha256"]
+    assert context["catalog_sha256"] == command_catalog_sha256(commands)
     assert context["cli_invocation"] == ["agent-workflow"]
     assert card["sha256"] == context["card_sha256"]
     assert "Do not run `--help`" in card["markdown"]
-    assert "agent-workflow progress" in card["markdown"]
+    assert "agent-workflow agent-run progress" in card["markdown"]
     assert "agent-workflow worktree create" not in card["markdown"]
     item = messages["items"][0]
     assert item["redaction_state"] == "body_omitted"

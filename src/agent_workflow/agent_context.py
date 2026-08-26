@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Any
 
 from .config import Settings
-from .contracts import validate_instance
 from .errors import WorkflowError
 from .journal import JournalTransactionResult, transact_jsonl
 from .events import append_lifecycle_event
@@ -40,6 +39,10 @@ def _read_json(path: Path) -> dict[str, Any]:
 def _validate_assignment_record(value: object, line_number: int) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise WorkflowError("assignment event must be a JSON object")
+    # Assignment writes/replays retain full schema validation, but the normal
+    # read-only `agent context` path does not need to import JSON Schema machinery.
+    from .contracts import validate_instance
+
     validate_instance(value, ASSIGNMENT_SCHEMA, artifact=f"assignment event:{line_number}")
     if value.get("sequence") != line_number:
         raise WorkflowError(

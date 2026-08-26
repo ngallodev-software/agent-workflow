@@ -11,7 +11,7 @@ Plugins are Python distributions advertising the `agent_workflow.plugins` entry-
 enabled = ["agent-workflow-spec"]
 ```
 
-Every configured plugin is required to be installed, uniquely discoverable, and compatible with the current plugin API. A failure stops command registration before a parser or registry is exposed. Use the global recovery option to start the core product without importing configured plugins:
+Every configured plugin is required to be installed, uniquely discoverable, and compatible with the current plugin API when a plugin-aware surface is requested. Normal built-in lifecycle commands skip plugin discovery entirely; plugin inventory, doctor/completion, the full maintainer catalog, and unknown top-level commands load the configured registry on demand. A plugin registration failure therefore blocks plugin-aware surfaces without adding import/discovery cost to ordinary Agent Run operations. Use the global recovery option to suppress configured plugins explicitly:
 
 ```bash
 agent-workflow --no-plugins plugins list
@@ -72,7 +72,7 @@ def plugin():
     )
 ```
 
-The host stages all enabled descriptors, checks API versions and duplicate plugin/command/schema/asset/resource identifiers, resolves declared package files through `importlib.resources`, verifies normalized relative paths and exact SHA-256 digests, and commits one immutable registry only after the complete set passes. Plugin-owned top-level commands and validated package-resource provenance are included in the parser-derived command catalog and orchestrator command cards. Consumers read activated bytes through `PluginRegistry.read_package_resource(kind, identifier)`; arbitrary host paths are never accepted.
+The host stages all enabled descriptors, checks API versions and duplicate plugin/command/schema/asset/resource identifiers, resolves declared package files through `importlib.resources`, verifies normalized relative paths and exact SHA-256 digests, and commits one immutable registry only after the complete set passes. Plugin-owned top-level commands and validated package-resource provenance are included in the full parser-derived maintainer catalog. Plugin commands do not automatically expand the normal orchestrator command profile; optional plugin capabilities are discovered explicitly when needed. Consumers read activated bytes through `PluginRegistry.read_package_resource(kind, identifier)`; arbitrary host paths are never accepted.
 
 ## Current boundary
 

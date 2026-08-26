@@ -489,6 +489,29 @@ def main(argv: list[str] | None = None) -> int:
         )
         if result.returncode != 0:
             fail("scripts/measure-agent-efficiency.py: current measurement failed")
+        else:
+            try:
+                current_efficiency = json.loads(result.stdout)
+            except json.JSONDecodeError:
+                fail("scripts/measure-agent-efficiency.py: current measurement is not valid JSON")
+            else:
+                targets = baseline.get("targets", {})
+                current_roles = current_efficiency.get("roles", {})
+                for role in ("implementation", "review", "orchestrator"):
+                    role_value = current_roles.get(role, {})
+                    command_limit = targets.get(f"{role}_role_commands_max")
+                    card_limit = targets.get(f"{role}_role_card_bytes_max")
+                    if not isinstance(command_limit, int) or not isinstance(card_limit, int):
+                        fail(f"release/agent-efficiency-baseline.json: missing {role} surface targets")
+                        continue
+                    if role_value.get("command_count", command_limit + 1) > command_limit:
+                        fail(
+                            f"command profile {role}: exceeds {command_limit}-command agent-visible budget"
+                        )
+                    if role_value.get("command_card_bytes", card_limit + 1) > card_limit:
+                        fail(
+                            f"command profile {role}: exceeds {card_limit}-byte command-card budget"
+                        )
 
     # Packaged scaffold assets are the single prompt-pack source. Repository mirror
     # trees and compatibility helper copies must not reappear.

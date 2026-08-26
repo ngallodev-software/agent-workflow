@@ -28,6 +28,7 @@ class ResolvedAgentIdentity:
     role_id: str
     role_digest: str
     role_instructions: str | None
+    command_profile: str
     runtime_alias: str | None
     executor: str | None
     model: str | None
@@ -163,6 +164,7 @@ def resolve_agent_identity(
             role_id=role_id,
             role_digest=role.digest,
             role_instructions=role.instructions_markdown,
+            command_profile=role.command_profile,
             runtime_alias=alias_name,
             executor=alias.executor,
             model=alias.model,
@@ -222,6 +224,7 @@ def resolve_agent_identity(
         role_id=role_id,
         role_digest=role.digest,
         role_instructions=role.instructions_markdown,
+        command_profile=role.command_profile,
         runtime_alias=None,
         executor=executor,
         model=model,

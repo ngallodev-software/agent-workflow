@@ -19,7 +19,7 @@ from .assets import asset_path
 from .config import Settings
 from .config import enforce_trust
 from .compatibility import probe_executor
-from .command_catalog import role_for_agent_class, write_launch_command_artifacts
+from .command_catalog import write_launch_command_artifacts
 from .contracts import read_contract, read_agent_run_contract, schema_descriptor
 from .errors import WorkflowError
 from .eval.commands import collect_commands, specs_from_data
@@ -198,80 +198,42 @@ def _write_launch_prompt(
     paths = AgentRunPaths(state_dir)
     context = [
         "# Agent-workflow launch context",
-        "The complete ticket is included below. Do not reread prompt_source unless the ticket explicitly requests it.",
-        "Use these durable paths only when the ticket references pack files or its completion report.",
-        f"- agent_run_id: `{agent_run_id}`",
-        f"- logical_role: `{role_id}`",
-        f"- role_digest_sha256: `{role_digest}`",
+        "The complete ticket follows this runtime contract; do not reread prompt_source unless the ticket requires it.",
+        f"- run: `{agent_run_id}`; role: `{role_id}`; role_digest: `{role_digest}`",
         f"- prompt_source: `{prompt_source}`",
-        f"- command_catalog_role: `{command_artifacts['role']}`",
-        "- The exact installed CLI contract is available at `AGENT_WORKFLOW_COMMAND_CATALOG`.",
-        "- A role-scoped command card is available at `AGENT_WORKFLOW_COMMAND_CARD`.",
-        "- Invoke commands through `AGENT_WORKFLOW_CLI` using the catalog signatures directly.",
-        "- Do not run `--help` for commands represented in the catalog. Use help only after a catalog/version mismatch, an argument error, or when a required command is absent.",
-        "- Lifecycle disposition commands (`review`, `accept`, `reject`, `force-accept`) are host-orchestrator-only and intentionally absent from child command cards. Report a recommendation and evidence; never attempt those commands from this run.",
+        f"- command_profile: `{command_artifacts['role']}`",
+        "- Use `AGENT_WORKFLOW_CLI` with signatures from `AGENT_WORKFLOW_COMMAND_CARD` / `AGENT_WORKFLOW_COMMAND_CATALOG`; do not browse `--help` unless the scoped contract is missing, mismatched, or rejects an argument.",
+        "- Review/accept/reject/force-accept are host-only disposition authority. Child runs report evidence/recommendations and never invoke them.",
     ]
     if role_instructions is not None:
-        context.extend(
-            [
-                "",
-                "## Logical role instructions",
-                role_instructions.strip(),
-                "",
-            ]
-        )
+        context.extend(["", "## Role contract", role_instructions.strip(), ""])
     if prompt_pack_root is not None:
         context.append(f"- prompt_pack_root: `{prompt_pack_root}`")
     if result_contract is not None:
-        context.extend(
-            [
-                f"- task_result_schema: `{result_contract['schema']}`",
-                "- Write task result JSON atomically to `AGENT_WORKFLOW_HANDOFF_DIR/result.json`.",
-                "- The result must satisfy the declared JSON Schema; downstream work may depend on its structured outputs.",
-            ]
+        context.append(
+            f"- task_result: write atomic `AGENT_WORKFLOW_HANDOFF_DIR/result.json` satisfying `{result_contract['schema']}`."
         )
     if interactive:
-        steering_instruction = (
-            "- This interactive agent accepts durable steering while its assignment is active."
-            if steering_adapter != "unsupported"
-            else "- This executor has no evidence-capable steering adapter. Do not wait for approval or operator input; when authorization is required, write a blocked or partial completion and exit cleanly."
-        )
+        if steering_adapter != "unsupported":
+            context.append("- Interactive steering is durable; acknowledge a steer message ID before treating it as applied.")
+        else:
+            context.append("- No evidence-capable steering adapter is available; never wait for approval/input. Report blocked/partial completion when authorization is required.")
         context.extend(
             [
-                steering_instruction,
-                '- End the assignment with `"$AGENT_WORKFLOW_CLI" agent task-complete "$AGENT_WORKFLOW_AGENT_RUN_ID" --actor <agent-name> --summary <summary>`; the host then terminates this executor and seals the Agent Run.',
-                '- Run `"$AGENT_WORKFLOW_CLI" agent completion-validate "$AGENT_WORKFLOW_AGENT_RUN_ID"` before task-complete; task-complete is interactive-only.',
+                "- Before finishing, run `agent completion-validate`; then use `agent task-complete ...`. The host seals/terminates the run.",
             ]
         )
     elif detached_interactive:
-        context.extend(
-            [
-                "- This task is executed as a headless worker and must not wait for terminal input.",
-                "- Do not wait for user input or expect a user to resume this run.",
-                "- On completion, notify the calling agent through the durable completion handoff and a concise progress update.",
-                "- Exit cleanly when finished; Agent-Workflow will collect and finalize the result.",
-                "- Do not invoke `agent task-complete`; that command is interactive-only.",
-            ]
-        )
+        context.append("- Headless worker: never wait for terminal/user input; write the durable completion handoff, emit concise progress when useful, then exit. Do not call `agent task-complete`.")
     else:
-        context.append(
-            "- This is a structured non-interactive run. Do not invoke `agent task-complete`; the runner collects completion on process exit."
-        )
+        context.append("- Structured non-interactive worker: write the durable completion handoff and exit. Do not call `agent task-complete`.")
     context.extend(
         [
-            f"- completion_handoff_dir: `{handoff_dir}`",
-            f"- completion_template: `{handoff_dir / 'completion-template.json'}` (read-only starting point; copy it to `completion.json` and edit the evidence)",
-            "- Write completion JSON only to `AGENT_WORKFLOW_HANDOFF_DIR/completion.json` using schema `agent-workflow/completion/v1`.",
-            "- Review agents must keep `result` separate from `review_disposition`: use `approved`, `changes_requested`, or `blocked` only in `review_disposition`.",
-            "- Write it atomically; optional `completion.md` and `evidence.json` sidecars may use the same handoff directory.",
-            "- `result: completed` requires an empty `unresolved` list except for a completed review with `review_disposition: changes_requested`; Host-owned merge, review, acceptance, and release are not unresolved defects.",
-            "- For non-review `result: completed`, record only final verification commands that passed. A completed review may record a failed target gate only when `review_disposition` is `changes_requested`; preserve exploratory or unrelated failures in `completion.md`.",
-            "- Canonical runtime completion paths are collector-owned; do not write to them.",
-            "- Matching environment variables use the `AGENT_WORKFLOW_` prefix.",
-            "- At meaningful checkpoints you may emit a concise durable progress update with `\"$AGENT_WORKFLOW_CLI\" progress "
-            + shlex.quote(agent_run_id)
-            + " 'message' --actor child`. Do not expose secrets in updates.",
-            "- A parent steer request is only applied after you explicitly acknowledge its message ID with `\"$AGENT_WORKFLOW_CLI\" ack`.",
+            f"- handoff: `{handoff_dir}`; template: `{handoff_dir / 'completion-template.json'}` (read-only)",
+            "- Copy the template to atomic `completion.json` and satisfy `agent-workflow/completion/v1`. Runtime completion paths outside the handoff directory are collector-owned.",
+            "- Review runs keep `result` separate from `review_disposition` (`approved|changes_requested|blocked`). Completion is never acceptance.",
+            "- `result: completed` normally requires no unresolved items and only final passing verification commands; completed reviews may cite a failed target gate only with `changes_requested`.",
+            "- Durable progress/steering uses the scoped `progress`, `steer`, and `ack` commands; acknowledge steering before applying it and never expose secrets.",
             "",
             "---",
             "",
@@ -896,6 +858,7 @@ def prepare(
     role_id = identity.role_id
     role_digest = identity.role_digest
     role_instructions = identity.role_instructions
+    command_profile = identity.command_profile
     runtime_alias = identity.runtime_alias
     executor = identity.executor
     model = identity.model
@@ -1024,7 +987,7 @@ def prepare(
     created_at = utc_now()
     command_artifacts = write_launch_command_artifacts(
         state_dir,
-        role=role_for_agent_class(agent_class),
+        role=command_profile,
         settings=settings,
         agent_visible_dir=handoff_dir,
     )
@@ -1063,7 +1026,7 @@ def prepare(
             ticket_id=ticket_id,
             pack_id=pack_id,
             base_revision=git_info["source_revision"],
-            review=role_for_agent_class(agent_class) == "review",
+            review=command_profile == "review",
         ),
         mode=0o444,
     )

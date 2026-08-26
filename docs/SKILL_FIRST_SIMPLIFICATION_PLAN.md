@@ -302,16 +302,16 @@ These are not candidates for simplification by prose.
 
 ### 5.1 Full command discovery during normal work
 
-A normal agent should not need to inspect the 93-command catalog.
+A normal agent should not need to inspect the full parser catalog (94 leaf commands at the Phase 2 consolidated-source checkpoint).
 
-The current launch artifacts already produce role-specific Markdown cards, but the run still binds/writes the complete machine catalog and the launch context directs the agent toward it. In 0.9, launch-scoped command material should be role-scoped by default.
+Phase 2 makes both launch artifacts scoped: the machine catalog and Markdown card are filtered to a small command profile before they are written and digest-bound. The full parser catalog remains an explicit maintainer/reference surface.
 
 **Target:**
 
 - implementation role: remain at **<= 8 commands** and **<= 2 KB** human command card;
 - review role: remain at **<= 12 commands** and **<= 3 KB**;
 - normal orchestrator/skill role: reduce from **58** to **<= 20 commands** and **<= 5 KB**;
-- full 93-command catalog remains available only through explicit maintainer/reference discovery.
+- full parser catalog remains available only through explicit maintainer/reference discovery (`agent-workflow commands --role all`).
 
 The exact installed parser remains the ultimate command authority. Role filtering must not become a second parser or hand-written argument model.
 
@@ -455,6 +455,8 @@ Tasks:
 
 ### Phase 2 — Minimize the agent-visible command surface
 
+**Implementation status:** complete. Verification is intentionally deferred to the separate phase-closeout verification pass. The deterministic delegation facade originally sequenced as Phase 4 landed early during Phase 2 because it was required to realize the common-path process/context reductions measured in Phase 0.
+
 **Goal:** make role-scoped command contracts the normal interface.
 
 Tasks:
@@ -465,6 +467,10 @@ Tasks:
 4. Keep a digest binding between the role-scoped catalog, parser/application version, and launch receipt.
 5. Ensure explicit `agent-workflow commands --role all` remains available for maintainers.
 6. Update launch context so agents use the scoped card/catalog first and do not perform routine `--help` discovery.
+   Phase 2 also compacts repeated launch boilerplate into a short mode-aware runtime contract; detailed syntax remains in the digest-bound scoped card/catalog and completion template.
+   The delegation facade also returns a compact common-path result instead of duplicating the full public Agent Run/worktree records; detailed state remains on explicit status/context surfaces.
+   Read-only worker context lookup also avoids importing completion/schema-validation stacks; schema validation remains lazy-loaded on the write/replay/validation paths that require it.
+   Launch catalog generation also materializes only the top-level parser branches represented by the selected command profile before applying the existing exact leaf filter; role-scoped preparation no longer builds the full maintainer parser tree merely to discard most commands.
 7. Add release tests proving every profile references only real parser commands and that no required command silently disappears.
 
 **Acceptance targets:**

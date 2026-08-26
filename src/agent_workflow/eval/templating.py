@@ -8,6 +8,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Mapping, Sequence
 
 from ..contracts import read_contract, validate_instance
+from ..cli_contract import EVALUATION_TEMPLATE_KINDS
 from ..errors import WorkflowError
 from ..lifecycle import lifecycle_receipts
 from ..path import inventory_tree, read_regular_file, require_directory
@@ -50,7 +51,7 @@ TEMPLATE_SPECS: dict[str, TemplateSpec] = {
         "lifecycle-archive.json", LIFECYCLE_ARCHIVE_SCHEMA
     ),
 }
-TEMPLATE_KINDS = tuple(TEMPLATE_SPECS)
+TEMPLATE_KINDS = EVALUATION_TEMPLATE_KINDS
 
 
 IDENTITY_FIELDS: tuple[tuple[str, str], ...] = (

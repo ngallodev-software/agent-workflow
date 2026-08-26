@@ -55,10 +55,59 @@ def parse_args(
     return args
 
 
+
+def top_level_command(argv: list[str] | None) -> str | None:
+    """Return the requested top-level command without constructing/loading plugins."""
+    raw = list(sys.argv[1:] if argv is None else argv)
+    if "--" in raw:
+        raw = raw[: raw.index("--")]
+    pre_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
+    pre_parser.add_argument("--config", type=Path)
+    pre_parser.add_argument("--json", action="store_true")
+    pre_parser.add_argument("--no-plugins", action="store_true")
+    pre_parser.add_argument("command", nargs="?")
+    known, _ = pre_parser.parse_known_args(raw)
+    return known.command
+
+
+def plugins_required_for_command(argv: list[str] | None, builtin_commands: set[str]) -> bool:
+    """Return whether parser construction/execution needs configured plugin registration.
+
+    Normal built-in lifecycle commands intentionally skip plugin discovery. Plugin-aware
+    inventory/help surfaces and unknown top-level commands still load plugins so enabled
+    plugin commands remain available without becoming common-path startup cost.
+    """
+    raw = list(sys.argv[1:] if argv is None else argv)
+    if "--version" in raw:
+        return False
+    command = top_level_command(argv)
+    if command is None:
+        return False
+    # The inventory command discovers entry-point metadata without importing
+    # enabled plugin code.  It must remain useful in recovery mode so callers
+    # can see which configured plugins were deliberately suppressed.
+    if command == "plugins":
+        return True
+    if "--no-plugins" in raw:
+        return False
+    if command not in builtin_commands:
+        return True
+    if command in {"doctor", "completion"}:
+        return True
+    if command == "commands":
+        try:
+            role_index = raw.index("--role")
+        except ValueError:
+            return not any(token.startswith("--role=") and token.split("=", 1)[1] != "all" for token in raw)
+        return role_index + 1 >= len(raw) or raw[role_index + 1] == "all"
+    return False
+
 def bootstrap_plugins(
     argv: list[str] | None,
+    *,
+    load_plugins: bool = True,
 ) -> tuple[Any, PluginRegistry]:
-    """Load settings and the explicitly enabled plugin registry for one CLI run."""
+    """Load settings and, when requested, the enabled plugin registry for one CLI run."""
     raw = list(sys.argv[1:] if argv is None else argv)
     if "--" in raw:
         raw = raw[: raw.index("--")]
@@ -71,6 +120,8 @@ def bootstrap_plugins(
     if "--version" in raw:
         return defaults(known.config), EMPTY_PLUGIN_REGISTRY
     settings = load_settings(known.config)
+    if not load_plugins:
+        return settings, EMPTY_PLUGIN_REGISTRY
     return settings, load_plugin_registry(
         settings.plugins_enabled,
         suppress=known.no_plugins,

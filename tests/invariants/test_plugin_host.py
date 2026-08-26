@@ -94,7 +94,7 @@ def test_plugin_command_cannot_shadow_core_command(monkeypatch: pytest.MonkeyPat
         build_parser(registry)
 
 
-def test_enabled_plugin_provenance_is_bound_into_launch_command_artifacts(
+def test_role_scoped_launch_artifacts_exclude_enabled_plugin_provenance(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
     entry = _EntryPoint(
@@ -112,11 +112,10 @@ def test_enabled_plugin_provenance_is_bound_into_launch_command_artifacts(
     )
 
     catalog = json.loads((tmp_path / evidence["catalog_path"]).read_text(encoding="utf-8"))
-    assert catalog["plugins"][0]["name"] == "fixture"
-    assert catalog["plugins"][0]["distribution"] == "dist-fixture"
-    assert "fixture-command" in {item["command"] for item in catalog["commands"]}
+    assert catalog["plugins"] == []
+    assert "fixture-command" not in {item["command"] for item in catalog["commands"]}
     card = (tmp_path / evidence["card_path"]).read_text(encoding="utf-8")
-    assert "`fixture-command`" in card
+    assert "`fixture-command`" not in card
 
 
 def _install_resource_package(

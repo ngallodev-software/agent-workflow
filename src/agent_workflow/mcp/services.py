@@ -362,7 +362,13 @@ class WorkflowReadService:
         if role is not None and role not in COMMAND_ROLES:
             raise ServiceError("invalid_identifier", "unknown command-catalog role")
         try:
-            catalog = filter_catalog(runtime_command_catalog(self.settings), role)
+            catalog = filter_catalog(
+                runtime_command_catalog(
+                    self.settings,
+                    include_plugins=role in {None, "all"},
+                ),
+                role,
+            )
             validate_instance(
                 catalog, COMMAND_CATALOG_SCHEMA, artifact="MCP command catalog"
             )
@@ -385,7 +391,6 @@ class WorkflowReadService:
                 "leaf_command_count": len(catalog["commands"]),
             },
             "launch_contracts": [
-                "agent-workflow/agent-run-contract/v1",
                 "agent-workflow/agent-run-contract/v1",
             ],
             "resources": list(MCP_RESOURCE_URIS),

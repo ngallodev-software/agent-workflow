@@ -34,18 +34,14 @@ The core intentionally does not own workspace, pane, window, or interactive term
 
 ## Agent Run lifecycle
 
-Prepare a headless run:
+For the normal path, create/select the worktree and launch the Agent Run in one deterministic composition:
 
 ```bash
-agent-workflow agent-run prepare RUN-001 /path/to/worktree prompt.md \
-  --role implementation --tier medium
+agent-workflow delegate RUN-001 prompt.md --repo /path/to/repo \
+  --ticket TICKET-001 --base-ref HEAD --role implementation --tier medium
 ```
 
-Start it:
-
-```bash
-agent-workflow agent-run start RUN-001
-```
+The lower-level `worktree create`, `agent-run prepare`, and `agent-run start` commands remain available for recovery, diagnostics, and explicit operator control. `delegate` uses those same authorities and produces the same durable Agent Run evidence; it does not introduce a parallel lifecycle.
 
 Observe and communicate durably:
 
@@ -68,11 +64,11 @@ agent-workflow agent-run accept RUN-001 --actor maintainer --reason "accepted" -
 An external runtime can consume a prepared Agent Run without being a dependency of the core:
 
 ```bash
-agent-workflow agent-run prepare RUN-EXT /path/to/worktree prompt.md \
+agent-workflow delegate RUN-EXT prompt.md --workdir /path/to/worktree \
   --worker-mode external --interactive --role implementation
 ```
 
-Preparation records the durable authority and launch plan but does not launch a process.
+The facade records the durable authority and launch plan but does not launch a process.
 
 ## Workflows
 
@@ -130,3 +126,8 @@ Version `0.9.0` builds on the breaking 0.8 headless-core rewrite and begins the 
 ## Repository-only CI assets
 
 Jenkins CI and local server-job files remain in the source repository for maintainers. They are repository infrastructure, not installed runtime features; see [Contributing](docs/CONTRIBUTING.md#jenkins-and-repository-only-ci-assets).
+
+
+## Phase 2 simplification notes
+
+Normal `agent-workflow delegate` output is intentionally compact: run ID, logical role, worker mode, worktree, state, idempotency/worktree indicators, and next actions. Use `agent-workflow agent-run status RUN` or `agent-workflow agent context RUN` when detailed durable state is actually needed rather than paying that context cost on every delegation.

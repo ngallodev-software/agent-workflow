@@ -150,7 +150,7 @@ def measure() -> dict:
             "full_json_approx_tokens": _approx_tokens(len(encode_command_catalog(catalog))),
             "full_markdown_bytes": len(full_card),
             "full_markdown_approx_tokens": _approx_tokens(len(full_card)),
-            "launch_artifact_currently_writes_full_json_for_every_role": True,
+            "launch_artifact_currently_writes_full_json_for_every_role": False,
         },
         "roles": roles,
         "primary_skill": {

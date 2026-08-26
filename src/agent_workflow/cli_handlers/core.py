@@ -7,13 +7,13 @@ from typing import Any
 
 from ..cli_output import print_json
 from ..cli_parser import build_parser
+from ..cli_contract import CORE_COMMANDS
 from ..command_catalog import build_command_catalog, filter_catalog, render_command_markdown
 from ..config import Settings, as_dict
 from ..doctor import run_doctor
 from ..errors import WorkflowError
 from ..plugins import PluginRegistry
 
-CORE_COMMANDS = frozenset({"commands", "plugins", "doctor", "completion", "config"})
 
 
 def handle_core_command(

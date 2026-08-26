@@ -39,6 +39,14 @@ class AgentRole:
     def role_id(self) -> str:
         return str(self.value["id"])
 
+    @property
+    def command_profile(self) -> str:
+        """Return the small command profile implied by this public role contract."""
+        capabilities = {str(item) for item in self.value.get("capabilities", [])}
+        if "agent-workflow.review.publish" in capabilities:
+            return "review"
+        return "implementation"
+
     def public_dict(self) -> dict[str, Any]:
         result = dict(self.value)
         # The source filename is not part of the public contract. Replace the

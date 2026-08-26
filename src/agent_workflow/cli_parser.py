@@ -8,17 +8,74 @@ help continue to share one authoritative command tree.
 from __future__ import annotations
 
 import argparse
+from collections.abc import Iterable
 from pathlib import Path
 
 from . import __version__
 from .command_catalog import COMMAND_ROLES
+from .cli_contract import EVALUATION_TEMPLATE_KINDS, AUTHORIZED_WORKFLOW_TEMPLATES
 from .errors import WorkflowError
-from .eval.templating import TEMPLATE_KINDS
 from .plugins import EMPTY_PLUGIN_REGISTRY, PluginRegistry
-from .workflow_templates import AUTHORIZED_TEMPLATES
 
 
-def build_parser(plugin_registry: PluginRegistry | None = None) -> argparse.ArgumentParser:
+class _ParserSink:
+    """No-op argparse construction sink for top-level branches outside a scoped build.
+
+    The source parser definition remains authoritative; scoped construction simply avoids
+    allocating argparse objects for unrelated command branches.
+    """
+
+    choices: dict[str, argparse.ArgumentParser] = {}
+
+    def add_parser(self, *args, **kwargs):
+        return self
+
+    def add_subparsers(self, *args, **kwargs):
+        return self
+
+    def add_argument(self, *args, **kwargs):
+        return self
+
+    def add_mutually_exclusive_group(self, *args, **kwargs):
+        return self
+
+    def set_defaults(self, *args, **kwargs):
+        return self
+
+
+class _ScopedSubparsers:
+    def __init__(
+        self,
+        action: argparse._SubParsersAction,
+        command_scopes: frozenset[str] | None,
+    ):
+        self._action = action
+        self._command_scopes = command_scopes
+        self._sink = _ParserSink()
+
+    @property
+    def choices(self):
+        return self._action.choices
+
+    def add_parser(self, name: str, *args, **kwargs):
+        if self._command_scopes is not None and name not in self._command_scopes:
+            return self._sink
+        return self._action.add_parser(name, *args, **kwargs)
+
+
+def build_parser(
+    plugin_registry: PluginRegistry | None = None,
+    *,
+    command_scope: str | None = None,
+    command_scopes: Iterable[str] | None = None,
+) -> argparse.ArgumentParser:
+    if command_scope is not None and command_scopes is not None:
+        raise ValueError("command_scope and command_scopes are mutually exclusive")
+    selected_scopes = (
+        frozenset({command_scope})
+        if command_scope is not None
+        else (frozenset(command_scopes) if command_scopes is not None else None)
+    )
     parser = argparse.ArgumentParser(prog="agent-workflow")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("--config", type=Path, help="override config.toml path")
@@ -32,7 +89,8 @@ def build_parser(plugin_registry: PluginRegistry | None = None) -> argparse.Argu
         action="store_true",
         help="suppress configured plugins for recovery and core-only operation",
     )
-    commands = parser.add_subparsers(dest="command", required=True)
+    command_action = parser.add_subparsers(dest="command", required=True)
+    commands = _ScopedSubparsers(command_action, selected_scopes)
 
     commands.add_parser("doctor", help="check environment and configuration")
     catalog = commands.add_parser(
@@ -60,7 +118,7 @@ def build_parser(plugin_registry: PluginRegistry | None = None) -> argparse.Argu
     wf_verify.add_argument("run_dir", type=Path)
     wf_verify.add_argument("snapshot", type=Path)
     wf_template = workflow_commands.add_parser("template", help="expand an authorized workflow template")
-    wf_template.add_argument("template", choices=AUTHORIZED_TEMPLATES)
+    wf_template.add_argument("template", choices=AUTHORIZED_WORKFLOW_TEMPLATES)
     wf_template.add_argument("spec", type=Path, help="JSON template request")
     wf_template.add_argument("--output", type=Path, required=True)
 
@@ -116,6 +174,42 @@ def build_parser(plugin_registry: PluginRegistry | None = None) -> argparse.Argu
     watch_parser.add_argument("--batch-size", type=int, default=100)
     watch_parser.add_argument("--max-per-child", type=int, default=25)
     watch_parser.add_argument("--max-cycles", type=int)
+
+    delegate = commands.add_parser(
+        "delegate", help="create/select a worktree and prepare/start one Agent Run"
+    )
+    delegate.add_argument("agent_run_id")
+    delegate.add_argument("prompt", type=Path)
+    source = delegate.add_mutually_exclusive_group(required=True)
+    source.add_argument("--repo", type=Path, help="repository from which to create a delegated worktree")
+    source.add_argument("--workdir", type=Path, help="existing worktree/workdir to use without creating one")
+    delegate.add_argument("--ticket", help="ticket ID; defaults to agent_run_id")
+    delegate.add_argument("--base-ref", default="HEAD")
+    delegate.add_argument("--dest", type=Path, help="destination for a newly created worktree")
+    delegate.add_argument("--branch", help="branch for a newly created worktree")
+    delegate.add_argument("--role", default="implementation", help="logical role; defaults to implementation")
+    delegate.add_argument("--pack")
+    delegate.add_argument("--job", type=Path)
+    delegate.add_argument("--prerequisite", action="append", dest="prerequisites")
+    delegate.add_argument("--evaluation", type=Path)
+    delegate.add_argument("--tier", choices=("low", "medium", "high", "critical"))
+    delegate.add_argument("--structured", action="store_true")
+    delegate.add_argument(
+        "--interactive", action=argparse.BooleanOptionalAction, default=None,
+        help="prepare an interactive provider command for an external worker",
+    )
+    delegate.add_argument("--allow-dirty", action="store_true")
+    delegate.add_argument(
+        "--worker-mode", choices=("headless", "external"), default="headless",
+        help="headless starts immediately; external prepares only",
+    )
+    # Operator/debug compatibility controls. Normal agent-facing use should select --role only.
+    delegate.add_argument("--executor", help=argparse.SUPPRESS)
+    delegate.add_argument("--agent-name", help=argparse.SUPPRESS)
+    delegate.add_argument("--agent-class", help=argparse.SUPPRESS)
+    delegate.add_argument("--model", help=argparse.SUPPRESS)
+    delegate.add_argument("--reasoning-effort", choices=("low", "medium", "high"), help=argparse.SUPPRESS)
+    delegate.add_argument("--allow-no-go-model", action="store_true", help=argparse.SUPPRESS)
 
     worktree = commands.add_parser("worktree", help="Git worktree commands")
     worktree_commands = worktree.add_subparsers(dest="worktree_command", required=True)
@@ -463,7 +557,7 @@ def build_parser(plugin_registry: PluginRegistry | None = None) -> argparse.Argu
     eval_template = evaluation_commands.add_parser(
         "template", help="write a deterministic evaluation or benchmark template"
     )
-    eval_template.add_argument("kind", choices=TEMPLATE_KINDS)
+    eval_template.add_argument("kind", choices=EVALUATION_TEMPLATE_KINDS)
     eval_template.add_argument("--output", type=Path, required=True)
     eval_validate_benchmark = evaluation_commands.add_parser(
         "validate-benchmark", help="validate a benchmark/cohort manifest"

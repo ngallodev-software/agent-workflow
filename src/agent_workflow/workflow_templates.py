@@ -4,13 +4,10 @@ from copy import deepcopy
 from typing import Any, Mapping
 
 from .errors import WorkflowError
+from .cli_contract import AUTHORIZED_WORKFLOW_TEMPLATES
 from .workflow import normalize_snapshot
 
-AUTHORIZED_TEMPLATES = (
-    "pipeline",
-    "parallel-review-fan-in",
-    "implementation-independent-review",
-)
+AUTHORIZED_TEMPLATES = AUTHORIZED_WORKFLOW_TEMPLATES
 
 
 def _task(value: Any, *, label: str) -> dict[str, Any]:

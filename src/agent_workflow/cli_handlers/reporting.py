@@ -7,6 +7,7 @@ import json
 from typing import Any
 
 from ..cli_output import print_json
+from ..cli_contract import REPORTING_COMMANDS
 from ..config import Settings
 from ..eval.assessment import assess_exported_runs
 from ..errors import WorkflowError
@@ -14,7 +15,6 @@ from ..ledger import build_ledger, render_ledger
 from ..state import runs_root
 from ..util import atomic_write_json, expand_path
 
-REPORTING_COMMANDS = frozenset({"assess-sealed-runs", "ledger"})
 
 
 def handle_reporting_command(

@@ -35,12 +35,14 @@ Worker modes:
 
 ## Standard headless flow
 
+Use the deterministic facade for normal delegation:
+
 ```bash
-agent-workflow worktree create REPO TICKET BASE_REF
-agent-workflow agent-run prepare RUN WORKTREE PROMPT --role implementation --tier medium
-agent-workflow agent-run start RUN
+agent-workflow delegate RUN PROMPT --repo REPO --ticket TICKET --base-ref BASE_REF --role implementation --tier medium
 agent-workflow agent-run status RUN
 ```
+
+`delegate` composes the existing worktree and Agent Run authorities; it does not create a second lifecycle. Its normal response is intentionally compact; query `agent-run status` or `agent context` only when the additional durable detail is needed. Use the lower-level `worktree create`, `agent-run prepare`, and `agent-run start` commands only when recovery, diagnostics, or explicit operator control requires them.
 
 Use durable progress and steering:
 
@@ -54,4 +56,4 @@ After completion, inspect evaluation/evidence and use explicit review/accept/rej
 
 ## External runtime composition
 
-When an interactive host is available, use its native mechanisms only for presentation/live execution. Prepare the Agent Run with `--worker-mode external`. Do not let the host replace durable AW identity, messaging, evidence, or acceptance authority.
+When an interactive host is available, use its native mechanisms only for presentation/live execution. Prefer `agent-workflow delegate ... --worker-mode external`; it prepares the durable Agent Run and launches nothing. Do not let the host replace durable AW identity, messaging, evidence, or acceptance authority.
