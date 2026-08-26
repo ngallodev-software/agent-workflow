@@ -22,7 +22,7 @@ def log_report(
     with mlflow.start_run() as active:
         mlflow.log_params(
             {
-                "session_id": report.get("session_id"),
+                "agent_run_id": report.get("agent_run_id"),
                 "executor": report.get("executor"),
                 "source_revision": report.get("source_revision"),
             }

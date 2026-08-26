@@ -37,8 +37,8 @@ The read-only server publishes parser-derived command knowledge without converti
 - `agent-workflow://capabilities` reports the installed version, stdio/read-only mode, live command-catalog digest and leaf count, supported launch-contract versions, registered resources/tools, and explicit exclusions.
 - `agent-workflow://commands` returns the complete schema-validated catalog generated from the installed CLI parser.
 - `agent-workflow://commands/{role}` returns the existing `orchestrator`, `implementation`, or `review` role scope.
-- `agent-workflow://runs/{session_id}/command-context` verifies the run launch contract and reports its catalog/card binding. Legacy launch-contract v1 runs return `legacy-no-command-binding`; launch-contract v2 runs return `verified`.
-- `agent-workflow://runs/{session_id}/command-card` returns the verified bounded role card for launch-contract v2 runs.
+- `agent-workflow://runs/{agent_run_id}/command-context` verifies the run launch contract and reports its catalog/card binding. The verified Agent Run contract returns a bounded command-context binding.
+- `agent-workflow://runs/{agent_run_id}/command-card` returns the verified bounded role card for Agent Runs.
 
 The server calls the same `runtime_command_catalog()`, `filter_catalog()`, and `read_launch_contract()` boundaries used by the CLI and sealed-run verifier. It never maintains an MCP-specific command list. Public run context normalizes the executable name and does not expose an absolute installation path. Catalog/card replacement or digest drift fails closed.
 
@@ -46,7 +46,7 @@ The catalog is discovery metadata, not authorization. The server must not dynami
 
 ## Planned mutation phase
 
-`MCP-003` is the planned mutation phase, but it remains blocked on HARD-007 authenticated principals. HARD-004 and HARD-005 are accepted. When authorized, it may add only validated tools that wrap existing services:
+`MCP-003` is the planned mutation phase, but it remains blocked on `HARD-007` authenticated principals. The prerequisite read-only path/response hardening is already implemented. When authorized, it may add only validated tools that wrap existing services:
 
 - prompt-pack validation;
 - worktree creation;
@@ -54,7 +54,7 @@ The catalog is discovery metadata, not authorization. The server must not dynami
 - workflow validate/start/status/resume;
 - durable progress, acknowledgement, and steering records.
 
-Before any mutation tool lands, the shared service layer must provide durable idempotency keys, replay-safe result mapping, bounded request contracts, and evidence linking equivalent to the CLI. Future `launch` and workflow-launch tools must call the same launch service as the CLI so every child run still emits launch-contract v2, `command-catalog.json`, the role-scoped `command-card.md`, child environment pointers, and immutable catalog/card digests. Mutation responses should return the session ID, launch-contract schema, command-catalog digest, role, idempotency identity, and durable result identity where available. A returned tool response is not proof that a child consumed steering; correlated durable acknowledgement remains required.
+Before any mutation tool lands, the shared service layer must provide durable idempotency keys, replay-safe result mapping, bounded request contracts, and evidence linking equivalent to the CLI. Future Agent Run and workflow mutation tools must call the same application services as the CLI so every child run emits the same Agent Run contract, command catalog/card bindings, child environment pointers, and immutable digests. Mutation responses should return the Agent Run ID, contract schema, command-catalog digest, role, idempotency identity, and durable result identity where available. A returned tool response is not proof that a child consumed steering; correlated durable acknowledgement remains required.
 
 Destructive lifecycle and review/disposition tools are a later policy-gated phase. Force kill remains excluded. Streamable HTTP requires a separate authorization ADR after local stdio adoption and security evidence.
 
@@ -62,7 +62,7 @@ Destructive lifecycle and review/disposition tools are a later policy-gated phas
 
 Read-only resources should remain URI-addressable and bounded. Mutation tools should use typed request/result schemas, stable error categories, idempotency keys, and actor provenance. Tool names must describe existing domain operations rather than expose internal Python functions.
 
-The active implementation pack is [`prompt-packs/mcp-server-next/`](../prompt-packs/mcp-server-next/). The canonical backlog entry is `MCP-003` in [BACKLOG.md](BACKLOG.md).
+The former implementation prompt pack was retired in the 0.8.0 rewrite. Future MCP work belongs in [BACKLOG.md](BACKLOG.md) with explicit scope and acceptance criteria.
 
 ## Acceptance requirements
 
@@ -77,4 +77,4 @@ A mutation release is not complete until black-box MCP client journeys prove:
 7. no tool can bypass executor/model/class/no-go policy;
 8. no transport beyond local stdio is enabled;
 9. command capability resources remain parser-derived and read-only rather than becoming dynamic executable tools;
-10. MCP-launched child runs preserve launch-contract v2 command-context parity with CLI launches.
+10. MCP-launched child Agent Runs preserve command-context parity with CLI-created Agent Runs.

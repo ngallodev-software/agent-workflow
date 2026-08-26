@@ -9,7 +9,7 @@ from unittest.mock import patch
 import pytest
 
 from agent_workflow.benchmarking.metrics import aggregate_usage, empty_usage
-from agent_workflow.benchmarking.common import file_inventory
+from agent_workflow.benchmarking.common import file_inventory, tree_sha256
 from agent_workflow.benchmarking.planning import create_run_plan, materialize_fixture
 from agent_workflow.benchmarking.review import (
     _require_exact_pair_ids,
@@ -20,9 +20,10 @@ from agent_workflow.benchmarking.service import cleanup_benchmark, export_builti
 from agent_workflow.config import defaults
 from agent_workflow.errors import WorkflowError
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-SPEC = REPO_ROOT / "benchmarks/specs/priority-picker-v1/benchmark-spec.json"
-EXECUTOR = REPO_ROOT / "benchmarks/specs/priority-picker-v1/executors/synthetic.json"
+def _suite(tmp_path: Path) -> Path:
+    destination = tmp_path / "priority-picker-v1"
+    export_builtin_suite(destination, benchmark_id="priority-picker-v1")
+    return destination
 
 
 def _settings(tmp_path: Path):
@@ -34,12 +35,15 @@ def _settings(tmp_path: Path):
 
 
 def test_planned_pair_preserves_task_identity_and_declares_treatment(tmp_path: Path) -> None:
+    suite = _suite(tmp_path)
+    spec = suite / "benchmark-spec.json"
+    executor = suite / "executors" / "synthetic.json"
     repo = tmp_path / "fixture"
-    materialize_fixture(SPEC, repo)
+    materialize_fixture(spec, repo)
     result = create_run_plan(
         _settings(tmp_path),
-        spec_path=SPEC,
-        executor_path=EXECUTOR,
+        spec_path=spec,
+        executor_path=executor,
         repo=repo,
         base_ref="HEAD",
         run_id="contract-pair",
@@ -66,8 +70,11 @@ def test_planned_pair_preserves_task_identity_and_declares_treatment(tmp_path: P
 
 
 def test_planner_rejects_noncanonical_fixture_and_cleans_created_branch(tmp_path: Path) -> None:
+    suite = _suite(tmp_path)
+    spec = suite / "benchmark-spec.json"
+    executor = suite / "executors" / "synthetic.json"
     repo = tmp_path / "fixture"
-    materialize_fixture(SPEC, repo)
+    materialize_fixture(spec, repo)
     (repo / "README.md").write_text("mutated fixture\n", encoding="utf-8")
     subprocess.run(["git", "-C", str(repo), "add", "README.md"], check=True)
     subprocess.run(["git", "-C", str(repo), "commit", "-qm", "mutate"], check=True)
@@ -75,8 +82,8 @@ def test_planner_rejects_noncanonical_fixture_and_cleans_created_branch(tmp_path
     with pytest.raises(WorkflowError, match="does not match the frozen fixture"):
         create_run_plan(
             _settings(tmp_path),
-            spec_path=SPEC,
-            executor_path=EXECUTOR,
+            spec_path=spec,
+            executor_path=executor,
             repo=repo,
             base_ref="HEAD",
             run_id="fixture-mismatch",
@@ -137,20 +144,29 @@ def test_cleanup_retains_arm_worktrees_by_default(tmp_path: Path) -> None:
     assert all(item["worktree_present"] for item in result["preserved"])
 
 
-def test_packaged_suite_exports_the_frozen_source_suite(tmp_path: Path) -> None:
-    destination = tmp_path / "suite"
-    result = export_builtin_suite(destination)
+@pytest.mark.parametrize(
+    ("benchmark_id", "expected_files", "expected_tree_sha256"),
+    [
+        ("priority-picker-v1", 50, "a4e4be0214650c283327fe903a241dca1cdebed85eb914f4097c84fa9a3e85c3"),
+        ("priority-picker-v2", 51, "28d9274d1d7bd3b3744bcf0c596b2cbd19a09b3ae02358ff3864bf3e26f78ab5"),
+        ("priority-picker-fast-v1", 51, "219b41fdde09d995773da92ce6f584021347e12721a477d328da96bb7745bc90"),
+    ],
+)
+def test_packaged_suite_exports_a_self_contained_frozen_suite(
+    tmp_path: Path,
+    benchmark_id: str,
+    expected_files: int,
+    expected_tree_sha256: str,
+) -> None:
+    destination = tmp_path / benchmark_id
+    result = export_builtin_suite(destination, benchmark_id=benchmark_id)
     assert Path(result["spec"]).is_file()
     assert Path(result["synthetic_executor"]).is_file()
-    def stable_inventory(root: Path) -> list[dict[str, object]]:
-        return [
-            item
-            for item in file_inventory(root)
-            if "__pycache__" not in Path(str(item["path"])).parts
-            and not str(item["path"]).endswith(".pyc")
-        ]
-
-    assert stable_inventory(destination) == stable_inventory(SPEC.parent)
+    assert len(file_inventory(destination)) == expected_files
+    assert tree_sha256(destination) == expected_tree_sha256
+    assert not (destination / "suite-layout.json").exists()
+    assert (destination / "fixture" / "starter" / "priority_picker" / "server.py").is_file()
+    assert (destination / "evaluation" / "evaluate.py").is_file()
     assert not any(path.name == "__pycache__" for path in destination.rglob("__pycache__"))
     assert not any(path.suffix in {".pyc", ".pyo"} for path in destination.rglob("*"))
 

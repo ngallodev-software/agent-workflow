@@ -1,9 +1,0 @@
-phase: "0"
-name: "authoritative-operator-snapshot"
-mandatory_order: ["TMUXUI-001"]
-tasks:
-  - id: "TMUXUI-001"
-    tier: A
-    session: "tmux-ui-operator-snapshot"
-    prompt: "tickets/TMUXUI-001-operator-snapshot.md"
-    backlog_id: "TMUXUI-001"

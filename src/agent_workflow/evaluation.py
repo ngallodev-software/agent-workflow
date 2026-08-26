@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import hashlib
-import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from .contracts import read_contract
 from .errors import WorkflowError
+from .util import canonical_json_sha256 as _canonical_json_sha256
 
 EVALUATION_SCHEMA = "agent-workflow/evaluation-plan/v1"
 
@@ -24,13 +23,7 @@ class EvaluationPlan:
 
 
 def canonical_json_sha256(value: Any) -> str:
-    encoded = json.dumps(
-        value,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
+    return _canonical_json_sha256(value, ensure_ascii=False)
 
 
 def validate_evaluation(

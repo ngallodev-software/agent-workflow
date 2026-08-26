@@ -4,14 +4,14 @@
   "type": "object",
   "required": [
     "schema",
-    "session_id",
+    "agent_run_id",
     "stages"
   ],
   "properties": {
     "schema": {
       "const": "agent-workflow/execution-metrics/v1"
     },
-    "session_id": {
+    "agent_run_id": {
       "type": "string",
       "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
     },
@@ -45,7 +45,6 @@
         "provider_billed_cost",
         "local_estimated_cost",
         "price_catalog_id",
-        "cost",
         "currency",
         "elapsed_seconds",
         "first_output_latency_seconds",
@@ -70,9 +69,6 @@
           "$ref": "#/$defs/nullableNumber"
         },
         "provider_total_tokens": {
-          "$ref": "#/$defs/nullableNumber"
-        },
-        "cost": {
           "$ref": "#/$defs/nullableNumber"
         },
         "currency": {

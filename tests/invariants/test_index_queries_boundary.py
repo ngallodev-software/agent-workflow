@@ -9,14 +9,14 @@ from agent_workflow.index_queries import build_query, build_query_report
 def test_query_builder_preserves_filters_order_and_bound_limit() -> None:
     sql, parameters = build_query(
         "runs",
-        session_id="session-1",
+        agent_run_id="session-1",
         state="running",
         executor="codex",
         model="gpt-5.6-luna",
         pack_id="pack-1",
         limit=25,
     )
-    assert "session_id = ?" in sql
+    assert "agent_run_id = ?" in sql
     assert "durable_status = ?" in sql
     assert "executor = ?" in sql
     assert "model = ?" in sql
@@ -34,7 +34,7 @@ def test_query_builder_preserves_filters_order_and_bound_limit() -> None:
 
 def test_query_builder_rejects_unsupported_filter_and_limit() -> None:
     with pytest.raises(WorkflowError, match="not supported"):
-        build_query("performance", session_id="session-1")
+        build_query("performance", agent_run_id="session-1")
     with pytest.raises(WorkflowError, match="between 1 and 10000"):
         build_query("runs", limit=0)
     with pytest.raises(WorkflowError, match="unsupported index query"):
@@ -50,7 +50,7 @@ def test_query_report_binds_rows_to_freshness_metadata() -> None:
         "stale_run_count": 1,
         "error_count": 0,
     }
-    rows = [{"session_id": "session-1"}]
+    rows = [{"agent_run_id": "session-1"}]
     report = build_query_report(status, "runs", rows)
     assert report["schema"] == "agent-workflow/index-query/v1"
     assert report["freshness"] == "stale"

@@ -10,7 +10,6 @@ from __future__ import annotations
 import json
 import os
 import signal
-import shlex
 import socket
 import subprocess
 import sys
@@ -21,7 +20,6 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from ..errors import WorkflowError
-from ..process import run
 from ..util import atomic_write_json, utc_now
 from .common import format_argv, read_object
 from .contracts import validate_spec
@@ -44,9 +42,6 @@ def runtime_dir(plan: Mapping[str, Any]) -> Path:
 def summary_path(plan: Mapping[str, Any]) -> Path:
     return runtime_dir(plan) / "live-review.json"
 
-
-def operator_panes_path(plan: Mapping[str, Any]) -> Path:
-    return runtime_dir(plan) / "operator-panes.json"
 
 
 def _pid_alive(pid: object) -> bool:
@@ -329,52 +324,11 @@ def _launch_one(
     return entry
 
 
-def _show_in_operator_panes(plan: Mapping[str, Any], apps: list[dict[str, Any]]) -> None:
-    panes_file = operator_panes_path(plan)
-    if not panes_file.is_file():
-        return
-    panes = read_object(panes_file)
-    by_arm: dict[str, dict[str, Any]] = {}
-    # The most recent pair is the most useful foreground view; every app remains
-    # independently reachable through status/review output.
-    for item in apps:
-        if item.get("state") == "ready":
-            by_arm[str(item["arm"])] = item
-    helper = Path(__file__).with_name("live_review_pane.py")
-    for arm_name in ("control_raw", "workflow_full"):
-        pane_id = panes.get("panes", {}).get(arm_name)
-        app = by_arm.get(arm_name)
-        if not isinstance(pane_id, str) or not app:
-            continue
-        argv = [
-            sys.executable,
-            str(helper),
-            "--arm",
-            arm_name,
-            "--url",
-            str(app["url"]),
-            "--pid",
-            str(app["pid"]),
-            "--stdout",
-            str(app["stdout"]),
-            "--stderr",
-            str(app["stderr"]),
-        ]
-        result = run(
-            ["tmux", "respawn-pane", "-k", "-t", pane_id, "-c", str(app["worktree"]), shlex.join(argv)],
-            check=False,
-            timeout_seconds=10,
-        )
-        if result.returncode == 0:
-            run(["tmux", "set-option", "-p", "-t", pane_id, "remain-on-exit", "on"], check=False)
-            run(["tmux", "select-pane", "-t", pane_id, "-T", f"benchmark {arm_name}: live review"], check=False)
-
 
 def start_live_review(plan_path: Path) -> dict[str, Any]:
     plan = read_object(plan_path.resolve())
     existing = live_review_status(plan_path)
     if existing["total"] and existing["ready"] == existing["total"]:
-        _show_in_operator_panes(plan, existing["apps"])
         return {**existing, "existing": True}
 
     # Stop a partial or stale runtime. Reuse its assigned ports where possible so
@@ -465,7 +419,6 @@ def start_live_review(plan_path: Path) -> dict[str, Any]:
         run_id=str(plan["run_id"]),
         payload={"ready": status["ready"], "total": status["total"]},
     )
-    _show_in_operator_panes(plan, status["apps"])
     if status["ready"] != status["total"]:
         failures = [f"{item['pair_id']}:{item['arm']}" for item in status["apps"] if item["state"] != "ready"]
         raise WorkflowError("benchmark live review server failed: " + ", ".join(failures))

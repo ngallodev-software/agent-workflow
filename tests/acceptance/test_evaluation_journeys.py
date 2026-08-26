@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 
 from tests.conftest import (
+    prepare_and_start_agent_run,
     InstalledProduct,
     fake_agent_path,
     git_repo,
@@ -54,88 +55,50 @@ def test_sealed_evaluation_runs_score_report_collect_and_compare_through_install
     validated = installed_product.json("eval", "validate", plan, env=env)
     assert validated["task_ids"] == ["EVAL-1"]
 
-    evidence_files: list[Path] = []
-    run_dirs: list[Path] = []
-    for session_id in ("baseline-eval", "candidate-eval"):
-        installed_product.json(
-            "launch",
-            session_id,
-            repo,
-            prompt,
-            "--ticket",
-            "EVAL-1",
-            "--tier",
-            "low",
-            "--evaluation",
-            plan,
-            "--config",
-            config,
-            "--executor",
-            "codex",
-            "--structured",
-            "--no-interactive",
-            env=env,
-        )
-        status = wait_for_status(env, session_id)
-        assert status["status"] == "completed"
-        run_dir = state_runs / session_id
-        run_dirs.append(run_dir)
-        deadline = time.monotonic() + 10
-        while time.monotonic() < deadline and not (run_dir / "ledger-row.json").is_file():
-            time.sleep(0.05)
-        assert (run_dir / "scores" / "score-set.json").is_file()
-        assert (run_dir / "reports" / "evaluation.md").is_file()
-        assert (run_dir / "ledger-row.json").is_file()
-        auto_ledger = json.loads((run_dir / "ledger-row.json").read_text(encoding="utf-8"))
-        assert auto_ledger["receipt_verification"] == "verified"
-        assert auto_ledger["attempt_classification"] == "acceptance-eligible"
-        assert auto_ledger["acceptance_eligible"] is True
+    # One sealed evaluated Agent Run exercises the full automatic lifecycle.
+    # Comparison/reporting is pure evidence processing, so duplicate the collected
+    # trial artifact rather than paying for a second equivalent worker execution.
+    agent_run_id = "baseline-eval"
+    prepare_and_start_agent_run(
+        installed_product, agent_run_id, repo, prompt,
+        "--ticket", "EVAL-1", "--tier", "low", "--evaluation", plan,
+        "--config", config, "--executor", "codex", "--structured", "--no-interactive",
+        env=env,
+    )
+    status = wait_for_status(env, agent_run_id)
+    assert status["status"] == "completed"
+    run_dir = state_runs / agent_run_id
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline and not (run_dir / "ledger-row.json").is_file():
+        time.sleep(0.05)
+    assert (run_dir / "scores" / "score-set.json").is_file()
+    assert (run_dir / "reports" / "evaluation.md").is_file()
+    assert (run_dir / "ledger-row.json").is_file()
+    auto_ledger = json.loads((run_dir / "ledger-row.json").read_text(encoding="utf-8"))
+    assert auto_ledger["receipt_verification"] == "verified"
+    assert auto_ledger["attempt_classification"] == "acceptance-eligible"
+    assert auto_ledger["acceptance_eligible"] is True
 
-        score = installed_product.json("eval", "score", run_dir, env=env)
-        assert score["verdict"] == "pass"
-        assert {item["scorer"]["id"] for item in score["scores"]} >= {
-            "schema_validity",
-            "writable_scope",
-        }
+    score = installed_product.json("eval", "score", run_dir, env=env)
+    assert score["verdict"] == "pass"
+    assert {item["scorer"]["id"] for item in score["scores"]} >= {"schema_validity", "writable_scope"}
 
-        report = run_dir / "reports" / "evaluation.md"
-        rendered = installed_product.json(
-            "eval", "report", run_dir, "--format", "markdown", "--output", report, env=env
-        )
-        assert rendered["output"] == str(report)
-        assert "Overall deterministic verdict: `pass`" in report.read_text(encoding="utf-8")
+    evidence = run_dir / "trials.json"
+    collected = installed_product.json("eval", "collect", run_dir, "--output", evidence, env=env)
+    assert collected["trials"] == 1
+    trial = json.loads(evidence.read_text(encoding="utf-8"))["trials"][0]
+    assert trial["task_id"] == "EVAL-1"
+    assert trial["verdict"] == "pass"
+    assert trial["input_tokens"] == 5
+    assert trial["output_tokens"] == 3
 
-        evidence = run_dir / "trials.json"
-        collected = installed_product.json("eval", "collect", run_dir, "--output", evidence, env=env)
-        assert collected["trials"] == 1
-        trial = json.loads(evidence.read_text(encoding="utf-8"))["trials"][0]
-        assert trial["task_id"] == "EVAL-1"
-        assert trial["verdict"] == "pass"
-        assert trial["input_tokens"] == 5
-        assert trial["output_tokens"] == 3
-        evidence_files.append(evidence)
+    installed_product.json("agent-run", "review", agent_run_id, "--actor", "fixture-reviewer", "--reason", "deterministic fixture review", env=env)
+    completion = json.loads((run_dir / "completion.json").read_text(encoding="utf-8"))
+    installed_product.json("agent-run", "accept", agent_run_id, "--actor", "fixture-reviewer", "--reason", "fixture evidence accepted", "--revision", completion["head_revision"], env=env)
 
-        installed_product.json(
-            "review",
-            session_id,
-            "--actor",
-            "fixture-reviewer",
-            "--reason",
-            "deterministic fixture review",
-            env=env,
-        )
-        completion = json.loads((run_dir / "completion.json").read_text(encoding="utf-8"))
-        installed_product.json(
-            "accept",
-            session_id,
-            "--actor",
-            "fixture-reviewer",
-            "--reason",
-            "fixture evidence accepted",
-            "--revision",
-            completion["head_revision"],
-            env=env,
-        )
+    candidate_evidence = tmp_path / "candidate-trials.json"
+    candidate_evidence.write_bytes(evidence.read_bytes())
+    evidence_files = [evidence, candidate_evidence]
 
     comparison_path = tmp_path / "comparison.json"
     comparison = installed_product.json(
@@ -213,12 +176,10 @@ def test_sealed_evaluation_runs_score_report_collect_and_compare_through_install
         assessment_path,
         env=env,
     )
-    candidate_assessment = next(
-        row for row in assessment["runs"] if row["run_id"] == "candidate-eval"
-    )
-    assert candidate_assessment["comparable"] is True
-    assert candidate_assessment["phase_acceptance"] == "accepted"
-    assert candidate_assessment["scope_audit"]["state"] == "verified"
+    run_assessment = next(row for row in assessment["runs"] if row["run_id"] == agent_run_id)
+    assert run_assessment["comparable"] is True
+    assert run_assessment["phase_acceptance"] == "accepted"
+    assert run_assessment["scope_audit"]["state"] == "verified"
 
     archive_path = run_dir / "archive-plan.json"
     archive = installed_product.json(
@@ -233,110 +194,3 @@ def test_sealed_evaluation_runs_score_report_collect_and_compare_through_install
     archive_value = json.loads(archive_path.read_text(encoding="utf-8"))
     assert archive_value["transfer_checksum"]["required_in_repository"] is False
     assert all(not item["path"].endswith(".sha256") for item in archive_value["export_contents"])
-
-    for session_id in ("baseline-eval", "candidate-eval"):
-        installed_product.json("terminate", session_id, "--grace-seconds", "0", env=env)
-        assert not (Path(env["FAKE_TMUX_STATE"]) / f"{session_id}.json").exists()
-
-
-def test_installed_evidence_repair_preserves_source_and_projects_supplemental_history(
-    installed_product: InstalledProduct,
-    product_env: dict[str, str],
-    tmp_path: Path,
-) -> None:
-    from agent_workflow.receipts import final_receipt_sha256, make_read_only, seal_run
-    from agent_workflow.util import atomic_write_json
-    from tests.support import write_minimal_run
-
-    state = Path(product_env["XDG_STATE_HOME"]) / "agent-workflow"
-    source_run = state / "runs" / "source-review-run"
-    write_minimal_run(source_run, session_id="source-review-run")
-    atomic_write_json(
-        source_run / "result.json",
-        {
-            "schema": "tax-machine/completion/v0",
-            "session_id": "source-review-run",
-            "ticket_id": "P1-REV-001",
-            "pack_id": "tax-machine-backlog-v1",
-            "result": "changes_requested",
-            "disposition": "changes_requested",
-            "base_revision": "base",
-            "head_revision": "head",
-            "changed_files": [],
-            "criteria": [
-                {"id": "review", "result": "fail", "evidence": ["durability gap"]}
-            ],
-            "commands": [
-                {
-                    "argv": ["pytest", "-q"],
-                    "cwd": "/repo",
-                    "exit_code": 0,
-                    "receipt": "1 passed",
-                }
-            ],
-            "unresolved": ["durability gap"],
-            "usage": None,
-        },
-    )
-    seal_run(source_run, session_id="source-review-run")
-    make_read_only(source_run)
-    digest = final_receipt_sha256(source_run)
-    source_before = {
-        path.relative_to(source_run).as_posix(): path.read_bytes()
-        for path in source_run.rglob("*")
-        if path.is_file() and path.name != "seal.lock"
-    }
-
-    created = installed_product.json(
-        "evidence",
-        "repair",
-        "--source-run",
-        "source-review-run",
-        "--source-receipt",
-        digest,
-        "--artifact",
-        "result.json",
-        "--output-run",
-        "source-review-repair",
-        "--actor",
-        "coordinator",
-        env=product_env,
-    )
-    assert created["idempotent"] is False
-    repeated = installed_product.json(
-        "evidence",
-        "repair",
-        "--source-run",
-        "source-review-run",
-        "--source-receipt",
-        digest,
-        "--artifact",
-        "result.json",
-        "--output-run",
-        "source-review-repair",
-        "--actor",
-        "coordinator",
-        env=product_env,
-    )
-    assert repeated["idempotent"] is True
-    verified = installed_product.json(
-        "evidence", "verify", "source-review-repair", env=product_env
-    )
-    assert verified["validation_result"] == "valid"
-    listed = installed_product.json(
-        "evidence", "list", "--source-run", "source-review-run", env=product_env
-    )
-    assert listed["count"] == 1
-    assert listed["repairs"][0]["validation_result"] == "valid"
-    assert source_before == {
-        path.relative_to(source_run).as_posix(): path.read_bytes()
-        for path in source_run.rglob("*")
-        if path.is_file() and path.name != "seal.lock"
-    }
-
-    installed_product.json("index", "rebuild", env=product_env)
-    indexed = installed_product.json(
-        "index", "query", "repairs", "--session", "source-review-run", env=product_env
-    )
-    assert indexed["rows"][0]["repair_id"] == "source-review-repair"
-    assert indexed["rows"][0]["source_final_receipt_sha256"] == digest

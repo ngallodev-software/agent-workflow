@@ -1,4 +1,4 @@
-"""Durable run-health, terminal, incident, permission, and remediation evidence.
+"""Durable run-health, incident, permission, and remediation evidence.
 
 The module deliberately keeps collection local and dependency-free. Linux
 ``/proc`` fields are collected when available; unsupported values remain
@@ -7,34 +7,29 @@ The module deliberately keeps collection local and dependency-free. Linux
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import json
 import os
 import re
 import shutil
-import stat
 import time
 from pathlib import Path
 from typing import Any, Iterable
 
 from .contracts import validate_instance
 from .errors import WorkflowError
+from .journal import JournalCapacityError, append_jsonl, read_jsonl
 from .process import redact_text
 from .util import atomic_write_json, utc_now
 
-RUN_HEALTH_SCHEMA = "agent-workflow/run-health-sample/v1"
-TERMINAL_EVENT_SCHEMA = "agent-workflow/terminal-event/v1"
+RUN_HEALTH_SCHEMA = "agent-workflow/run-health-sample/v2"
 INCIDENT_SCHEMA = "agent-workflow/incident-event/v1"
 PERMISSION_SCHEMA = "agent-workflow/permission-event/v1"
 REMEDIATION_SCHEMA = "agent-workflow/remediation-event/v1"
 PROCESS_RESULT_SCHEMA = "agent-workflow/process-result/v1"
 
 MAX_HEALTH_JOURNAL_BYTES = 8 * 1024 * 1024
-MAX_TERMINAL_JOURNAL_BYTES = 16 * 1024 * 1024
 MAX_CONTROL_JOURNAL_BYTES = 8 * 1024 * 1024
-MAX_TERMINAL_CAPTURE_BYTES = 64 * 1024
-ANSI_ESCAPE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 
 _PERMISSION_PENDING = (
     "permission required",
@@ -58,36 +53,27 @@ _PERMISSION_DENIED = (
 )
 
 
+def _validate_health_record(value: object, line_number: int) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise WorkflowError(f"JSONL record must be an object at line {line_number}")
+    schema_id = value.get("schema")
+    if not isinstance(schema_id, str):
+        raise WorkflowError(f"JSONL record has no schema at line {line_number}")
+    validate_instance(value, schema_id, artifact=f"durable journal:{line_number}")
+    return value
+
+
 def _safe_append_jsonl(path: Path, value: dict[str, Any], *, max_bytes: int) -> bool:
-    """Append one fsynced JSON record without following a final-component symlink."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
+    """Append one validated record; return False only when the bounded journal is full."""
     try:
-        descriptor = os.open(path, flags, 0o600)
-    except OSError as exc:
-        raise WorkflowError(f"cannot open durable journal {path}: {exc}") from exc
-    try:
-        info = os.fstat(descriptor)
-        if not stat.S_ISREG(info.st_mode):
-            raise WorkflowError(f"durable journal must be a regular file: {path}")
-        schema_id = value.get("schema")
-        if not isinstance(schema_id, str):
-            raise WorkflowError(f"durable journal record has no schema: {path}")
-        validate_instance(value, schema_id, artifact=str(path))
-        record = (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode(
-            "utf-8"
+        append_jsonl(
+            path,
+            value,
+            validator=_validate_health_record,
+            max_bytes=max_bytes,
         )
-        fcntl.flock(descriptor, fcntl.LOCK_EX)
-        try:
-            current = os.fstat(descriptor).st_size
-            if current + len(record) > max_bytes:
-                return False
-            os.write(descriptor, record)
-            os.fsync(descriptor)
-        finally:
-            fcntl.flock(descriptor, fcntl.LOCK_UN)
-    finally:
-        os.close(descriptor)
+    except JournalCapacityError:
+        return False
     return True
 
 
@@ -99,29 +85,9 @@ def write_process_result(path: Path, value: dict[str, Any]) -> dict[str, Any]:
     return value
 
 def read_events(path: Path, *, limit: int | None = None) -> list[dict[str, Any]]:
-    if not path.is_file():
-        return []
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except OSError as exc:
-        raise WorkflowError(f"cannot read durable journal {path}: {exc}") from exc
+    values = read_jsonl(path, validator=_validate_health_record, missing_ok=True)
     if limit is not None:
-        lines = lines[-max(0, limit) :]
-    values: list[dict[str, Any]] = []
-    for index, line in enumerate(lines, start=1):
-        if not line:
-            continue
-        try:
-            value = json.loads(line)
-        except json.JSONDecodeError as exc:
-            raise WorkflowError(f"invalid JSONL record {path}:{index}: {exc}") from exc
-        if not isinstance(value, dict):
-            raise WorkflowError(f"JSONL record must be an object: {path}:{index}")
-        schema_id = value.get("schema")
-        if not isinstance(schema_id, str):
-            raise WorkflowError(f"JSONL record has no schema: {path}:{index}")
-        validate_instance(value, schema_id, artifact=f"{path}:{index}")
-        values.append(value)
+        return values[-max(0, limit) :] if limit > 0 else []
     return values
 
 
@@ -157,7 +123,6 @@ def semantic_progress(run_dir: Path) -> dict[str, Any]:
         "output": run_dir / "output.log",
         "stderr": run_dir / "executor-stderr.log",
         "executor_event": run_dir / "executor-events.jsonl",
-        "terminal_event": run_dir / "terminal-events.jsonl",
         "message": run_dir / "messages.jsonl",
         "control_intent": run_dir / "control-intents.jsonl",
         "steering_delivery": run_dir / "steering-delivery.jsonl",
@@ -310,26 +275,21 @@ def host_sample(run_dir: Path) -> dict[str, Any]:
 def record_health_sample(
     run_dir: Path,
     *,
-    session_id: str,
+    agent_run_id: str,
     runner_pid: int | None,
     executor_pid: int | None,
-    tmux_pane_id: str | None = None,
-    pane_dead: bool | None = None,
 ) -> dict[str, Any]:
     progress = semantic_progress(run_dir)
     sample = {
         "schema": RUN_HEALTH_SCHEMA,
-        "session_id": session_id,
+        "agent_run_id": agent_run_id,
         "recorded_at": utc_now(),
         "runner": process_sample(runner_pid),
         "executor": process_sample(executor_pid),
         "host": host_sample(run_dir),
-        "tmux_pane_id": tmux_pane_id,
-        "pane_dead": pane_dead,
         "output_bytes": _file_size(run_dir / "output.log"),
         "stderr_bytes": _file_size(run_dir / "executor-stderr.log"),
         "executor_event_bytes": _file_size(run_dir / "executor-events.jsonl"),
-        "terminal_event_bytes": _file_size(run_dir / "terminal-events.jsonl"),
         **progress,
     }
     stored = _safe_append_jsonl(
@@ -339,16 +299,6 @@ def record_health_sample(
     )
     sample["stored"] = stored
     return sample
-
-
-def normalize_terminal_text(value: str, *, secret_values: Iterable[str] = ()) -> str:
-    text = ANSI_ESCAPE.sub("", value).replace("\x00", "")
-    text = redact_text(text, secret_values)
-    encoded = text.encode("utf-8", errors="replace")
-    if len(encoded) > MAX_TERMINAL_CAPTURE_BYTES:
-        encoded = encoded[-MAX_TERMINAL_CAPTURE_BYTES:]
-        text = encoded.decode("utf-8", errors="replace")
-    return text
 
 
 def permission_signal(value: str) -> str | None:
@@ -363,7 +313,7 @@ def permission_signal(value: str) -> str | None:
 def record_permission_event(
     run_dir: Path,
     *,
-    session_id: str,
+    agent_run_id: str,
     state: str,
     source: str,
     evidence_sha256: str,
@@ -376,9 +326,9 @@ def record_permission_event(
     event = {
         "schema": PERMISSION_SCHEMA,
         "event_id": hashlib.sha256(
-            f"{session_id}:{state}:{source}:{evidence_sha256}".encode()
+            f"{agent_run_id}:{state}:{source}:{evidence_sha256}".encode()
         ).hexdigest()[:24],
-        "session_id": session_id,
+        "agent_run_id": agent_run_id,
         "recorded_at": utc_now(),
         "principal": None,
         "operation": "executor_interaction",
@@ -395,57 +345,10 @@ def record_permission_event(
     return event
 
 
-def record_terminal_capture(
-    run_dir: Path,
-    *,
-    session_id: str,
-    pane_id: str,
-    content: str,
-    secret_values: Iterable[str] = (),
-) -> dict[str, Any] | None:
-    normalized = normalize_terminal_text(content, secret_values=secret_values)
-    digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
-    path = run_dir / "terminal-events.jsonl"
-    prior = last_event(path)
-    if prior and prior.get("content_sha256") == digest:
-        return None
-    event = {
-        "schema": TERMINAL_EVENT_SCHEMA,
-        "session_id": session_id,
-        "recorded_at": utc_now(),
-        "pane_id": pane_id,
-        "content_sha256": digest,
-        "content_bytes": len(normalized.encode("utf-8")),
-        "content": normalized,
-    }
-    stored = _safe_append_jsonl(path, event, max_bytes=MAX_TERMINAL_JOURNAL_BYTES)
-    event["stored"] = stored
-    if stored:
-        signal = permission_signal(normalized)
-        prior_permission = last_event(run_dir / "permission-events.jsonl")
-        if signal is not None:
-            record_permission_event(
-                run_dir,
-                session_id=session_id,
-                state=signal,
-                source="interactive_terminal",
-                evidence_sha256=digest,
-            )
-        elif prior_permission and prior_permission.get("state") == "pending":
-            record_permission_event(
-                run_dir,
-                session_id=session_id,
-                state="cleared",
-                source="interactive_terminal",
-                evidence_sha256=digest,
-            )
-    return event
-
-
 def record_incident(
     run_dir: Path,
     *,
-    session_id: str,
+    agent_run_id: str,
     category: str,
     severity: str,
     summary: str,
@@ -465,7 +368,7 @@ def record_incident(
     event = {
         "schema": INCIDENT_SCHEMA,
         "incident_id": fingerprint[:24],
-        "session_id": session_id,
+        "agent_run_id": agent_run_id,
         "recorded_at": utc_now(),
         "category": category,
         "severity": severity,
@@ -481,7 +384,7 @@ def record_incident(
 def record_remediation(
     run_dir: Path,
     *,
-    session_id: str,
+    agent_run_id: str,
     incident_id: str | None,
     rule_id: str,
     action: str,
@@ -492,9 +395,9 @@ def record_remediation(
     event = {
         "schema": REMEDIATION_SCHEMA,
         "event_id": hashlib.sha256(
-            f"{session_id}:{incident_id}:{rule_id}:{action}:{outcome}:{reason}:{utc_now()}".encode()
+            f"{agent_run_id}:{incident_id}:{rule_id}:{action}:{outcome}:{reason}:{utc_now()}".encode()
         ).hexdigest()[:24],
-        "session_id": session_id,
+        "agent_run_id": agent_run_id,
         "incident_id": incident_id,
         "recorded_at": utc_now(),
         "rule_id": rule_id,

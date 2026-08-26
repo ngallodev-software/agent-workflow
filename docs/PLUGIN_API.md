@@ -1,6 +1,6 @@
 # Trusted plugin API
 
-`agent-workflow` 0.7.8 includes the first version of its trusted in-process plugin host. The boundary exists to keep optional capabilities modular; it is not a sandbox and installing or enabling a plugin does not grant workflow, permission, review, or acceptance authority.
+`agent-workflow` 0.8.0 includes the trusted in-process plugin host. The boundary exists to keep optional capabilities modular; it is not a sandbox and installing or enabling a plugin does not grant workflow, permission, review, or acceptance authority.
 
 ## Enablement and recovery
 
@@ -90,4 +90,4 @@ Version 1 supports:
 - installed-distribution and package-resource provenance in command catalogs;
 - a `--no-plugins` recovery path.
 
-PLUG-001 implementation is complete and awaits independent MOD-GATE-1 review. A general hook framework remains deferred until multiple real plugins require ordered one-to-many hooks. Package-resource activation does not parse schemas, execute templates, or grant authority; feature code must still route all authority-bearing work through core services.
+A general hook framework remains deferred until multiple real plugins require ordered one-to-many hooks. Package-resource activation does not parse schemas, execute templates, or grant authority; feature code must still route all authority-bearing work through core services.

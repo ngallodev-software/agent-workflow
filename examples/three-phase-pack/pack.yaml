@@ -1,0 +1,42 @@
+schema: agent-workflow/prompt-pack/v1
+pack_id: example-three-phase-pack
+workflow:
+  name: agent-workflow
+  minimum_version: 0.8.0
+  requires:
+    - isolated_worktree
+    - durable_agent_run
+    - persistent_log
+    - source_baseline
+    - completion_report
+    - independent_phase_gate
+phases:
+  - id: "0"
+    name: example-phase-0
+    directory: phase-0
+    mandatory_order: [P0-00]
+    tasks:
+      - id: P0-00
+        tier: C
+        agent_run_id: example-p0-00-baseline
+        prompt: phase-0/tickets/P0-00-baseline.md
+  - id: "1"
+    name: example-phase-1
+    directory: phase-1
+    mandatory_order: [P1-00]
+    tasks:
+      - id: P1-00
+        tier: C
+        agent_run_id: example-p1-00-baseline
+        prompt: phase-1/tickets/P1-00-baseline.md
+        dependencies: [P0-00]
+  - id: "2"
+    name: example-phase-2
+    directory: phase-2
+    mandatory_order: [P2-00]
+    tasks:
+      - id: P2-00
+        tier: C
+        agent_run_id: example-p2-00-baseline
+        prompt: phase-2/tickets/P2-00-baseline.md
+        dependencies: [P1-00]

@@ -18,7 +18,6 @@ from .contracts import BENCHMARK_ARM_SCHEMA, BENCHMARK_PAIR_SCHEMA, validate_val
 from .events import append_event
 from .metrics import aggregate_usage, load_usage
 from .pairing import attempts_for
-from .operator_panes import ensure_operator_panes, pane_runtime, respawn
 
 TERMINAL_PHASE_STATES = {"completed", "task_failed", "infrastructure_failed", "timed_out"}
 
@@ -81,12 +80,12 @@ def _render_command(
 def _run_phase_arm(
     plan: Mapping[str, Any], pair: Mapping[str, Any], attempt: Mapping[str, Any],
     arm: Mapping[str, Any], phase: Mapping[str, Any], barrier: threading.Barrier,
-    release: dict[str, float], panes: Mapping[str, Any],
+    release: dict[str, float],
 ) -> dict[str, Any]:
+    """Execute one benchmark arm headlessly with bounded process evidence."""
     run_dir = Path(plan["coordinator"]["run_dir"])
-    argv, environment, phase_dir, _ = _render_command(plan, pair, attempt, arm, phase)
+    argv, environment, phase_dir, prompt_text = _render_command(plan, pair, attempt, arm, phase)
     stdout_path, stderr_path = phase_dir / "stdout.log", phase_dir / "stderr.log"
-    result_path = phase_dir / "tmux-result.json"
     barrier.wait()
     actual_start_monotonic = time.monotonic()
     actual_start_utc = utc_now()
@@ -96,91 +95,28 @@ def _run_phase_arm(
         pair_id=str(pair["pair_id"]), arm=str(arm["arm"]), phase_id=str(phase["id"]),
         payload={"slot": arm["slot"], "attempt": attempt["attempt"]},
     )
-    if shutil.which("tmux") is None:
-        raise WorkflowError("benchmark agents require tmux; no interactive pane backend is available")
     credential_names = tuple(
         str(name)
         for name in plan["executor"].get("authentication", {}).get("credential_environment", [])
     )
-    provider_executable = shutil.which(argv[0], path=os.environ.get("PATH", ""))
-    if provider_executable:
-        environment["PATH"] = f"{Path(provider_executable).parent}:/usr/local/bin:/usr/bin:/bin"
     allowlist = tuple(dict.fromkeys(
         [str(name) for name in plan["executor"].get("environment_allowlist", [])]
         + list(credential_names)
     ))
-    helper = Path(__file__).with_name("tmux_runner.py")
-    helper_argv = [
-        sys.executable, str(helper), "--cwd", str(arm["worktree"]),
-        "--prompt", str(_prompt_for(arm, str(phase["id"]))),
-        "--stdout", str(stdout_path), "--stderr", str(stderr_path),
-        "--result", str(result_path), "--timeout", str(float(phase["timeout_seconds"])),
-        "--max-stdout", str(int(plan["executor"]["max_stdout_bytes"])),
-        "--max-stderr", str(int(plan["executor"]["max_stderr_bytes"])),
-    ]
-    helper_argv.extend(item for name in allowlist for item in ("--allow-env", name))
-    helper_argv.extend(item for key, value in environment.items() for item in ("--set-env", f"{key}={value}"))
-    helper_argv.extend(["--", *argv])
-    pane_id = respawn(
-        panes,
-        str(arm["arm"]),
-        worktree=Path(arm["worktree"]),
-        argv=helper_argv,
-        title=f"benchmark {arm['arm']}: {phase['id']}",
+    result = run(
+        argv,
+        cwd=Path(str(arm["worktree"])),
+        check=False,
+        timeout_seconds=float(phase["timeout_seconds"]),
+        max_stdout_bytes=int(plan["executor"]["max_stdout_bytes"]),
+        max_stderr_bytes=int(plan["executor"]["max_stderr_bytes"]),
+        environment=EnvironmentPolicy(allowlist=allowlist, values=environment),
+        input_text=prompt_text,
     )
-    deadline = time.monotonic() + float(phase["timeout_seconds"]) + 15.0
-    while not result_path.is_file() and time.monotonic() < deadline:
-        time.sleep(0.1)
-    if result_path.is_file():
-        result_value = read_object(result_path)
-    else:
-        # A missing result means the pane helper itself failed to seal evidence.
-        # Terminate that pane command before continuing so retries and later
-        # phases cannot overlap with an orphaned provider process.
-        timeout_banner = [
-            sys.executable,
-            "-c",
-            (
-                "print('benchmark phase failed: pane result evidence was not sealed', flush=True); "
-                "print('the pane was stopped to prevent an orphaned provider process', flush=True)"
-            ),
-        ]
-        respawn(
-            panes,
-            str(arm["arm"]),
-            worktree=Path(arm["worktree"]),
-            argv=timeout_banner,
-            title=f"benchmark {arm['arm']}: {phase['id']} evidence failure",
-        )
-        result_value = {
-            "returncode": 124,
-            "timed_out": True,
-            "error_category": "evidence_timeout",
-            "duration_seconds": float(phase["timeout_seconds"]),
-        }
-
-    class _TmuxResult:
-        returncode = int(result_value.get("returncode", 127))
-        timed_out = bool(result_value.get("timed_out"))
-        error_category = result_value.get("error_category")
-        duration_seconds = float(result_value.get("duration_seconds", 0.0))
-
-        def as_dict(self, *, include_output: bool = False) -> dict[str, Any]:
-            return {
-                "argv": [str(item) for item in argv],
-                "returncode": self.returncode,
-                "timed_out": self.timed_out,
-                "error_category": self.error_category or ("completed" if self.returncode == 0 else "task_failed"),
-                "duration_seconds": self.duration_seconds,
-                **pane_runtime(panes, str(arm["arm"])),
-                "stdout": str(stdout_path),
-                "stderr": str(stderr_path),
-                "include_output": include_output,
-            }
-
-    result = _TmuxResult()
+    stdout_path.write_text(str(result.stdout), encoding="utf-8")
+    stderr_path.write_text(str(result.stderr), encoding="utf-8")
     wall = round(time.monotonic() - actual_start_monotonic, 6)
-    stdout_text = stdout_path.read_text(encoding="utf-8", errors="replace") if stdout_path.is_file() else ""
+    stdout_text = str(result.stdout)
     usage = load_usage(
         phase_dir / "usage.json", stdout_text,
         currency=plan["executor"].get("currency"),
@@ -191,7 +127,7 @@ def _run_phase_arm(
         state = "timed_out"
     elif result.returncode == 0:
         state = "completed"
-    elif result.error_category in {"launch_failed", "cancelled", "evidence_timeout"}:
+    elif result.error_category in {"not-found", "spawn-error", "cancelled"}:
         state = "infrastructure_failed"
     elif plan["executor"].get("nonzero_classification", "task") == "infrastructure":
         state = "infrastructure_failed"
@@ -283,7 +219,6 @@ def _finalize_arm(
 
 def _execute_attempt(plan: Mapping[str, Any], pair: Mapping[str, Any], attempt: Mapping[str, Any]) -> dict[str, Any]:
     run_dir = Path(plan["coordinator"]["run_dir"])
-    panes = plan.get("_operator_panes") if isinstance(plan.get("_operator_panes"), Mapping) else ensure_operator_panes(plan)
     started = time.monotonic()
     records: dict[str, list[dict[str, Any]]] = {"control_raw": [], "workflow_full": []}
     start_skews: list[float] = []
@@ -295,7 +230,7 @@ def _execute_attempt(plan: Mapping[str, Any], pair: Mapping[str, Any], attempt: 
         barrier = threading.Barrier(2, action=lambda: release.__setitem__("monotonic", time.monotonic()))
         starts: dict[str, float] = {}
         def invoke(arm_name: str) -> dict[str, Any]:
-            result = _run_phase_arm(plan, pair, attempt, attempt["arms"][arm_name], phase, barrier, release, panes)
+            result = _run_phase_arm(plan, pair, attempt, attempt["arms"][arm_name], phase, barrier, release)
             starts[arm_name] = float(result["start_offset_seconds"])
             return result
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
@@ -370,13 +305,10 @@ def execute_run(plan_path: Path) -> dict[str, Any]:
     state = read_object(state_path)
     if state["state"] in {"executed", "awaiting_human_review", "completed"}:
         return state
-    plan["_operator_panes"] = ensure_operator_panes(plan)
     state.update(
         state="running",
         started_at=state.get("started_at") or utc_now(),
         updated_at=utc_now(),
-        operator_window=plan["_operator_panes"].get("window"),
-        operator_panes=plan["_operator_panes"].get("panes"),
     )
     atomic_write_json(state_path, state)
     append_event(run_dir, event_type="run_started", run_id=str(plan["run_id"]))

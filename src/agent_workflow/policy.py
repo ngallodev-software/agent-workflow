@@ -51,9 +51,6 @@ def evaluate_budgets(
     if cost is None:
         cost = usage.get("local_estimated_cost")
         cost_source = "local_estimated_cost"
-    if cost is None:
-        cost = usage.get("cost", usage.get("total_cost"))
-        cost_source = "legacy_cost"
     max_cost = budgets.get("max_cost")
     if isinstance(cost, (int, float)) and isinstance(max_cost, (int, float)) and cost > max_cost:
         failures.append(
@@ -92,13 +89,8 @@ def evaluate_budgets(
             }
         )
 
-    legacy = [
-        f"{item['metric']}:{item['observed']}{item['operator']}{item['limit']}"
-        for item in failures
-    ]
     return {
         "policy_result": "failed" if failures else "passed" if configured else "not_evaluated",
         "policy_failures": failures,
-        "budget_exceeded": legacy,
         "policy_failure_category": "budget_exhausted" if failures else None,
     }

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import fcntl
-import hashlib
 import json
 import os
 import stat
@@ -11,7 +9,15 @@ from typing import Any, Iterator, Mapping
 
 from .contracts import read_contract, validate_instance
 from .errors import WorkflowError
-from .util import atomic_write_json, fsync_directory, utc_now, validate_id
+from .journal import JournalTransactionResult, locked_file, read_jsonl, transact_jsonl
+from .util import (
+    atomic_write_json,
+    canonical_json_bytes,
+    canonical_json_sha256,
+    fsync_directory,
+    utc_now,
+    validate_id,
+)
 
 WORKFLOW_SNAPSHOT_SCHEMA = "agent-workflow/workflow-snapshot/v1"
 WORKFLOW_NODE_BINDING_SCHEMA = "agent-workflow/workflow-node-binding/v1"
@@ -83,53 +89,22 @@ def workflow_lock(run_dir: Path, *, exclusive: bool = True) -> Iterator[None]:
     """Serialize workflow mutations and stable evidence reads."""
     run_dir.mkdir(parents=True, exist_ok=True)
     path = run_dir / "workflow.lock"
-    existed = path.exists() or path.is_symlink()
-    flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
-    try:
-        descriptor = os.open(path, flags, 0o600)
-    except OSError as exc:
-        raise WorkflowError(f"cannot open workflow lock {path}: {exc}") from exc
-    try:
-        info = os.fstat(descriptor)
-        if not stat.S_ISREG(info.st_mode):
-            raise WorkflowError(f"workflow lock must be a regular file: {path}")
-        if not existed:
-            os.fsync(descriptor)
-            fsync_directory(path.parent)
-        operation = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
-        fcntl.flock(descriptor, operation)
-        try:
-            yield
-        finally:
-            fcntl.flock(descriptor, fcntl.LOCK_UN)
-    finally:
-        os.close(descriptor)
+    with locked_file(
+        path,
+        exclusive=exclusive,
+        create=True,
+        create_parent=True,
+    ):
+        yield
 
 
 def ensure_workflow_events_file(run_dir: Path) -> Path:
     """Create or validate the canonical workflow event journal safely."""
     run_dir.mkdir(parents=True, exist_ok=True)
     path = workflow_events_path(run_dir)
-    existed = path.exists() or path.is_symlink()
-    flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
-    try:
-        descriptor = os.open(path, flags, 0o600)
-    except OSError as exc:
-        raise WorkflowError(f"cannot open workflow event journal {path}: {exc}") from exc
-    try:
-        info = os.fstat(descriptor)
-        if not stat.S_ISREG(info.st_mode):
-            raise WorkflowError(f"workflow event journal must be a regular file: {path}")
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
-    if not existed:
-        fsync_directory(path.parent)
+    with locked_file(path, exclusive=True, create=True, create_parent=True):
+        pass
     return path
-
-
-def _canonical_json(value: Any) -> bytes:
-    return json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
 def _validate_input_bindings(value: Any, *, location: str) -> dict[str, dict[str, Any]]:
@@ -192,11 +167,11 @@ def _validate_node(node: Mapping[str, Any], *, location: str) -> dict[str, Any]:
         "dependencies": normalized_dependencies,
     }
     if kind == "task":
-        session_id = validate_id(str(node.get("session_id", "")), "workflow session ID")
+        agent_run_id = validate_id(str(node.get("agent_run_id", "")), "Agent Run ID")
         prompt_path = str(node.get("prompt_path", ""))
         if not prompt_path:
             raise WorkflowError(f"{location}: prompt_path is required")
-        result.update(session_id=session_id, prompt_path=prompt_path)
+        result.update(agent_run_id=agent_run_id, prompt_path=prompt_path)
         for name in ("ticket_id", "tier", "pack_id", "agent_class", "executor", "model"):
             value = node.get(name)
             if value is not None:
@@ -211,7 +186,7 @@ def _validate_node(node: Mapping[str, Any], *, location: str) -> dict[str, Any]:
         if routing is not None:
             if not isinstance(routing, Mapping):
                 raise WorkflowError(f"{location}: routing must be a mapping")
-            encoded = _canonical_json(dict(routing))
+            encoded = canonical_json_bytes(dict(routing))
             if len(encoded) > 16384:
                 raise WorkflowError(f"{location}: routing metadata exceeds 16384 bytes")
             result["routing"] = dict(routing)
@@ -247,7 +222,7 @@ def normalize_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
         raise WorkflowError("workflow snapshot nodes must be a non-empty list")
     normalized_nodes: list[dict[str, Any]] = []
     seen: set[str] = set()
-    seen_session_ids: set[str] = set()
+    seen_agent_run_ids: set[str] = set()
     for index, node in enumerate(nodes):
         normalized = _validate_node(node, location=f"nodes[{index}]")
         node_id = normalized["node_id"]
@@ -255,10 +230,10 @@ def normalize_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
             raise WorkflowError(f"duplicate workflow node ID: {node_id}")
         seen.add(node_id)
         if normalized["kind"] == "task":
-            session_id = str(normalized["session_id"])
-            if session_id in seen_session_ids:
-                raise WorkflowError(f"duplicate workflow session ID: {session_id}")
-            seen_session_ids.add(session_id)
+            agent_run_id = str(normalized["agent_run_id"])
+            if agent_run_id in seen_agent_run_ids:
+                raise WorkflowError(f"duplicate Agent Run ID: {agent_run_id}")
+            seen_agent_run_ids.add(agent_run_id)
         normalized_nodes.append(normalized)
     graph = {item["node_id"]: list(item["dependencies"]) for item in normalized_nodes}
     unknown = sorted(
@@ -316,7 +291,7 @@ def normalize_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
 
 def snapshot_sha256(snapshot: Mapping[str, Any]) -> str:
     normalized = normalize_snapshot(snapshot)
-    return hashlib.sha256(_canonical_json(normalized)).hexdigest()
+    return canonical_json_sha256(normalized)
 
 
 def initial_status(snapshot: Mapping[str, Any]) -> dict[str, Any]:
@@ -326,9 +301,9 @@ def initial_status(snapshot: Mapping[str, Any]) -> dict[str, Any]:
             "node_id": node["node_id"],
             "kind": node["kind"],
             "state": "eligible" if not node["dependencies"] else "blocked",
-            "run_id": None,
+            "agent_run_id": None,
             "attempt": None,
-            "retry_of_run_id": None,
+            "retry_of_agent_run_id": None,
             "bound_at": None,
             "terminal_reason": None,
             "approval_receipt_sha256": None,
@@ -367,17 +342,17 @@ def _binding_record(event: Mapping[str, Any]) -> dict[str, Any]:
     binding = event.get("binding")
     if not isinstance(binding, Mapping):
         raise WorkflowError("workflow binding event missing binding record")
-    required = ["run_id", "attempt", "bound_at", "current"]
+    required = ["agent_run_id", "attempt", "bound_at", "current"]
     missing = [name for name in required if name not in binding]
     if missing:
         raise WorkflowError(
             "workflow binding event missing fields: " + ", ".join(missing)
         )
     node_id = validate_id(str(event.get("node_id", "")), "workflow node ID")
-    run_id = validate_id(str(binding.get("run_id", "")), "workflow run ID")
-    retry_of_run_id = binding.get("retry_of_run_id")
-    if retry_of_run_id is not None:
-        retry_of_run_id = validate_id(str(retry_of_run_id), "retry run ID")
+    agent_run_id = validate_id(str(binding.get("agent_run_id", "")), "Agent Run ID")
+    retry_of_agent_run_id = binding.get("retry_of_agent_run_id")
+    if retry_of_agent_run_id is not None:
+        retry_of_agent_run_id = validate_id(str(retry_of_agent_run_id), "retry run ID")
     attempt = binding.get("attempt")
     if not isinstance(attempt, int) or attempt < 1:
         raise WorkflowError("workflow binding attempt must be a positive integer")
@@ -391,9 +366,9 @@ def _binding_record(event: Mapping[str, Any]) -> dict[str, Any]:
         "schema": WORKFLOW_NODE_BINDING_SCHEMA,
         "workflow_id": str(event.get("workflow_id", "")),
         "node_id": node_id,
-        "run_id": run_id,
+        "agent_run_id": agent_run_id,
         "attempt": attempt,
-        "retry_of_run_id": retry_of_run_id,
+        "retry_of_agent_run_id": retry_of_agent_run_id,
         "bound_at": bound_at,
         "current": current,
     }
@@ -418,48 +393,46 @@ def _transition_record(event: Mapping[str, Any]) -> tuple[str, str, str]:
     return previous_state, next_state, reason
 
 
+def _validate_workflow_event_record(value: object, line_number: int) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise WorkflowError(f"workflow event at line {line_number} must be an object")
+    validate_instance(value, WORKFLOW_EVENT_SCHEMA, artifact=f"workflow event:{line_number}")
+    if value.get("sequence") != line_number:
+        raise WorkflowError(
+            f"workflow event sequence mismatch at line {line_number}: expected {line_number}"
+        )
+    return value
+
+
 def append_workflow_event(run_dir: Path, event: Mapping[str, Any]) -> dict[str, Any]:
     path = ensure_workflow_events_file(run_dir)
-    event_data = dict(event)
-    event_data["schema"] = WORKFLOW_EVENT_SCHEMA
-    flags = os.O_RDWR | os.O_APPEND | getattr(os, "O_NOFOLLOW", 0)
-    try:
-        descriptor = os.open(path, flags)
-    except OSError as exc:
-        raise WorkflowError(f"cannot open workflow event journal {path}: {exc}") from exc
-    with os.fdopen(descriptor, "a+b") as stream:
-        fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
-        stream.seek(0)
-        try:
-            existing = stream.read().decode("utf-8")
-        except UnicodeDecodeError as exc:
-            raise WorkflowError(f"workflow event journal is not UTF-8: {path}") from exc
-        sequence = len(_parse_event_lines(existing.splitlines(), path)) + 1
-        event_data["sequence"] = sequence
-        event_data.setdefault("timestamp", utc_now())
-        validate_instance(event_data, WORKFLOW_EVENT_SCHEMA, artifact=str(path))
-        stream.seek(0, os.SEEK_END)
-        stream.write(
-            json.dumps(event_data, sort_keys=True, separators=(",", ":")).encode()
-            + b"\n"
-        )
-        stream.flush()
-        os.fsync(stream.fileno())
-        fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
-    return event_data
 
+    def decide(existing: list[dict[str, Any]]) -> JournalTransactionResult[dict[str, Any]]:
+        event_data = dict(event)
+        event_data["schema"] = WORKFLOW_EVENT_SCHEMA
+        event_data["sequence"] = len(existing) + 1
+        event_data.setdefault("timestamp", utc_now())
+        event_data = _validate_workflow_event_record(event_data, len(existing) + 1)
+        return JournalTransactionResult(value=event_data, record=event_data)
+
+    return transact_jsonl(
+        path,
+        validator=_validate_workflow_event_record,
+        transaction=decide,
+        sequence_field="sequence",
+    )
 
 def record_workflow_binding(
     run_dir: Path,
     *,
     workflow_id: str,
     node_id: str,
-    run_id: str,
+    agent_run_id: str,
     attempt: int,
     actor: str,
     reason: str,
     snapshot_sha256: str,
-    retry_of_run_id: str | None = None,
+    retry_of_agent_run_id: str | None = None,
     current: bool = True,
 ) -> dict[str, Any]:
     event = append_workflow_event(
@@ -472,11 +445,11 @@ def record_workflow_binding(
             "actor": actor,
             "reason": reason,
             "binding": {
-                "run_id": validate_id(run_id, "workflow run ID"),
+                "agent_run_id": validate_id(agent_run_id, "Agent Run ID"),
                 "attempt": attempt,
-                "retry_of_run_id": (
-                    validate_id(retry_of_run_id, "retry run ID")
-                    if retry_of_run_id is not None
+                "retry_of_agent_run_id": (
+                    validate_id(retry_of_agent_run_id, "retry run ID")
+                    if retry_of_agent_run_id is not None
                     else None
                 ),
                 "bound_at": utc_now(),
@@ -517,55 +490,21 @@ def record_workflow_transition(
 
 
 def _parse_event_lines(lines: list[str], path: Path) -> list[dict[str, Any]]:
-    events: list[dict[str, Any]] = []
-    expected = 1
-    for line_number, line in enumerate(lines, start=1):
-        if not line.strip():
-            raise WorkflowError(f"blank workflow event at line {line_number}")
-        try:
-            event = json.loads(line)
-        except json.JSONDecodeError as exc:
-            raise WorkflowError(
-                f"invalid workflow event JSON at line {line_number}: {exc}"
-            ) from exc
-        if not isinstance(event, dict):
-            raise WorkflowError(f"workflow event at line {line_number} must be an object")
-        validate_instance(event, WORKFLOW_EVENT_SCHEMA, artifact=str(path))
-        if event.get("sequence") != expected:
-            raise WorkflowError(
-                f"workflow event sequence mismatch at line {line_number}: expected {expected}"
-            )
-        events.append(event)
-        expected += 1
-    return events
+    # Retained for callers/tests that provide decoded lines directly. Journal
+    # file reads use the shared descriptor-safe JSONL primitive below.
+    data = ("\n".join(lines) + ("\n" if lines else "")).encode("utf-8")
+    from .journal import decode_jsonl
+
+    return decode_jsonl(data, path=path, validator=_validate_workflow_event_record)
 
 
 def read_workflow_events(path: Path) -> list[dict[str, Any]]:
-    """Read a stable journal snapshot from a regular non-symlink file."""
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
-    try:
-        descriptor = os.open(path, flags)
-    except OSError as exc:
-        raise WorkflowError(f"cannot open workflow events {path}: {exc}") from exc
-    with os.fdopen(descriptor, "rb") as stream:
-        info = os.fstat(stream.fileno())
-        if not stat.S_ISREG(info.st_mode):
-            raise WorkflowError(
-                f"workflow event journal must be a regular non-symlink file: {path}"
-            )
-        fcntl.flock(stream.fileno(), fcntl.LOCK_SH)
-        data = stream.read()
-        fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
-    try:
-        lines = data.decode("utf-8").splitlines()
-    except UnicodeDecodeError as exc:
-        raise WorkflowError(f"workflow event journal is not UTF-8: {path}") from exc
-    return _parse_event_lines(lines, path)
+    """Read and validate a stable workflow event journal snapshot."""
+    return read_jsonl(path, validator=_validate_workflow_event_record, sequence_field="sequence")
 
 
 def _read_events(path: Path) -> list[dict[str, Any]]:
     return read_workflow_events(path)
-
 
 def _transition_summary(
     *,
@@ -594,7 +533,7 @@ def _transition_summary(
             next_state in {"running", "completed"}
             or (next_state == "failed" and previous_state != "blocked")
         )
-        and nodes[node_id]["run_id"] is None
+        and nodes[node_id]["agent_run_id"] is None
     ):
         raise WorkflowError(
             f"workflow node {node_id} cannot enter {next_state} without a current binding"
@@ -632,9 +571,9 @@ def reconstruct_workflow_status(
             "node_id": node["node_id"],
             "kind": node["kind"],
             "state": "eligible" if not node["dependencies"] else "blocked",
-            "run_id": None,
+            "agent_run_id": None,
             "attempt": None,
-            "retry_of_run_id": None,
+            "retry_of_agent_run_id": None,
             "bound_at": None,
             "terminal_reason": None,
         }
@@ -663,7 +602,7 @@ def reconstruct_workflow_status(
                 raise WorkflowError(
                     f"workflow node {node_id} cannot be bound while {current_state}"
                 )
-            prior_run_id = nodes[node_id]["run_id"]
+            prior_run_id = nodes[node_id]["agent_run_id"]
             prior_attempt = nodes[node_id]["attempt"]
             if prior_run_id is None:
                 if current_state != "eligible":
@@ -674,7 +613,7 @@ def reconstruct_workflow_status(
                     raise WorkflowError(
                         f"workflow node {node_id} first binding must use attempt 1"
                     )
-                if binding["retry_of_run_id"] is not None:
+                if binding["retry_of_agent_run_id"] is not None:
                     raise WorkflowError(
                         f"workflow node {node_id} first binding cannot have retry lineage"
                     )
@@ -687,17 +626,17 @@ def reconstruct_workflow_status(
                     raise WorkflowError(
                         f"workflow node {node_id} retry attempt must be the next attempt"
                     )
-                if binding["retry_of_run_id"] != prior_run_id:
+                if binding["retry_of_agent_run_id"] != prior_run_id:
                     raise WorkflowError(
                         f"workflow node {node_id} retry must reference the current run"
                     )
-            if binding["run_id"] in seen_run_ids:
-                raise WorkflowError(f"workflow run ID reused: {binding['run_id']}")
-            seen_run_ids.add(binding["run_id"])
+            if binding["agent_run_id"] in seen_run_ids:
+                raise WorkflowError(f"Agent Run ID reused: {binding['agent_run_id']}")
+            seen_run_ids.add(binding["agent_run_id"])
             nodes[node_id].update(
-                run_id=binding["run_id"],
+                agent_run_id=binding["agent_run_id"],
                 attempt=binding["attempt"],
-                retry_of_run_id=binding["retry_of_run_id"],
+                retry_of_agent_run_id=binding["retry_of_agent_run_id"],
                 bound_at=binding["bound_at"],
             )
         elif kind == "node-transition":

@@ -76,7 +76,7 @@ def _parent_writable(path: Path) -> bool:
 def run_doctor(settings: Settings) -> dict[str, Any]:
     commands = {
         name: shutil.which(name)
-        for name in ("git", "tmux", "bash", "tar", "zstd", "python3")
+        for name in ("git", "bash", "tar", "zstd", "python3")
     }
     security = trust_report(settings)
     executors = {
@@ -90,11 +90,10 @@ def run_doctor(settings: Settings) -> dict[str, Any]:
     )
     checks = {
         "python_3_11_or_newer": sys.version_info >= (3, 11),
-        "terminal_backend_supported": settings.terminal_backend == "tmux",
         "state_parent_writable": _parent_writable(settings.state_root),
         "worktree_parent_writable": _parent_writable(settings.worktree_root),
         "required_commands_present": all(
-            commands[name] for name in ("git", "tmux", "bash", "python3")
+            commands[name] for name in ("git", "bash", "python3")
         ),
         "trusted_policy_inputs": security["ok"],
         "executor_compatibility": compatibility_ok,

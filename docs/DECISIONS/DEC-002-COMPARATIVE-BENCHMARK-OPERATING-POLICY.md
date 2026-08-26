@@ -4,7 +4,7 @@
 - **Date:** 2026-08-01
 - **Scope:** real and synthetic paired comparative benchmark runs
 - **Complements:** [DEC-008](DEC-008-INITIAL-COMPARATIVE-BENCHMARK.md)
-- **Implementation:** [Comparative benchmark implementation](../COMPARATIVE_BENCHMARK_IMPLEMENTATION.md)
+- **Implementation:** current benchmark modules, schemas, built-in assets, and acceptance journeys
 
 ## Decision
 
@@ -16,7 +16,7 @@ The comparative benchmark uses three versioned operating-policy profiles:
 | `comparative-internal/v1` | internal | 10 | enabled after 10 eligible pairs |
 | `comparative-publication/v1` | publication | 20 | enabled after 20 eligible pairs |
 
-The profiles are machine-readable under `benchmarks/specs/priority-picker-v1/policies/` and are copied and hashed into every run.
+The profiles are machine-readable in the materialized built-in `priority-picker-v1` suite under `policies/`. Canonical packaged copies live in the shared benchmark asset layers and are copied and hashed into every run.
 
 ### Authentication
 

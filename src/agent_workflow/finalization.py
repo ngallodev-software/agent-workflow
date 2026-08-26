@@ -1,8 +1,8 @@
 """Idempotent recovery finalization for terminal executor loss.
 
 The normal runner remains the preferred owner of completion collection and sealing.
-This module closes the gap where the runner or tmux presentation disappears after
-launch and no normal terminal projection is written.
+This module closes the gap where an owned worker disappears after launch and no
+normal final projection is written.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from .config import Settings
-from .contracts import read_launch_contract
+from .contracts import read_agent_run_contract
 from .errors import WorkflowError
 from .eval.attempts import emit_attempt_artifacts
 from .health import process_sample, record_incident
@@ -29,7 +29,9 @@ from .receipts import (
     update_provenance,
     verify_seal_details,
 )
-from .state import TERMINAL_STATUSES, read_status, run_dir, update_status
+from .state import run_dir, update_projection
+from .run_lifecycle import authoritative_execution_status, synchronize_projection, transition_execution
+from .run_collections import capture_patch, collect_completion, collect_task_result
 from .util import atomic_write_json, sha256_file, utc_now
 
 RECOVERY_FINALIZATION_SCHEMA = "agent-workflow/recovery-finalization/v1"
@@ -111,9 +113,9 @@ def _already_finalized(run: Path, status: dict[str, Any]) -> dict[str, Any] | No
     receipt, digest = verify_seal_details(run)
     return {
         "schema": RECOVERY_FINALIZATION_SCHEMA,
-        "session_id": status.get("session_id"),
+        "agent_run_id": status.get("agent_run_id"),
         "outcome": "already_finalized",
-        "status": status.get("status"),
+        "status": authoritative_execution_status(run),
         "final_receipt_path": str(receipt_path),
         "final_receipt_sha256": digest,
         "sealed_artifact_count": len(receipt.get("artifacts", [])),
@@ -122,33 +124,33 @@ def _already_finalized(run: Path, status: dict[str, Any]) -> dict[str, Any] | No
 
 def finalize_run(
     settings: Settings,
-    session_id: str,
+    agent_run_id: str,
     *,
     observation: dict[str, Any] | None = None,
     actor: str = "agent-workflow-recovery",
-    reason: str = "terminal executor evidence requires recovery finalization",
+    reason: str = "worker evidence requires recovery finalization",
 ) -> dict[str, Any]:
-    """Finalize one terminal, unsealed run without inventing process success.
+    """Finalize one stopped, unsealed Agent Run without inventing process success.
 
     The operation is idempotent. It refuses to race an alive runner or executor.
     Missing process exit information is recorded as ``executor_result=lost`` and
     never converted into a fabricated process-result contract.
     """
 
-    run = run_dir(settings, session_id)
+    run = run_dir(settings, agent_run_id)
     with _finalization_lock(run):
-        status = read_status(settings, session_id)
+        status = synchronize_projection(run / "status.json", source="recovery-finalization")
         existing = _already_finalized(run, status)
         if existing is not None:
             return existing
 
-        launch = read_launch_contract(run / "launch-contract.json")
+        launch = read_agent_run_contract(run / "agent-run-contract.json")
         runner_pid, executor_pid = _heartbeat_pids(run)
         runner_sample = process_sample(runner_pid)
         executor_sample = process_sample(executor_pid)
         process_result = _json_object(run / "process-result.json")
         observed = observation or {}
-        tmux_alive = observed.get("tmux_alive")
+        worker_alive = observed.get("worker_alive")
         observed_state = observed.get("observed_state")
 
         if runner_sample.get("alive") is True:
@@ -156,26 +158,24 @@ def finalize_run(
         if executor_sample.get("alive") is True:
             raise WorkflowError("cannot recovery-finalize while the executor process is alive")
         if not process_result and not (
-            observed_state == "orphaned" and tmux_alive is False
+            observed_state == "orphaned" and worker_alive is False
         ):
             raise WorkflowError(
                 "recovery finalization requires a durable process result or a confirmed dead orphan observation"
             )
 
-        from .runner import _capture_patch, _collect_completion, _collect_task_result
-
         workdir = Path(str(launch["worktree"]["path"]))
         finished_at = utc_now()
-        completion = _collect_completion(run, workdir)
-        _collect_task_result(run, workdir)
-        _capture_patch(workdir, run, run / "patch.diff")
+        completion = collect_completion(run, workdir)
+        collect_task_result(run, workdir)
+        capture_patch(workdir, run, run / "patch.diff")
 
         provider = write_provider_evidence(
             run,
-            stream_format=str(launch["command_plan"]["stream_format"]),
+            stream_format=str(launch["worker_plan"]["stream_format"]),
             executor=(
-                str(launch["command_plan"].get("executor"))
-                if launch["command_plan"].get("executor")
+                str(launch["worker_plan"].get("executor"))
+                if launch["worker_plan"].get("executor")
                 else None
             ),
         )
@@ -198,13 +198,13 @@ def finalize_run(
         )
         recovery = {
             "schema": RECOVERY_FINALIZATION_SCHEMA,
-            "session_id": session_id,
+            "agent_run_id": agent_run_id,
             "triggered_at": finished_at,
             "actor": actor,
             "reason": reason,
             "source_status": status.get("status"),
             "observed_state": observed_state,
-            "tmux_alive": tmux_alive,
+            "worker_alive": worker_alive,
             "runner": runner_sample,
             "executor": executor_sample,
             "process_result_present": bool(process_result),
@@ -233,7 +233,7 @@ def finalize_run(
         update_provenance(run, **provenance_changes)
 
         final_status = {
-            **read_status(settings, session_id),
+            **synchronize_projection(run / "status.json", source="recovery-finalization"),
             "status": terminal_status,
             "executor_result": executor_result,
             "completion_result": completion_result,
@@ -245,16 +245,15 @@ def finalize_run(
             "exit_code": exit_code,
             "failure_category": failure_category,
             "recovery_finalization_path": str(run / "recovery-finalization.json"),
-            "budget_exceeded": list(policy["budget_exceeded"]),
             "updated_at": finished_at,
         }
         atomic_write_json(run / "final-status.json", final_status)
         record_incident(
             run,
-            session_id=session_id,
+            agent_run_id=agent_run_id,
             category=failure_category,
             severity="high",
-            summary="run required recovery finalization after terminal executor loss",
+            summary="Agent Run required recovery finalization after worker/executor loss",
             evidence={
                 "executor_result": executor_result,
                 "completion_result": completion_result,
@@ -263,61 +262,54 @@ def finalize_run(
                 "executor_pid": executor_pid,
             },
         )
-        update_status(
-            settings,
-            session_id,
-            **{key: value for key, value in final_status.items() if key != "session_id"},
-            _actor=actor,
-            _reason=reason,
-            _projection_source="recovery-finalization",
-        )
-
         try:
-            receipt = seal_run(run, session_id=session_id)
+            receipt = seal_run(run, agent_run_id=agent_run_id)
             digest = final_receipt_sha256(run)
-            update_status(
-                settings,
-                session_id,
-                final_receipt_path=str(run / "final-receipt.json"),
-                final_receipt_sha256=digest,
-                sealed_artifact_count=len(receipt["artifacts"]),
-                _actor=actor,
-                _reason="recovery finalization sealed terminal evidence",
-                _projection_source="recovery-finalization",
-            )
-            make_read_only(run)
-            try:
-                attempt = emit_attempt_artifacts(run)
-                update_status(
-                    settings,
-                    session_id,
-                    **attempt,
-                    _actor=actor,
-                    _reason="recovery finalization projected attempt evidence",
-                    _projection_source="recovery-finalization",
-                )
-            except Exception as eval_exc:
-                update_status(
-                    settings,
-                    session_id,
-                    evaluation_state="not_verified",
-                    evaluation_error=str(eval_exc),
-                    _actor=actor,
-                    _reason="recovery attempt projection failed",
-                    _projection_source="recovery-finalization",
-                )
         except Exception as exc:
-            update_status(
+            transition_execution(
                 settings,
-                session_id,
-                status="failed",
+                agent_run_id,
+                "failed",
+                actor=actor,
+                reason="recovery finalization could not seal evidence",
+                projection_source="recovery-finalization",
                 failure_category="seal_failed",
                 seal_error=str(exc),
-                _actor=actor,
-                _reason="recovery finalization could not seal evidence",
-                _projection_source="recovery-finalization",
             )
             raise WorkflowError(f"recovery finalization failed to seal run: {exc}") from exc
+
+        # The immutable final receipt owns terminal execution state from here.
+        # Synchronize the mutable projection without adding a post-seal
+        # execution transition to the lifecycle journal.
+        transition_execution(
+            settings,
+            agent_run_id,
+            terminal_status,
+            actor=actor,
+            reason=reason,
+            projection_source="recovery-finalization",
+            **{key: value for key, value in final_status.items() if key not in {"agent_run_id", "status"}},
+            final_receipt_path=str(run / "final-receipt.json"),
+            final_receipt_sha256=digest,
+            sealed_artifact_count=len(receipt["artifacts"]),
+        )
+        make_read_only(run)
+        try:
+            attempt = emit_attempt_artifacts(run)
+            update_projection(
+                settings,
+                agent_run_id,
+                **attempt,
+                projection_source="recovery-finalization",
+            )
+        except Exception as eval_exc:
+            update_projection(
+                settings,
+                agent_run_id,
+                evaluation_state="not_verified",
+                evaluation_error=str(eval_exc),
+                projection_source="recovery-finalization",
+            )
 
         return {
             **recovery,
@@ -325,5 +317,5 @@ def finalize_run(
             "final_receipt_path": str(run / "final-receipt.json"),
             "final_receipt_sha256": digest,
             "sealed_artifact_count": len(receipt["artifacts"]),
-            "next_action": f"agent-workflow restart {session_id}",
+            "next_action": f"agent-workflow agent-run restart {agent_run_id}",
         }

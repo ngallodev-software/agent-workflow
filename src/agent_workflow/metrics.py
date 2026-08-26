@@ -43,7 +43,6 @@ def normalize_usage(usage: object) -> dict[str, Any]:
     reasoning = _number(source.get("reasoning_output_tokens", source.get("reasoning_tokens")))
     provider_cost = _number(source.get("provider_billed_cost"))
     local_cost = _number(source.get("local_estimated_cost"))
-    legacy_cost = _number(source.get("cost", source.get("total_cost")))
     currency = source.get("currency") if isinstance(source.get("currency"), str) else None
     catalog = source.get("price_catalog_id") if isinstance(source.get("price_catalog_id"), str) else None
     return {
@@ -56,7 +55,6 @@ def normalize_usage(usage: object) -> dict[str, Any]:
         "provider_billed_cost": provider_cost,
         "local_estimated_cost": local_cost,
         "price_catalog_id": catalog,
-        "cost": legacy_cost,
         "currency": currency,
     }
 
@@ -143,7 +141,7 @@ def build_execution_metrics(run_dir: Path, *, elapsed_seconds: float | None = No
         max(0, workflow_attempt - 1)
         if isinstance(workflow_attempt, int) and not isinstance(workflow_attempt, bool)
         else 1
-        if provenance.get("retry_of_run_id")
+        if provenance.get("retry_of_agent_run_id")
         else 0
     )
     orchestrator.update({
@@ -167,7 +165,7 @@ def build_execution_metrics(run_dir: Path, *, elapsed_seconds: float | None = No
     total = {**orchestrator, "stage": "total"}
     value = {
         "schema": METRICS_SCHEMA,
-        "session_id": provenance.get("session_id"),
+        "agent_run_id": provenance.get("agent_run_id"),
         "stages": [orchestrator, *child_stages, verification, total],
     }
     validate_instance(value, METRICS_SCHEMA, artifact=str(run_dir / "execution-metrics.json"))

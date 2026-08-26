@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import contextlib
-import fcntl
 import hashlib
 import json
 import os
@@ -12,8 +11,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterator, Mapping, Sequence
 
-from .contracts import read_launch_contract, validate_instance
+from .contracts import read_agent_run_contract, validate_instance
 from .errors import WorkflowError
+from .journal import locked_file
 from .messages import message_digest, validate_message
 from .util import atomic_write_json, fsync_directory, utc_now, validate_id
 
@@ -124,11 +124,11 @@ class ConsumerBinding:
         cls, contract_path: Path, *, source_journal_path: Path
     ) -> "ConsumerBinding":
         """Bind a child consumer to its immutable launch contract."""
-        contract = read_launch_contract(contract_path)
-        session = contract["session"]
-        consumer_id = session.get("id")
+        contract = read_agent_run_contract(contract_path)
+        agent_run = contract["agent_run"]
+        consumer_id = agent_run.get("id")
         if not isinstance(consumer_id, str):
-            raise CursorIntegrityError("launch contract has no consumer session identity")
+            raise CursorIntegrityError("launch contract has no consumer Agent Run identity")
         source_path = Path(source_journal_path)
         expected = contract_path.parent / "messages.jsonl"
         if source_path.resolve(strict=False) != expected.resolve(strict=False):
@@ -377,23 +377,15 @@ class CursorStore:
     def locked(self) -> Iterator[_LockedCursor]:
         """Hold the per-identity lock across compare, target commit, and update."""
         try:
-            descriptor = os.open(
+            with locked_file(
                 self.lock_path,
-                os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0),
-                0o600,
-            )
-        except OSError as exc:
-            raise CursorIntegrityError("cannot open consumer cursor lock") from exc
-        try:
-            if not stat.S_ISREG(os.fstat(descriptor).st_mode):
-                raise CursorIntegrityError("consumer cursor lock is not a regular file")
-            fcntl.flock(descriptor, fcntl.LOCK_EX)
-            yield _LockedCursor(self)
-        finally:
-            try:
-                fcntl.flock(descriptor, fcntl.LOCK_UN)
-            finally:
-                os.close(descriptor)
+                exclusive=True,
+                create=True,
+                create_parent=True,
+            ):
+                yield _LockedCursor(self)
+        except WorkflowError as exc:
+            raise CursorIntegrityError("cannot lock consumer cursor") from exc
 
     def _read_unlocked(self) -> dict[str, Any] | None:
         if not self.path.exists() and not self.path.is_symlink():

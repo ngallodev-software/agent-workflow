@@ -74,21 +74,18 @@ bash -n install.sh uninstall.sh bin/agent-workflow scripts/*.sh
 while IFS= read -r -d '' path; do
   bash -n "$path"
 done < <(find templates src/agent_workflow/assets -type f -name '*.sh' -print0)
-for path in scripts/hooks/agent-workflow-session-reminder scripts/hooks/codebase-memory-session-reminder scripts/hooks/rtk-session-reminder; do
+for path in scripts/hooks/agent-workflow-run-reminder scripts/hooks/codebase-memory-session-reminder scripts/hooks/rtk-session-reminder; do
   bash -n "$path"
 done
-# Dedicated acceptance fixtures must not inherit the coordinator's tmux pane;
-# otherwise a nested tmux server can outlive the test and leave a completed
-# fake executor projected as `running`.
-env -u TMUX -u TMUX_PANE "$PYTHON_BIN" -m pytest -q --junitxml "$JUNIT_PATH"
+"$PYTHON_BIN" -m pytest -q --junitxml "$JUNIT_PATH"
 "$PYTHON_BIN" scripts/audit-test-suite.py \
   --skip-collection \
   --junit "$JUNIT_PATH" \
   --report "$EVIDENCE_DIR/test-suite-audit.json"
-"$PYTHON_BIN" -m agent_workflow pack validate examples/three-phase-pack
+"$PYTHON_BIN" -m agent_workflow --config "$ROOT/config/agent-workflow.example.toml" pack validate examples/three-phase-pack
 for pack in prompt-packs/*; do
-  [[ -d "$pack" ]] || continue
-  "$PYTHON_BIN" -m agent_workflow pack validate "$pack"
+  [[ -f "$pack/pack.yaml" ]] || continue
+  "$PYTHON_BIN" -m agent_workflow --config "$ROOT/config/agent-workflow.example.toml" pack validate "$pack"
 done
 "$PYTHON_BIN" - <<'PY'
 import json

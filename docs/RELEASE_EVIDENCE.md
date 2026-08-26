@@ -1,6 +1,6 @@
 # Release evidence and blocker automation
 
-REL-005 provides one machine-readable release-evidence path without converting open governance or compatibility work into a false release claim.
+The release-evidence path provides one machine-readable view without converting open governance or compatibility work into a false release claim.
 
 ## Authoritative inputs
 

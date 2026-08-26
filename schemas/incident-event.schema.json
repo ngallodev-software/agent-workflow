@@ -2,11 +2,11 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "agent-workflow/incident-event/v1",
   "type": "object",
-  "required": ["schema", "incident_id", "session_id", "recorded_at", "category", "severity", "summary", "fingerprint", "evidence", "state"],
+  "required": ["schema", "incident_id", "agent_run_id", "recorded_at", "category", "severity", "summary", "fingerprint", "evidence", "state"],
   "properties": {
     "schema": {"const": "agent-workflow/incident-event/v1"},
     "incident_id": {"type": "string", "pattern": "^[0-9a-f]{24}$"},
-    "session_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "agent_run_id": {"type": "string", "minLength": 1, "maxLength": 128},
     "recorded_at": {"type": "string", "minLength": 1, "maxLength": 64},
     "category": {"type": "string", "minLength": 1, "maxLength": 128},
     "severity": {"enum": ["low", "medium", "high", "critical"]},

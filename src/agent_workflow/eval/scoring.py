@@ -7,9 +7,8 @@ import stat
 from pathlib import Path
 from typing import Any, Mapping
 
-from ..contracts import validate_instance, validate_launch_contract_value
+from ..contracts import validate_instance, validate_agent_run_contract_value
 from ..errors import WorkflowError
-from ..evidence_repair import supplemental_repairs_for_run
 from ..receipts import read_sealed_contract, read_sealed_json, verify_seal_details
 from ..util import atomic_write_json
 from .junit import compare_junit
@@ -228,7 +227,6 @@ def score_trial(
             "agent-workflow/completion-collection/v1",
         )
         completion_status = completion_collection.get("validation_status")
-        supplemental_repairs = supplemental_repairs_for_run(run_dir, final_hash)
         scores.append(
             _receipt(
                 "completion_presence",
@@ -239,7 +237,6 @@ def score_trial(
                     "validation_errors": completion_collection.get("validation_errors", []),
                     "adapter": completion_collection.get("adapter"),
                     "adapter_version": completion_collection.get("adapter_version"),
-                    "supplemental_repairs": supplemental_repairs,
                     "original_acceptance_authority": completion_status == "valid",
                 },
                 _evidence(final, "collections/completion.json"),
@@ -441,31 +438,16 @@ def score_trial(
 def evaluation_policy_for_run(
     run_dir: Path, final_receipt: Mapping[str, Any]
 ) -> dict[str, Any]:
-    """Read evaluation authority from the launch contract, with a sealed legacy fallback."""
-    sealed = {
-        item.get("path")
-        for item in final_receipt.get("artifacts", [])
-        if isinstance(item, dict)
-    }
-    if "launch-contract.json" in sealed:
-        contract, _ = read_sealed_json(
-            run_dir,
-            dict(final_receipt),
-            "launch-contract.json",
-        )
-        if not isinstance(contract, dict):
-            raise WorkflowError("sealed launch contract must be a JSON object")
-        validate_launch_contract_value(
-            contract, artifact=str(run_dir / "launch-contract.json")
-        )
-        value = contract.get("evaluation_policy", {})
-        return value if isinstance(value, dict) else {}
-    if "evaluation-runtime.json" in sealed:
-        runtime, _ = read_sealed_contract(
-            run_dir,
-            dict(final_receipt),
-            "evaluation-runtime.json",
-            "agent-workflow/evaluation-runtime/v1",
-        )
-        return runtime
-    return {}
+    """Read evaluation authority from the sealed Agent Run contract."""
+    contract, _ = read_sealed_json(
+        run_dir,
+        dict(final_receipt),
+        "agent-run-contract.json",
+    )
+    if not isinstance(contract, dict):
+        raise WorkflowError("sealed launch contract must be a JSON object")
+    validate_agent_run_contract_value(
+        contract, artifact=str(run_dir / "agent-run-contract.json")
+    )
+    value = contract.get("evaluation_policy", {})
+    return value if isinstance(value, dict) else {}

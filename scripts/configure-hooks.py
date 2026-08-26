@@ -47,7 +47,7 @@ def codex_gate_command(hooks_dir: Path, cbm_gate: str) -> str:
 
 def render_codex_hooks(hooks_dir: Path, cbm_gate: str) -> str:
     entries = [
-        ("agent-workflow-session-reminder", "Loading agent-workflow delegation policy"),
+        ("agent-workflow-run-reminder", "Loading agent-workflow delegation policy"),
         ("rtk-session-reminder", "Loading RTK command policy"),
         ("codebase-memory-session-reminder", "Loading codebase-memory discovery policy"),
     ]
@@ -139,7 +139,7 @@ def configure_claude(path: Path, hooks_dir: Path, cbm_gate: str) -> None:
     hooks = data.setdefault("hooks", {})
     if not isinstance(hooks, dict):
         raise SystemExit(f"refusing to configure Claude hooks: hooks is not an object: {path}")
-    add_claude_hook(hooks, "SessionStart", str(hooks_dir / "agent-workflow-session-reminder"))
+    add_claude_hook(hooks, "SessionStart", str(hooks_dir / "agent-workflow-run-reminder"))
     add_claude_hook(hooks, "SessionStart", str(hooks_dir / "rtk-session-reminder"))
     add_claude_hook(hooks, "SessionStart", str(hooks_dir / "codebase-memory-session-reminder"))
     if cbm_gate:

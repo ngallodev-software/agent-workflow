@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-workflow"
-version = "0.7.9"
-description = "Terminal-first, observable workflow for bounded coding-agent delegation"
+version = "0.8.0"
+description = "Headless, observable workflow for durable coding-agent delegation"
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
@@ -42,7 +42,6 @@ otel = [
 mlflow = ["mlflow>=3,<4"]
 completion = ["shtab>=1.7,<2"]
 benchmark-visual = ["playwright==1.57.0"]
-# Kept as a compatibility alias for callers that explicitly request [mcp].
 mcp = ["mcp==1.28.1"]
 
 [project.scripts]
@@ -72,6 +71,6 @@ pythonpath = ["src"]
 testpaths = ["tests"]
 addopts = "-ra"
 markers = [
-  "live: opt-in compatibility checks requiring real tmux or paid agent executors",
+  "live: opt-in compatibility checks requiring external provider CLIs or paid agent executors",
   "future: strict expected-failure acceptance specifications for approved backlog behavior",
 ]

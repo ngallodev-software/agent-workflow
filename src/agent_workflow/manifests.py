@@ -2,15 +2,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import yaml
 
+from .contracts import validate_instance
 from .evaluation import validate_evaluation
 from .errors import WorkflowError
 from .path import absolute_path, inventory_tree, read_regular_file, require_directory
 from .util import atomic_write_bytes
+
+PROMPT_PACK_SCHEMA = "agent-workflow/prompt-pack/v1"
+PROMPT_PACK_MANIFEST = "pack.yaml"
+ARCHIVE_MANIFEST = "MANIFEST.json"
 
 
 @dataclass
@@ -56,8 +61,24 @@ def _load_yaml(path: Path, report: ValidationReport) -> dict[str, Any] | None:
     return value
 
 
-def _check_required(root: Path, entries: dict[str, Any], report: ValidationReport) -> None:
+def load_pack_manifest(root: Path) -> dict[str, Any]:
+    """Read and schema-validate the authoritative prompt-pack manifest."""
+    root = require_directory(root, label="pack root")
+    path = root / PROMPT_PACK_MANIFEST
+    report = ValidationReport(root=root)
+    value = _load_yaml(path, report)
+    if value is None:
+        raise WorkflowError("; ".join(report.errors))
+    try:
+        validate_instance(value, PROMPT_PACK_SCHEMA, artifact=str(path))
+    except WorkflowError as exc:
+        raise WorkflowError(str(exc)) from exc
+    return value
+
+
+def _check_required(entries: dict[str, Any], report: ValidationReport) -> None:
     required = [
+        PROMPT_PACK_MANIFEST,
         "README.md",
         "EXECUTION_PROTOCOL.md",
         "DELEGATION_RUNBOOK.md",
@@ -71,45 +92,17 @@ def _check_required(root: Path, entries: dict[str, Any], report: ValidationRepor
             report.errors.append(f"missing required file: {rel}")
 
 
-def task_result_contract(root: Path, ticket_id: str | None) -> dict[str, Any] | None:
-    """Return the validated result contract declaration for one pack ticket."""
-    if not ticket_id:
-        return None
-    root = require_directory(root, label="pack root")
-    entries = {entry.path: entry for entry in inventory_tree(root)}
-    manifest_entry = entries.get("MANIFEST.json")
-    if manifest_entry is not None and manifest_entry.kind == "file":
-        try:
-            manifest_value = json.loads(
-                read_regular_file(root / "MANIFEST.json").data.decode("utf-8")
-            )
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError, WorkflowError):
-            manifest_value = None
-        tickets = manifest_value.get("tickets") if isinstance(manifest_value, dict) else None
-        if isinstance(tickets, list):
-            for item in tickets:
-                if _manifest_ticket_id(item) != ticket_id or not isinstance(item, dict):
-                    continue
-                contract = item.get("result_contract")
-                return dict(contract) if isinstance(contract, dict) else None
-    for relative in sorted(
-        path for path, entry in entries.items()
-        if entry.kind == "file" and path.startswith("phase-") and path.count("/") == 1 and path.endswith("/task-manifest.yaml")
+def _safe_pack_relative(value: str, *, location: str, report: ValidationReport) -> str | None:
+    path = PurePosixPath(value)
+    if (
+        not value
+        or path.is_absolute()
+        or any(part in {"", ".", ".."} for part in path.parts)
+        or path.as_posix() != value
     ):
-        manifest_path = root / relative
-        report = ValidationReport(root=root)
-        manifest = _load_yaml(manifest_path, report)
-        if manifest is None:
-            continue
-        tasks = manifest.get("tasks")
-        if not isinstance(tasks, list):
-            continue
-        for task in tasks:
-            if not isinstance(task, dict) or str(task.get("id")) != ticket_id:
-                continue
-            contract = task.get("result_contract")
-            return dict(contract) if isinstance(contract, dict) else None
-    return None
+        report.errors.append(f"{location}: path must be a normalized pack-relative POSIX path: {value}")
+        return None
+    return value
 
 
 def _find_dependency_cycle(graph: dict[str, list[str]]) -> list[str] | None:
@@ -141,152 +134,134 @@ def _find_dependency_cycle(graph: dict[str, list[str]]) -> list[str] | None:
     return None
 
 
+def _task_records(manifest: dict[str, Any]) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    records: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    for phase in manifest.get("phases", []):
+        if not isinstance(phase, dict):
+            continue
+        for task in phase.get("tasks", []):
+            if isinstance(task, dict):
+                records.append((phase, task))
+    return records
 
-def _manifest_native_version(value: dict[str, Any], report: ValidationReport) -> str | None:
-    schema = value.get("schema")
-    accepted = {
-        "agent-workflow/manifest-native-pack/v1": "1",
-        "agent-workflow/prompt-pack-manifest/v1": "1",
-    }
-    if isinstance(schema, str):
-        if schema not in accepted:
-            report.errors.append(f"MANIFEST.json: unsupported manifest schema: {schema}")
-            return None
-        return accepted[schema]
-    raw = value.get("manifest_version", value.get("version"))
-    if raw in {1, "1", "v1", "1.0"}:
-        return "1"
-    if raw is not None:
-        report.errors.append(f"MANIFEST.json: unsupported manifest version: {raw}")
+
+def task_result_contract(root: Path, ticket_id: str | None) -> dict[str, Any] | None:
+    """Return the result contract declared for one prompt-pack ticket."""
+    if not ticket_id:
         return None
-    if isinstance(value.get("tickets"), list):
-        report.warnings.append(
-            "MANIFEST.json: legacy manifest-native inventory has no explicit schema/version; "
-            "add agent-workflow/manifest-native-pack/v1"
-        )
-        return "legacy-v0"
-    report.errors.append("MANIFEST.json: missing manifest schema/version")
+    manifest = load_pack_manifest(root)
+    for _phase, task in _task_records(manifest):
+        if task.get("id") != ticket_id:
+            continue
+        contract = task.get("result_contract")
+        return dict(contract) if isinstance(contract, dict) else None
     return None
 
 
-def _manifest_ticket_id(item: Any) -> str | None:
-    if isinstance(item, str) and item.strip():
-        return item.strip()
-    if not isinstance(item, dict):
-        return None
-    for key in ("id", "ticket_id", "ticket"):
-        value = item.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-    return None
-
-
-def _validate_manifest_native(
+def _validate_phase(
     root: Path,
     entries: dict[str, Any],
+    phase: dict[str, Any],
+    phase_index: int,
     report: ValidationReport,
-) -> set[str]:
-    entry = entries.get("MANIFEST.json")
-    if entry is None or entry.kind != "file":
-        report.errors.append("manifest-native pack requires MANIFEST.json")
-        return set()
-    report.pack_format = "manifest-native"
-    report.manifest_path = "MANIFEST.json"
-    try:
-        value = json.loads(read_regular_file(root / "MANIFEST.json").data.decode("utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError, WorkflowError) as exc:
-        report.errors.append(f"MANIFEST.json: invalid JSON: {exc}")
-        return set()
-    if not isinstance(value, dict):
-        report.errors.append("MANIFEST.json: expected JSON object")
-        return set()
-    report.manifest_version = _manifest_native_version(value, report)
-    tickets = value.get("tickets")
-    if not isinstance(tickets, list) or not tickets:
-        report.errors.append("MANIFEST.json: tickets must be a non-empty list")
-        return set()
+    ticket_ids: set[str],
+    agent_run_ids: set[str],
+    dependencies: dict[str, list[str]],
+    locations: dict[str, str],
+) -> None:
+    phase_location = f"pack.yaml phases[{phase_index}]"
+    directory = str(phase.get("directory", ""))
+    directory = _safe_pack_relative(directory, location=f"{phase_location}.directory", report=report) or ""
+    if directory:
+        directory_entry = entries.get(directory)
+        if directory_entry is None or directory_entry.kind != "directory":
+            report.errors.append(f"{phase_location}: phase directory not found: {directory}")
+        elif "/" in directory:
+            report.errors.append(f"{phase_location}: phase directory must be top-level: {directory}")
+        for rel, kind in (
+            ("README.md", "file"),
+            ("MASTER_IMPLEMENTATION_PROMPT.md", "file"),
+            ("tickets", "directory"),
+        ):
+            path = f"{directory}/{rel}"
+            entry = entries.get(path)
+            if entry is None or entry.kind != kind:
+                report.errors.append(f"missing phase item: {path}")
 
-    ticket_ids: set[str] = set()
-    dependencies: dict[str, list[str]] = {}
-    locations: dict[str, str] = {}
-    for index, item in enumerate(tickets):
-        location = f"MANIFEST.json tickets[{index}]"
-        ticket_id = _manifest_ticket_id(item)
-        if ticket_id is None:
-            report.errors.append(f"{location}: missing ticket ID")
-            continue
+    report.phases += 1
+    local_ids: list[str] = []
+    tasks = phase.get("tasks", [])
+    for task_index, task in enumerate(tasks if isinstance(tasks, list) else []):
         report.tasks += 1
-        if ticket_id in ticket_ids:
-            report.errors.append(f"{location}: duplicate ticket ID: {ticket_id}")
-        ticket_ids.add(ticket_id)
-        locations[ticket_id] = location
-        if isinstance(item, dict):
-            raw_dependencies = item.get("dependencies", [])
-            if raw_dependencies is None:
-                raw_dependencies = []
-            if not isinstance(raw_dependencies, list) or any(
-                not isinstance(dependency, str) or not dependency
-                for dependency in raw_dependencies
-            ):
-                report.errors.append(f"{location}: dependencies must be ticket IDs")
-                raw_dependencies = []
-            dependencies[ticket_id] = list(raw_dependencies)
-            prompt = next(
-                (
-                    item.get(key)
-                    for key in ("prompt", "path", "file")
-                    if isinstance(item.get(key), str) and item.get(key)
-                ),
-                None,
+        location = f"{phase_location} tasks[{task_index}]"
+        if not isinstance(task, dict):
+            # JSON Schema normally catches this; keep domain traversal fail-closed.
+            report.errors.append(f"{location}: expected mapping")
+            continue
+        task_id = str(task.get("id", ""))
+        agent_run_id = str(task.get("agent_run_id", ""))
+        local_ids.append(task_id)
+        if task_id in ticket_ids:
+            report.errors.append(f"{location}: duplicate ticket ID: {task_id}")
+        ticket_ids.add(task_id)
+        if agent_run_id in agent_run_ids:
+            report.errors.append(f"{location}: duplicate agent run ID: {agent_run_id}")
+        agent_run_ids.add(agent_run_id)
+        locations[task_id] = location
+
+        prompt_rel = str(task.get("prompt", ""))
+        safe_prompt = _safe_pack_relative(prompt_rel, location=f"{location}.prompt", report=report)
+        if safe_prompt:
+            prompt_entry = entries.get(safe_prompt)
+            if prompt_entry is None or prompt_entry.kind != "file":
+                report.errors.append(f"{location}: prompt not found: {safe_prompt}")
+            else:
+                text = read_regular_file(root / safe_prompt).data.decode("utf-8", errors="replace").lower()
+                absent = [concept for concept in ("writable", "acceptance", "test", "stop") if concept not in text]
+                if absent:
+                    report.warnings.append(
+                        f"{safe_prompt}: prompt may lack explicit " + ", ".join(absent)
+                    )
+            if directory and not safe_prompt.startswith(f"{directory}/tickets/"):
+                report.warnings.append(
+                    f"{location}: prompt is outside the phase tickets directory: {safe_prompt}"
+                )
+
+        raw_dependencies = task.get("dependencies", []) or []
+        dependencies[task_id] = list(raw_dependencies) if isinstance(raw_dependencies, list) else []
+
+        result_contract = task.get("result_contract")
+        if isinstance(result_contract, dict):
+            schema_rel = str(result_contract.get("schema", ""))
+            safe_schema = _safe_pack_relative(
+                schema_rel,
+                location=f"{location}.result_contract.schema",
+                report=report,
             )
-            if prompt is not None:
-                relative = Path(prompt)
-                if (
-                    relative.is_absolute()
-                    or any(part in {"", ".", ".."} for part in relative.parts)
-                    or relative.as_posix() != prompt
-                ):
-                    report.errors.append(f"{location}: prompt escapes pack root: {prompt}")
+            if safe_schema:
+                schema_entry = entries.get(safe_schema)
+                if schema_entry is None or schema_entry.kind != "file":
+                    report.errors.append(f"{location}: result contract schema not found: {safe_schema}")
                 else:
-                    prompt_entry = entries.get(prompt)
-                    if prompt_entry is None or prompt_entry.kind != "file":
-                        report.errors.append(f"{location}: prompt not found: {prompt}")
-            result_contract = item.get("result_contract")
-            if result_contract is not None:
-                if not isinstance(result_contract, dict):
-                    report.errors.append(f"{location}: result_contract must be an object")
-                else:
-                    schema_path = result_contract.get("schema")
-                    if not isinstance(schema_path, str) or not schema_path:
-                        report.errors.append(f"{location}: result_contract.schema is required")
-                    elif entries.get(schema_path) is None or entries[schema_path].kind != "file":
-                        report.errors.append(
-                            f"{location}: result contract schema not found: {schema_path}"
+                    try:
+                        schema_value = json.loads(
+                            read_regular_file(root / safe_schema).data.decode("utf-8")
                         )
-        else:
-            dependencies[ticket_id] = []
+                    except (OSError, UnicodeDecodeError, json.JSONDecodeError, WorkflowError) as exc:
+                        report.errors.append(f"{location}: invalid result contract schema: {exc}")
+                    else:
+                        if not isinstance(schema_value, dict):
+                            report.errors.append(f"{location}: result contract schema must be a JSON object")
 
-    for ticket_id, required in dependencies.items():
-        unknown = sorted(set(required) - ticket_ids)
+    order = phase.get("mandatory_order", []) or []
+    if isinstance(order, list):
+        ordered = {str(item) for item in order}
+        unknown = [str(item) for item in order if str(item) not in local_ids]
+        omitted = [item for item in local_ids if item not in ordered]
         if unknown:
-            report.errors.append(f"{locations[ticket_id]}: unknown dependencies: {unknown}")
-        if ticket_id in required:
-            report.errors.append(f"{locations[ticket_id]}: ticket cannot depend on itself")
-    graph = {
-        ticket_id: [dependency for dependency in required if dependency in ticket_ids]
-        for ticket_id, required in dependencies.items()
-    }
-    cycle = _find_dependency_cycle(graph)
-    if cycle:
-        report.errors.append("dependency cycle: " + " -> ".join(cycle))
-
-    evaluation_path = root / "evals" / "evaluation.json"
-    if entries.get("evals/evaluation.json") is not None:
-        try:
-            validate_evaluation(evaluation_path, pack_root=root, task_ids=ticket_ids)
-        except WorkflowError as exc:
-            report.errors.append(str(exc))
-    return ticket_ids
+            report.errors.append(f"{phase_location}: unknown ordered tickets: {unknown}")
+        if omitted:
+            report.warnings.append(f"{phase_location}: unordered tickets: {omitted}")
 
 
 def _validate_checksum_manifest(
@@ -326,6 +301,54 @@ def _validate_checksum_manifest(
     elif verify_checksums:
         report.errors.append("MANIFEST.sha256: missing")
 
+
+
+
+def _validate_archive_manifest(
+    root: Path,
+    inventory: tuple[Any, ...],
+    entries: dict[str, Any],
+    report: ValidationReport,
+) -> None:
+    entry = entries.get(ARCHIVE_MANIFEST)
+    if entry is None:
+        return
+    if entry.kind != "file":
+        report.errors.append(f"{ARCHIVE_MANIFEST}: expected file")
+        return
+    try:
+        value = json.loads(read_regular_file(root / ARCHIVE_MANIFEST).data.decode("utf-8"))
+        validate_instance(value, "agent-workflow/pack-manifest/v1", artifact=ARCHIVE_MANIFEST)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, WorkflowError) as exc:
+        report.errors.append(f"{ARCHIVE_MANIFEST}: invalid archive integrity manifest: {exc}")
+        return
+    declared = {
+        str(item.get("path")): item
+        for item in value.get("entries", [])
+        if isinstance(item, dict) and isinstance(item.get("path"), str)
+    }
+    actual = {
+        item.path: item
+        for item in inventory
+        if item.path not in {ARCHIVE_MANIFEST, "MANIFEST.sha256"}
+    }
+    missing = sorted(actual.keys() - declared.keys())
+    extra = sorted(declared.keys() - actual.keys())
+    for rel in missing:
+        report.errors.append(f"{ARCHIVE_MANIFEST}: missing archive entry: {rel}")
+    for rel in extra:
+        report.errors.append(f"{ARCHIVE_MANIFEST}: lists nonexistent archive entry: {rel}")
+    for rel in sorted(actual.keys() & declared.keys()):
+        item = actual[rel]
+        recorded = declared[rel]
+        if recorded.get("type") != item.kind:
+            report.errors.append(f"{ARCHIVE_MANIFEST}: type mismatch: {rel}")
+            continue
+        if recorded.get("size") != item.size:
+            report.errors.append(f"{ARCHIVE_MANIFEST}: size mismatch: {rel}")
+        if item.kind == "file" and recorded.get("sha256") != item.sha256:
+            report.errors.append(f"{ARCHIVE_MANIFEST}: checksum mismatch: {rel}")
+
 def validate_pack(root: Path, verify_checksums: bool = False) -> ValidationReport:
     root = absolute_path(root)
     report = ValidationReport(root=root)
@@ -337,141 +360,59 @@ def validate_pack(root: Path, verify_checksums: bool = False) -> ValidationRepor
         return report
     entries = {entry.path: entry for entry in inventory}
     report.inventory = inventory
+    report.pack_format = "prompt-pack"
+    report.manifest_version = "1"
+    report.manifest_path = PROMPT_PACK_MANIFEST
 
-    phase_dirs = sorted(
-        root / entry.path
-        for entry in inventory
-        if entry.kind == "directory" and "/" not in entry.path and entry.path.startswith("phase-")
-    )
-    if not phase_dirs:
-        if entries.get("MANIFEST.json") is not None:
-            _validate_manifest_native(root, entries, report)
-            _validate_checksum_manifest(root, inventory, entries, report, verify_checksums)
-            return report
-        report.errors.append("no phase-* directories found and no manifest-native MANIFEST.json present")
+    _validate_archive_manifest(root, inventory, entries, report)
+    _check_required(entries, report)
+
+    manifest_entry = entries.get(PROMPT_PACK_MANIFEST)
+    if manifest_entry is None or manifest_entry.kind != "file":
+        _validate_checksum_manifest(root, inventory, entries, report, verify_checksums)
         return report
 
-    report.pack_format = "legacy-phased"
-    report.manifest_version = "1"
-    _check_required(root, entries, report)
+    manifest = _load_yaml(root / PROMPT_PACK_MANIFEST, report)
+    if manifest is None:
+        _validate_checksum_manifest(root, inventory, entries, report, verify_checksums)
+        return report
+    try:
+        validate_instance(manifest, PROMPT_PACK_SCHEMA, artifact=PROMPT_PACK_MANIFEST)
+    except WorkflowError as exc:
+        report.errors.append(str(exc))
+        _validate_checksum_manifest(root, inventory, entries, report, verify_checksums)
+        return report
 
-    sessions: set[str] = set()
     ticket_ids: set[str] = set()
-    dependencies_by_ticket: dict[str, list[str]] = {}
-    dependency_locations: dict[str, str] = {}
-    for phase_dir in phase_dirs:
-        report.phases += 1
-        for rel in ["README.md", "MASTER_IMPLEMENTATION_PROMPT.md", "task-manifest.yaml", "tickets"]:
-            path = phase_dir / rel
-            relative = path.relative_to(root).as_posix()
-            expected_kind = "directory" if rel == "tickets" else "file"
-            if relative not in entries or entries[relative].kind != expected_kind:
-                report.errors.append(f"missing phase item: {relative}")
-        manifest_path = phase_dir / "task-manifest.yaml"
-        manifest_rel = manifest_path.relative_to(root).as_posix()
-        if manifest_rel not in entries or entries[manifest_rel].kind != "file":
-            continue
-        manifest = _load_yaml(manifest_path, report)
-        if manifest is None:
-            continue
-        tasks = manifest.get("tasks")
-        order = manifest.get("mandatory_order", [])
-        if not isinstance(tasks, list) or not tasks:
-            report.errors.append(f"{manifest_rel}: tasks must be a non-empty list")
-            continue
+    agent_run_ids: set[str] = set()
+    dependencies: dict[str, list[str]] = {}
+    locations: dict[str, str] = {}
+    phases = manifest.get("phases", [])
+    for phase_index, phase in enumerate(phases if isinstance(phases, list) else []):
+        if isinstance(phase, dict):
+            _validate_phase(
+                root,
+                entries,
+                phase,
+                phase_index,
+                report,
+                ticket_ids,
+                agent_run_ids,
+                dependencies,
+                locations,
+            )
 
-        local_ids: list[str] = []
-        for index, task in enumerate(tasks):
-            report.tasks += 1
-            location = f"{manifest_rel} task[{index}]"
-            if not isinstance(task, dict):
-                report.errors.append(f"{location}: expected mapping")
-                continue
-            missing = [key for key in ("id", "tier", "session", "prompt") if not task.get(key)]
-            if missing:
-                report.errors.append(f"{location}: missing {', '.join(missing)}")
-                continue
-            task_id = str(task["id"])
-            session = str(task["session"])
-            prompt_rel = str(task["prompt"])
-            local_ids.append(task_id)
-            if task_id in ticket_ids:
-                report.errors.append(f"duplicate ticket ID across pack: {task_id}")
-            ticket_ids.add(task_id)
-            if session in sessions:
-                report.errors.append(f"duplicate session ID across pack: {session}")
-            sessions.add(session)
-            prompt_path = phase_dir / prompt_rel
-            try:
-                prompt_display = prompt_path.relative_to(root).as_posix()
-            except ValueError:
-                report.errors.append(f"{location}: prompt escapes pack root: {prompt_rel}")
-                continue
-            prompt_entry = entries.get(prompt_display)
-            if prompt_entry is None or prompt_entry.kind != "file":
-                report.errors.append(f"{location}: prompt not found: {prompt_display}")
-            else:
-                text = read_regular_file(prompt_path).data.decode("utf-8", errors="replace").lower()
-                absent = [concept for concept in ("writable", "acceptance", "test", "stop") if concept not in text]
-                if absent:
-                    report.warnings.append(f"{prompt_display}: prompt may lack explicit " + ", ".join(absent))
-
-            dependencies = task.get("dependencies", [])
-            if dependencies is None:
-                dependencies = []
-            if not isinstance(dependencies, list) or any(not isinstance(item, str) for item in dependencies):
-                report.errors.append(f"{location}: dependencies must be a list of ticket IDs")
-                dependencies = []
-            dependencies_by_ticket[task_id] = list(dependencies)
-            dependency_locations[task_id] = location
-
-            result_contract = task.get("result_contract")
-            if result_contract is not None:
-                if not isinstance(result_contract, dict):
-                    report.errors.append(f"{location}: result_contract must be a mapping")
-                else:
-                    schema_rel = result_contract.get("schema")
-                    if not isinstance(schema_rel, str) or not schema_rel:
-                        report.errors.append(f"{location}: result_contract.schema is required")
-                    else:
-                        schema_path = root / schema_rel
-                        try:
-                            schema_display = schema_path.relative_to(root).as_posix()
-                        except ValueError:
-                            report.errors.append(f"{location}: result contract schema escapes pack root: {schema_rel}")
-                            schema_display = ""
-                        schema_entry = entries.get(schema_display)
-                        if schema_entry is None or schema_entry.kind != "file":
-                            report.errors.append(f"{location}: result contract schema not found: {schema_rel}")
-                        else:
-                            try:
-                                schema_value = json.loads(read_regular_file(schema_path).data.decode("utf-8"))
-                            except (OSError, UnicodeDecodeError, json.JSONDecodeError, WorkflowError) as exc:
-                                report.errors.append(f"{location}: invalid result contract schema: {exc}")
-                            else:
-                                if not isinstance(schema_value, dict):
-                                    report.errors.append(f"{location}: result contract schema must be a JSON object")
-
-        if order:
-            if not isinstance(order, list):
-                report.errors.append(f"{manifest_rel}: mandatory_order must be a list")
-            else:
-                ordered = {str(item) for item in order}
-                unknown = [str(item) for item in order if str(item) not in local_ids]
-                omitted = [item for item in local_ids if item not in ordered]
-                if unknown:
-                    report.errors.append(f"{manifest_rel}: unknown ordered tickets: {unknown}")
-                if omitted:
-                    report.warnings.append(f"{manifest_rel}: unordered tickets: {omitted}")
-
-    for ticket_id, dependencies in dependencies_by_ticket.items():
-        unknown = sorted(set(dependencies) - ticket_ids)
+    for ticket_id, required in dependencies.items():
+        unknown = sorted(set(required) - ticket_ids)
         if unknown:
-            report.errors.append(f"{dependency_locations[ticket_id]}: unknown dependencies: {unknown}")
-        if ticket_id in dependencies:
-            report.errors.append(f"{dependency_locations[ticket_id]}: ticket cannot depend on itself")
-    known_graph = {ticket_id: [item for item in deps if item in ticket_ids] for ticket_id, deps in dependencies_by_ticket.items()}
-    cycle = _find_dependency_cycle(known_graph)
+            report.errors.append(f"{locations.get(ticket_id, ticket_id)}: unknown dependencies: {unknown}")
+        if ticket_id in required:
+            report.errors.append(f"{locations.get(ticket_id, ticket_id)}: ticket cannot depend on itself")
+    graph = {
+        ticket_id: [dependency for dependency in required if dependency in ticket_ids]
+        for ticket_id, required in dependencies.items()
+    }
+    cycle = _find_dependency_cycle(graph)
     if cycle:
         report.errors.append("dependency cycle: " + " -> ".join(cycle))
 
@@ -490,6 +431,10 @@ def write_checksum_manifest(root: Path) -> Path:
     root = require_directory(root, label="pack root")
     output = root / "MANIFEST.sha256"
     inventory = inventory_tree(root)
-    lines = [f"{entry.sha256}  {entry.path}" for entry in inventory if entry.kind == "file" and entry.path != "MANIFEST.sha256"]
+    lines = [
+        f"{entry.sha256}  {entry.path}"
+        for entry in inventory
+        if entry.kind == "file" and entry.path != "MANIFEST.sha256"
+    ]
     atomic_write_bytes(output, ("\n".join(lines) + "\n").encode("utf-8"), mode=0o644)
     return output

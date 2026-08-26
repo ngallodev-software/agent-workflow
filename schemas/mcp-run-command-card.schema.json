@@ -17,7 +17,7 @@
     "schema": {
       "const": "agent-workflow/mcp-run-command-card/v1"
     },
-    "session_id": {
+    "agent_run_id": {
       "minLength": 1,
       "type": "string"
     },
@@ -28,7 +28,7 @@
   },
   "required": [
     "schema",
-    "session_id",
+    "agent_run_id",
     "role",
     "sha256",
     "markdown"

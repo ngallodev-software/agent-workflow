@@ -1,33 +1,24 @@
 ---
 name: prompt-pack-builder
-description: Build validated, self-contained agent-workflow prompt packs with phased tickets, references, lifecycle instructions, and checksums.
+description: Create and validate reproducible host-independent prompt packs with tasks, result contracts, evaluations, and deterministic archives.
 ---
 
-# Prompt-pack builder
+# Prompt-Pack Builder Skill
 
-Use this skill when bounded work needs isolated worktrees, persistent evidence, independent review, recovery, or ordered multi-ticket execution. Small one-step local edits do not require a ceremonial pack. Use [`agent-workflow-orchestrator`](../agent-workflow-orchestrator/SKILL.md) to validate and launch the completed pack.
+Use this skill to create reproducible prompt packs with tasks, result contracts, evaluations, and deterministic archives.
 
-## Required archive structure
+A pack must be host-independent. `pack.yaml` is the single authoritative, versioned machine-readable manifest. Phase directories contain human-readable prompts and runbooks only; do not create per-phase task manifests or a second workflow manifest. It may define:
 
-- root README, execution protocol, and delegation runbook;
-- one directory per phase;
-- phase README, master prompt, task manifest, and bounded tickets;
-- complexity/model tiers, `backlog_id` ownership, and dependency ordering;
-- writable paths, acceptance criteria, necessary tests, and stop conditions;
-- concrete code structures and interfaces where possible;
-- reusable templates and portable helper scripts;
-- source references sufficient for a smaller model to avoid guessing;
-- internal SHA-256 manifest and external archive checksum;
-- validated `.tar.zst` archive.
+- phases/tasks and dependencies;
+- prompts and writable scope;
+- expected outputs;
+- result JSON Schemas;
+- evaluation commands/policies;
+- review requirements;
+- completion instructions.
 
-## Operational requirements
+Operational instructions should use `agent-workflow agent-run prepare` and `agent-workflow agent-run start` for headless execution. If a future external host is used, the pack should still define the same durable Agent Run contract and leave host-specific presentation to a separate integration document.
 
-The generated README and runbook must name `agent-workflow pack validate`, `agent-workflow worktree create`, and `agent-workflow launch`. They must state that a valid current tmux context produces a visible pane through `agent-workflow launch`, while an unusable context falls back to a detached named session. They must also state that native host subagents are not durable workflow runs unless explicitly bridged through the CLI.
+Use schema `agent-workflow/prompt-pack/v1`. Keep task dependencies, Agent Run IDs, prompt paths, result contracts, and optional backlog ownership in root `pack.yaml`. `MANIFEST.json` is reserved for deterministic archive integrity and is never a source-pack workflow manifest.
 
-## Quality rules
-
-A ticket must be independently executable but should not duplicate broad context unnecessarily. Parallel tickets use separate worktrees and sessions; absence of a dependency edge permits concurrency, while integration and gate review remain serialized. Use exact paths and current source evidence. Never use one large prompt as a substitute for dependency ordering or review gates. Keep tests narrow and semantic.
-
-## Workflow-aware packs
-
-When tickets form a graph, declare cross-phase dependencies and optional structured result contracts explicitly. Prefer one of the authorized workflow templates when its shape fits. Define every downstream input as a named bounded JSON Pointer binding with required/optional behavior; never instruct children to scrape arbitrary predecessor files. Include terminal workflow sealing and independent phase review in acceptance criteria. Repository-owned packs must pass the `release-drift-auditor` ownership/collision checks before archive creation.
+Validate with `agent-workflow pack validate` and produce deterministic archives with `agent-workflow pack archive`.

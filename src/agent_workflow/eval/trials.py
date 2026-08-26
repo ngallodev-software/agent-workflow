@@ -137,7 +137,7 @@ def extract_trial(run_dir: Path) -> dict[str, Any]:
 
     result = {
         "schema": TRIAL_EVIDENCE_SCHEMA,
-        "trial_id": str(provenance.get("session_id") or run_dir.name),
+        "trial_id": str(provenance.get("agent_run_id") or run_dir.name),
         "run_path": str(run_dir),
         "final_receipt_sha256": final_receipt_sha256,
         "provider_evidence_sha256": artifacts.get("provider-evidence.json"),
@@ -174,7 +174,7 @@ def extract_trial(run_dir: Path) -> dict[str, Any]:
         "local_estimated_cost": local_cost,
         "currency": currency,
         "price_catalog_id": catalog,
-        "retry_of_run_id": provider.get("retry_of_run_id"),
+        "retry_of_agent_run_id": provider.get("retry_of_agent_run_id"),
         "retry_count": total.get("retry_count") if isinstance(total.get("retry_count"), int) else None,
         "errors": total.get("errors") if isinstance(total.get("errors"), list) else [],
         "steer_count": total.get("steer_count") if isinstance(total.get("steer_count"), int) else None,

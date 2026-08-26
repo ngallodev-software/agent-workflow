@@ -51,7 +51,7 @@
         "local_estimated_cost",
         "currency",
         "price_catalog_id",
-        "retry_of_run_id",
+        "retry_of_agent_run_id",
         "retry_count",
         "errors",
         "steer_count",
@@ -148,7 +148,7 @@
             "null"
           ]
         },
-        "retry_of_run_id": {
+        "retry_of_agent_run_id": {
           "type": [
             "string",
             "null"

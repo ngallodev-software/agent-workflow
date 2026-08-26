@@ -10,16 +10,16 @@ from .util import validate_id
 
 QUERY_COLUMNS: dict[str, tuple[str, Sequence[str]]] = {
     "runs": (
-        "SELECT session_id,source_dir,storage_class,ticket_id,pack_id,executor,model,durable_status,disposition,index_state,index_error,started_at,finished_at,final_receipt_sha256,evidence_complete,indexed_at,open_incident_count,pending_permission_count FROM run_overview",
-        ("session_id", "source_dir", "storage_class", "ticket_id", "pack_id", "executor", "model", "durable_status", "disposition", "index_state", "index_error", "started_at", "finished_at", "final_receipt_sha256", "evidence_complete", "indexed_at", "open_incident_count", "pending_permission_count"),
+        "SELECT agent_run_id,source_dir,storage_class,ticket_id,pack_id,executor,model,durable_status,disposition,index_state,index_error,started_at,finished_at,final_receipt_sha256,evidence_complete,indexed_at,open_incident_count,pending_permission_count FROM run_overview",
+        ("agent_run_id", "source_dir", "storage_class", "ticket_id", "pack_id", "executor", "model", "durable_status", "disposition", "index_state", "index_error", "started_at", "finished_at", "final_receipt_sha256", "evidence_complete", "indexed_at", "open_incident_count", "pending_permission_count"),
     ),
     "incidents": (
-        "SELECT session_id,relative_path,source_sequence,incident_id,recorded_at,category,severity,state,summary,record_sha256 FROM incident_events",
-        ("session_id", "relative_path", "source_sequence", "incident_id", "recorded_at", "category", "severity", "state", "summary", "record_sha256"),
+        "SELECT agent_run_id,relative_path,source_sequence,incident_id,recorded_at,category,severity,state,summary,record_sha256 FROM incident_events",
+        ("agent_run_id", "relative_path", "source_sequence", "incident_id", "recorded_at", "category", "severity", "state", "summary", "record_sha256"),
     ),
     "permissions": (
-        "SELECT session_id,relative_path,source_sequence,event_id,recorded_at,operation,resource_class,state,source,remediation_class,record_sha256 FROM permission_events",
-        ("session_id", "relative_path", "source_sequence", "event_id", "recorded_at", "operation", "resource_class", "state", "source", "remediation_class", "record_sha256"),
+        "SELECT agent_run_id,relative_path,source_sequence,event_id,recorded_at,operation,resource_class,state,source,remediation_class,record_sha256 FROM permission_events",
+        ("agent_run_id", "relative_path", "source_sequence", "event_id", "recorded_at", "operation", "resource_class", "state", "source", "remediation_class", "record_sha256"),
     ),
     "performance": (
         "SELECT executor,model,stage,sample_count,avg_elapsed_seconds,avg_first_output_latency_seconds,avg_input_tokens,avg_output_tokens,provider_billed_sample_count,avg_provider_billed_cost,provider_billed_currency,local_estimated_sample_count,avg_local_estimated_cost,local_estimated_currency FROM performance_summary",
@@ -30,16 +30,12 @@ QUERY_COLUMNS: dict[str, tuple[str, Sequence[str]]] = {
         ("workflow_id", "owner_run_id", "pack_id", "workflow_state", "event_count", "indexed_at"),
     ),
     "workflow-nodes": (
-        "SELECT workflow_id,node_id,kind,ticket_id,bound_run_id,state,attempt,executor,model,terminal_reason FROM workflow_nodes",
-        ("workflow_id", "node_id", "kind", "ticket_id", "bound_run_id", "state", "attempt", "executor", "model", "terminal_reason"),
-    ),
-    "repairs": (
-        "SELECT repair_id,source_session_id,source_final_receipt_sha256,source_artifact_path,source_artifact_sha256,adapter_id,adapter_version,adapter_sha256,canonical_sha256,validation_result,source_mutation_verified,repair_receipt_sha256,repair_dir,created_at,actor,indexed_at FROM evidence_repairs",
-        ("repair_id", "source_session_id", "source_final_receipt_sha256", "source_artifact_path", "source_artifact_sha256", "adapter_id", "adapter_version", "adapter_sha256", "canonical_sha256", "validation_result", "source_mutation_verified", "repair_receipt_sha256", "repair_dir", "created_at", "actor", "indexed_at"),
+        "SELECT workflow_id,node_id,kind,ticket_id,bound_agent_run_id,state,attempt,executor,model,terminal_reason FROM workflow_nodes",
+        ("workflow_id", "node_id", "kind", "ticket_id", "bound_agent_run_id", "state", "attempt", "executor", "model", "terminal_reason"),
     ),
     "errors": (
-        "SELECT error_id,session_id,source_path,detected_at,category,detail FROM index_errors",
-        ("error_id", "session_id", "source_path", "detected_at", "category", "detail"),
+        "SELECT error_id,agent_run_id,source_path,detected_at,category,detail FROM index_errors",
+        ("error_id", "agent_run_id", "source_path", "detected_at", "category", "detail"),
     ),
 }
 
@@ -47,7 +43,7 @@ QUERY_COLUMNS: dict[str, tuple[str, Sequence[str]]] = {
 def build_query(
     kind: str,
     *,
-    session_id: str | None = None,
+    agent_run_id: str | None = None,
     state: str | None = None,
     category: str | None = None,
     executor: str | None = None,
@@ -60,8 +56,8 @@ def build_query(
         raise WorkflowError(f"unsupported index query: {kind}")
     if not 1 <= limit <= 10000:
         raise WorkflowError("index query limit must be between 1 and 10000")
-    if session_id is not None:
-        validate_id(session_id, "session ID")
+    if agent_run_id is not None:
+        validate_id(agent_run_id, "agent run ID")
 
     base, columns = QUERY_COLUMNS[kind]
     clauses: list[str] = []
@@ -75,7 +71,7 @@ def build_query(
         "permissions": "state",
     }.get(kind)
     filters = [
-        ("source_session_id" if kind == "repairs" else "session_id", session_id),
+        ("agent_run_id", agent_run_id),
         (state_column, state),
         ("category", category),
         ("executor", executor),

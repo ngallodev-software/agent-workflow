@@ -37,7 +37,7 @@ def advise_routing(
     *,
     enforced_selection: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Return deterministic advice; configuration/session enforcement stays authoritative."""
+    """Return deterministic advice; configuration/Agent Run enforcement stays authoritative."""
     metadata = dict(metadata or {})
     task_type = str(metadata.get("task_type", "implementation")).strip().lower()
     risk = str(metadata.get("risk", "normal")).strip().lower()

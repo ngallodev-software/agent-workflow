@@ -1,9 +1,0 @@
-phase: "0"
-name: "audited-manual-override"
-mandatory_order: ["LIFE-001"]
-tasks:
-  - id: "LIFE-001"
-    tier: A
-    session: "force-accept-override-life-001"
-    prompt: "tickets/LIFE-001-force-accept.md"
-    backlog_id: "LIFE-001"

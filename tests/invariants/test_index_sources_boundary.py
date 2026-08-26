@@ -28,7 +28,7 @@ def test_discovery_prefers_active_run_over_archive_duplicate(tmp_path: Path) -> 
     archive = settings.state_root / "archive" / "session-1"
     active.mkdir(parents=True)
     archive.mkdir(parents=True)
-    assert discover_runs(settings, include_archived=True, session_id=None) == [
+    assert discover_runs(settings, include_archived=True, agent_run_id=None) == [
         ("session-1", "active", active)
     ]
 
@@ -40,7 +40,7 @@ def test_discovery_rejects_unsafe_archive_root(tmp_path: Path) -> None:
     target.mkdir()
     os.symlink(target, settings.state_root / "archive")
     with pytest.raises(WorkflowError, match="archive root is unsafe"):
-        discover_runs(settings, include_archived=True, session_id=None)
+        discover_runs(settings, include_archived=True, agent_run_id=None)
 
 
 def test_artifact_inventory_ignores_symlinks_locks_and_non_evidence(tmp_path: Path) -> None:

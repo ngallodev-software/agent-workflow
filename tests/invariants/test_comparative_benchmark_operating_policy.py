@@ -20,9 +20,16 @@ from agent_workflow.benchmarking.planning import create_run_plan
 from agent_workflow.config import defaults
 from agent_workflow.benchmarking.runner import execute_pair
 from agent_workflow.benchmarking.runtime import validate_runtime_lock
+from agent_workflow.benchmarking.service import export_builtin_suite
 from agent_workflow.benchmarking.statistics import paired_bootstrap_interval
 from agent_workflow.errors import WorkflowError
 from agent_workflow.process import run
+
+
+def _builtin_suite(tmp_path: Path) -> Path:
+    destination = tmp_path / "priority-picker-v1"
+    export_builtin_suite(destination, benchmark_id="priority-picker-v1")
+    return destination
 
 
 def _executor(*, provider: str = "openai", mode: str = SUBSCRIPTION_MODE) -> dict[str, object]:
@@ -220,25 +227,17 @@ def test_pair_level_infrastructure_retry_selects_fresh_attempt(
     assert [item["state"] for item in result["attempts"]] == ["infrastructure_failed", "terminal"]
 
 
-def test_internal_policy_rejects_synthetic_authentication() -> None:
-    root = Path(__file__).resolve().parents[2]
-    policy = load_operating_policy(
-        root / "benchmarks/specs/priority-picker-v1/policies/internal.json"
-    )
-    spec = json.loads(
-        (root / "benchmarks/specs/priority-picker-v1/benchmark-spec.json").read_text(
-            encoding="utf-8"
-        )
-    )
+def test_internal_policy_rejects_synthetic_authentication(tmp_path: Path) -> None:
+    suite = _builtin_suite(tmp_path)
+    policy = load_operating_policy(suite / "policies" / "internal.json")
+    spec = json.loads((suite / "benchmark-spec.json").read_text(encoding="utf-8"))
     with pytest.raises(WorkflowError, match="not allowed by operating policy"):
         apply_operating_policy(spec, policy, authentication_mode="synthetic-none")
 
 
-def test_publication_policy_requires_twenty_eligible_pairs() -> None:
-    root = Path(__file__).resolve().parents[2]
-    policy = load_operating_policy(
-        root / "benchmarks/specs/priority-picker-v1/policies/publication.json"
-    )
+def test_publication_policy_requires_twenty_eligible_pairs(tmp_path: Path) -> None:
+    suite = _builtin_suite(tmp_path)
+    policy = load_operating_policy(suite / "policies" / "publication.json")
     assert policy["repetitions"] == 20
     assert policy["winner_policy"]["minimum_eligible_pairs"] == 20
     assert policy["winner_policy"]["confidence_level"] == 0.95
@@ -248,7 +247,7 @@ def test_publication_policy_requires_twenty_eligible_pairs() -> None:
 
 
 def test_internal_policy_rejects_command_line_overrides(tmp_path: Path) -> None:
-    root = Path(__file__).resolve().parents[2]
+    suite = _builtin_suite(tmp_path)
     settings = replace(
         defaults(tmp_path / "config.toml"),
         worktree_root=tmp_path / "worktrees",
@@ -257,10 +256,10 @@ def test_internal_policy_rejects_command_line_overrides(tmp_path: Path) -> None:
     with pytest.raises(WorkflowError, match="may not be overridden"):
         create_run_plan(
             settings,
-            spec_path=root / "benchmarks/specs/priority-picker-v1/benchmark-spec.json",
-            executor_path=root / "benchmarks/specs/priority-picker-v1/executors/synthetic.json",
+            spec_path=suite / "benchmark-spec.json",
+            executor_path=suite / "executors" / "synthetic.json",
             repo=tmp_path / "unused",
             base_ref="HEAD",
             repetitions=2,
-            policy_path=root / "benchmarks/specs/priority-picker-v1/policies/internal.json",
+            policy_path=suite / "policies" / "internal.json",
         )

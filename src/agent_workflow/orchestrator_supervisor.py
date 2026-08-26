@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import fcntl
-import json
 import os
 import signal
 import threading
@@ -13,6 +12,7 @@ from typing import Any
 
 from .config import Settings
 from .errors import WorkflowError
+from .journal import append_jsonl
 from .orchestrator_inbox import OrchestratorInboxError, orchestrator_dir, replay_registered
 from .util import utc_now
 
@@ -20,13 +20,28 @@ LOCK_NAME = ".supervisor.lock"
 EVENTS_NAME = "supervisor-events.jsonl"
 
 
+def _validate_supervisor_event(value: object, _line_number: int) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise WorkflowError("orchestrator supervisor event must be a JSON object")
+    if value.get("schema") != "agent-workflow/orchestrator-supervisor-event/v1":
+        raise WorkflowError("invalid orchestrator supervisor event schema")
+    if not isinstance(value.get("timestamp"), str) or not isinstance(value.get("reason"), str):
+        raise WorkflowError("invalid orchestrator supervisor event")
+    return value
+
+
 def _record(directory: Path, reason: str, **metadata: Any) -> None:
-    value = {"schema": "agent-workflow/orchestrator-supervisor-event/v1", "timestamp": utc_now(), "reason": reason, **metadata}
-    descriptor = os.open(directory / EVENTS_NAME, os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_CLOEXEC | os.O_NOFOLLOW, 0o600)
-    with os.fdopen(descriptor, "a", encoding="utf-8") as stream:
-        stream.write(json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n")
-        stream.flush()
-        os.fsync(stream.fileno())
+    value = {
+        "schema": "agent-workflow/orchestrator-supervisor-event/v1",
+        "timestamp": utc_now(),
+        "reason": reason,
+        **metadata,
+    }
+    append_jsonl(
+        directory / EVENTS_NAME,
+        value,
+        validator=_validate_supervisor_event,
+    )
 
 
 def watch(
@@ -39,7 +54,7 @@ def watch(
     max_per_child: int = 25,
     max_cycles: int | None = None,
 ) -> dict[str, Any]:
-    """Run one active writer that replays after every wake or timeout."""
+    """Run one active writer that replays durable child journals on a bounded interval."""
     if poll_seconds <= 0 or batch_size < 1 or max_per_child < 1:
         raise WorkflowError("watch bounds must be positive")
     if max_cycles is not None and max_cycles < 1:
@@ -83,17 +98,8 @@ def watch(
                     continue
                 if max_cycles is not None and cycles >= max_cycles:
                     break
-                started = time.monotonic()
                 stop.wait(interval)
-                elapsed = time.monotonic() - started
-                _record(
-                    directory,
-                    "wake",
-                    cycle=cycles,
-                    wake_reason="poll",
-                )
-                if elapsed < poll_seconds:
-                    stop.wait(poll_seconds - elapsed)
+                _record(directory, "poll", cycle=cycles, interval_seconds=interval)
             reason = "shutdown" if stop.is_set() else "completed"
             _record(directory, reason, cycles=cycles, advanced=total_advanced, imported=total_imported)
             return {"orchestrator_id": orchestrator_id, "state": reason, "cycles": cycles, "advanced": total_advanced, "imported": total_imported}

@@ -1,337 +1,88 @@
 # Operations
 
-This document consolidates day-to-day delegation lifecycle, agent policy, recovery, and host-routing guidance.
+## Normal delegation
 
-## Execution model
+1. Create or validate an isolated worktree.
+2. Prepare an Agent Run.
+3. For headless mode, start the worker.
+4. Observe lifecycle state and durable progress.
+5. Persist steering requests when needed.
+6. Require explicit acknowledgement for steering disposition.
+7. Collect completion and evaluation evidence.
+8. Review and accept/reject separately.
+9. Seal/archive when appropriate.
 
-Each delegation has:
+## External workers
 
-- a source repository and pinned baseline revision;
-- a dedicated Git worktree;
-- a fresh session ID and durable run directory;
-- a copied and hashed prompt;
-- a configured executor/model/class selection or explicit argv;
-- a tmux session or pane used as an observation and process-control surface;
-- sealed terminal evidence and later immutable lifecycle receipts.
+Use `--worker-mode external` when another runtime will launch the worker. Preparation remains durable and host-independent. The external runtime is presentation/execution infrastructure, not workflow authority.
 
-The CLI and MCP adapter call shared services. Shell scripts are compatibility wrappers only.
+Agent-workflow does not guess external process ownership or silently control an external host. Host-specific binding/reconciliation remains future work unless an explicit public integration contract is present.
 
-## Process and environment policy
+## Recovery and restore
 
-Governed commands are argv arrays and never use `shell=True` or command-string fallback. The shared process substrate applies a timeout, owns the complete non-interactive process group, caps stdout/stderr, and performs graceful cancellation followed by bounded escalation. `command.json`, provenance, logs, completion collection, and diagnostics contain redacted argv/output; explicit launches are classified as `unclassified`.
+Recovery starts from source, immutable Agent Run contracts, append-only journals, sealed evidence, and workflow snapshots. Mutable status, indexes, and external-host bindings are projections and may be rebuilt.
 
-Child environments start from fixed `PATH`/locale defaults. A configured executor may name variables in `environment_allowlist`; only those ambient values, plus named values supplied by the caller, are passed through. Credential-agent and cloud credential variables are not inherited by default. `unsafe_inherit` is an explicit break-glass policy and is not used by governed launch paths.
+Recommended restore sequence:
 
-## Launch policy
+1. restore and verify repository source;
+2. install the current package and dependencies;
+3. run `agent-workflow doctor`;
+4. verify the relevant worktree/source baseline;
+5. inspect Agent Run contracts and durable journals;
+6. repair mutable run status and rebuild the SQLite projection where needed;
+7. resume workflow scheduling or create a new Agent Run with retry lineage;
+8. rerun applicable tests/evaluations before acceptance.
 
-Agent classes constrain interactivity, executor, and model combinations. Named profiles may narrow those choices but cannot escape class policy. Explicit no-go authorization is recorded in provenance.
+Do not depend on prior UI state, a prior interactive host, or host-specific absolute paths.
 
-Routing advice is deterministic and explainable, but advisory. The launch plan produced by configured policy is authoritative. Never allow a recommendation, prior trial, or agent-selected value to bypass class, executor, model, or permission restrictions.
+## Interrupt and termination
 
-The default classes are:
+For headless workers, Agent Run control targets the Agent-Workflow-owned process group. External workers are not controlled through guessed host mechanisms; unsupported lifecycle operations fail clearly.
 
-| Class | Intended use | Default behavior |
-|---|---|---|
-| `exploratory` | bounded research and reconnaissance | non-interactive, low-cost models |
-| `review` | independent inspection and evidence review | non-interactive |
-| `implementation` | code-changing work | interactive by default |
+## Messaging
 
-The concrete allowlists live in configuration, not documentation. Use `agent-workflow config show` to inspect effective policy.
+Persist first. Delivery is optional. A steer request remains pending until correlated acknowledgement evidence exists.
 
-`agent-workflow --json doctor` reports the exact trusted policy inputs, resolved
-executor path, probed version, adapter version, capabilities, compatibility
-decision, and explanation code. Local mode reports unsafe ownership/modes and
-custom executors as warnings. Governed and release modes fail closed with a
-remediation message; an unsupported named adapter is never silently treated as
-unclassified.
+## Completion gates
 
-The executor compatibility policy is shipped as the versioned
-`executor-compatibility/v1` data asset. It is intentionally separate from user
-settings so changing provider support requires a release-backed asset update.
-Launch provenance records the actual absolute executable path, version, optional
-digest, compatibility policy digest, adapter version, and decision. This makes a
-PATH substitution between doctor and launch observable even when the host PATH
-changes.
+Do not infer success from worker exit alone. Verify completion schema, sealed evidence, evaluation policy, review state, and lifecycle disposition.
 
-Implementation work starts interactive. Exploration, research, and review work
-starts non-interactive. When an implementation launch is inside a tmux window
-that has reached its configured capacity, the CLI reports the count and
-explicitly identified idle panes. The operator may close enough idle panes and
-retry, choose a structured non-interactive fallback, or cancel. The fallback
-sets both assignment and executor mode to non-interactive; it is never an
-implicit downgrade. A structured provider stream is required when the run will
-be evaluated after completion.
+## SQLite index operations
 
-When no shared tmux window is available, a dedicated named session remains an
-interactive executor context; it is not a silent non-interactive downgrade.
+The SQLite database is a disposable query projection over durable evidence. It may accelerate fleet status, workflow views, incidents, permissions, and performance analysis, but it must never become authority for an acceptance or lifecycle decision.
 
-## Observe and control
-
-```bash
-agent-workflow list
-agent-workflow status SESSION --capture 50
-agent-workflow attach SESSION
-agent-workflow tail SESSION
-```
-
-Controls preserve prior evidence:
-
-```bash
-agent-workflow interrupt SESSION
-agent-workflow terminate SESSION
-agent-workflow kill SESSION
-agent-workflow restart SESSION --new-session RETRY_SESSION
-```
-
-A potential stall is a diagnostic state, not authorization to terminate. Inspect runner heartbeat, executor/process liveness, pane death, semantic progress, terminal snapshots, output/event growth, permission state, lifecycle events, and durable messages before acting. A fresh supervisor heartbeat does not count as semantic progress and cannot conceal a stuck executor.
-
-## Foreground supervision and bounded recovery
-
-Run one reconciliation cycle during diagnosis or a continuous foreground loop while delegations are active:
-
-```bash
-agent-workflow --json supervisor once
-agent-workflow supervisor run --interval-seconds 10
-```
-
-Safe defaults collect evidence, repair a missing or corrupt `status.json` only when immutable authority can reconstruct it, deduplicate incidents, and send at most one progress probe per incident/rule ceiling. Automatic interruption and restart are disabled by default:
-
-```bash
-agent-workflow supervisor run \
-  --interrupt-stalled \
-  --restart-orphaned \
-  --max-remediation-attempts 1
-```
-
-Enable those switches only under an operator-approved policy. A restart always creates a new run ID and preserves retry lineage. The supervisor never approves a permission request, changes a model/tool allowlist, increases resource limits, accepts implementation evidence, merges a branch, or deletes a run.
-
-### Manual force acceptance
-
-`agent-workflow force-accept SESSION --actor ID --reason TEXT --acknowledge FORCE-ACCEPT` is an explicit local operator override for a terminal run whose ordinary acceptance gate cannot be satisfied. The acknowledgement token is a narrowly documented manual confirmation mechanism; the actor value is an operator-supplied label, not authenticated-human authorization. The command writes a read-only `force-accept-receipt.json` linked to the sealed final-receipt digest with the session, actor, timestamp, reason, command identity, and normal-gate failures, then projects `force-accepted` in status and ledger output. It never rewrites normal lifecycle, completion, evaluation, review, or final-receipt artifacts. Running/launched sessions, missing or tampered sealed evidence, and repeated requests fail closed. HARD-007 remains the required future authenticated authority boundary.
-
-Key evidence:
-
-| Artifact | Operational use |
-|---|---|
-| `run-health-samples.jsonl` | distinguish runner/executor liveness, host pressure, and semantic progress |
-| `terminal-events.jsonl` | inspect bounded changed interactive output without treating pane text as authority |
-| `permission-events.jsonl` | surface observed permission waits, denials, and later clears |
-| `incident-events.jsonl` | stable typed diagnosis with deduplicated fingerprints |
-| `remediation-events.jsonl` | rule, attempt, action, result, and verification history |
-| `process-result.json` | exact exit/signal, timeout/cancel, completion-authorized termination, bytes, and truncation outcome |
-
-### Incident response order
-
-1. Read `agent-workflow status SESSION` and the latest incident/remediation records.
-2. Confirm immutable launch authority and whether semantic progress actually stopped.
-3. Resolve permission, credential, sandbox, or policy incidents manually; do not widen access through a retry.
-4. For a transient stall, allow the bounded probe before opting into interruption.
-5. Restart only when the original process is proven unavailable or terminal and the retry budget permits it.
-6. Verify the new run from durable evidence, not from a pane appearing active.
-
-## Mutable run-status projection
-
-`runs/<session>/status.json` is an atomically updated operator cache. Running
-`agent-workflow status <session> --json` refreshes live tmux, health, semantic
-progress, permission, and capture-exhaustion fields in that file. Inspect
-`projection_generated_at`, `projection_source`, and `projection_freshness` before
-using a copied projection. Never treat it as launch, completion, evaluation, or
-acceptance authority; those decisions are reconstructed from immutable contracts,
-append-only journals, process results, and sealed receipts. An observed diagnosis
-is stored separately as `observed_failure_category` and does not replace the
-durable `failure_category`.
-
-## Searchable evidence projection
-
-The host-local SQLite database is an operational projection, not execution authority. The supervisor performs `index sync` after each cycle by default. For manual operations:
+Common operations:
 
 ```bash
 agent-workflow index status
 agent-workflow index sync
-agent-workflow index query runs --state possibly_stalled
-agent-workflow index query incidents --category permission_wait
-agent-workflow index verify [--full] [--review SESSION]
-```
-
-Use a full verification before relying on an older index for analysis:
-
-```bash
-agent-workflow index verify --full [--review SESSION]
-```
-
-`--full` rehashes every indexed source artifact in addition to SQLite integrity and foreign-key checks. A mismatch indicates stale or altered current source evidence; it does not rewrite the source file. Obsolete non-authoritative legacy runs are reported as preserved quarantines and do not become valid/current evidence. Unsafe paths and current-schema failures remain blocking.
-
-To verify one named reviewed run and its direct gate evidence without changing
-the global result, use `agent-workflow index verify --full --review SESSION`.
-The report exposes this separately as `review_valid`; global `valid` still
-reflects every unresolved host integrity blocker.
-
-### Rebuild and corruption recovery
-
-If the database is missing, corrupt, on an unsupported schema, or suspected of drift:
-
-```bash
 agent-workflow index rebuild
-agent-workflow index verify --full [--review SESSION]
+agent-workflow index verify --full
+agent-workflow index query runs --state running
+agent-workflow index query incidents --category process_alive_no_progress
+agent-workflow index query errors
 ```
 
-The rebuild removes only the SQLite projection and its WAL/SHM companions, acquires the exclusive indexer lock, then reconstructs rows from validated active and archived run evidence. A corrupt individual run is quarantined as an index error while healthy runs remain queryable. Never repair an authoritative JSON/JSONL artifact by editing SQLite.
+Use `index sync` for normal incremental reconciliation. Fingerprints skip unchanged runs; a changed run is replaced transactionally.
 
-For a scoped repair:
+Use `index rebuild` after database loss/corruption, projection-schema changes, or when a clean reconstruction is preferable to diagnosis. A rebuild deletes/recreates only the projection and never rewrites Agent Run source evidence.
+
+Use `index verify --full` when source drift or post-index tampering is suspected. Corrupt or unsafe source evidence is isolated as an index error; it is not silently repaired or translated into an older representation.
+
+The foreground supervisor synchronizes the index after each cycle by default. When diagnosing the index itself, disable that integration explicitly:
 
 ```bash
-agent-workflow index rebuild --run SESSION
+agent-workflow supervisor once --no-sync-index
 ```
 
-The database does not require an independent evidence backup because it is reconstructable. Back up or transfer authoritative run/archive directories and their sealed receipts instead. Do not copy a live WAL database as the sole record of a run.
+The public query surface is curated and parameterized. It intentionally exposes neither arbitrary SQL nor raw prompt/message/log/provider bodies.
 
-### Concurrency and freshness
+## Command discovery
 
-Only the indexer writes. It uses an exclusive state-root lock, short transactions, WAL mode, foreign keys, and stable shared-lock reads of append-only journals. Query commands are fixed and read-only. `index status` reports source/index counts, last synchronization, and errors; automation must treat a stale or incomplete index as a query limitation rather than a lifecycle fact. Disable supervisor reconciliation temporarily with `--no-sync-index` or `[supervisor].sync_index = false`.
-
-## Durable messages
-
-The fsynced message journal is the authority. tmux `wait-for` is a local wakeup accelerator only. Producers append immutable records; consumers replay by sequence and acknowledge work explicitly.
-
-Per-consumer cursor files are rebuildable performance projections below the
-configured state root. They are keyed by hashed trusted consumer and source
-journal identities, use lock-scoped compare/update, and advance only after a
-committed target-effect receipt. Missing, stale, truncated, or corrupt cursor
-files are reconstructed from the source journal and target evidence. A source
-message ID is idempotent only when its canonical digest matches; conflicting
-reuse fails closed. Handling states are the fixed dispositions `applied`,
-`rejected`, `ignored`, `deferred`, and `security_error`.
+The CLI parser is the command authority. Generate the exact installed command surface rather than maintaining a parallel static command listing:
 
 ```bash
-agent-workflow steer SESSION "Run the focused tests." --actor orchestrator
-agent-workflow watch SESSION --after 0 --timeout 300
-agent-workflow progress SESSION "Focused tests passed." --actor child
-agent-workflow ack SESSION MESSAGE_ID "Applied." --actor child --outcome applied
+agent-workflow commands --format markdown
 ```
 
-A steer is pending until correlated acknowledgement exists. Logs, terminal text, or a live tmux process do not prove delivery or application. The default adapter is `unsupported`. Use `steering_adapter = "control-file-v1"` only for a cooperative executor/wrapper that watches `AGENT_WORKFLOW_STEERING_INBOX` and writes a correlated `ack` through the bound CLI/control bridge. The durable delivery journal distinguishes `queued`, `delivered`, `applied`, `rejected`, `unsupported`, `expired`, and `failed`; an expired request cannot later become applied.
-
-## Completion evidence
-
-JSON Schema validation is only the first gate. A `completed` handoff must match the launch session/ticket/pack identity, name real base/head revisions, include at least one acceptance criterion with evidence, include at least one successful command receipt, and contain no unresolved items. `partial`, `failed`, and `blocked` handoffs must preserve their nonzero/skipped/unavailable command receipts and explain unresolved work. Invalid completion collection is durable evidence and forces a failed terminal status.
-
-## Source cleanliness evidence
-
-`worktree create` and launch preflight execute a fresh exact-root `git -C <root> status --porcelain`. The command preserves the operator's configured Git exclude view while still disabling pagers, editors, diff helpers, and credential prompts. Worktree creation returns bounded provenance—resolved executable, exact argv/root, return code, byte counts, and output digests—without exposing the unbounded filename list. A real tracked or untracked change remains fail-closed unless `--allow-dirty` is explicit.
-
-Optional codebase-memory discovery uses a full non-persistent exact-worktree index by default and compares porcelain status before and after the one allowed probe. Persistent graphs must use an external host cache or an explicitly pre-authorized `.codebase-memory/` disposable tree. For the local exception, scope snapshots record ownership, mode, file count, total size, tree digest, cleanup policy, and a 256 MiB limit. Unauthorized, unsafe, or oversized tooling residue remains a scope violation; optional-tool failure never blocks bounded shell discovery.
-
-## Interactive agent reuse
-
-`task-complete` is terminal by default: after the host validates the completion intent it stops the interactive executor, seals the run, and lets tmux close the pane. Interactive agents can retain bounded assignment context only with the explicit `--keep-alive` mode. Reuse then requires:
-
-- explicit prior task completion;
-- an idle, live, unexpired session;
-- the exact same worktree;
-- a compatible agent policy;
-- exact ticket/retry lineage for automatic reuse;
-- correlated acknowledgement of the reassignment.
-
-```bash
-agent-workflow agent task-complete SESSION --actor AGENT --summary "Implemented parser" --keep-alive
-agent-workflow agent candidates /path/to/worktree --ticket TICKET --pack PACK
-agent-workflow agent reuse SESSION ./next-task.md --actor orchestrator --ticket TICKET --pack PACK
-```
-
-Similarity ranking helps an operator choose; it is not autonomous memory or routing authority.
-
-## Workflow recovery
-
-Workflow snapshots are immutable and event journals append-only. To recover after interruption:
-
-1. verify the supplied snapshot is identical to the started snapshot;
-2. run `workflow status` to refresh projections from the journal;
-3. inspect child run evidence for running or terminal nodes;
-4. run `workflow resume` to reconcile and schedule eligible work;
-5. seal only after every node is terminal.
-
-Never edit `workflow-status.json` to repair state. It is a projection.
-
-## Comparative benchmark operations
-
-Use `agent-workflow benchmark suite-export` to materialize the installed frozen suite. A planned run creates a coordinator and two sibling arm worktrees per case/repetition; the original repository is never a benchmark output target. `benchmark run` performs the automated pipeline and normally stops at `awaiting_human_review`. Use `benchmark review` to create a neutral left/right assignment and submit a completed rubric, then run `benchmark verify`.
-
-Do not manually remove arm worktrees before consolidation. `benchmark cleanup` verifies the receipt and manifest, removes only the arm worktrees and branches, writes `cleanup.json`, and preserves the coordinator plus `benchmarks/runs/<run-id>`. A failed verification is a hard cleanup stop. Real-provider configurations should inherit only explicitly allowlisted credentials and must emit the complete usage contract when `provider_usage` is a required guardrail.
-
-## Worktree and evidence cleanup
-
-Do not delete a failed worktree or run directory automatically. Review the patch and receipts first. Removing a worktree does not remove the authoritative XDG run evidence.
-
-Use `worktree remove` only after deciding whether the branch should be retained. Use uninstall only for installer-owned links and launchers; unrelated paths are left untouched.
-
-Before claiming repository integration, create an immutable closeout receipt:
-
-```bash
-agent-workflow worktree closeout /path/to/worktree \
-  --output /path/to/repository-closeout.json \
-  --baseline-revision BASE_SHA --fetch --push \
-  --integration-branch main \
-  --operational-tree .agent-workflow-handoff/ \
-  --disposable-tree .codebase-memory/
-agent-workflow worktree closeout-verify /path/to/repository-closeout.json
-```
-
-Without `--fetch` or `--push`, remote observations remain explicitly
-unverified. A successful local `git push` exit is not enough: the pushed claim
-is true only when the exact remote branch is re-read and equals local HEAD.
-Ledger rows expose local/remote revisions and committed, pushed, and merged
-claims separately.
-
-## Host routing
-
-Global instructions may recommend `agent-workflow` for bounded delegation. They are guidance, not a security boundary. Future installer-owned hooks may block a narrowly defined set of direct delegation commands, but only after explicit maintainer authorization and an audited break-glass path. See `BKL-007` in [BACKLOG.md](BACKLOG.md).
-
-## Orchestrator registry and inbox
-
-Run one foreground aggregate supervisor per orchestrator:
-
-```bash
-agent-workflow orchestrator watch ORCHESTRATOR_ID [--operator-override]
-```
-
-It acquires a durable single-writer lease, replays registered child journals
-fairly after each timeout or wake hint, appends normalized metadata before
-advancing each source cursor, and records redacted startup/replay/error/
-shutdown metadata. A second active watcher exits with a stable diagnostic.
-Normal stale-lock recovery requires recorded process identity/start evidence;
-`--operator-override` is a bounded explicit recovery option for ambiguous
-metadata and never rewrites source journals or sealed evidence.
-
-The repository provides the `MSG-001` registry and aggregate inbox surfaces:
-
-```text
-agent-workflow orchestrator registry create ORCHESTRATOR_ID
-agent-workflow orchestrator registry register ORCHESTRATOR_ID SESSION
-agent-workflow orchestrator inbox import ORCHESTRATOR_ID
-agent-workflow orchestrator inbox list ORCHESTRATOR_ID --after 0 --limit 100
-```
-
-The registry binds child sessions to immutable launch evidence and preserves source evidence on unregistration. Inbox import is delivery authority only; it does not replace child lifecycle authority. The foregroundable supervisor, shared wake loop, and safe orchestrator resume adapter remain `MSG-002` and `MSG-003`.
-
-See [Durable two-way messaging](ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md).
-
-## Recovery finalization for dead executors
-
-The supervisor automatically invokes the idempotent recovery finalizer when it
-confirms that an active durable run has lost both its runner/executor and its tmux
-presentation. Recovery finalization never fabricates a process exit code or valid
-completion. It records `executor_result=lost` when no process result exists,
-collects the completion handoff as `valid`, `missing`, or `invalid`, writes
-`recovery-finalization.json`, creates a terminal lifecycle event, seals available
-evidence, and marks the run ineligible for acceptance.
-
-Use the same service explicitly when investigating a terminal unsealed run:
-
-```text
-agent-workflow finalize <session-id> --json
-```
-
-The command refuses to race a live runner or executor. Repeating it after a
-successful seal returns the verified existing receipt. Restart is a separate,
-lineage-preserving operator action; recovery finalization never silently launches
-a replacement task.
+Use normal `--help` output when investigating a catalog/version mismatch, an argument error, or a command absent from the catalog.

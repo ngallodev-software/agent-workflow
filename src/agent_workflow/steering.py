@@ -1,24 +1,22 @@
 """Durable post-launch steering delivery for cooperative executor adapters.
 
-The session message log remains the request authority.  This module records
+The Agent Run message log remains the request authority.  This module records
 adapter delivery outcomes in a separate append-only journal and exposes a
 bounded file adapter for executors or wrappers that explicitly opt in.
 """
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import json
-import os
-import stat
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from .contracts import read_launch_contract
+from .contracts import read_agent_run_contract
 from .errors import WorkflowError
+from .journal import JournalTransactionResult, read_jsonl, transact_jsonl
 from .messages import message_digest, replay_messages
 from .util import atomic_write_json, utc_now
 
@@ -65,8 +63,8 @@ def _policy(launch: dict[str, Any]) -> dict[str, Any]:
         deadline = DEFAULT_DEADLINE_SECONDS
     if not isinstance(attempts, int) or isinstance(attempts, bool) or attempts < 1:
         attempts = DEFAULT_MAX_ATTEMPTS
-    command_plan = launch.get("command_plan")
-    argv = command_plan.get("argv") if isinstance(command_plan, dict) else None
+    worker_plan = launch.get("worker_plan")
+    argv = worker_plan.get("argv") if isinstance(worker_plan, dict) else None
     executable = argv[0] if isinstance(argv, list) and argv and isinstance(argv[0], str) else None
     return {
         "adapter": adapter,
@@ -80,7 +78,7 @@ def _validate_event(value: object, *, expected_sequence: int | None = None) -> d
     if not isinstance(value, dict):
         raise WorkflowError("steering delivery record must be a JSON object")
     required = {
-        "schema", "sequence", "event_id", "session_id", "correlation_id",
+        "schema", "sequence", "event_id", "agent_run_id", "correlation_id",
         "message_sha256", "at", "adapter", "outcome", "attempt", "reason",
         "executor",
     }
@@ -100,8 +98,8 @@ def _validate_event(value: object, *, expected_sequence: int | None = None) -> d
             raise WorkflowError(f"{field} must be a UUID") from exc
         if str(parsed) != str(value[field]).lower():
             raise WorkflowError(f"{field} must be canonical")
-    if not isinstance(value["session_id"], str) or not value["session_id"]:
-        raise WorkflowError("steering session_id must be non-empty")
+    if not isinstance(value["agent_run_id"], str) or not value["agent_run_id"]:
+        raise WorkflowError("steering agent_run_id must be non-empty")
     if not isinstance(value["message_sha256"], str) or not value["message_sha256"].startswith("sha256:"):
         raise WorkflowError("invalid steering message digest")
     _parse_timestamp(value["at"])
@@ -118,40 +116,21 @@ def _validate_event(value: object, *, expected_sequence: int | None = None) -> d
     return value
 
 
+def _validate_delivery_record(value: object, line_number: int) -> dict[str, Any]:
+    return _validate_event(value, expected_sequence=line_number)
+
+
 def replay_delivery_events(run_dir: Path) -> list[dict[str, Any]]:
     path = _journal_path(run_dir)
-    if not path.exists() and not path.is_symlink():
-        return []
-    try:
-        mode = path.lstat().st_mode
-    except OSError as exc:
-        raise WorkflowError(f"cannot inspect steering journal: {exc}") from exc
-    if stat.S_ISLNK(mode) or not stat.S_ISREG(mode):
-        raise WorkflowError("steering journal must be a regular non-symlink file")
-    events: list[dict[str, Any]] = []
-    with path.open("rb") as stream:
-        fcntl.flock(stream.fileno(), fcntl.LOCK_SH)
-        try:
-            for index, raw in enumerate(stream, start=1):
-                if not raw.strip():
-                    raise WorkflowError("blank steering delivery record")
-                try:
-                    value = json.loads(raw)
-                except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-                    raise WorkflowError(f"invalid steering delivery JSON at line {index}") from exc
-                event = _validate_event(value, expected_sequence=index)
-                if events and event["session_id"] != events[0]["session_id"]:
-                    raise WorkflowError("steering journal contains mixed session IDs")
-                events.append(event)
-        finally:
-            fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+    events = read_jsonl(path, validator=_validate_delivery_record, missing_ok=True, sequence_field="sequence")
+    if events and any(event["agent_run_id"] != events[0]["agent_run_id"] for event in events):
+        raise WorkflowError("steering journal contains mixed agent run IDs")
     return events
-
 
 def append_delivery_event(
     run_dir: Path,
     *,
-    session_id: str,
+    agent_run_id: str,
     correlation_id: str,
     message_sha256: str,
     adapter: str,
@@ -163,77 +142,57 @@ def append_delivery_event(
     if adapter not in SUPPORTED_ADAPTERS or outcome not in OUTCOMES:
         raise WorkflowError("invalid steering delivery event")
     path = _journal_path(run_dir)
-    with path.open("a+b") as stream:
-        fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
-        try:
-            stream.seek(0)
-            existing: list[dict[str, Any]] = []
-            for index, raw in enumerate(stream, start=1):
-                value = json.loads(raw)
-                existing.append(_validate_event(value, expected_sequence=index))
-            current = [item for item in existing if item["correlation_id"] == correlation_id]
-            if any(
-                item["session_id"] != session_id
-                or item["message_sha256"] != message_sha256
-                or item["adapter"] != adapter
-                for item in current
-            ):
-                raise WorkflowError(
-                    "steering correlation identity conflicts with existing evidence"
-                )
-            hard_terminal = next(
-                (
-                    item for item in reversed(current)
-                    if item["outcome"] in ACK_TERMINAL_OUTCOMES
-                ),
-                None,
-            )
-            if hard_terminal is not None:
-                return hard_terminal
-            # Unsupported/failed describe the configured adapter delivery
-            # path, not necessarily the child's final disposition.  A real,
-            # correlated acknowledgement written through the child bridge may
-            # supersede either outcome. Other delivery events remain stopped.
-            delivery_stop = next(
-                (
-                    item for item in reversed(current)
-                    if item["outcome"] in DELIVERY_STOP_OUTCOMES
-                ),
-                None,
-            )
-            if delivery_stop is not None and outcome not in {"applied", "rejected"}:
-                return delivery_stop
-            if any(
-                item["outcome"] == outcome and item["attempt"] == attempt
-                for item in current
-            ):
-                return next(
-                    item for item in reversed(current)
-                    if item["outcome"] == outcome and item["attempt"] == attempt
-                )
-            event = {
-                "schema": STEERING_SCHEMA,
-                "sequence": len(existing) + 1,
-                "event_id": str(uuid.uuid4()),
-                "session_id": session_id,
-                "correlation_id": correlation_id,
-                "message_sha256": message_sha256,
-                "at": utc_now(),
-                "adapter": adapter,
-                "outcome": outcome,
-                "attempt": attempt,
-                "reason": reason,
-                "executor": executor,
-            }
-            _validate_event(event, expected_sequence=len(existing) + 1)
-            stream.seek(0, os.SEEK_END)
-            stream.write(json.dumps(event, sort_keys=True, separators=(",", ":")).encode("utf-8") + b"\n")
-            stream.flush()
-            os.fsync(stream.fileno())
-        finally:
-            fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
-    return event
 
+    def decide(existing: list[dict[str, Any]]) -> JournalTransactionResult[dict[str, Any]]:
+        if existing and any(item["agent_run_id"] != existing[0]["agent_run_id"] for item in existing):
+            raise WorkflowError("steering journal contains mixed agent run IDs")
+        current = [item for item in existing if item["correlation_id"] == correlation_id]
+        if any(
+            item["agent_run_id"] != agent_run_id
+            or item["message_sha256"] != message_sha256
+            or item["adapter"] != adapter
+            for item in current
+        ):
+            raise WorkflowError("steering correlation identity conflicts with existing evidence")
+        hard_terminal = next(
+            (item for item in reversed(current) if item["outcome"] in ACK_TERMINAL_OUTCOMES),
+            None,
+        )
+        if hard_terminal is not None:
+            return JournalTransactionResult(value=hard_terminal)
+        delivery_stop = next(
+            (item for item in reversed(current) if item["outcome"] in DELIVERY_STOP_OUTCOMES),
+            None,
+        )
+        if delivery_stop is not None and outcome not in {"applied", "rejected"}:
+            return JournalTransactionResult(value=delivery_stop)
+        duplicate = next(
+            (
+                item for item in reversed(current)
+                if item["outcome"] == outcome and item["attempt"] == attempt
+            ),
+            None,
+        )
+        if duplicate is not None:
+            return JournalTransactionResult(value=duplicate)
+        event = {
+            "schema": STEERING_SCHEMA,
+            "sequence": len(existing) + 1,
+            "event_id": str(uuid.uuid4()),
+            "agent_run_id": agent_run_id,
+            "correlation_id": correlation_id,
+            "message_sha256": message_sha256,
+            "at": utc_now(),
+            "adapter": adapter,
+            "outcome": outcome,
+            "attempt": attempt,
+            "reason": reason,
+            "executor": executor,
+        }
+        event = _validate_event(event, expected_sequence=len(existing) + 1)
+        return JournalTransactionResult(value=event, record=event)
+
+    return transact_jsonl(path, validator=_validate_delivery_record, transaction=decide, sequence_field="sequence")
 
 def current_delivery(run_dir: Path, correlation_id: str) -> dict[str, Any] | None:
     matches = [
@@ -244,7 +203,7 @@ def current_delivery(run_dir: Path, correlation_id: str) -> dict[str, Any] | Non
 
 
 def queue_request(run_dir: Path, message: dict[str, Any]) -> dict[str, Any]:
-    launch = read_launch_contract(run_dir / "launch-contract.json")
+    launch = read_agent_run_contract(run_dir / "agent-run-contract.json")
     policy = _policy(launch)
     existing = current_delivery(run_dir, str(message["message_id"]))
     if existing is not None:
@@ -254,7 +213,7 @@ def queue_request(run_dir: Path, message: dict[str, Any]) -> dict[str, Any]:
         return existing
     queued = append_delivery_event(
         run_dir,
-        session_id=str(launch["session"]["id"]),
+        agent_run_id=str(launch["agent_run"]["id"]),
         correlation_id=str(message["message_id"]),
         message_sha256=message_digest(message),
         adapter=str(policy["adapter"]),
@@ -266,7 +225,7 @@ def queue_request(run_dir: Path, message: dict[str, Any]) -> dict[str, Any]:
     if policy["adapter"] == "unsupported":
         return append_delivery_event(
             run_dir,
-            session_id=str(launch["session"]["id"]),
+            agent_run_id=str(launch["agent_run"]["id"]),
             correlation_id=str(message["message_id"]),
             message_sha256=message_digest(message),
             adapter="unsupported",
@@ -285,8 +244,8 @@ def _expired(message: dict[str, Any], deadline_seconds: int) -> bool:
 
 def deliver_pending(run_dir: Path, *, active: bool) -> list[dict[str, Any]]:
     """Deliver any undelivered steering requests through the bound adapter."""
-    launch = read_launch_contract(run_dir / "launch-contract.json")
-    session_id = str(launch["session"]["id"])
+    launch = read_agent_run_contract(run_dir / "agent-run-contract.json")
+    agent_run_id = str(launch["agent_run"]["id"])
     policy = _policy(launch)
     handoff = Path(str(launch["paths"]["handoff_dir"]))
     inbox = handoff / "steering-inbox"
@@ -311,7 +270,7 @@ def deliver_pending(run_dir: Path, *, active: bool) -> list[dict[str, Any]]:
         if _expired(message, int(policy["deadline_seconds"])):
             results.append(append_delivery_event(
                 run_dir,
-                session_id=session_id,
+                agent_run_id=agent_run_id,
                 correlation_id=correlation_id,
                 message_sha256=message_digest(message),
                 adapter=str(policy["adapter"]),
@@ -324,7 +283,7 @@ def deliver_pending(run_dir: Path, *, active: bool) -> list[dict[str, Any]]:
         if not active:
             results.append(append_delivery_event(
                 run_dir,
-                session_id=session_id,
+                agent_run_id=agent_run_id,
                 correlation_id=correlation_id,
                 message_sha256=message_digest(message),
                 adapter=str(policy["adapter"]),
@@ -343,7 +302,7 @@ def deliver_pending(run_dir: Path, *, active: bool) -> list[dict[str, Any]]:
             target = inbox / f"steer-{correlation_id}.json"
             payload = {
                 "schema": STEERING_REQUEST_SCHEMA,
-                "session_id": session_id,
+                "agent_run_id": agent_run_id,
                 "message_id": correlation_id,
                 "message_sha256": message_digest(message),
                 "actor": message["actor"],
@@ -358,7 +317,7 @@ def deliver_pending(run_dir: Path, *, active: bool) -> list[dict[str, Any]]:
                 atomic_write_json(target, payload, mode=0o444)
             results.append(append_delivery_event(
                 run_dir,
-                session_id=session_id,
+                agent_run_id=agent_run_id,
                 correlation_id=correlation_id,
                 message_sha256=message_digest(message),
                 adapter="control-file-v1",
@@ -370,7 +329,7 @@ def deliver_pending(run_dir: Path, *, active: bool) -> list[dict[str, Any]]:
         except (OSError, UnicodeDecodeError, json.JSONDecodeError, WorkflowError) as exc:
             results.append(append_delivery_event(
                 run_dir,
-                session_id=session_id,
+                agent_run_id=agent_run_id,
                 correlation_id=correlation_id,
                 message_sha256=message_digest(message),
                 adapter="control-file-v1",
@@ -391,7 +350,7 @@ def record_acknowledgement(
 ) -> dict[str, Any]:
     if outcome not in {"applied", "rejected"}:
         raise WorkflowError("acknowledgement outcome must be applied or rejected")
-    launch = read_launch_contract(run_dir / "launch-contract.json")
+    launch = read_agent_run_contract(run_dir / "agent-run-contract.json")
     policy = _policy(launch)
     steer = next(
         (item for item in replay_messages(run_dir) if item.get("message_id") == correlation_id),
@@ -401,7 +360,7 @@ def record_acknowledgement(
         raise WorkflowError("acknowledgement must reference a durable steer request")
     return append_delivery_event(
         run_dir,
-        session_id=str(launch["session"]["id"]),
+        agent_run_id=str(launch["agent_run"]["id"]),
         correlation_id=correlation_id,
         message_sha256=message_digest(steer),
         adapter=str(policy["adapter"]),

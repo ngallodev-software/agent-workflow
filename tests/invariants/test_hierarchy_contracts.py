@@ -27,18 +27,12 @@ def hierarchy_input() -> dict:
         "root_orchestrator_id": "orchestrator-001",
         "workflow_id": "workflow-001",
         "allowed_depth": 2,
-        "tmux_session_name": "aw-root-001",
         "budgets": {
             "max_teams": 2,
             "max_total_workers": 8,
             "max_concurrent_workers": 4,
-            "max_interactive_panes": 10,
             "max_retries_per_worker": 2,
             "max_wall_seconds": 7200,
-        },
-        "terminal_policy": {
-            "allowed_modes": ["current"],
-            "external_argv_prefixes": [],
         },
         "allowed": {
             "executors": ["codex", "claude"],
@@ -51,12 +45,12 @@ def hierarchy_input() -> dict:
         "teams": [
             {
                 "team_id": "implementation",
-                "team_lead_session_id": "lead-implementation",
+                "team_lead_agent_run_id": "lead-implementation",
                 "parent_principal": "root",
             },
             {
                 "team_id": "review",
-                "team_lead_session_id": "lead-review",
+                "team_lead_agent_run_id": "lead-review",
                 "parent_principal": "root",
             },
         ],
@@ -78,7 +72,7 @@ def team_input(team_id: str, lead_id: str) -> dict:
         "orchestration_id": "root-001",
         "root_orchestrator_id": "orchestrator-001",
         "team_id": team_id,
-        "team_lead_session_id": lead_id,
+        "team_lead_agent_run_id": lead_id,
         "objective": f"Complete bounded work for {team_id}",
         "deliverables": [f"reports/{team_id}.json"],
         "writable_scope": [f"work/{team_id}"],
@@ -89,7 +83,6 @@ def team_input(team_id: str, lead_id: str) -> dict:
         "budgets": {
             "max_workers": 3,
             "max_concurrent_workers": 2,
-            "max_interactive_panes": 4,
             "max_retries": 1,
             "max_wall_seconds": 3600,
         },
@@ -158,7 +151,7 @@ def test_fixed_depth_and_declared_team_identity_are_enforced() -> None:
 
 def test_duplicate_team_lead_identity_is_rejected() -> None:
     source = hierarchy_input()
-    source["teams"][1]["team_lead_session_id"] = source["teams"][0]["team_lead_session_id"]
+    source["teams"][1]["team_lead_agent_run_id"] = source["teams"][0]["team_lead_agent_run_id"]
 
     with pytest.raises(WorkflowError, match="duplicate hierarchy authority identity"):
         seal_hierarchy_contract(source)

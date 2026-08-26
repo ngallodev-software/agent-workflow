@@ -148,11 +148,6 @@ def test_cleanup_preserves_worktrees_when_live_server_cannot_stop(
         "stop_live_review",
         lambda path: {"remaining": 1, "failed": 1, "stopped": 0},
     )
-    monkeypatch.setattr(
-        service,
-        "close_operator_panes",
-        lambda plan: pytest.fail("panes must remain visible when teardown fails"),
-    )
 
     with pytest.raises(Exception, match="worktrees were preserved"):
         service.cleanup_benchmark(

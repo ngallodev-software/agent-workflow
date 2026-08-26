@@ -1,8 +1,8 @@
 """Opt-in bounded hierarchical orchestration authority primitives.
 
 Immutable contract authority, append-only local journals, deterministic replay,
-and digest-sealed team/root receipts are implemented here. Team runtime, tmux
-projection, messaging, scheduling, and recovery remain independently gated.
+and digest-sealed team/root receipts are implemented here. Runtime hosting,
+messaging, scheduling, and recovery remain independently gated.
 """
 
 from .contracts import (

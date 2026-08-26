@@ -11,9 +11,10 @@ from typing import Any, Literal
 from .config import Settings
 from .contracts import validate_instance
 from .errors import WorkflowError
+from .events import append_lifecycle_event
 from .eval.scoring import validate_score_set
 from .receipts import read_sealed_contract, verify_seal_details
-from .state import run_dir, update_status
+from .state import run_dir, update_projection
 from .util import fsync_directory, utc_now
 from .path_security import open_relative, validate_directory
 
@@ -88,7 +89,7 @@ def lifecycle_receipts(run: Path, *, expected_final_receipt_sha256: str | None =
             receipt, receipt_sha256 = _read_lifecycle_receipt_descriptor(descriptor, name)
             if receipt.get("action") != match.group("action"):
                 raise WorkflowError("lifecycle receipt action does not match filename")
-            if receipt.get("session_id") != run.name:
+            if receipt.get("agent_run_id") != run.name:
                 raise WorkflowError("lifecycle receipt belongs to another run")
             if (
                 expected_final_receipt_sha256 is not None
@@ -183,7 +184,7 @@ def _append_receipt(run: Path, value: dict[str, Any]) -> Path:
 
 def record(
     settings: Settings,
-    session_id: str,
+    agent_run_id: str,
     *,
     action: Action,
     actor: str,
@@ -192,15 +193,15 @@ def record(
 ) -> dict[str, Any]:
     if not actor.strip() or not reason.strip():
         raise WorkflowError("lifecycle actor and reason must be non-empty")
-    run = run_dir(settings, session_id)
+    run = run_dir(settings, agent_run_id)
     final_receipt, expected = verify_seal_details(run)
     final_status, _ = read_sealed_contract(
         run,
         final_receipt,
         "final-status.json",
-        "agent-workflow/session-status/v2",
+        "agent-workflow/agent-run-status/v1",
     )
-    if final_status.get("session_id") != session_id:
+    if final_status.get("agent_run_id") != agent_run_id:
         raise WorkflowError("final status belongs to another run")
     if final_status.get("status") != "completed":
         raise WorkflowError("only a completed execution can be reviewed")
@@ -266,7 +267,7 @@ def record(
         raise WorkflowError("run is already reviewed")
     value = {
         "schema": "agent-workflow/lifecycle-receipt/v1",
-        "session_id": session_id,
+        "agent_run_id": agent_run_id,
         "action": action,
         "actor": actor,
         "reason": reason,
@@ -285,12 +286,22 @@ def record(
     }
     if action == "accepted":
         projection_updates["accepted_revision"] = revision
-    result = update_status(
+    prior_disposition = (
+        chain[-1]["receipt"].get("action") if chain else None
+    )
+    append_lifecycle_event(
+        run,
+        dimension="review",
+        prior=prior_disposition,
+        new=action,
+        actor=actor,
+        reason=reason,
+        receipt_refs=(str(path),),
+    )
+    result = update_projection(
         settings,
-        session_id,
+        agent_run_id,
         **projection_updates,
-        _actor=actor,
-        _reason=reason,
-        _receipt_refs=(str(path),),
+        projection_source="review-lifecycle",
     )
     return {**result, "lifecycle_receipt": str(path)}

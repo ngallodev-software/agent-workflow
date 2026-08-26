@@ -1,9 +1,0 @@
-phase: "0"
-name: "cross-platform-release-installers"
-mandatory_order: ["REL-008"]
-tasks:
-  - id: "REL-008"
-    tier: A
-    session: "release-installers-rel-008"
-    prompt: "tickets/P0-00-baseline-and-preflight.md"
-    backlog_id: "REL-008"

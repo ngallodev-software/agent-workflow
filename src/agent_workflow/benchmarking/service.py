@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
-import os
+from pathlib import Path, PurePosixPath
+import json
 import shutil
 import time
 from typing import Any
@@ -11,10 +11,9 @@ from ..config import Settings
 from ..errors import WorkflowError
 from ..process import EnvironmentPolicy, run as run_process
 from ..util import atomic_write_json, utc_now
-from .common import read_object, write_manifest
+from .common import read_object, tree_sha256, write_manifest
 from .auth import preflight_authentication
 from .policy import apply_operating_policy, implicit_operating_policy, load_operating_policy
-from .operator_panes import close_operator_panes, operator_pane_preflight
 from .pairing import attempts_for
 from .runtime import attest_runtime, seal_runtime_lock, validate_runtime_lock
 from .consolidation import consolidate_run, verify_consolidated_run
@@ -64,17 +63,75 @@ def validate_benchmark(spec: Path, executor: Path | None = None) -> dict[str, An
     return result
 
 
+BUILTIN_BENCHMARK_LAYOUT_SCHEMA = "agent-workflow/builtin-benchmark-layout/v1"
+
+
+def _validate_builtin_layer(value: object, benchmark_id: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise WorkflowError(f"built-in benchmark {benchmark_id}: layout layer must be a non-empty string")
+    path = PurePosixPath(value)
+    if path.is_absolute() or any(part in {"", ".", ".."} for part in path.parts):
+        raise WorkflowError(f"built-in benchmark {benchmark_id}: invalid layout layer: {value}")
+    if not path.parts or path.parts[0] != "_shared":
+        raise WorkflowError(f"built-in benchmark {benchmark_id}: layout layers must live under _shared/: {value}")
+    return value
+
+
+def materialize_builtin_suite(destination: Path, benchmark_id: str) -> Path:
+    """Materialize a self-contained built-in benchmark suite from shared layers.
+
+    The packaged benchmark assets are stored as immutable shared layers plus
+    suite-specific overlays.  Consumers never need to understand that storage
+    format: materialization reproduces the complete historical suite tree.
+    """
+    if not benchmark_id or any(part in {"", ".", ".."} for part in Path(benchmark_id).parts) or Path(benchmark_id).name != benchmark_id:
+        raise WorkflowError(f"invalid built-in benchmark suite ID: {benchmark_id}")
+    suite_relative = f"benchmarks/{benchmark_id}"
+    source = asset_path(suite_relative)
+    if not source.is_dir():
+        raise WorkflowError(f"unknown built-in benchmark suite: {benchmark_id}")
+    layout_asset = asset_path(f"{suite_relative}/suite-layout.json")
+    if not layout_asset.is_file():
+        raise WorkflowError(f"built-in benchmark {benchmark_id}: suite-layout.json is required")
+    try:
+        layout = json.loads(layout_asset.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise WorkflowError(f"built-in benchmark {benchmark_id}: invalid suite-layout.json: {exc}") from exc
+    if not isinstance(layout, dict) or layout.get("schema") != BUILTIN_BENCHMARK_LAYOUT_SCHEMA:
+        raise WorkflowError(f"built-in benchmark {benchmark_id}: unsupported suite layout schema")
+    if layout.get("benchmark_id") != benchmark_id:
+        raise WorkflowError(f"built-in benchmark {benchmark_id}: suite layout benchmark_id mismatch")
+    raw_layers = layout.get("layers")
+    if not isinstance(raw_layers, list) or not raw_layers:
+        raise WorkflowError(f"built-in benchmark {benchmark_id}: suite layout requires at least one shared layer")
+    expected_tree_sha256 = layout.get("materialized_tree_sha256")
+    if not isinstance(expected_tree_sha256, str) or len(expected_tree_sha256) != 64:
+        raise WorkflowError(f"built-in benchmark {benchmark_id}: materialized_tree_sha256 is required")
+
+    destination.mkdir(parents=True, exist_ok=True)
+    for raw_layer in raw_layers:
+        layer = _validate_builtin_layer(raw_layer, benchmark_id)
+        layer_asset = asset_path(f"benchmarks/{layer}")
+        if not layer_asset.is_dir():
+            raise WorkflowError(f"built-in benchmark {benchmark_id}: missing shared layer: {layer}")
+        copy_asset_tree(f"benchmarks/{layer}", destination)
+    copy_asset_tree(suite_relative, destination)
+    (destination / "suite-layout.json").unlink(missing_ok=True)
+    observed_tree_sha256 = tree_sha256(destination)
+    if observed_tree_sha256 != expected_tree_sha256:
+        raise WorkflowError(
+            f"built-in benchmark {benchmark_id}: materialized suite digest mismatch; "
+            f"expected {expected_tree_sha256}, observed {observed_tree_sha256}"
+        )
+    return destination
+
+
 def export_builtin_suite(
     destination: Path,
     *,
     benchmark_id: str = "priority-picker-v1",
     force: bool = False,
 ) -> dict[str, Any]:
-    if not benchmark_id or any(part in {"", ".", ".."} for part in Path(benchmark_id).parts) or Path(benchmark_id).name != benchmark_id:
-        raise WorkflowError(f"invalid built-in benchmark suite ID: {benchmark_id}")
-    source = asset_path(f"benchmarks/{benchmark_id}")
-    if not source.is_dir():
-        raise WorkflowError(f"unknown built-in benchmark suite: {benchmark_id}")
     destination = destination.expanduser().resolve()
     if destination.exists():
         if not force:
@@ -83,7 +140,7 @@ def export_builtin_suite(
             shutil.rmtree(destination)
         else:
             destination.unlink()
-    copy_asset_tree(f"benchmarks/{benchmark_id}", destination)
+    materialize_builtin_suite(destination, benchmark_id)
     spec = destination / "benchmark-spec.json"
     synthetic = destination / "executors" / "synthetic.json"
     validate_spec(spec)
@@ -325,11 +382,6 @@ def cleanup_benchmark(
         raise WorkflowError(
             "benchmark live applications remain active; worktrees were preserved"
         )
-    pane_cleanup = (
-        close_operator_panes(plan)
-        if stop_live_apps and remaining_live == 0
-        else {"run_id": plan["run_id"], "closed": 0, "already_closed": 0, "preserved": 0}
-    )
     repository = Path(plan["source"]["repository"])
     removed: list[dict[str, Any]] = []
     preserved: list[dict[str, Any]] = []
@@ -366,7 +418,7 @@ def cleanup_benchmark(
         "schema": "agent-workflow/benchmark-cleanup/v1", "run_id": plan["run_id"],
         "completed_at": utc_now(), "verification": verification, "removed": removed,
         "preserved": preserved, "remove_worktrees": remove_worktrees,
-        "stop_live_apps": stop_live_apps, "live_review": live_cleanup, "operator_panes": pane_cleanup,
+        "stop_live_apps": stop_live_apps, "live_review": live_cleanup,
         "coordinator_preserved": plan["coordinator"]["worktree"],
     }
     atomic_write_json(run_dir / "cleanup.json", cleanup_value)
@@ -431,13 +483,9 @@ def benchmark_readiness(
         checks.append({"id": "visual-runtime", "passed": False, "detail": str(exc)})
     checks.extend([
         {
-            "id": "interactive-tmux",
-            "passed": shutil.which("tmux") is not None and bool(os.environ.get("TMUX")) and bool(os.environ.get("TMUX_PANE")),
-            "detail": "run from inside tmux; two new observable arm panes are created in the launching window",
-        },
-        {
-            "id": "pane-capacity",
-            **operator_pane_preflight(),
+            "id": "headless-executor",
+            "passed": shutil.which(str(configured["executor"])) is not None or Path(str(configured["executor"])).exists(),
+            "detail": f"executor={configured['executor']}; benchmark arms execute without a terminal host",
         },
         {
             "id": "paired-repetitions",

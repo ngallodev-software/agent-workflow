@@ -21,7 +21,7 @@ from agent_workflow.repository_closeout import create_repository_closeout
 def _completion(**overrides: object) -> dict[str, object]:
     value: dict[str, object] = {
         "schema": "agent-workflow/completion/v1",
-        "session_id": "run-1",
+        "agent_run_id": "run-1",
         "ticket_id": "T-1",
         "pack_id": "pack-1",
         "result": "completed",
@@ -57,7 +57,7 @@ def test_substantive_completion_rejects_empty_schema_valid_success() -> None:
         commands=[],
     )
     errors = substantive_completion_errors(
-        value, session_id="run-1", ticket_id="T-1", pack_id="pack-1"
+        value, agent_run_id="run-1", ticket_id="T-1", pack_id="pack-1"
     )
     assert "completed result requires substantive base_revision" in errors
     assert "completed result requires substantive head_revision" in errors
@@ -95,11 +95,11 @@ def test_completion_schema_rejects_command_evidence_instead_of_receipt() -> None
 def test_review_ticket_identity_requires_explicit_match_or_omission() -> None:
     omitted = _completion(ticket_id=None)
     assert substantive_completion_errors(
-        omitted, session_id="run-1", ticket_id=None, pack_id="pack-1"
+        omitted, agent_run_id="run-1", ticket_id=None, pack_id="pack-1"
     ) == []
     mismatch = _completion(ticket_id="REVIEW-FORGED")
     assert substantive_completion_errors(
-        mismatch, session_id="run-1", ticket_id=None, pack_id="pack-1"
+        mismatch, agent_run_id="run-1", ticket_id=None, pack_id="pack-1"
     ) == ["completion ticket_id does not match launch contract"]
 
 
@@ -126,7 +126,7 @@ def test_substantive_completion_accepts_failure_with_real_unresolved_evidence() 
         unresolved=["MCP dependency unavailable in the configured environment"],
     )
     assert substantive_completion_errors(
-        value, session_id="run-1", ticket_id="T-1", pack_id="pack-1"
+        value, agent_run_id="run-1", ticket_id="T-1", pack_id="pack-1"
     ) == []
 
 
@@ -142,7 +142,7 @@ def test_substantive_completion_preserves_failed_command_as_non_success() -> Non
         ]
     )
     errors = substantive_completion_errors(
-        value, session_id="run-1", ticket_id="T-1", pack_id="pack-1"
+        value, agent_run_id="run-1", ticket_id="T-1", pack_id="pack-1"
     )
     assert "completed result cannot hide commands[0] exit_code 1" in errors
 
@@ -158,7 +158,7 @@ def test_substantive_completion_rejects_missing_command_exit_code() -> None:
         ]
     )
     errors = substantive_completion_errors(
-        value, session_id="run-1", ticket_id="T-1", pack_id="pack-1"
+        value, agent_run_id="run-1", ticket_id="T-1", pack_id="pack-1"
     )
     assert "commands[0].exit_code is missing or invalid" in errors
 
@@ -220,7 +220,7 @@ def test_acknowledgement_supersedes_unsupported_delivery_but_expiry_is_immutable
     tmp_path: Path,
 ) -> None:
     common = {
-        "session_id": "run-1",
+        "agent_run_id": "run-1",
         "message_sha256": "sha256:" + "a" * 64,
         "adapter": "unsupported",
         "attempt": 0,
@@ -274,73 +274,28 @@ def test_acknowledgement_supersedes_unsupported_delivery_but_expiry_is_immutable
     assert later["outcome"] == "expired"
 
 
-def test_observe_tracks_executor_event_growth_independently(
-    tmp_path: Path, monkeypatch,
-) -> None:
+def test_semantic_progress_tracks_executor_event_growth_independently(tmp_path: Path) -> None:
+    import os
     import time
-    from dataclasses import replace
 
-    from agent_workflow import sessions
-    from agent_workflow.config import defaults
-    from agent_workflow.tmux import PaneInfo
+    from agent_workflow.health import semantic_progress
 
     run = tmp_path / "run"
     run.mkdir()
     log = run / "output.log"
-    heartbeat = run / "heartbeat.json"
     executor_events = run / "executor-events.jsonl"
-    lifecycle_events = run / "events.jsonl"
     log.write_text("", encoding="utf-8")
-    heartbeat.write_text("{}", encoding="utf-8")
     executor_events.write_text('{"type":"progress"}\n', encoding="utf-8")
-    lifecycle_events.write_text(
-        '{"schema":"agent-workflow/lifecycle-event/v1"}\n', encoding="utf-8"
-    )
     old = time.time() - 120
     os.utime(log, (old, old))
-    os.utime(heartbeat, (old, old))
 
-    status = {
-        "session_id": "observe-run",
-        "status": "running",
-        "log_path": str(log),
-        "tmux_session": "observe-run",
-        "tmux_target": "observe-run",
-        "tmux_mode": "dedicated_session",
-        "interactive": False,
-    }
-    monkeypatch.setattr(sessions, "read_status", lambda _settings, _session: status)
-    monkeypatch.setattr(
-        sessions,
-        "update_status",
-        lambda _settings, _session, **changes: {
-            **status,
-            **{key: value for key, value in changes.items() if not key.startswith("_")},
-            "projection_source": changes.get("_projection_source"),
-            "projection_freshness": changes.get("_projection_freshness"),
-            "projection_authority": "cache",
-        },
-    )
-    monkeypatch.setattr(sessions.tmux, "session_exists", lambda _target: True)
-    monkeypatch.setattr(
-        sessions.tmux,
-        "resolve_status_pane",
-        lambda _status: PaneInfo(pid=123, dead=False, command="python", pane_id="%1"),
-    )
-    settings = replace(defaults(), stall_minutes=1)
-
-    fresh = sessions.observe(settings, "observe-run")
-    assert fresh["observed_state"] == "running"
-    assert fresh["seconds_since_log_growth"] >= 60
-    assert fresh["seconds_since_heartbeat"] >= 60
-    assert fresh["seconds_since_executor_event_growth"] < 5
-    assert fresh["signals"]["executor_events_exist"] is True
+    fresh = semantic_progress(run)
+    assert fresh["last_semantic_progress_source"] == "executor_event"
+    assert fresh["seconds_since_semantic_progress"] < 5
 
     os.utime(executor_events, (old, old))
-    stale = sessions.observe(settings, "observe-run")
-    assert stale["observed_state"] == "possibly_stalled"
-    assert stale["failure_category"] == "stalled"
-    assert stale["safe_actions"][-1] == "agent-workflow interrupt observe-run"
+    stale = semantic_progress(run)
+    assert stale["seconds_since_semantic_progress"] >= 60
 
 
 def test_approved_review_requires_green_evidence_and_no_unresolved() -> None:
@@ -356,7 +311,7 @@ def test_approved_review_requires_green_evidence_and_no_unresolved() -> None:
         unresolved=["privacy boundary not verified"],
     )
     errors = substantive_completion_errors(
-        value, session_id="run-1", ticket_id="T-1", pack_id="pack-1"
+        value, agent_run_id="run-1", ticket_id="T-1", pack_id="pack-1"
     )
     assert "approved review requires criteria[0] to be pass" in errors
     assert "approved review disposition requires an empty unresolved list" in errors

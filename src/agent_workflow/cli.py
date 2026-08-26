@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import sys
 from typing import Any
 
@@ -13,15 +14,14 @@ from .cli_handlers.pack import handle_pack_command
 from .cli_handlers.orchestrator import handle_orchestrator_command
 from .cli_handlers.agent import handle_agent_command
 from .cli_handlers.eval import handle_eval_command
-from .cli_handlers.evidence import handle_evidence_command
 from .cli_handlers.benchmark import handle_benchmark_command
-from .cli_handlers.session import SESSION_COMMANDS, handle_session_command
+from .cli_handlers.agent_run import handle_agent_run_command
 from .cli_handlers.supervisor import handle_supervisor_command
 from .cli_handlers.core import CORE_COMMANDS, handle_core_command
 from .cli_handlers.reporting import REPORTING_COMMANDS, handle_reporting_command
 from .cli_output import print_json as _print_json
 from .cli_output import print_mapping as _print_mapping
-from .errors import InteractiveCapacityError, WorkflowError
+from .errors import WorkflowError
 from .plugin_api import PluginExecutionContext
 from .plugins import PluginRegistry
 
@@ -58,8 +58,8 @@ def main(argv: list[str] | None = None) -> int:
             data = handle_orchestrator_command(settings, args)
         elif args.command == "worktree":
             data = handle_worktree_command(settings, args)
-        elif args.command in SESSION_COMMANDS:
-            data, output_complete = handle_session_command(
+        elif args.command == "agent-run":
+            data, output_complete = handle_agent_run_command(
                 settings,
                 args,
                 argv=argv,
@@ -82,8 +82,6 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
         elif args.command == "agent":
             data = handle_agent_command(settings, args)
-        elif args.command == "evidence":
-            data = handle_evidence_command(settings, args)
         elif args.command == "eval":
             data, output_complete = handle_eval_command(settings, args)
             if output_complete:
@@ -105,12 +103,6 @@ def main(argv: list[str] | None = None) -> int:
         else:
             _print_json(data)
         return 0
-    except InteractiveCapacityError as exc:
-        if bool(getattr(args, "json", False)):
-            _print_json(exc.as_dict())
-        else:
-            print(f"error: {exc}", file=sys.stderr)
-        return 2
     except WorkflowError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

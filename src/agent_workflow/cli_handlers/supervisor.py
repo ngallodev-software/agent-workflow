@@ -13,8 +13,6 @@ def handle_supervisor_command(settings: Settings, args: argparse.Namespace) -> A
     """Execute one parsed supervisor command without changing service policy."""
     options = SupervisorOptions.from_settings(
         settings,
-        capture_interactive=args.capture_interactive,
-        capture_lines=args.capture_lines,
         probe_stalled=args.probe_stalled,
         interrupt_stalled=args.interrupt_stalled,
         restart_orphaned=args.restart_orphaned,
@@ -24,14 +22,14 @@ def handle_supervisor_command(settings: Settings, args: argparse.Namespace) -> A
     if args.supervisor_command == "once":
         return supervise_once(
             settings,
-            session_ids=args.session,
+            agent_run_ids=args.agent_runs,
             options=options,
         )
     reports = supervise_loop(
         settings,
         interval_seconds=args.interval_seconds,
         max_cycles=args.max_cycles,
-        session_ids=args.session,
+        agent_run_ids=args.agent_runs,
         options=options,
     )
     return {

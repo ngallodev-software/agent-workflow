@@ -1,40 +1,18 @@
 ---
 name: delegated-implementation
-description: Execute bounded implementation tickets already launched through agent-workflow with strict scope, durable evidence, and test controls.
+description: Execute an implementation task as a durable Agent Run with scoped changes, progress, tests, and structured completion evidence.
 ---
 
-# Delegated implementation
+# Delegated Implementation Skill
 
-Use this skill inside a bounded ticket session that was launched through the `agent-workflow` CLI. For orchestration and lifecycle commands, use [`agent-workflow-orchestrator`](../agent-workflow-orchestrator/SKILL.md).
+Use this skill for an implementation task executed as a durable Agent Run.
 
-## Installed command contract
-
-Read `AGENT_WORKFLOW_COMMAND_CARD` for the role-scoped signatures and `AGENT_WORKFLOW_COMMAND_CATALOG` for the complete machine-readable contract. Invoke them through `AGENT_WORKFLOW_CLI` without routine help probing. Use `--help` only when the catalog/version does not match, the command is missing, or an invocation returns an argument error.
-
-## Required behavior
-
-1. Read the ticket, phase README, master prompt, execution protocol, and named references.
-2. In a new worktree, perform [`WORKTREE_PREFLIGHT.md`](../../docs/references/WORKTREE_PREFLIGHT.md): verify the exact worktree and probe codebase-memory once. Use a non-persistent exact-worktree index by default; repository-local persistence requires pre-authorized disposable scope and host-owned cleanup. Otherwise record the limitation and continue with bounded RTK shell discovery without retrying.
-3. Verify current source before editing.
-4. Stay inside writable paths.
-5. Implement the smallest coherent change.
-6. Add only tests tied to explicit acceptance criteria or a demonstrated regression.
-7. Emit durable `progress` records at meaningful checkpoints and `ack` correlated steering messages when the configured executor adapter supports semantic delivery.
-8. Preserve failed commands and unresolved contradictions in the completion report, including unavailable index evidence.
-9. Do not merge, broaden scope, or claim phase acceptance.
-
-## Terminal contract
-
-The operator must launch the ticket with `agent-workflow launch`. Do not create tmux sessions or panes directly. Do not spawn a replacement coding agent from inside the ticket session unless the ticket explicitly assigns coordinator behavior.
-
-A host-native child process or subagent is not an `agent-workflow` run unless an explicit bridge launches it through the CLI and records receipts.
-
-## Stop conditions
-
-Stop rather than guess when current source would make the ticket destructive, a required dependency is absent, a migration cannot be made recoverable, or secrets/real target data would be exposed.
-
-## Structured result and workflow child contract
-
-When the ticket declares a result schema, write only the declared bounded `result.json` contract and ensure it validates before completion. A downstream workflow receives copied values through `workflow-inputs.json`; it must not open predecessor run directories or mutable status projections directly.
-
-For structured executor runs, preserve raw event output. Do not rewrite provider usage, invent cost, or convert missing evidence into zero. Report retries, steering, and errors honestly in the completion handoff.
+1. Work only in the assigned source/worktree scope.
+2. Read the immutable launch context and task requirements.
+3. Emit durable progress at meaningful checkpoints.
+4. Apply steering only after recording a correlated acknowledgement.
+5. Run the required tests/evaluations.
+6. Write the structured completion handoff atomically.
+7. Report unresolved items explicitly.
+8. Do not self-accept the result; review and acceptance are host/orchestrator responsibilities.
+9. Do not create or manipulate an interactive runtime layout as part of task completion.

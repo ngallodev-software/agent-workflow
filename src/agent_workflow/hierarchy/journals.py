@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import fcntl
 import json
-import os
 import re
-import stat
 import uuid
 from collections.abc import Mapping
 from pathlib import Path
@@ -14,8 +11,8 @@ from typing import Any
 
 from ..contracts import validate_instance
 from ..errors import WorkflowError
-from ..path import require_directory
-from ..util import fsync_directory, utc_now, validate_id
+from ..journal import JournalTransactionResult, read_jsonl, transact_jsonl
+from ..util import utc_now, validate_id
 from .contracts import validate_hierarchy_contract, validate_team_delegation_contract
 
 JOURNAL_RECORD_SCHEMA = "agent-workflow/hierarchy-journal-record/v1"
@@ -32,67 +29,27 @@ def _canonical(value: Any) -> bytes:
     )
 
 
-def _open_locked_journal(path: Path) -> tuple[int, bool]:
-    parent = require_directory(path.parent, label="hierarchy journal parent")
-    parent_fd = os.open(
-        parent,
-        os.O_RDONLY
-        | getattr(os, "O_DIRECTORY", 0)
-        | getattr(os, "O_CLOEXEC", 0)
-        | getattr(os, "O_NOFOLLOW", 0),
-    )
-    created = False
-    try:
-        flags = (
-            os.O_RDWR
-            | os.O_CREAT
-            | getattr(os, "O_CLOEXEC", 0)
-            | getattr(os, "O_NOFOLLOW", 0)
+def _validate_record(value: object, expected_sequence: int) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise WorkflowError("hierarchy journal record must be an object")
+    validate_instance(value, JOURNAL_RECORD_SCHEMA, artifact=f"hierarchy journal:{expected_sequence}")
+    if value["sequence"] != expected_sequence:
+        raise WorkflowError(
+            f"hierarchy journal sequence mismatch: expected {expected_sequence}, got {value['sequence']}"
         )
-        try:
-            descriptor = os.open(path.name, flags, 0o600, dir_fd=parent_fd)
-        except OSError as exc:
-            raise WorkflowError(f"cannot open hierarchy journal without following links: {path}") from exc
-        info = os.fstat(descriptor)
-        if not stat.S_ISREG(info.st_mode):
-            os.close(descriptor)
-            raise WorkflowError(f"hierarchy journal must be a regular file: {path}")
-        if info.st_nlink != 1:
-            os.close(descriptor)
-            raise WorkflowError(f"hierarchy journal must not be hard linked: {path}")
-        created = info.st_size == 0
-        fcntl.flock(descriptor, fcntl.LOCK_EX)
-        return descriptor, created
-    finally:
-        os.close(parent_fd)
+    return value
 
 
-def _decode_records(data: bytes, *, path: Path, expected_journal_id: str | None) -> list[dict[str, Any]]:
-    if len(data) > _MAX_JOURNAL_BYTES:
-        raise WorkflowError(f"hierarchy journal exceeds size limit: {path}")
-    if data and not data.endswith(b"\n"):
-        raise WorkflowError(f"hierarchy journal is truncated: {path}")
-    records: list[dict[str, Any]] = []
+def _validate_records_semantics(
+    records: list[dict[str, Any]],
+    *,
+    path: Path,
+    expected_journal_id: str | None,
+) -> list[dict[str, Any]]:
     local_message_ids: set[str] = set()
     imported_ids: set[tuple[str, str]] = set()
     observed_journal_id = expected_journal_id
-    for expected_sequence, raw in enumerate(data.splitlines(), start=1):
-        if not raw:
-            raise WorkflowError(f"hierarchy journal contains an empty record: {path}")
-        if len(raw) > _MAX_RECORD_BYTES:
-            raise WorkflowError(f"hierarchy journal record exceeds size limit: {path}")
-        try:
-            value = json.loads(raw)
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise WorkflowError(f"invalid hierarchy journal JSON at sequence {expected_sequence}: {path}") from exc
-        if not isinstance(value, dict):
-            raise WorkflowError(f"hierarchy journal record must be an object: {path}")
-        validate_instance(value, JOURNAL_RECORD_SCHEMA, artifact=f"{path}:{expected_sequence}")
-        if value["sequence"] != expected_sequence:
-            raise WorkflowError(
-                f"hierarchy journal sequence mismatch in {path}: "
-                f"expected {expected_sequence}, got {value['sequence']}"
-            )
+    for value in records:
         if observed_journal_id is None:
             observed_journal_id = value["journal_id"]
         if value["journal_id"] != observed_journal_id:
@@ -112,7 +69,6 @@ def _decode_records(data: bytes, *, path: Path, expected_journal_id: str | None)
                     f"duplicate imported hierarchy message {key[0]}:{key[1]} in {path}"
                 )
             imported_ids.add(key)
-        records.append(value)
     return records
 
 
@@ -121,56 +77,20 @@ def read_journal(path: Path, *, expected_journal_id: str | None = None) -> tuple
     path = Path(path)
     if expected_journal_id is not None:
         validate_id(expected_journal_id, "journal id")
-    parent = require_directory(path.parent, label="hierarchy journal parent")
-    parent_fd = os.open(
-        parent,
-        os.O_RDONLY
-        | getattr(os, "O_DIRECTORY", 0)
-        | getattr(os, "O_CLOEXEC", 0)
-        | getattr(os, "O_NOFOLLOW", 0),
+    records = read_jsonl(
+        path,
+        validator=_validate_record,
+        max_bytes=_MAX_JOURNAL_BYTES,
+        max_record_bytes=_MAX_RECORD_BYTES,
+        sequence_field="sequence",
     )
-    try:
-        try:
-            descriptor = os.open(
-                path.name,
-                os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
-                dir_fd=parent_fd,
-            )
-        except OSError as exc:
-            raise WorkflowError(f"cannot read hierarchy journal without following links: {path}") from exc
-        try:
-            before = os.fstat(descriptor)
-            if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
-                raise WorkflowError(f"hierarchy journal must be a single-link regular file: {path}")
-            data = bytearray()
-            while True:
-                chunk = os.read(descriptor, min(1024 * 1024, _MAX_JOURNAL_BYTES - len(data) + 1))
-                if not chunk:
-                    break
-                data.extend(chunk)
-                if len(data) > _MAX_JOURNAL_BYTES:
-                    raise WorkflowError(f"hierarchy journal exceeds size limit: {path}")
-            after = os.fstat(descriptor)
-            if (
-                before.st_dev,
-                before.st_ino,
-                before.st_size,
-                before.st_mtime_ns,
-                before.st_ctime_ns,
-            ) != (
-                after.st_dev,
-                after.st_ino,
-                after.st_size,
-                after.st_mtime_ns,
-                after.st_ctime_ns,
-            ):
-                raise WorkflowError(f"hierarchy journal changed during read: {path}")
-        finally:
-            os.close(descriptor)
-    finally:
-        os.close(parent_fd)
-    return tuple(_decode_records(bytes(data), path=path, expected_journal_id=expected_journal_id))
-
+    return tuple(
+        _validate_records_semantics(
+            records,
+            path=path,
+            expected_journal_id=expected_journal_id,
+        )
+    )
 
 def append_journal_record(
     path: Path,
@@ -211,18 +131,8 @@ def append_journal_record(
     if not isinstance(payload, Mapping):
         raise WorkflowError("hierarchy journal payload must be an object")
 
-    descriptor, created = _open_locked_journal(path)
-    try:
-        os.lseek(descriptor, 0, os.SEEK_SET)
-        data = bytearray()
-        while True:
-            chunk = os.read(descriptor, min(1024 * 1024, _MAX_JOURNAL_BYTES - len(data) + 1))
-            if not chunk:
-                break
-            data.extend(chunk)
-            if len(data) > _MAX_JOURNAL_BYTES:
-                raise WorkflowError(f"hierarchy journal exceeds size limit: {path}")
-        existing = _decode_records(bytes(data), path=path, expected_journal_id=journal_id)
+    def decide(existing: list[dict[str, Any]]) -> JournalTransactionResult[dict[str, Any]]:
+        _validate_records_semantics(existing, path=path, expected_journal_id=journal_id)
         if source is not None:
             for record in existing:
                 if record.get("source") == source:
@@ -240,17 +150,9 @@ def append_journal_record(
                         raise WorkflowError(
                             f"conflicting idempotent hierarchy import {source_journal_id}:{source_message_id}"
                         )
-                    return record
+                    return JournalTransactionResult(value=record)
         if any(record["message_id"] == chosen_message_id for record in existing):
             raise WorkflowError(f"duplicate hierarchy journal message_id: {chosen_message_id}")
-        stable = os.fstat(descriptor)
-        if (
-            not stat.S_ISREG(stable.st_mode)
-            or stable.st_nlink != 1
-            or stable.st_size != len(data)
-        ):
-            raise WorkflowError(f"hierarchy journal changed before append: {path}")
-
         record = {
             "schema": JOURNAL_RECORD_SCHEMA,
             "journal_id": journal_id,
@@ -265,26 +167,18 @@ def append_journal_record(
             "source": source,
             "payload": dict(payload),
         }
-        validate_instance(record, JOURNAL_RECORD_SCHEMA, artifact=f"new hierarchy record for {path}")
-        encoded = _canonical(record) + b"\n"
-        if len(encoded) > _MAX_RECORD_BYTES:
-            raise WorkflowError("hierarchy journal record exceeds size limit")
-        if len(data) + len(encoded) > _MAX_JOURNAL_BYTES:
-            raise WorkflowError("hierarchy journal exceeds size limit")
-        os.lseek(descriptor, 0, os.SEEK_END)
-        offset = 0
-        while offset < len(encoded):
-            written = os.write(descriptor, encoded[offset:])
-            if written <= 0:
-                raise WorkflowError(f"short write while appending hierarchy journal: {path}")
-            offset += written
-        os.fsync(descriptor)
-        if created:
-            fsync_directory(path.parent)
-        return record
-    finally:
-        fcntl.flock(descriptor, fcntl.LOCK_UN)
-        os.close(descriptor)
+        record = _validate_record(record, len(existing) + 1)
+        return JournalTransactionResult(value=record, record=record)
+
+    return transact_jsonl(
+        path,
+        validator=_validate_record,
+        transaction=decide,
+        max_bytes=_MAX_JOURNAL_BYTES,
+        max_record_bytes=_MAX_RECORD_BYTES,
+        sequence_field="sequence",
+    )
+
 
 
 def replay_authority_state(

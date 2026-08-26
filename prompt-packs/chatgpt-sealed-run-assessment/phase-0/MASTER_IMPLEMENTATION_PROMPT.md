@@ -1,1 +1,0 @@
-Read `CHATGPT_INITIAL_PROMPT.md` first. Complete `CHATGPT-EVAL-001` using only sealed evidence and current source contracts. Preserve missing eval artifacts as missing, then produce a reviewable completion report.

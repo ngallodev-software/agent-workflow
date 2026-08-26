@@ -5,7 +5,7 @@
 - Ticket: `P{{PHASE_NUMBER}}-00`
 - Recommended tier: C
 - Dependencies: none
-- New terminal session required: yes
+- New Agent Run required: yes
 - Implementation risk: read-only
 
 ## Objective

@@ -11,7 +11,7 @@ from agent_workflow.manifests import ValidationReport, _load_yaml
 def test_manifest_yaml_uses_safe_loader_and_rejects_python_tags(tmp_path: Path) -> None:
     root = tmp_path / "pack"
     root.mkdir()
-    path = root / "task-manifest.yaml"
+    path = root / "pack.yaml"
     path.write_text("value: !!python/object/apply:os.system ['echo unsafe']\n", encoding="utf-8")
     report = ValidationReport(root=root)
 
@@ -23,7 +23,7 @@ def test_manifest_yaml_uses_safe_loader_and_rejects_python_tags(tmp_path: Path) 
 def test_manifest_yaml_supports_standard_nested_yaml(tmp_path: Path) -> None:
     root = tmp_path / "pack"
     root.mkdir()
-    path = root / "task-manifest.yaml"
+    path = root / "pack.yaml"
     path.write_text(
         "phase: '0'\n"
         "tasks:\n"

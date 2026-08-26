@@ -96,7 +96,6 @@ def _create_team(
         budget_usage={
             "workers_started": 1,
             "peak_concurrent_workers": 1,
-            "peak_interactive_panes": 2,
             "retries": 0,
             "wall_seconds": 30,
         },
@@ -215,7 +214,6 @@ def test_root_rejects_aggregate_team_budget_overrun(tmp_path: Path) -> None:
         {
             "max_total_workers": 1,
             "max_concurrent_workers": 1,
-            "max_interactive_panes": 4,
             "max_retries_per_worker": 1,
             "max_wall_seconds": 7200,
         }
@@ -228,7 +226,6 @@ def test_root_rejects_aggregate_team_budget_overrun(tmp_path: Path) -> None:
                 "budgets": {
                     "max_workers": 1,
                     "max_concurrent_workers": 1,
-                    "max_interactive_panes": 2,
                     "max_retries": 1,
                     "max_wall_seconds": 3600,
                 },
@@ -310,7 +307,6 @@ def test_required_outputs_reviews_approvals_and_budgets_fail_closed(tmp_path: Pa
         "budget_usage": {
             "workers_started": 1,
             "peak_concurrent_workers": 1,
-            "peak_interactive_panes": 1,
             "retries": 0,
             "wall_seconds": 1,
         },
@@ -395,7 +391,6 @@ def test_symlink_hardlink_and_writable_evidence_fail_closed(tmp_path: Path) -> N
             budget_usage={
                 "workers_started": 1,
                 "peak_concurrent_workers": 1,
-                "peak_interactive_panes": 1,
                 "retries": 0,
                 "wall_seconds": 1,
             },

@@ -16,8 +16,8 @@ from agent_workflow.scheduler import calculate_eligibility, plan_launches
 
 def test_message_log_is_contiguous_replayable_and_fail_closed(tmp_path: Path) -> None:
     records = [
-        append_message(tmp_path, session_id="run", direction="parent_to_child", kind="steer", actor="parent", content="inspect"),
-        append_message(tmp_path, session_id="run", direction="child_to_parent", kind="progress", actor="child", content="working"),
+        append_message(tmp_path, agent_run_id="run", direction="parent_to_child", kind="steer", actor="parent", content="inspect"),
+        append_message(tmp_path, agent_run_id="run", direction="child_to_parent", kind="progress", actor="child", content="working"),
     ]
     assert [item["sequence"] for item in records] == [1, 2]
     assert replay_messages(tmp_path, after_sequence=1) == [records[1]]

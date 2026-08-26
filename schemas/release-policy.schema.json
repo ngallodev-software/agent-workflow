@@ -177,7 +177,7 @@
         "status",
         "host",
         "python",
-        "tmux",
+        "execution_mode",
         "executor"
       ],
       "properties": {
@@ -200,10 +200,6 @@
           "type": "string",
           "minLength": 1
         },
-        "tmux": {
-          "type": "string",
-          "minLength": 1
-        },
         "executor": {
           "type": "string",
           "minLength": 1
@@ -218,6 +214,12 @@
         "notes": {
           "type": "string",
           "maxLength": 500
+        },
+        "execution_mode": {
+          "enum": [
+            "headless",
+            "external"
+          ]
         }
       }
     },
@@ -246,4 +248,3 @@
     }
   }
 }
-

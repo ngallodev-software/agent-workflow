@@ -9,7 +9,6 @@ from typing import Any, Mapping, Sequence
 
 from ..contracts import read_contract, validate_instance
 from ..errors import WorkflowError
-from ..evidence_repair import supplemental_repairs_for_run
 from ..lifecycle import lifecycle_receipts
 from ..path import inventory_tree, read_regular_file, require_directory
 from ..receipts import read_sealed_artifact_bytes, read_sealed_contract, verify_seal_details
@@ -572,7 +571,7 @@ def build_ledger_row(run_dir: Path) -> dict[str, Any]:
 
     if receipt_verified and final_receipt is not None:
         contracts = (
-            ("final-status.json", "agent-workflow/session-status/v2", "status"),
+            ("final-status.json", "agent-workflow/agent-run-status/v1", "status"),
             ("completion.json", "agent-workflow/completion/v1", "completion"),
             ("collections/completion.json", "agent-workflow/completion-collection/v1", "collection"),
             ("run-provenance.json", "agent-workflow/run-provenance/v1", "provenance"),
@@ -685,11 +684,6 @@ def build_ledger_row(run_dir: Path) -> dict[str, Any]:
         "repository_closeout": "repository-closeout.json" if (run_dir / "repository-closeout.json").is_file() else None,
         "lifecycle_disposition": disposition_path,
     }
-    supplemental_repairs = (
-        supplemental_repairs_for_run(run_dir, receipt_digest)
-        if receipt_verified and receipt_digest is not None
-        else []
-    )
     row = {
         "schema": LEDGER_ROW_SCHEMA,
         "run_id": run_dir.name,
@@ -705,7 +699,6 @@ def build_ledger_row(run_dir: Path) -> dict[str, Any]:
         "policy_result": policy_result,
         "acceptance_eligible": acceptance_eligible,
         "attempt_classification": attempt_classification,
-        "supplemental_repairs": supplemental_repairs,
         "repository_closeout": repository_closeout,
         "evaluation_state": evaluation_state,
         "evaluation_result": score_verdict,

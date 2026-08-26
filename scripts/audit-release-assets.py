@@ -5,7 +5,9 @@ import argparse
 import json
 import re
 import stat
+import subprocess
 import sys
+import tempfile
 import tomllib
 from pathlib import Path
 
@@ -13,6 +15,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from agent_workflow.release_evidence import validate_dependency_lock
+from agent_workflow.manifests import load_pack_manifest, validate_pack
+from agent_workflow.pack import scaffold as scaffold_pack
+from agent_workflow.benchmarking.contracts import validate_executor_config, validate_spec
+from agent_workflow.benchmarking.service import materialize_builtin_suite
 
 EXPECTED_VERSION = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
 PLACEHOLDER_RE = re.compile(r"\{\{[A-Z0-9_]+\}\}")
@@ -43,9 +49,27 @@ BINARY_SUFFIXES = {".gif", ".ico", ".jpeg", ".jpg", ".png", ".webp"}
 
 
 def release_files(root: Path = ROOT) -> tuple[Path, ...]:
+    ignored: set[Path] = set()
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "check-ignore", "--stdin", "-z"],
+            input="".join(
+                f"{path.relative_to(root).as_posix()}\0"
+                for path in root.rglob("*")
+                if path.is_file() and not path.is_symlink()
+            ).encode(),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        ignored = {root / item for item in result.stdout.decode().split("\0") if item}
+    except OSError:
+        pass
     files: list[Path] = []
     for path in root.rglob("*"):
         if not path.is_file() or path.is_symlink():
+            continue
+        if path in ignored:
             continue
         rel = path.relative_to(root)
         if any(
@@ -101,6 +125,18 @@ def _backlog_rows() -> dict[str, dict[str, str]]:
         if raw.startswith("## "):
             section = raw[3:].strip()
             continue
+        if raw.startswith("### "):
+            heading = raw[4:].strip()
+            title_ids = heading.split("—", 1)[0].strip()
+            ids = [item.strip() for item in title_ids.split("/")]
+            for item_id in ids:
+                if not re.fullmatch(r"[A-Z][A-Z0-9-]*-\d+", item_id):
+                    continue
+                if item_id in rows:
+                    fail(f"docs/BACKLOG.md: duplicate active ID {item_id}")
+                else:
+                    rows[item_id] = {"section": section, "state": ""}
+            continue
         if not raw.startswith("|"):
             continue
         cells = [cell.strip() for cell in raw.strip().strip("|").split("|")]
@@ -123,44 +159,6 @@ def _backlog_rows() -> dict[str, dict[str, str]]:
     return rows
 
 
-def _manifest_tasks(path: Path) -> list[dict[str, str]]:
-    tasks: list[dict[str, str]] = []
-    current: dict[str, str] | None = None
-    for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-        if raw.startswith("  - "):
-            if current is not None:
-                tasks.append(current)
-            current = {"_line": str(number)}
-            remainder = raw[4:].strip()
-            key, sep, value = remainder.partition(":")
-            if sep:
-                current[key.strip()] = _unquote(value)
-            continue
-        if current is not None and raw.startswith("    "):
-            key, sep, value = raw.strip().partition(":")
-            if sep:
-                current[key.strip()] = _unquote(value)
-    if current is not None:
-        tasks.append(current)
-    return tasks
-
-
-def _pack_declared_backlog_ids(path: Path) -> set[str]:
-    declared: set[str] = set()
-    in_items = False
-    for raw in path.read_text(encoding="utf-8").splitlines():
-        if raw.startswith("backlog_items:"):
-            in_items = True
-            continue
-        if in_items:
-            if raw.startswith("  - "):
-                declared.add(_unquote(raw[4:].strip()))
-                continue
-            if raw and not raw.startswith(" "):
-                break
-    return declared
-
-
 def _audit_backlog_and_prompt_pack_ownership() -> None:
     backlog = _backlog_rows()
     packs_root = ROOT / "prompt-packs"
@@ -168,49 +166,58 @@ def _audit_backlog_and_prompt_pack_ownership() -> None:
     global_task_ids: dict[str, str] = {}
     owners: dict[str, set[str]] = {}
 
-    for pack_dir in sorted(path for path in packs_root.iterdir() if path.is_dir()):
+    pack_dirs = (
+        sorted(path for path in packs_root.iterdir() if path.is_dir() and (path / "pack.yaml").is_file())
+        if packs_root.is_dir()
+        else []
+    )
+    for pack_dir in pack_dirs:
         pack_name = pack_dir.name
         if pack_name not in documented:
             fail(f"docs/PROMPT_PACKS.md: active pack {pack_name!r} is not documented")
-        pack_yaml = pack_dir / "pack.yaml"
-        if not pack_yaml.is_file():
-            fail(f"prompt-packs/{pack_name}: missing pack.yaml")
+        report = validate_pack(pack_dir)
+        if not report.ok:
+            for error in report.errors:
+                fail(f"prompt-packs/{pack_name}: {error}")
             continue
-        match = re.search(r'^pack_id:\s*["\']?([^"\']+)["\']?\s*$', pack_yaml.read_text(encoding="utf-8"), re.MULTILINE)
-        if match is None or match.group(1).strip() != pack_name:
+        try:
+            manifest = load_pack_manifest(pack_dir)
+        except Exception as exc:
+            fail(f"prompt-packs/{pack_name}/pack.yaml: {exc}")
+            continue
+        if manifest.get("pack_id") != pack_name:
             fail(f"prompt-packs/{pack_name}/pack.yaml: pack_id must match directory")
-        declared = _pack_declared_backlog_ids(pack_yaml)
+        declared = {str(item) for item in manifest.get("backlog_items", [])}
         claimed: set[str] = set()
-        manifests = sorted(pack_dir.glob("phase-*/task-manifest.yaml"))
-        if not manifests:
-            fail(f"prompt-packs/{pack_name}: no task manifests")
-        for manifest in manifests:
-            for task in _manifest_tasks(manifest):
-                task_id = task.get("id", "")
+        for phase_index, phase in enumerate(manifest.get("phases", [])):
+            if not isinstance(phase, dict):
+                continue
+            for task_index, task in enumerate(phase.get("tasks", [])):
+                if not isinstance(task, dict):
+                    continue
+                task_id = str(task.get("id", ""))
                 if not task_id:
                     continue
+                location = f"prompt-packs/{pack_name}/pack.yaml:phases[{phase_index}].tasks[{task_index}]"
                 prior = global_task_ids.get(task_id)
                 if prior is not None:
-                    fail(f"{manifest.relative_to(ROOT)}: task ID {task_id} already used by {prior}")
+                    fail(f"{location}: task ID {task_id} already used by {prior}")
                 else:
-                    global_task_ids[task_id] = str(manifest.relative_to(ROOT))
-                task_type = task.get("task_type", "implementation")
-                backlog_id = task.get("backlog_id", "")
+                    global_task_ids[task_id] = location
+                task_type = str(task.get("task_type", "implementation"))
+                backlog_id = str(task.get("backlog_id") or "")
                 if task_type in {"gate", "review", "historical"}:
                     if backlog_id:
-                        fail(
-                            f"{manifest.relative_to(ROOT)}:{task.get('_line')}: "
-                            f"{task_type} task {task_id} must not claim backlog_id"
-                        )
+                        fail(f"{location}: {task_type} task {task_id} must not claim backlog_id")
                     continue
                 if not backlog_id:
-                    fail(f"{manifest.relative_to(ROOT)}:{task.get('_line')}: implementation task {task_id} missing backlog_id")
+                    fail(f"{location}: implementation task {task_id} missing backlog_id")
                     continue
                 if backlog_id not in backlog:
-                    fail(f"{manifest.relative_to(ROOT)}:{task.get('_line')}: unknown backlog_id {backlog_id}")
+                    fail(f"{location}: unknown backlog_id {backlog_id}")
                     continue
                 if backlog[backlog_id].get("state") == "done":
-                    fail(f"{manifest.relative_to(ROOT)}:{task.get('_line')}: active task owns completed backlog item {backlog_id}")
+                    fail(f"{location}: active task owns completed backlog item {backlog_id}")
                 claimed.add(backlog_id)
                 owners.setdefault(backlog_id, set()).add(pack_name)
         if declared != claimed:
@@ -226,7 +233,7 @@ def _audit_backlog_and_prompt_pack_ownership() -> None:
     skill = ROOT / "skills" / "release-drift-auditor" / "SKILL.md"
     if not skill.is_file():
         fail("skills/release-drift-auditor/SKILL.md: missing specialized drift skill")
-    for required in [ROOT / "docs" / "references" / "DELEGATION_RUNBOOK.md", ROOT / "skills" / "phase-gate-review" / "SKILL.md"]:
+    for required in [ROOT / "skills" / "phase-gate-review" / "SKILL.md"]:
         if "release-drift-auditor" not in required.read_text(encoding="utf-8"):
             fail(f"{required.relative_to(ROOT)}: does not invoke release-drift-auditor")
 
@@ -242,45 +249,71 @@ def _audit_backlog_and_prompt_pack_ownership() -> None:
 
 
 
-def _audit_builtin_benchmark_parity() -> None:
-    """Require packaged built-in suites to be exact copies of authoring sources."""
-    source_root = ROOT / "benchmarks" / "specs"
+def _audit_builtin_benchmark_layouts() -> None:
+    """Validate canonical layered built-ins and reject a duplicate authoring mirror."""
+    duplicate_root = ROOT / "benchmarks" / "specs"
+    if duplicate_root.exists():
+        fail(f"{duplicate_root.relative_to(ROOT)}: duplicate benchmark source mirror must not exist")
+
     package_root = ROOT / "src" / "agent_workflow" / "assets" / "benchmarks"
-    for source in sorted(path for path in source_root.iterdir() if path.is_dir()):
-        mirror = package_root / source.name
-        if not mirror.is_dir():
-            fail(f"{mirror.relative_to(ROOT)}: missing packaged mirror of {source.relative_to(ROOT)}")
+    if not package_root.is_dir():
+        fail(f"{package_root.relative_to(ROOT)}: built-in benchmark assets are missing")
+        return
+
+    shared_root = package_root / "_shared"
+    if not shared_root.is_dir():
+        fail(f"{shared_root.relative_to(ROOT)}: shared benchmark layers are missing")
+        return
+
+    for suite in sorted(path for path in package_root.iterdir() if path.is_dir() and path.name != "_shared"):
+        layout_path = suite / "suite-layout.json"
+        try:
+            layout = json.loads(layout_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            fail(f"{layout_path.relative_to(ROOT)}: invalid built-in suite layout: {exc}")
             continue
-        source_files = {
-            path.relative_to(source): path
-            for path in source.rglob("*")
-            if path.is_file()
-            and not path.is_symlink()
-            and "__pycache__" not in path.relative_to(source).parts
-            and path.suffix != ".pyc"
-        }
-        mirror_files = {
-            path.relative_to(mirror): path
-            for path in mirror.rglob("*")
-            if path.is_file()
-            and not path.is_symlink()
-            and "__pycache__" not in path.relative_to(mirror).parts
-            and path.suffix != ".pyc"
-        }
-        if source_files.keys() != mirror_files.keys():
-            missing = sorted(str(item) for item in source_files.keys() - mirror_files.keys())
-            extra = sorted(str(item) for item in mirror_files.keys() - source_files.keys())
-            fail(
-                f"{mirror.relative_to(ROOT)}: suite inventory differs from authoring source; "
-                f"missing={missing}, extra={extra}"
-            )
+        layers = layout.get("layers") if isinstance(layout, dict) else None
+        if not isinstance(layers, list) or not layers:
+            fail(f"{layout_path.relative_to(ROOT)}: layers must be a non-empty list")
             continue
-        for relative, canonical in source_files.items():
-            if canonical.read_bytes() != mirror_files[relative].read_bytes():
-                fail(
-                    f"{(mirror / relative).relative_to(ROOT)}: differs from canonical "
-                    f"{(source / relative).relative_to(ROOT)}"
-                )
+
+        layer_files: dict[Path, Path] = {}
+        for layer in layers:
+            if not isinstance(layer, str) or not layer.startswith("_shared/"):
+                fail(f"{layout_path.relative_to(ROOT)}: invalid shared layer {layer!r}")
+                continue
+            layer_root = package_root / layer
+            if not layer_root.is_dir():
+                fail(f"{layout_path.relative_to(ROOT)}: missing shared layer {layer}")
+                continue
+            for path in layer_root.rglob("*"):
+                if not path.is_file() or path.is_symlink():
+                    continue
+                rel = path.relative_to(layer_root)
+                previous = layer_files.get(rel)
+                if previous is not None:
+                    fail(
+                        f"{layout_path.relative_to(ROOT)}: shared layers overlap at {rel}; "
+                        f"{previous.relative_to(ROOT)} and {path.relative_to(ROOT)}"
+                    )
+                else:
+                    layer_files[rel] = path
+
+        for path in suite.rglob("*"):
+            if not path.is_file() or path.is_symlink() or path == layout_path:
+                continue
+            rel = path.relative_to(suite)
+            shared = layer_files.get(rel)
+            if shared is not None and shared.read_bytes() == path.read_bytes():
+                fail(f"{path.relative_to(ROOT)}: duplicates identical content already supplied by a shared layer")
+
+        try:
+            with tempfile.TemporaryDirectory(prefix=f"aw-benchmark-{suite.name}-") as temp_dir:
+                materialized = materialize_builtin_suite(Path(temp_dir) / suite.name, suite.name)
+                validate_spec(materialized / "benchmark-spec.json")
+                validate_executor_config(materialized / "executors" / "synthetic.json")
+        except Exception as exc:
+            fail(f"{layout_path.relative_to(ROOT)}: built-in suite does not materialize cleanly: {exc}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -424,93 +457,60 @@ def main(argv: list[str] | None = None) -> int:
         ROOT / "src/agent_workflow/__init__.py": f'__version__ = "{EXPECTED_VERSION}"',
         ROOT / "src/agent_workflow/cli_parser.py": 'from . import __version__',
         ROOT / "src/agent_workflow/doctor.py": '"version": __version__',
-        ROOT / "docs/man/agent-workflow.1": f"agent-workflow {EXPECTED_VERSION}",
         ROOT / "docs/man/agent-workflow-workflow.1": f"agent-workflow {EXPECTED_VERSION}",
-        ROOT / "docs/man/agent-workflow-mcp.1": f"agent-workflow {EXPECTED_VERSION}",
         ROOT / "docs/man/agent-workflow-index.1": f"agent-workflow {EXPECTED_VERSION}",
-        ROOT / "docs/diagrams/REPOSITORY_CHART_PACK.md": f"**Release:** {EXPECTED_VERSION}",
     }
     for path, needle in version_locations.items():
         if needle not in path.read_text(encoding="utf-8"):
             fail(f"{path.relative_to(ROOT)}: missing expected version marker {needle!r}")
 
-    # Portable copies must not drift from their canonical source.
-    portable_scripts = {
-        "archive-prompt-pack.sh",
-        "check-delegation.sh",
-        "create-ticket-worktree.sh",
-        "foreground-delegation.sh",
-        "launch-delegation.sh",
-        "restart-delegation.sh",
-        "stop-delegation.sh",
-        "validate-prompt-pack.sh",
-    }
-    for canonical in sorted(
-        path for path in (ROOT / "scripts").glob("*.sh")
-        if path.name in portable_scripts
-    ):
-        for mirror_root in [
-            ROOT / "templates/prompt-pack/scripts",
-            ROOT / "src/agent_workflow/assets/prompt-pack-root/scripts",
-        ]:
-            mirror = mirror_root / canonical.name
-            if not mirror.is_file():
-                fail(f"{mirror.relative_to(ROOT)}: missing mirror of scripts/{canonical.name}")
-            elif mirror.read_bytes() != canonical.read_bytes():
-                fail(f"{mirror.relative_to(ROOT)}: differs from canonical scripts/{canonical.name}")
+    # Packaged scaffold assets are the single prompt-pack source. Repository mirror
+    # trees and compatibility helper copies must not reappear.
+    stale_prompt_pack_mirrors = [
+        ROOT / "templates" / "prompt-pack",
+        ROOT / "templates" / "TICKET_COMPLETION.md",
+        ROOT / "templates" / "PHASE_GATE_REPORT.md",
+        ROOT / "templates" / "source-baseline.example.json",
+        ROOT / "scripts" / "archive-prompt-pack.sh",
+        ROOT / "scripts" / "check-delegation.sh",
+        ROOT / "scripts" / "create-ticket-worktree.sh",
+        ROOT / "scripts" / "launch-delegation.sh",
+        ROOT / "scripts" / "restart-delegation.sh",
+        ROOT / "scripts" / "stop-delegation.sh",
+        ROOT / "scripts" / "validate-prompt-pack.sh",
+    ]
+    for path in stale_prompt_pack_mirrors:
+        if path.exists():
+            fail(f"{path.relative_to(ROOT)}: obsolete prompt-pack source mirror must not exist")
 
-    mirror_groups = {
-        ROOT / "docs" / "references" / "EXECUTION_PROTOCOL.md": [
-            ROOT / "src/agent_workflow/assets/prompt-pack-root/EXECUTION_PROTOCOL.md",
-            ROOT / "examples/three-phase-pack/EXECUTION_PROTOCOL.md",
-        ],
-        ROOT / "docs" / "references" / "DELEGATION_RUNBOOK.md": [
-            ROOT / "src/agent_workflow/assets/prompt-pack-root/DELEGATION_RUNBOOK.md",
-            ROOT / "examples/three-phase-pack/DELEGATION_RUNBOOK.md",
-        ],
-        ROOT / "templates/prompt-pack/ROOT_README.md": [
-            ROOT / "src/agent_workflow/assets/prompt-pack-root/README.md",
-        ],
-        ROOT / "templates/prompt-pack/pack.yaml": [
-            ROOT / "src/agent_workflow/assets/prompt-pack-root/pack.yaml",
-        ],
-        ROOT / "templates/prompt-pack/references-README.md": [
-            ROOT / "src/agent_workflow/assets/prompt-pack-root/references/README.md",
-        ],
-        ROOT / "templates/prompt-pack/CODE_STRUCTURE_OUTLINES.md": [
-            ROOT / "src/agent_workflow/assets/prompt-pack-root/references/code-structure-outlines.md",
-        ],
-        ROOT / "templates/prompt-pack/PHASE_README.md": [
-            ROOT / "src/agent_workflow/assets/phase/README.md",
-        ],
-        ROOT / "templates/prompt-pack/MASTER_IMPLEMENTATION_PROMPT.md": [
-            ROOT / "src/agent_workflow/assets/phase/MASTER_IMPLEMENTATION_PROMPT.md",
-        ],
-        ROOT / "templates/prompt-pack/task-manifest.yaml": [
-            ROOT / "src/agent_workflow/assets/phase/task-manifest.yaml",
-        ],
-        ROOT / "templates/prompt-pack/TICKET_PROMPT.md": [
-            ROOT / "src/agent_workflow/assets/phase/tickets/P{{PHASE_NUMBER}}-00-baseline-and-preflight.md",
-        ],
-        ROOT / "templates/TICKET_COMPLETION.md": [
-            ROOT / "src/agent_workflow/assets/prompt-pack-root/templates/TICKET_COMPLETION.md",
-        ],
-        ROOT / "templates/PHASE_GATE_REPORT.md": [
-            ROOT / "src/agent_workflow/assets/prompt-pack-root/templates/PHASE_GATE_REPORT.md",
-        ],
-        ROOT / "templates/source-baseline.example.json": [
-            ROOT / "src/agent_workflow/assets/prompt-pack-root/templates/source-baseline.example.json",
-        ],
-    }
-    for canonical, mirrors in mirror_groups.items():
-        for mirror in mirrors:
-            if not mirror.is_file():
-                fail(f"{mirror.relative_to(ROOT)}: missing mirror of {canonical.relative_to(ROOT)}")
-            elif mirror.read_bytes() != canonical.read_bytes():
-                fail(
-                    f"{mirror.relative_to(ROOT)}: differs from canonical "
-                    f"{canonical.relative_to(ROOT)}"
-                )
+    required_scaffold_assets = [
+        ROOT / "src/agent_workflow/assets/prompt-pack-root/README.md",
+        ROOT / "src/agent_workflow/assets/prompt-pack-root/templates/TICKET_COMPLETION.md",
+        ROOT / "src/agent_workflow/assets/prompt-pack-root/templates/PHASE_GATE_REPORT.md",
+        ROOT / "src/agent_workflow/assets/prompt-pack-root/templates/source-baseline.example.json",
+        ROOT / "src/agent_workflow/assets/prompt-pack-root/scripts/validate-prompt-pack.sh",
+        ROOT / "src/agent_workflow/assets/phase/README.md",
+        ROOT / "src/agent_workflow/assets/phase/MASTER_IMPLEMENTATION_PROMPT.md",
+        ROOT / "src/agent_workflow/assets/phase/tickets/P{{PHASE_NUMBER}}-00-baseline-and-preflight.md",
+    ]
+    for path in required_scaffold_assets:
+        if not path.is_file():
+            fail(f"{path.relative_to(ROOT)}: canonical packaged scaffold asset is missing")
+
+    # Validate the product behavior rather than byte parity between duplicate trees.
+    with tempfile.TemporaryDirectory(prefix="agent-workflow-scaffold-audit-") as tmp:
+        destination = Path(tmp) / "audit-pack"
+        try:
+            scaffold_pack(destination, 2, "audit-pack")
+            report = validate_pack(destination)
+            if not report.ok:
+                for error in report.errors:
+                    fail(f"generated prompt-pack scaffold: {error}")
+            for script in sorted((destination / "scripts").glob("*.sh")):
+                if not script.stat().st_mode & stat.S_IXUSR:
+                    fail(f"generated prompt-pack scaffold: {script.name} is not executable")
+        except Exception as exc:
+            fail(f"generated prompt-pack scaffold failed: {exc}")
 
     # Shell entrypoints must be executable.
     for path in [
@@ -518,7 +518,7 @@ def main(argv: list[str] | None = None) -> int:
         ROOT / "uninstall.sh",
         ROOT / "bin/agent-workflow",
         *sorted((ROOT / "scripts").glob("*.sh")),
-        ROOT / "scripts/hooks/agent-workflow-session-reminder",
+        ROOT / "scripts/hooks/agent-workflow-run-reminder",
         ROOT / "scripts/hooks/codebase-memory-session-reminder",
         ROOT / "scripts/hooks/rtk-session-reminder",
     ]:
@@ -546,7 +546,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
     # Canonical benchmark package parity and backlog/prompt-pack ownership.
-    _audit_builtin_benchmark_parity()
+    _audit_builtin_benchmark_layouts()
     _audit_backlog_and_prompt_pack_ownership()
 
     if errors:

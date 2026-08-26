@@ -80,7 +80,7 @@ def _ancestor_nodes(snapshot: Mapping[str, Any], node_id: str) -> set[str]:
 
 def _read_sealed_result(run_dir: Path) -> tuple[Any, str, str]:
     receipt, expected = verify_seal_details(run_dir)
-    if receipt.get("session_id") != run_dir.name:
+    if receipt.get("agent_run_id") != run_dir.name:
         raise WorkflowError(f"source final receipt belongs to another run: {run_dir.name}")
     try:
         collection, _ = read_sealed_contract(
@@ -129,7 +129,7 @@ def resolve_node_inputs(
         source = states.get(source_node_id)
         if not isinstance(source, Mapping) or source.get("state") != "completed":
             raise WorkflowError(f"input binding source is not completed: {source_node_id}")
-        source_run_id = source.get("run_id")
+        source_run_id = source.get("agent_run_id")
         if not isinstance(source_run_id, str):
             raise WorkflowError(f"input binding source has no bound run: {source_node_id}")
         source_dir = session_run_dir(settings, source_run_id)

@@ -1,203 +1,147 @@
 from __future__ import annotations
 
 import fcntl
-import json
-import uuid
+import subprocess
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
+from agent_workflow.agent_runs import prepare
 from agent_workflow.config import defaults
 from agent_workflow.errors import WorkflowError
+from agent_workflow.messages import append_message
 from agent_workflow.orchestrator_inbox import (
+    OrchestratorInboxError,
     create_registry,
     import_registered,
+    orchestrator_dir,
     read_inbox,
     register_child,
-    unregister_child,
+    replay_registered,
 )
-from agent_workflow.orchestrator_inbox import orchestrator_dir, replay_registered
 from agent_workflow.orchestrator_supervisor import watch
-from agent_workflow.messages import append_message
-from agent_workflow.sessions import launch
-from agent_workflow.util import atomic_write_json, utc_now
-from tests.conftest import git_repo
+from agent_workflow.state import run_dir
 
 
-def _make_child(tmp_path: Path, settings, session_id: str, summary: str, monkeypatch) -> None:
-    repo = tmp_path / f"repo-{session_id}"
-    git_repo(repo)
-    prompt = tmp_path / f"{session_id}.md"
-    prompt.write_text("child\n", encoding="utf-8")
-    monkeypatch.setattr("agent_workflow.tmux.session_exists", lambda *args: False)
-    monkeypatch.setattr("agent_workflow.tmux.create_session", lambda *args: None)
-    monkeypatch.setattr("agent_workflow.tmux.pane_info", lambda *args: None)
-    launch(
+def _git_repo(path: Path) -> None:
+    path.mkdir(parents=True)
+    subprocess.run(["git", "init", "-q", str(path)], check=True)
+    subprocess.run(["git", "-C", str(path), "config", "user.email", "fixture@example.com"], check=True)
+    subprocess.run(["git", "-C", str(path), "config", "user.name", "Fixture"], check=True)
+    (path / "README.md").write_text("fixture\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(path), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(path), "commit", "-qm", "fixture"], check=True)
+
+
+def _make_child(tmp_path: Path, settings, agent_run_id: str, content: str) -> dict:
+    repo = tmp_path / f"repo-{agent_run_id}"
+    _git_repo(repo)
+    prompt = tmp_path / f"{agent_run_id}.md"
+    prompt.write_text("fixture task\n", encoding="utf-8")
+    prepare(
         settings,
-        session_id=session_id,
+        agent_run_id=agent_run_id,
         workdir=repo,
         prompt_path=prompt,
-        explicit_command=["true"],
+        explicit_command=["/bin/true"],
         structured=True,
-        interactive=False,
-        allow_dirty=False,
+        worker_mode="headless",
     )
-    run = settings.state_root / "runs" / session_id
-    assignment_id = str(uuid.uuid4())
-    now = utc_now()
-    contract = json.loads((run / "launch-contract.json").read_text(encoding="utf-8"))
-    atomic_write_json(
-        run / "agent-context.json",
-        {
-            "schema": "agent-workflow/agent-context/v1",
-            "session_id": session_id,
-            "agent_name": None,
-            "agent_class": "implementation",
-            "executor": None,
-            "model": None,
-            "interactive": True,
-            "provider_session_id": None,
-            "repository_root": str(repo),
-            "worktree": contract["worktree"]["path"],
-            "source_revision": contract["worktree"]["source_revision"],
-            "state": "idle_reusable",
-            "current_assignment": None,
-            "completed_assignments": [{"assignment_id": assignment_id, "summary": summary}],
-            "reuse_count": 0,
-            "created_at": now,
-            "updated_at": now,
-        },
-    )
-    (run / "assignments.jsonl").write_text(
-        json.dumps(
-            {
-                "schema": "agent-workflow/assignment-event/v1", "sequence": 1,
-                "timestamp": now, "event": "task_completed", "session_id": session_id,
-                "assignment_id": assignment_id, "actor": "child", "ticket_id": None,
-                "pack_id": None, "correlation_id": None, "summary": summary,
-                "tags": [], "files": [],
-            }, sort_keys=True,
-        ) + "\n", encoding="utf-8",
-    )
-    (run / "events.jsonl").write_text(
-        json.dumps(
-            {
-                "schema": "agent-workflow/lifecycle-event/v1", "sequence": 1,
-                "timestamp": now, "dimension": "assignment", "prior": "busy",
-                "new": "idle_reusable", "actor": "child", "reason": "complete",
-                "receipt_refs": ["assignments.jsonl", "agent-context.json"],
-            }, sort_keys=True,
-        ) + "\n", encoding="utf-8",
-    )
-    (run / "messages.jsonl").write_text(
-        json.dumps(
-            {
-                "schema": "agent-workflow/session-message/v1", "sequence": 1,
-                "message_id": str(uuid.uuid4()), "session_id": session_id,
-                "timestamp": now, "direction": "child_to_parent", "kind": "task_complete",
-                "actor": "child", "content": summary,
-            }, sort_keys=True,
-        ) + "\n", encoding="utf-8",
+    return append_message(
+        run_dir(settings, agent_run_id),
+        agent_run_id=agent_run_id,
+        direction="child_to_parent",
+        kind="progress",
+        actor="fixture-child",
+        content=content,
     )
 
 
-def test_inbox_rejects_unverified_source_claim_and_symlink(tmp_path: Path, monkeypatch) -> None:
-    settings = replace(defaults(tmp_path / "config.toml"), state_root=tmp_path / "state")
-    _make_child(tmp_path, settings, "child-one", "one complete", monkeypatch)
-    create_registry(settings, "main-orchestrator")
-    register_child(settings, "main-orchestrator", "child-one")
-    message = json.loads(
-        (settings.state_root / "runs" / "child-one" / "messages.jsonl").read_text(encoding="utf-8")
-    )
-    message["session_id"] = "other-child"
-    with pytest.raises(WorkflowError, match="another registered session"):
-        from agent_workflow.orchestrator_inbox import import_message
-
-        import_message(settings, "main-orchestrator", "child-one", message)
-
-    inbox = next((settings.state_root / "orchestrators").iterdir()) / "inbox.jsonl"
-    inbox.unlink()
-    inbox.symlink_to(settings.state_root / "runs" / "child-one" / "messages.jsonl")
-    with pytest.raises(WorkflowError):
-        import_registered(settings, "main-orchestrator")
+def _settings(tmp_path: Path):
+    return replace(defaults(tmp_path / "missing.toml"), state_root=tmp_path / "state")
 
 
-def test_terminal_import_rejects_missing_seal_and_stale_assignment_evidence(tmp_path: Path, monkeypatch) -> None:
-    settings = replace(defaults(tmp_path / "config.toml"), state_root=tmp_path / "state")
-    _make_child(tmp_path, settings, "terminal-child", "terminal complete", monkeypatch)
-    create_registry(settings, "terminal-root")
-    register_child(settings, "terminal-root", "terminal-child")
-    run = settings.state_root / "runs" / "terminal-child"
-    context = json.loads((run / "agent-context.json").read_text(encoding="utf-8"))
-    context["state"] = "closed"
-    atomic_write_json(run / "agent-context.json", context)
-    events = json.loads((run / "events.jsonl").read_text(encoding="utf-8").splitlines()[0])
-    events["new"] = "closed"
-    (run / "events.jsonl").write_text(json.dumps(events, sort_keys=True) + "\n", encoding="utf-8")
-    with pytest.raises(WorkflowError, match="sealed receipt"):
-        import_registered(settings, "terminal-root")
+def test_registry_import_is_identity_bound_and_idempotent(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    source = _make_child(tmp_path, settings, "child-one", "implemented first step")
+    create_registry(settings, "root")
+    registered = register_child(settings, "root", "child-one")
+    assert registered["child"]["agent_run_id"] == "child-one"
 
-    _make_child(tmp_path, settings, "stale-child", "stale complete", monkeypatch)
-    register_child(settings, "terminal-root", "stale-child")
-    stale_run = settings.state_root / "runs" / "stale-child"
-    stale_events = json.loads((stale_run / "events.jsonl").read_text(encoding="utf-8").splitlines()[0])
-    stale_events["new"] = "busy"
-    (stale_run / "events.jsonl").write_text(json.dumps(stale_events, sort_keys=True) + "\n", encoding="utf-8")
-    with pytest.raises(WorkflowError, match="terminal or idle_reusable"):
-        import_registered(settings, "terminal-root", session_id="stale-child")
+    first = import_registered(settings, "root")
+    assert first["count"] == 1
+    assert first["imported"][0]["kind"] == "agent_progress"
+    second = import_registered(settings, "root")
+    assert second["count"] == 1
+    assert second["imported"][0]["duplicate"] is True
+
+    metadata = read_inbox(settings, "root")
+    assert len(metadata) == 1
+    assert metadata[0]["source_message_id"] == source["message_id"]
+    assert "summary" not in metadata[0]
+    assert read_inbox(settings, "root", include_content=True)[0]["summary"] == "implemented first step"
 
 
-def test_replay_uses_bounded_round_robin_across_small_batches(tmp_path: Path, monkeypatch) -> None:
-    settings = replace(defaults(tmp_path / "config.toml"), state_root=tmp_path / "state")
-    for session_id in ("child-one", "child-two", "child-three"):
-        _make_child(tmp_path, settings, session_id, session_id, monkeypatch)
-    create_registry(settings, "fair-watcher")
-    for session_id in ("child-one", "child-two", "child-three"):
-        register_child(settings, "fair-watcher", session_id)
+def test_replay_uses_durable_per_child_cursors_and_fairness(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    for child in ("child-a", "child-b"):
+        _make_child(tmp_path, settings, child, f"progress from {child}")
+    create_registry(settings, "root")
+    register_child(settings, "root", "child-a")
+    register_child(settings, "root", "child-b")
 
-    delivered = []
-    for _ in range(3):
-        report = replay_registered(settings, "fair-watcher", batch_size=1, max_per_child=1)
-        delivered.extend(item["sender_session_id"] for item in report["imported"])
-    assert delivered == ["child-one", "child-two", "child-three"]
+    first = replay_registered(settings, "root", batch_size=1, max_per_child=1)
+    second = replay_registered(settings, "root", batch_size=1, max_per_child=1)
+    third = replay_registered(settings, "root", batch_size=2, max_per_child=1)
+
+    assert first["advanced"] == 1
+    assert second["advanced"] == 1
+    assert third["advanced"] == 0
+    events = read_inbox(settings, "root", include_content=True)
+    assert {event["sender_agent_run_id"] for event in events} == {"child-a", "child-b"}
 
 
-def test_registered_child_message_replay_does_not_require_terminal_wakeup(tmp_path: Path, monkeypatch) -> None:
-    settings = replace(defaults(tmp_path / "config.toml"), state_root=tmp_path / "state")
-    _make_child(tmp_path, settings, "wake-child", "wake complete", monkeypatch)
-    create_registry(settings, "wake-watcher")
-    register_child(settings, "wake-watcher", "wake-child")
+def test_completion_message_without_closed_sealed_assignment_fails_closed(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    _make_child(tmp_path, settings, "child-one", "still working")
     append_message(
-        settings.state_root / "runs" / "wake-child",
-        session_id="wake-child", direction="child_to_parent", kind="progress",
-        actor="child", content="durable progress",
+        run_dir(settings, "child-one"),
+        agent_run_id="child-one",
+        direction="child_to_parent",
+        kind="task_complete",
+        actor="fixture-child",
+        content="complete",
     )
-    report = replay_registered(settings, "wake-watcher", batch_size=1, max_per_child=1)
-    assert report["count"] == 1
+    create_registry(settings, "root")
+    register_child(settings, "root", "child-one")
+
+    with pytest.raises(OrchestratorInboxError, match="closed assignment evidence"):
+        import_registered(settings, "root")
 
 
-def test_watch_rejects_second_active_supervisor_with_stable_diagnostic(tmp_path: Path, monkeypatch) -> None:
-    settings = replace(defaults(tmp_path / "config.toml"), state_root=tmp_path / "state")
+def test_watch_replays_durable_messages_without_wakeup_channel(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    _make_child(tmp_path, settings, "child-one", "durable progress")
+    create_registry(settings, "watcher")
+    register_child(settings, "watcher", "child-one")
+
+    first = watch(settings, "watcher", interval_seconds=0.01, poll_seconds=0.01, max_cycles=1)
+    second = watch(settings, "watcher", interval_seconds=0.01, poll_seconds=0.01, max_cycles=1)
+
+    assert first["advanced"] == 1
+    assert first["imported"] == 1
+    assert second["advanced"] == 0
+    assert len(read_inbox(settings, "watcher")) == 1
+
+
+def test_watch_has_a_single_writer_lease(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
     create_registry(settings, "leased-watcher")
     directory = orchestrator_dir(settings, "leased-watcher")
-    with (directory / ".supervisor.lock").open("a+b") as lock:
+    lock_path = directory / ".supervisor.lock"
+    with lock_path.open("a+b") as lock:
         fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         with pytest.raises(WorkflowError, match="orchestrator supervisor already active"):
             watch(settings, "leased-watcher", interval_seconds=0.01, max_cycles=1)
         fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
-
-
-def test_polling_watch_preserves_cursor_resume_boundary(tmp_path: Path, monkeypatch) -> None:
-    settings = replace(defaults(tmp_path / "config.toml"), state_root=tmp_path / "state")
-    _make_child(tmp_path, settings, "signal-child", "signal complete", monkeypatch)
-    create_registry(settings, "signal-watcher")
-    register_child(settings, "signal-watcher", "signal-child")
-
-    result = watch(settings, "signal-watcher", interval_seconds=0.01, poll_seconds=0.01, max_cycles=1)
-    assert result["state"] == "completed"
-    assert result["advanced"] == 1
-    resumed = replay_registered(settings, "signal-watcher", batch_size=1)
-    assert resumed["advanced"] == 0
-    events = (orchestrator_dir(settings, "signal-watcher") / "supervisor-events.jsonl").read_text()
-    assert '"reason":"shutdown"' in events

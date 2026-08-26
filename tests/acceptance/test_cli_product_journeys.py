@@ -1,579 +1,122 @@
 from __future__ import annotations
 
-import hashlib
 import json
-import shlex
-import shutil
-import subprocess
-import tomllib
 from pathlib import Path
 
-from tests.conftest import InstalledProduct, REPO_ROOT, fake_agent_path, git_repo, wait_for_status
+from tests.conftest import InstalledProduct, git_repo, wait_for_status, write_config
 
 
-def test_installed_cli_exposes_operable_public_surface(
+def _run_dir(env: dict[str, str], agent_run_id: str) -> Path:
+    return Path(env["XDG_STATE_HOME"]) / "agent-workflow" / "runs" / agent_run_id
+
+
+def test_installed_cli_exposes_headless_agent_run_surface(
     installed_product: InstalledProduct, product_env: dict[str, str]
 ) -> None:
-    expected_version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
-    version = installed_product.run("--version", env=product_env, check=True)
-    assert version.stdout.strip() == f"agent-workflow {expected_version}"
+    expected_version = (Path(__file__).resolve().parents[2] / "VERSION").read_text().strip()
+    assert installed_product.run("--version", env=product_env, check=True).stdout.strip() == f"agent-workflow {expected_version}"
 
-    help_result = installed_product.run("--help", env=product_env, check=True)
-    for command in ("doctor", "launch", "workflow", "eval", "pack", "worktree", "supervisor"):
-        assert command in help_result.stdout
-    launch_help = installed_product.run("launch", "--help", env=product_env, check=True)
-    launch_help_text = " ".join(launch_help.stdout.split())
-    assert "explicitly opt into a non-interactive structured evidence run" in launch_help_text
-    assert "pane-limit-action" in launch_help.stdout
+    help_text = installed_product.run("--help", env=product_env, check=True).stdout
+    for command in ("doctor", "agent-run", "workflow", "eval", "pack", "worktree", "supervisor"):
+        assert command in help_text
+    assert " launch " not in f" {help_text} "
+
+    agent_run_help = installed_product.run("agent-run", "--help", env=product_env, check=True).stdout
+    for command in ("prepare", "start", "status", "steer", "progress", "ack", "interrupt", "terminate", "restart"):
+        assert command in agent_run_help
 
     doctor = installed_product.json("doctor", env=product_env)
     assert doctor["version"] == expected_version
     assert doctor["checks"]["required_commands_present"] is True
-    assert doctor["commands"]["tmux"].endswith("/tmux")
+    assert set(doctor["commands"]) >= {"git", "bash", "python3", "tar", "zstd"}
 
     config = installed_product.json("config", "show", env=product_env)
-    assert config["terminal"]["backend"] == "tmux"
+    assert "terminal" not in config
+    assert "backend" not in config
     assert Path(config["paths"]["state_root"]).is_absolute()
-
-    # Public parser/runtime behavior is protected through the installed executable,
-    # not through private handler or parser imports.
-    after_subcommand = installed_product.run("doctor", "--json", env=product_env, check=True)
-    assert json.loads(after_subcommand.stdout)["version"] == expected_version
-    missing_config = Path(product_env["XDG_CONFIG_HOME"]) / "missing.toml"
-    version_without_bootstrap = installed_product.run(
-        "--config", missing_config, "--version", env=product_env, check=True
-    )
-    assert version_without_bootstrap.stdout.strip() == f"agent-workflow {expected_version}"
-    rejected_tail = installed_product.run("doctor", "--", "echo", "no", env=product_env)
-    assert rejected_tail.returncode == 2
 
     catalog = installed_product.json("commands", "--format", "json", env=product_env)
     represented = {item["command"] for item in catalog["commands"]}
-    assert {"launch", "agent task-complete", "worktree closeout", "evidence repair"} <= represented
+    assert {"agent-run prepare", "agent-run start", "agent-run status", "agent task-complete", "worktree closeout"} <= represented
+    assert "launch" not in represented
 
 
-def test_installed_config_doctor_and_provenance_trust_journey(
+def test_headless_agent_run_prepare_start_and_provenance_journey(
     installed_product: InstalledProduct,
     product_env: dict[str, str],
     fake_agent_path: Path,
     tmp_path: Path,
 ) -> None:
-    config = tmp_path / "config.toml"
-    config.write_text(
-        "\n".join(
-            [
-                "schema_version = 1",
-                "[security]",
-                'mode = "local"',
-                "executable_digest = true",
-                "",
-                "[executors.fixture]",
-                f'command = ["{fake_agent_path}"]',
-                "",
-            ]
-        ),
-        encoding="utf-8",
-    )
-    doctor = installed_product.json("doctor", "--config", config, env=product_env)
-    fixture = doctor["executors"]["fixture"]
-    assert fixture["compatibility"]["decision"] == "unclassified"
-    assert fixture["compatibility"]["explanation_code"] == "COMPAT-CUSTOM-EXECUTOR"
-    assert fixture["binary"] == str(fake_agent_path.resolve())
-    assert len(fixture["sha256"]) == 64
-
-    unknown = tmp_path / "unknown.toml"
-    unknown.write_text("schema_version = 1\n[security]\nunknown = true\n", encoding="utf-8")
-    rejected = installed_product.run("config", "show", "--config", unknown, env=product_env)
-    assert rejected.returncode == 2
-    assert "unknown config key(s) in [security]" in rejected.stderr
-
     repo = tmp_path / "repo"
     git_repo(repo)
     prompt = tmp_path / "prompt.md"
-    prompt.write_text("Read the fixture.\n", encoding="utf-8")
-    launch_config = tmp_path / "launch.toml"
-    launch_config.write_text(
-        "\n".join(
-            [
-                "schema_version = 1",
-                "[git]",
-                "require_clean_source = false",
-                "[executors.codex]",
-                f'command = ["{fake_agent_path}"]',
-                    'models = ["gpt-5.6-luna"]',
-                    'default_model = "gpt-5.6-luna"',
-                'model_arg = ["--model"]',
-                "[agents]",
-                'default_executor = "codex"',
-                'default_class = "review"',
-            ]
-        )
-        + "\n",
-        encoding="utf-8",
-    )
+    prompt.write_text("Complete the fixture task.\n", encoding="utf-8")
+    config = write_config(product_env, fake_agent=fake_agent_path)
     env = dict(product_env)
     env["FAKE_AGENT_MODE"] = "structured"
-    installed_product.json(
-        "launch",
-        "config-trust-provenance",
-        repo,
-        prompt,
-        "--config",
-        launch_config,
-        "--executor",
-        "codex",
-        "--agent-class",
-        "review",
-        "--tier",
-        "medium",
-        "--structured",
-        env=env,
+
+    prepared = installed_product.json(
+        "agent-run", "prepare", "headless-basic", repo, prompt,
+        "--config", config, "--executor", "codex", "--agent-class", "review",
+        "--tier", "medium", "--structured", env=env,
     )
-    wait_for_status(env, "config-trust-provenance")
-    provenance = json.loads(
-        (
-            Path(env["XDG_STATE_HOME"])
-            / "agent-workflow"
-            / "runs"
-            / "config-trust-provenance"
-            / "run-provenance.json"
-        ).read_text(encoding="utf-8")
-    )
+    assert prepared["status"] == "prepared"
+    assert prepared["worker_mode"] == "headless"
+
+    run = _run_dir(env, "headless-basic")
+    contract = json.loads((run / "agent-run-contract.json").read_text(encoding="utf-8"))
+    assert contract["schema"] == "agent-workflow/agent-run-contract/v1"
+    assert contract["agent_run"]["id"] == "headless-basic"
+    assert contract["worker_plan"]["mode"] == "headless"
+    serialized = json.dumps(contract).lower()
+    assert "pane_id" not in serialized
+    assert "terminal_backend" not in serialized
+
+    started = installed_product.json("agent-run", "start", "headless-basic", env=env)
+    assert started["status"] in {"running", "completed"}
+    status = wait_for_status(env, "headless-basic")
+    assert status["status"] == "completed"
+    assert status["worker_mode"] == "headless"
+    assert status.get("worker_id")
+    assert status.get("worker_pid") != status.get("worker_id")
+
+    provenance = json.loads((run / "run-provenance.json").read_text(encoding="utf-8"))
     assert provenance["executable"]["resolved_path"] == str(fake_agent_path.resolve())
     assert len(provenance["executable"]["sha256"]) == 64
-    assert provenance["compatibility"]["decision"] == "unclassified"
-    assert len(provenance["compatibility"]["policy_sha256"]) == 64
+    assert (run / "final-receipt.json").is_file()
 
 
-def test_pane_capacity_fallback_is_structured_and_non_interactive(
+def test_external_prepare_is_host_independent_and_process_control_is_unavailable(
     installed_product: InstalledProduct,
     product_env: dict[str, str],
     fake_agent_path: Path,
     tmp_path: Path,
 ) -> None:
-    repo = tmp_path / "repo"
+    repo = tmp_path / "external-repo"
     git_repo(repo)
-    prompt = tmp_path / "prompt.md"
-    prompt.write_text("Inspect the repository.\n", encoding="utf-8")
-    config = tmp_path / "config.toml"
-    config.write_text(
-        "\n".join(
-            [
-                "[executors.codex]",
-                f'command = ["{fake_agent_path}"]',
-                'models = ["gpt-5.6-luna"]',
-                'default_model = "gpt-5.6-luna"',
-                'model_arg = ["--model"]',
-                "",
-                "[git]",
-                "require_clean_source = false",
-                "",
-                "[agents]",
-                'default_executor = "codex"',
-                'default_class = "implementation"',
-            ]
-        )
-        + "\n",
-        encoding="utf-8",
-    )
+    prompt = tmp_path / "external.md"
+    prompt.write_text("Prepare only.\n", encoding="utf-8")
     env = dict(product_env)
-    env.update(
-        {
-            "TMUX": "fake-server",
-            "TMUX_PANE": "%0",
-            "FAKE_TMUX_AGENT_COUNT": "6",
-            "FAKE_AGENT_MODE": "structured",
-        }
-    )
-    installed_product.json(
-        "launch",
-        "capacity-fallback",
-        repo,
-        prompt,
-        "--config",
-        config,
-        "--executor",
-        "codex",
-        "--agent-class",
-        "implementation",
-        "--pane-limit-action",
-        "non-interactive",
+
+    prepared = installed_product.json(
+        "agent-run", "prepare", "external-run", repo, prompt,
+        "--worker-mode", "external", "--interactive", "--", fake_agent_path,
         env=env,
     )
-    status = wait_for_status(env, "capacity-fallback")
-    assert status["status"] == "completed"
-    run = Path(env["XDG_STATE_HOME"]) / "agent-workflow" / "runs" / "capacity-fallback"
-    contract = json.loads((run / "launch-contract.json").read_text(encoding="utf-8"))
-    assert contract["command_plan"]["interactive"] is False
-    assert contract["command_plan"]["executor_interactive"] is False
-    assert contract["command_plan"]["stream_format"] == "codex-jsonl"
+    assert prepared["status"] == "prepared"
+    assert prepared["worker_mode"] == "external"
+    assert prepared.get("worker_pid") is None
 
+    start = installed_product.run("--json", "agent-run", "start", "external-run", env=env)
+    assert start.returncode == 2
+    assert "external" in start.stderr.lower()
 
-def test_prompt_pack_scaffold_validate_and_archive_round_trip_is_deterministic(
-    installed_product: InstalledProduct, product_env: dict[str, str], tmp_path: Path
-) -> None:
-    pack = tmp_path / "release-pack"
-    scaffold = installed_product.json(
-        "pack", "scaffold", pack, "--phases", "2", "--name", "Release Pack", env=product_env
-    )
-    assert scaffold["phases"] == 2
-    assert (pack / "phase-0" / "task-manifest.yaml").is_file()
-    assert not (pack / "MANIFEST.sha256").exists()
-
-    validation = installed_product.json("pack", "validate", pack, env=product_env)
-    assert validation["ok"] is True
-
-    first = tmp_path / "first.tar.zst"
-    second = tmp_path / "second.tar.zst"
-    installed_product.json("pack", "archive", pack, first, env=product_env)
-    installed_product.json("pack", "archive", pack, second, env=product_env)
-    assert hashlib.sha256(first.read_bytes()).digest() == hashlib.sha256(second.read_bytes()).digest()
-    subprocess.run(["zstd", "-t", "-q", str(first)], check=True)
-
-    native = tmp_path / "native-pack"
-    (native / "tickets").mkdir(parents=True)
-    (native / "contracts").mkdir()
-    for ticket in ("T-1", "T-2"):
-        (native / "tickets" / f"{ticket}.md").write_text(
-            "Writable scope, acceptance criteria, tests, and stop conditions.\n",
-            encoding="utf-8",
-        )
-    (native / "contracts" / "result.schema.json").write_text(
-        json.dumps({"type": "object"}) + "\n", encoding="utf-8"
-    )
-    (native / "MANIFEST.json").write_text(
-        json.dumps(
-            {
-                "schema": "agent-workflow/manifest-native-pack/v1",
-                "pack_id": "native-pack",
-                "tickets": [
-                    {
-                        "id": "T-1",
-                        "prompt": "tickets/T-1.md",
-                        "dependencies": [],
-                        "result_contract": {"schema": "contracts/result.schema.json"},
-                    },
-                    {
-                        "id": "T-2",
-                        "prompt": "tickets/T-2.md",
-                        "dependencies": ["T-1"],
-                    },
-                ],
-            },
-            indent=2,
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    native_validation = installed_product.json("pack", "validate", native, env=product_env)
-    assert native_validation["ok"] is True
-    assert native_validation["pack_format"] == "manifest-native"
-    assert native_validation["task_count"] == 2
-    native_first = tmp_path / "native-first.tar.zst"
-    native_second = tmp_path / "native-second.tar.zst"
-    installed_product.json("pack", "archive", native, native_first, env=product_env)
-    installed_product.json("pack", "archive", native, native_second, env=product_env)
-    assert native_first.read_bytes() == native_second.read_bytes()
-
-    ledger_pack = tmp_path / "ledger-pack"
-    ledger_phase = ledger_pack / "phase-0"
-    ledger_phase.mkdir(parents=True)
-    (ledger_phase / "task-manifest.yaml").write_text(
-        'phase: "0"\ntasks:\n  - id: T-1\n    session: run-1\n    prompt: ticket.md\n',
-        encoding="utf-8",
-    )
-    ledger_runs = tmp_path / "ledger-runs"
-    ledger_run = ledger_runs / "run-1"
-    ledger_run.mkdir(parents=True)
-    (ledger_run / "status.json").write_text(
-        json.dumps({"status": "completed", "evaluation_path": None}) + "\n",
-        encoding="utf-8",
-    )
-    ledger = installed_product.json(
-        "ledger", ledger_pack, "--runs-root", ledger_runs, env=product_env
-    )
-    row = ledger["rows"][0]
-    assert row["ticket"] == "T-1"
-    assert row["evaluation_required"] is False
-    assert row["evaluation_state"] == "not-planned"
-    assert "eval score" not in row["next_action"]
-
-
-def test_worktree_create_list_and_remove_uses_real_git(
-    installed_product: InstalledProduct, product_env: dict[str, str], tmp_path: Path
-) -> None:
-    repo = tmp_path / "repo"
-    head = git_repo(repo)
-    destination = tmp_path / "ticket-worktree"
-
-    created = installed_product.json(
-        "worktree", "create", repo, "TICKET-1", "HEAD", "--dest", destination, env=product_env
-    )
-    assert created["base_revision"] == head
-    assert destination.is_dir()
-
-    listed = installed_product.json("worktree", "list", repo, env=product_env)
-    assert any(Path(item["worktree"]) == destination for item in listed)
-
-    removed = installed_product.json(
-        "worktree", "remove", repo, destination, "--delete-branch", env=product_env
-    )
-    assert removed["branch_deleted"] is True
-    assert not destination.exists()
-
-    (repo / "source-change.txt").write_text("dirty\n", encoding="utf-8")
-    operational = repo / ".agent-workflow-handoff"
-    operational.mkdir()
-    (operational / "completion.json").write_text("{}\n", encoding="utf-8")
-    disposable = repo / ".codebase-memory"
-    disposable.mkdir()
-    (disposable / "graph.db.zst").write_bytes(b"graph")
-    receipt_path = tmp_path / "repository-closeout.json"
-    closeout = installed_product.json(
-        "worktree",
-        "closeout",
-        repo,
-        "--output",
-        receipt_path,
-        "--baseline-revision",
-        head,
-        "--operational-tree",
-        ".agent-workflow-handoff/",
-        "--disposable-tree",
-        ".codebase-memory/",
-        env=product_env,
-    )
-    assert closeout["remote"]["network_mode"] == "offline"
-    assert closeout["dirty_state"]["counts"] == {
-        "source": 1,
-        "operational": 1,
-        "disposable": 1,
-    }
-    assert closeout["claims"] == {"committed": False, "pushed": False, "merged": None}
-    verified = installed_product.json(
-        "worktree", "closeout-verify", receipt_path, env=product_env
-    )
-    assert verified["digest_valid"] is True
-    assert verified["read_only_mode"] is True
-
-
-def test_worktree_cleanliness_matches_operator_excludes_and_rejects_real_dirt(
-    installed_product: InstalledProduct, product_env: dict[str, str], tmp_path: Path
-) -> None:
-    repo = tmp_path / "repo"
-    git_repo(repo)
-    home = Path(product_env["HOME"])
-    excludes = home / "global-excludes"
-    excludes.write_text(".operator-cache/\n", encoding="utf-8")
-    (home / ".gitconfig").write_text(
-        f"[core]\n\texcludesfile = {excludes}\n", encoding="utf-8"
-    )
-    ignored = repo / ".operator-cache"
-    ignored.mkdir()
-    (ignored / "state.json").write_text("{}", encoding="utf-8")
-    destination = tmp_path / "clean-worktree"
-
-    created = installed_product.json(
-        "worktree", "create", repo, "CLEAN-1", "HEAD", "--dest", destination,
-        env=product_env,
-    )
-    evidence = created["source_cleanliness"]
-    assert evidence["argv"] == [
-        "git", "-C", str(repo.resolve()), "status", "--porcelain"
-    ]
-    assert evidence["returncode"] == 0
-    assert evidence["stdout_bytes"] == 0
-    assert evidence["environment_policy"] == "unsafe-inherit+operator-git-config"
-    installed_product.json(
-        "worktree", "remove", repo, destination, "--delete-branch", env=product_env
-    )
-
-    (repo / "real-untracked.txt").write_text("dirty\n", encoding="utf-8")
-    rejected = installed_product.run(
-        "worktree", "create", repo, "DIRTY-1", "HEAD", "--dest", tmp_path / "dirty-worktree",
-        env=product_env,
-    )
-    assert rejected.returncode != 0
-    assert "source repository is dirty" in rejected.stderr
-    assert "status --porcelain" in rejected.stderr
-
-
-def test_source_installer_round_trip_preserves_user_owned_paths(
-    product_env: dict[str, str], tmp_path: Path
-) -> None:
-    home = tmp_path / "install-home"
-    env = dict(product_env)
-    env.update(
-        {
-            "HOME": str(home),
-            "XDG_CONFIG_HOME": str(home / ".config"),
-            "XDG_DATA_HOME": str(home / ".local" / "share"),
-            "XDG_STATE_HOME": str(home / ".local" / "state"),
-            "PYTHONNOUSERSITE": "1",
-            "PYTHONPATH": "",
-        }
-    )
-    (home / ".codex").mkdir(parents=True)
-    (home / ".codex" / "config.toml").write_text('model = "keep-me"\n', encoding="utf-8")
-    cbm_gate = home / ".codex" / "hooks" / "cbm-code-discovery-gate"
-    cbm_gate.parent.mkdir()
-    cbm_gate.write_text("#!/bin/sh\nexit 2\n", encoding="utf-8")
-    cbm_gate.chmod(0o700)
-    (home / ".claude.json").write_text('{"userSetting": "keep-me"}\n', encoding="utf-8")
-    (home / ".claude").mkdir()
-    (home / ".claude" / "settings.json").write_text(
-        '{"permissions": {"mode": "acceptEdits"}}\n', encoding="utf-8"
-    )
-
-    def run(script: str) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
-            [str(REPO_ROOT / script), "--no-deps"]
-            if script == "install.sh"
-            else [str(REPO_ROOT / script)],
-            cwd=REPO_ROOT,
-            env=env,
-            text=True,
-            capture_output=True,
-            timeout=60,
-            check=False,
-        )
-
-    first = run("install.sh")
-    assert first.returncode == 0, first.stdout + first.stderr
-    launcher = home / ".local" / "bin" / "agent-workflow"
-    assert launcher.resolve() == (REPO_ROOT / "bin" / "agent-workflow").resolve()
-    assert (home / ".config" / "agent-workflow" / "config.toml").is_file()
-    codex_config = tomllib.loads((home / ".codex" / "config.toml").read_text(encoding="utf-8"))
-    assert codex_config["model"] == "keep-me"
-    assert "mcp_servers" not in codex_config
-    codex_hook_commands = [
-        entry["hooks"][0]["command"] for entry in codex_config["hooks"]["SessionStart"]
-    ]
-    assert len(codex_hook_commands) == 3
-    assert all(Path(command).is_file() for command in codex_hook_commands)
-    codex_pre_tool_use = codex_config["hooks"]["PreToolUse"]
-    assert [group["matcher"] for group in codex_pre_tool_use] == ["^Bash$"]
-    adapter_command = codex_pre_tool_use[0]["hooks"][0]["command"]
-    assert "codex-code-discovery-gate" in adapter_command
-    assert "Read|Grep|Glob" not in (home / ".codex" / "config.toml").read_text(encoding="utf-8")
-    adapter, configured_gate = shlex.split(adapter_command)
-    code_payload = {
-        "hook_event_name": "PreToolUse",
-        "tool_name": "Bash",
-        "session_id": str(tmp_path),
-        "tool_input": {"command": "sed -n '1,20p' src/example.py"},
-    }
-    first_gate = subprocess.run(
-        [adapter, configured_gate], input=json.dumps(code_payload), text=True, capture_output=True, check=False
-    )
-    assert first_gate.returncode == 2
-    second_gate = subprocess.run(
-        [adapter, configured_gate], input=json.dumps(code_payload), text=True, capture_output=True, check=False
-    )
-    assert second_gate.returncode == 0
-    no_path_gate = subprocess.run(
-        [adapter, configured_gate],
-        input=json.dumps({**code_payload, "tool_input": {"command": "git status --short"}}),
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    assert no_path_gate.returncode == 0
-    codex_cli = shutil.which("codex")
-    if codex_cli:
-        codex_help = subprocess.run(
-            [codex_cli, "--strict-config", "--help"],
-            env={**env, "CODEX_HOME": str(home / ".codex")},
-            text=True,
-            capture_output=True,
-            timeout=30,
-            check=False,
-        )
-        assert codex_help.returncode == 0, codex_help.stdout + codex_help.stderr
-    claude_config = json.loads((home / ".claude.json").read_text(encoding="utf-8"))
-    assert claude_config["userSetting"] == "keep-me"
-    assert "mcpServers" not in claude_config
-    claude_settings = json.loads((home / ".claude" / "settings.json").read_text(encoding="utf-8"))
-    claude_hook_commands = [
-        entry["command"]
-        for group in claude_settings["hooks"]["SessionStart"]
-        for entry in group["hooks"]
-    ]
-    assert len(claude_hook_commands) == 3
-    assert all(Path(command).is_file() for command in claude_hook_commands)
-    assert claude_settings["permissions"] == {"mode": "acceptEdits"}
-    assert len(claude_settings["hooks"]["SessionStart"][0]["hooks"]) == 3
-    assert (home / ".codex" / "config.toml").read_text(encoding="utf-8").count("[mcp_servers.agent-workflow]") == 0
-    assert (home / ".claude.json").read_text(encoding="utf-8").count('"agent-workflow"') == 0
-    assert (home / ".claude.json").read_text(encoding="utf-8").count('"hooks"') == 0
-    version = subprocess.run(
-        [str(launcher), "--version"], env=env, text=True, capture_output=True, timeout=30, check=False
-    )
-    assert version.returncode == 0, version.stderr
-
-    second = run("install.sh")
-    assert second.returncode == 0, second.stdout + second.stderr
-
-    user_owned = home / ".codex" / "skills" / "agent-workflow-orchestrator"
-    user_owned.unlink()
-    user_owned.write_text("user-owned\n", encoding="utf-8")
-    removed = run("uninstall.sh")
-    assert removed.returncode == 0, removed.stdout + removed.stderr
-    assert not launcher.exists()
-    assert user_owned.read_text(encoding="utf-8") == "user-owned\n"
-    assert (home / ".config" / "agent-workflow" / "config.toml").is_file()
-    assert "preserved unrelated path" in removed.stderr
-
-
-def test_source_installer_without_cbm_gate_keeps_pretooluse_disabled(
-    product_env: dict[str, str], tmp_path: Path
-) -> None:
-    home = tmp_path / "install-home"
-    env = dict(product_env)
-    env.update(
-        {
-            "HOME": str(home),
-            "XDG_CONFIG_HOME": str(home / ".config"),
-            "XDG_DATA_HOME": str(home / ".local" / "share"),
-            "XDG_STATE_HOME": str(home / ".local" / "state"),
-            "PYTHONNOUSERSITE": "1",
-            "PYTHONPATH": "",
-        }
-    )
-    codex_home = home / ".codex"
-    codex_home.mkdir(parents=True)
-    (codex_home / "config.toml").write_text('model = "keep-me"\n', encoding="utf-8")
-    result = subprocess.run(
-        [str(REPO_ROOT / "install.sh"), "--no-deps", "--no-skills"],
-        cwd=REPO_ROOT,
-        env=env,
-        text=True,
-        capture_output=True,
-        timeout=60,
-        check=False,
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
-    config = tomllib.loads((codex_home / "config.toml").read_text(encoding="utf-8"))
-    assert len(config["hooks"]["SessionStart"]) == 3
-    assert "PreToolUse" not in config["hooks"]
-
-
-def test_public_errors_are_actionable_and_nonzero(
-    installed_product: InstalledProduct, product_env: dict[str, str], tmp_path: Path
-) -> None:
-    missing_snapshot = installed_product.run(
-        "workflow", "validate", tmp_path / "missing.json", env=product_env
-    )
-    assert missing_snapshot.returncode == 2
-    assert "cannot read" in missing_snapshot.stderr.lower()
-
-    mcp = subprocess.run(
-        [str(installed_product.mcp), "--repo-root", str(tmp_path)],
-        env=product_env,
-        text=True,
-        capture_output=True,
-        timeout=20,
-        check=False,
-    )
-    assert mcp.returncode == 2
-    assert "agent-workflow[mcp]" in mcp.stderr
+    # External lifecycle operations do not guess at runtime-host control.
+    status_path = _run_dir(env, "external-run") / "status.json"
+    status = json.loads(status_path.read_text())
+    status["status"] = "running"
+    status_path.write_text(json.dumps(status), encoding="utf-8")
+    interrupted = installed_product.json("agent-run", "interrupt", "external-run", env=env)
+    terminated = installed_product.json("agent-run", "terminate", "external-run", "--grace-seconds", "0", env=env)
+    assert interrupted["outcome"] == "unavailable"
+    assert terminated["outcome"] == "unavailable"

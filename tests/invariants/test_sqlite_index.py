@@ -12,16 +12,12 @@ from pathlib import Path
 from agent_workflow.cli import main
 from agent_workflow.config import defaults
 from agent_workflow.errors import WorkflowError
+from agent_workflow.index_db import database_path, integrity_authority_path
+from agent_workflow.index_integrity import integrity_input_snapshot, record_integrity_authority
+from agent_workflow.index_schema import INDEX_APPLICATION_ID, INDEX_SCHEMA_VERSION
 from agent_workflow.index_store import (
-    INDEX_APPLICATION_ID,
-    INDEX_SCHEMA_VERSION,
-    database_path,
-    integrity_authority_path,
-    integrity_input_snapshot,
     index_status,
-    migrate_integrity_authority,
     query_index,
-    record_integrity_authority,
     query_index_report,
     rebuild_index,
     sync_index,
@@ -58,12 +54,12 @@ def _settings(tmp_path: Path):
     )
 
 
-def _status(run: Path, session_id: str) -> None:
+def _status(run: Path, agent_run_id: str) -> None:
     _write(
         run / "status.json",
         {
-            "schema": "agent-workflow/session-status/v2",
-            "session_id": session_id,
+            "schema": "agent-workflow/agent-run-status/v1",
+            "agent_run_id": agent_run_id,
             "status": "running",
             "created_at": "2026-07-30T00:00:00+00:00",
             "updated_at": "2026-07-30T00:01:00+00:00",
@@ -74,11 +70,12 @@ def _status(run: Path, session_id: str) -> None:
             "pack_id": "sqlite-index",
             "disposition": None,
             "failure_category": None,
+            "worker_mode": "headless",
         },
     )
 
 
-def _health(session_id: str) -> dict:
+def _health(agent_run_id: str) -> dict:
     process = {
         "pid": 123,
         "alive": True,
@@ -97,8 +94,8 @@ def _health(session_id: str) -> dict:
         "collector": "test",
     }
     return {
-        "schema": "agent-workflow/run-health-sample/v1",
-        "session_id": session_id,
+        "schema": "agent-workflow/run-health-sample/v2",
+        "agent_run_id": agent_run_id,
         "recorded_at": "2026-07-30T00:02:00+00:00",
         "runner": process,
         "executor": process,
@@ -110,29 +107,26 @@ def _health(session_id: str) -> dict:
             "disk_free_bytes": 200000,
             "disk_total_bytes": 300000,
         },
-        "tmux_pane_id": "%1",
-        "pane_dead": False,
         "output_bytes": 100,
         "stderr_bytes": 0,
         "executor_event_bytes": 50,
-        "terminal_event_bytes": 40,
         "last_semantic_progress_at": "2026-07-30T00:01:59+00:00",
         "seconds_since_semantic_progress": 1.0,
-        "last_semantic_progress_source": "terminal_event",
+        "last_semantic_progress_source": "executor_event",
     }
 
 
-def _seed_run(settings, session_id: str = "run-one") -> Path:
-    run = settings.state_root / "runs" / session_id
+def _seed_run(settings, agent_run_id: str = "run-one") -> Path:
+    run = settings.state_root / "runs" / agent_run_id
     run.mkdir(parents=True)
-    _status(run, session_id)
-    _append(run / "run-health-samples.jsonl", _health(session_id))
+    _status(run, agent_run_id)
+    _append(run / "run-health-samples.jsonl", _health(agent_run_id))
     _append(
         run / "incident-events.jsonl",
         {
             "schema": "agent-workflow/incident-event/v1",
             "incident_id": "a" * 24,
-            "session_id": session_id,
+            "agent_run_id": agent_run_id,
             "recorded_at": "2026-07-30T00:03:00+00:00",
             "category": "process_alive_no_progress",
             "severity": "medium",
@@ -147,7 +141,7 @@ def _seed_run(settings, session_id: str = "run-one") -> Path:
         {
             "schema": "agent-workflow/permission-event/v1",
             "event_id": "c" * 24,
-            "session_id": session_id,
+            "agent_run_id": agent_run_id,
             "recorded_at": "2026-07-30T00:04:00+00:00",
             "principal": None,
             "operation": "execute",
@@ -155,7 +149,7 @@ def _seed_run(settings, session_id: str = "run-one") -> Path:
             "target": None,
             "requested_access": "manual approval",
             "state": "pending",
-            "source": "terminal",
+            "source": "executor_stderr",
             "policy_rule_id": None,
             "evidence_sha256": "d" * 64,
             "remediation_class": "human_required",
@@ -166,7 +160,7 @@ def _seed_run(settings, session_id: str = "run-one") -> Path:
         {
             "schema": "agent-workflow/remediation-event/v1",
             "event_id": "e" * 24,
-            "session_id": session_id,
+            "agent_run_id": agent_run_id,
             "incident_id": "a" * 24,
             "recorded_at": "2026-07-30T00:05:00+00:00",
             "rule_id": "probe-stalled-v1",
@@ -174,18 +168,6 @@ def _seed_run(settings, session_id: str = "run-one") -> Path:
             "outcome": "queued",
             "reason": "SECRET REMEDIATION REASON",
             "details": {},
-        },
-    )
-    _append(
-        run / "terminal-events.jsonl",
-        {
-            "schema": "agent-workflow/terminal-event/v1",
-            "session_id": session_id,
-            "recorded_at": "2026-07-30T00:05:30+00:00",
-            "pane_id": "%1",
-            "content_sha256": "f" * 64,
-            "content_bytes": 24,
-            "content": "SECRET TERMINAL CONTENT",
         },
     )
     _write(
@@ -219,7 +201,7 @@ def _seed_run(settings, session_id: str = "run-one") -> Path:
         run / "execution-metrics.json",
         {
             "schema": "agent-workflow/execution-metrics/v1",
-            "session_id": session_id,
+            "agent_run_id": agent_run_id,
             "stages": [
                 {
                     "stage": "total",
@@ -232,7 +214,6 @@ def _seed_run(settings, session_id: str = "run-one") -> Path:
                     "provider_billed_cost": 0.01,
                     "local_estimated_cost": None,
                     "price_catalog_id": "test",
-                    "cost": 0.01,
                     "currency": "USD",
                     "elapsed_seconds": 12,
                     "first_output_latency_seconds": 1,
@@ -248,7 +229,7 @@ def _seed_run(settings, session_id: str = "run-one") -> Path:
     return run
 
 
-def test_corrupt_run_is_quarantined_without_losing_other_runs(tmp_path: Path) -> None:
+def test_corrupt_run_is_rejected_without_losing_other_runs(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     _seed_run(settings, "healthy")
     corrupt = settings.state_root / "runs" / "corrupt"
@@ -259,13 +240,13 @@ def test_corrupt_run_is_quarantined_without_losing_other_runs(tmp_path: Path) ->
     report = rebuild_index(settings)
     assert report["indexed_count"] == 1
     assert report["error_count"] == 1
-    rows = {row["session_id"]: row for row in query_index(settings, "runs")}
+    rows = {row["agent_run_id"]: row for row in query_index(settings, "runs")}
     assert rows["healthy"]["index_state"] == "current"
     assert rows["corrupt"]["index_state"] == "error"
-    assert query_index(settings, "errors", session_id="corrupt")
+    assert query_index(settings, "errors", agent_run_id="corrupt")
 
 
-def test_symlinked_source_is_quarantined_without_following_target(tmp_path: Path) -> None:
+def test_symlinked_source_is_rejected_without_following_target(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     run = settings.state_root / "runs" / "unsafe"
     run.mkdir(parents=True)
@@ -277,10 +258,10 @@ def test_symlinked_source_is_quarantined_without_following_target(tmp_path: Path
     report = rebuild_index(settings)
     assert report["indexed_count"] == 0
     assert report["error_count"] == 1
-    row = query_index(settings, "runs", session_id="unsafe")[0]
+    row = query_index(settings, "runs", agent_run_id="unsafe")[0]
     assert row["index_state"] == "error"
     assert "incident-events.jsonl" in row["index_error"]
-    error = query_index(settings, "errors", session_id="unsafe")[0]
+    error = query_index(settings, "errors", agent_run_id="unsafe")[0]
     assert error["category"] == "unsafe_source"
     assert index_status(settings)["freshness"] == "incomplete"
     verification = verify_index(settings, full=True)
@@ -290,101 +271,13 @@ def test_symlinked_source_is_quarantined_without_following_target(tmp_path: Path
         assert "SECRET TARGET CONTENT" not in "\n".join(connection.iterdump())
 
 
-@pytest.mark.parametrize("storage_class", ["active", "archive"])
-@pytest.mark.parametrize(
-    ("status_schema", "metrics_schema"),
-    [
-            ("agent-workflow/session-status/v2", "agent-workflow/execution-metrics/retired-v1"),
-    ],
-)
-def test_legacy_archive_is_quarantined_but_does_not_block_full_verification(
-    tmp_path: Path, storage_class: str, status_schema: str, metrics_schema: str
-) -> None:
+
+
+
+
+def test_execution_metrics_missing_current_required_fields_is_blocking(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
-    root = settings.state_root / ("runs" if storage_class == "active" else "archive")
-    run = root / "legacy-run"
-    run.mkdir(parents=True)
-    _write(
-        run / "status.json",
-        {
-            "schema": status_schema,
-            "session_id": "legacy-run",
-            "status": "completed",
-            "created_at": "2025-01-01T00:00:00+00:00",
-            "workdir": "/tmp/legacy",
-            "prompt_path": str(run / "prompt.md"),
-            "log_path": str(run / "output.log"),
-        },
-    )
-    (run / "execution-metrics.json").write_text(
-        json.dumps({"schema": metrics_schema}) + "\n", encoding="utf-8"
-    )
-
-    report = rebuild_index(settings)
-    assert report["error_count"] == 0
-    assert report["quarantined"] == [
-        {"session_id": "legacy-run", "classification": "historical_artifact"}
-    ]
-    status = index_status(settings)
-    assert status["historical_run_count"] == 1
-    assert status["freshness"] == "current"
-    verification = verify_index(settings, full=True)
-    assert verification["valid"] is True
-    assert verification["historical_artifacts"][0]["outcome"] == "preserved_excluded"
-
-
-@pytest.mark.parametrize(
-    ("filename", "payload", "expected_reason"),
-    [
-        (
-            "command-collection.json",
-            {"schema": "agent-workflow/command-collection-set/v1"},
-            "retired_schema_id:agent-workflow/command-collection-set/v1",
-        ),
-        (
-            "lifecycle-events.jsonl",
-            {"schema": "agent-workflow/lifecycle-event/v1"},
-            "retired_schema_id:agent-workflow/lifecycle-event/v1",
-        ),
-    ],
-)
-def test_host_validation_error_binds_retired_candidate_path_without_schema_text(
-    tmp_path: Path,
-    filename: str,
-    payload: dict[str, str],
-    expected_reason: str,
-) -> None:
-    settings = _settings(tmp_path)
-    run = settings.state_root / "runs" / "host-shaped"
-    run.mkdir(parents=True)
-    _write(
-        run / "status.json",
-        {
-            "schema": "agent-workflow/session-status/v2",
-            "session_id": "host-shaped",
-            "status": "completed",
-            "created_at": "2025-01-01T00:00:00+00:00",
-            "workdir": "/tmp/legacy",
-            "prompt_path": str(run / "prompt.md"),
-            "log_path": str(run / "output.log"),
-        },
-    )
-    if filename.endswith(".jsonl"):
-        (run / filename).write_text(json.dumps(payload) + "\n", encoding="utf-8")
-    else:
-        _write(run / filename, payload)
-
-    rebuilt = rebuild_index(settings)
-    assert rebuilt["quarantined_count"] == 1
-    error = query_index(settings, "errors", session_id="host-shaped")[0]["detail"]
-    assert str(run / filename) in error
-    assert error.count(expected_reason.split(":", 1)[1]) == 2
-    assert verify_index(settings, full=True)["valid"] is True
-
-
-def test_execution_metrics_requires_all_five_known_additive_fields(tmp_path: Path) -> None:
-    settings = _settings(tmp_path)
-    run = _seed_run(settings, "metrics-legacy")
+    run = _seed_run(settings, "metrics-invalid")
     metrics_path = run / "execution-metrics.json"
     metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
     for stage in metrics["stages"]:
@@ -403,43 +296,12 @@ def test_execution_metrics_requires_all_five_known_additive_fields(tmp_path: Pat
     _write(status_path, status)
 
     rebuilt = rebuild_index(settings)
-    assert rebuilt["quarantined_count"] == 1
-    assert verify_index(settings, full=True)["valid"] is True
-
-    metrics["stages"][0]["price_catalog_id"] = "unexpectedly-present"
-    _write(metrics_path, metrics)
-    rebuild_index(settings)
+    assert rebuilt["error_count"] == 1
+    row = query_index(settings, "runs", agent_run_id="metrics-invalid")[0]
+    assert row["index_state"] == "error"
     assert verify_index(settings, full=True)["valid"] is False
 
 
-@pytest.mark.parametrize("storage_class", ["active", "archive"])
-@pytest.mark.parametrize("disposition", ["reviewed", "accepted"])
-def test_legacy_schema_drift_with_active_or_dispositioned_evidence_blocks(
-    tmp_path: Path, storage_class: str, disposition: str
-) -> None:
-    settings = _settings(tmp_path)
-    root = settings.state_root / ("runs" if storage_class == "active" else "archive")
-    run = root / f"legacy-{storage_class}-{disposition}"
-    run.mkdir(parents=True)
-    _write(
-        run / "status.json",
-        {
-            "schema": "agent-workflow/session-status/v2",
-            "session_id": run.name,
-            "status": "running" if storage_class == "active" else "completed",
-            "created_at": "2026-07-30T00:00:00+00:00",
-            "workdir": "/tmp/legacy",
-            "prompt_path": str(run / "prompt.md"),
-            "log_path": str(run / "output.log"),
-            "disposition": disposition,
-        },
-    )
-    _write(run / "execution-metrics.json", {"schema": "agent-workflow/execution-metrics/v1"})
-
-    report = rebuild_index(settings)
-    assert report["error_count"] == 1
-    assert report["quarantined_count"] == 0
-    assert verify_index(settings, full=True)["valid"] is False
 
 
 def test_workflow_projection_materializes_nodes_and_edges(tmp_path: Path) -> None:
@@ -457,7 +319,7 @@ def test_workflow_projection_materializes_nodes_and_edges(tmp_path: Path) -> Non
                     "node_id": "build",
                     "kind": "task",
                     "ticket_id": "IDX-001",
-                    "session_id": "build-run",
+                    "agent_run_id": "build-run",
                     "prompt_path": "build.md",
                     "dependencies": [],
                     "executor": "codex",
@@ -468,7 +330,7 @@ def test_workflow_projection_materializes_nodes_and_edges(tmp_path: Path) -> Non
                     "node_id": "review",
                     "kind": "task",
                     "ticket_id": "IDX-002",
-                    "session_id": "review-run",
+                    "agent_run_id": "review-run",
                     "prompt_path": "review.md",
                     "dependencies": ["build"],
                     "executor": "claude",
@@ -491,9 +353,9 @@ def test_workflow_projection_materializes_nodes_and_edges(tmp_path: Path) -> Non
                     "node_id": "build",
                     "kind": "task",
                     "state": "completed",
-                    "run_id": "build-run",
+                    "agent_run_id": "build-run",
                     "attempt": 1,
-                    "retry_of_run_id": None,
+                    "retry_of_agent_run_id": None,
                     "bound_at": "2026-07-30T00:00:00+00:00",
                     "terminal_reason": None,
                 },
@@ -501,9 +363,9 @@ def test_workflow_projection_materializes_nodes_and_edges(tmp_path: Path) -> Non
                     "node_id": "review",
                     "kind": "task",
                     "state": "running",
-                    "run_id": "review-run",
+                    "agent_run_id": "review-run",
                     "attempt": 1,
-                    "retry_of_run_id": None,
+                    "retry_of_agent_run_id": None,
                     "bound_at": "2026-07-30T00:10:00+00:00",
                     "terminal_reason": None,
                 },
@@ -535,7 +397,7 @@ def test_foreign_or_newer_database_is_rejected_without_touching_sources(tmp_path
     with sqlite3.connect(path) as connection:
         connection.execute(f"PRAGMA application_id = {INDEX_APPLICATION_ID}")
         connection.execute(f"PRAGMA user_version = {INDEX_SCHEMA_VERSION + 1}")
-    with pytest.raises(WorkflowError, match="newer than supported"):
+    with pytest.raises(WorkflowError, match="not current"):
         sync_index(settings)
     assert (run / "status.json").is_file()
 
@@ -569,7 +431,6 @@ def test_performance_projection_never_coalesces_provider_and_local_cost(tmp_path
     stage = metrics["stages"][0]
     stage["provider_billed_cost"] = None
     stage["local_estimated_cost"] = 0.02
-    stage["cost"] = 0.02
     stage["currency"] = "EUR"
     _write(metrics_path, metrics)
 
@@ -592,7 +453,6 @@ def test_performance_projection_nulls_mixed_currency_averages(tmp_path: Path) ->
     eur_metrics_path = eur_run / "execution-metrics.json"
     eur_metrics = json.loads(eur_metrics_path.read_text(encoding="utf-8"))
     eur_metrics["stages"][0]["provider_billed_cost"] = 0.02
-    eur_metrics["stages"][0]["cost"] = 0.02
     eur_metrics["stages"][0]["currency"] = "EUR"
     _write(eur_metrics_path, eur_metrics)
 
@@ -611,10 +471,10 @@ def test_query_report_exposes_stale_projection_freshness(tmp_path: Path) -> None
 
     status_path = run / "status.json"
     status = json.loads(status_path.read_text(encoding="utf-8"))
-    status["status"] = "blocked"
+    status["ticket_id"] = "IDX-002"
     _write(status_path, status)
 
-    report = query_index_report(settings, "runs", session_id="stale-query")
+    report = query_index_report(settings, "runs", agent_run_id="stale-query")
     assert report["freshness"] == "stale"
     assert report["stale_run_count"] == 1
     assert report["rows"][0]["durable_status"] == "running"
@@ -628,7 +488,7 @@ def test_source_fingerprint_detects_same_size_same_mtime_content_change(tmp_path
     status_path = run / "status.json"
     before = status_path.stat()
     raw = status_path.read_text(encoding="utf-8")
-    changed = raw.replace('"status": "running"', '"status": "blocked"')
+    changed = raw.replace('"ticket_id": "IDX-001"', '"ticket_id": "IDX-002"')
     assert len(changed.encode("utf-8")) == len(raw.encode("utf-8"))
     status_path.write_text(changed, encoding="utf-8")
     os.utime(status_path, ns=(before.st_atime_ns, before.st_mtime_ns))

@@ -1,22 +1,22 @@
 from __future__ import annotations
+
+from pathlib import Path
 from typing import Any
-from .config import Settings
-from .config import enforce_trust
+
+from .config import Settings, enforce_trust
+from .contracts import read_agent_run_contract
 from .errors import WorkflowError
-from .events import append_lifecycle_event
-from .migrations import migrate_contract
-from .util import atomic_write_json, read_json, utc_now, validate_id
-from .contracts import read_launch_contract
 from .path import require_directory
+from .util import atomic_write_json, read_json, utc_now, validate_id
 
 TERMINAL_STATUSES = {
     "completed",
     "failed",
     "interrupted",
-    "killed",
+    "terminated",
 }
 
-STATUS_SCHEMA = "agent-workflow/session-status/v2"
+STATUS_SCHEMA = "agent-workflow/agent-run-status/v1"
 PROJECTION_AUTHORITY = "cache"
 
 
@@ -35,17 +35,19 @@ def _stamp_projection(
 
 
 def _current(data: dict[str, Any]) -> dict[str, Any]:
-    if "schema" not in data:
-        data = {"schema": "agent-workflow/session-status/v1", **data}
-    return migrate_contract(data, STATUS_SCHEMA)
+    if data.get("schema") != STATUS_SCHEMA:
+        raise WorkflowError(
+            f"unsupported Agent Run status schema: {data.get('schema')!r}; "
+            f"expected {STATUS_SCHEMA!r}"
+        )
+    return data
 
 
-def runs_root(settings: Settings):
+def runs_root(settings: Settings) -> Path:
     enforce_trust(settings)
     creator = settings.state_root
     while not creator.exists() and creator.parent != creator:
         creator = creator.parent
-    # Validate the existing prefix before mkdir can follow a hostile parent.
     require_directory(creator, label="state root parent")
     settings.state_root.mkdir(parents=True, mode=0o700, exist_ok=True)
     require_directory(settings.state_root, label="state root")
@@ -56,116 +58,66 @@ def runs_root(settings: Settings):
     return root
 
 
-def run_dir(settings: Settings, session_id: str):
-    validate_id(session_id, "session ID")
-    return runs_root(settings) / session_id
+def run_dir(settings: Settings, agent_run_id: str) -> Path:
+    validate_id(agent_run_id, "agent run ID")
+    return runs_root(settings) / agent_run_id
 
 
-def status_path(settings: Settings, session_id: str):
-    return run_dir(settings, session_id) / "status.json"
+def status_path(settings: Settings, agent_run_id: str) -> Path:
+    return run_dir(settings, agent_run_id) / "status.json"
 
 
-def read_status(settings: Settings, session_id: str):
-    data = _current(read_json(status_path(settings, session_id)))
-    return _migrate_legacy_tmux_status(settings, session_id, data)
+def read_status_path(path: Path) -> dict[str, Any]:
+    return _current(read_json(path))
 
 
-def _migrate_legacy_tmux_status(
-    settings: Settings,
-    session_id: str,
-    data: dict[str, Any],
-) -> dict[str, Any]:
-    """Upgrade an unambiguous shared-window target to stable pane identity."""
-    if data.get("tmux_mode") != "shared_window":
-        return data
-    target = data.get("tmux_target")
-    if (
-        not isinstance(target, str)
-        or not target
-        or target.startswith("%")
-        or data.get("tmux_pane_id")
-    ):
-        return data
-
-    from . import tmux
-
-    try:
-        pane = tmux.resolve_status_pane(data)
-    except WorkflowError:
-        return data
-    if pane is None or not pane.pane_id or not pane.pane_id.startswith("%"):
-        return data
-
-    window_target = data.get("tmux_window_target")
-    if not isinstance(window_target, str) or not window_target:
-        window_target = None
-        if ":" in target and "." in target:
-            candidate, pane_index = target.rsplit(".", 1)
-            if candidate and pane_index.isdigit():
-                window_target = candidate
-    if window_target is None:
-        return data
-
-    migrated = dict(data)
-    migrated["tmux_pane_id"] = pane.pane_id
-    migrated["tmux_target"] = pane.pane_id
-    migrated["tmux_window_target"] = window_target
-    atomic_write_json(status_path(settings, session_id), migrated)
-    return migrated
+def read_status(settings: Settings, agent_run_id: str) -> dict[str, Any]:
+    return read_status_path(status_path(settings, agent_run_id))
 
 
-def write_status(
-    settings: Settings,
-    session_id: str,
+def write_projection_path(
+    path: Path,
     data: dict[str, Any],
     *,
     projection_source: str = "initialization",
-):
+    projection_freshness: str = "snapshot",
+) -> dict[str, Any]:
+    """Write mutable Agent Run status as a rebuildable projection only."""
     current = _stamp_projection(
-        _current(data), source=projection_source, freshness="snapshot"
+        _current(data), source=projection_source, freshness=projection_freshness
     )
-    append_lifecycle_event(
-        run_dir(settings, session_id),
-        dimension="execution",
-        prior=None,
-        new=current.get("status"),
-        actor="agent-workflow",
-        reason="status initialized",
-    )
-    atomic_write_json(status_path(settings, session_id), current)
+    atomic_write_json(path, current)
+    return current
 
 
-def update_status(settings: Settings, session_id: str, **changes: Any):
-    path = status_path(settings, session_id)
+def write_projection(
+    settings: Settings,
+    agent_run_id: str,
+    data: dict[str, Any],
+    *,
+    projection_source: str = "initialization",
+    projection_freshness: str = "snapshot",
+) -> dict[str, Any]:
+    return write_projection_path(
+        status_path(settings, agent_run_id),
+        data,
+        projection_source=projection_source,
+        projection_freshness=projection_freshness,
+    )
+
+
+def _update_projection_path_unchecked(
+    path: Path,
+    *,
+    projection_source: str = "status-update",
+    projection_freshness: str = "snapshot",
+    **changes: Any,
+) -> dict[str, Any]:
     if not path.exists():
-        raise WorkflowError(f"unknown session: {session_id}")
-    data = read_status(settings, session_id)
-    actor = str(changes.pop("_actor", "agent-workflow"))
-    reason = str(changes.pop("_reason", "status updated"))
-    receipt_refs = changes.pop("_receipt_refs", ())
-    projection_source = str(changes.pop("_projection_source", "status-update"))
-    projection_freshness = str(changes.pop("_projection_freshness", "snapshot"))
-    if "status" in changes and changes["status"] != data.get("status"):
-        append_lifecycle_event(
-            path.parent,
-            dimension="execution",
-            prior=data.get("status"),
-            new=changes["status"],
-            actor=actor,
-            reason=reason,
-            receipt_refs=receipt_refs,
-        )
-    if "disposition" in changes and changes["disposition"] != data.get("disposition"):
-        append_lifecycle_event(
-            path.parent,
-            dimension="review",
-            prior=data.get("disposition"),
-            new=changes["disposition"],
-            actor=actor,
-            reason=reason,
-            receipt_refs=receipt_refs,
-        )
+        raise WorkflowError(f"unknown Agent Run projection: {path.parent.name}")
+    data = read_status_path(path)
     data.update(changes)
+    data["updated_at"] = str(changes.get("updated_at") or utc_now())
     data = _stamp_projection(
         data, source=projection_source, freshness=projection_freshness
     )
@@ -173,8 +125,44 @@ def update_status(settings: Settings, session_id: str, **changes: Any):
     return data
 
 
-def list_statuses(settings: Settings):
-    items = []
+def update_projection_path(
+    path: Path,
+    *,
+    projection_source: str = "status-update",
+    projection_freshness: str = "snapshot",
+    **changes: Any,
+) -> dict[str, Any]:
+    """Patch mutable projection fields; execution status is lifecycle-owned."""
+    if "status" in changes:
+        raise WorkflowError(
+            "execution status must be changed through run_lifecycle.transition_execution"
+        )
+    return _update_projection_path_unchecked(
+        path,
+        projection_source=projection_source,
+        projection_freshness=projection_freshness,
+        **changes,
+    )
+
+
+def update_projection(
+    settings: Settings,
+    agent_run_id: str,
+    *,
+    projection_source: str = "status-update",
+    projection_freshness: str = "snapshot",
+    **changes: Any,
+) -> dict[str, Any]:
+    return update_projection_path(
+        status_path(settings, agent_run_id),
+        projection_source=projection_source,
+        projection_freshness=projection_freshness,
+        **changes,
+    )
+
+
+def list_statuses(settings: Settings) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
     for path in sorted(runs_root(settings).glob("*/status.json")):
         try:
             items.append(read_status(settings, path.parent.name))
@@ -182,7 +170,7 @@ def list_statuses(settings: Settings):
             items.append(
                 {
                     "schema": STATUS_SCHEMA,
-                    "session_id": path.parent.name,
+                    "agent_run_id": path.parent.name,
                     "status": "failed",
                     "failure_category": "corrupt_status",
                     "error": str(exc),
@@ -192,20 +180,17 @@ def list_statuses(settings: Settings):
     return items
 
 
-def repair_status(settings: Settings, session_id: str) -> dict[str, Any]:
-    """Rebuild the mutable status projection from immutable run authority."""
-    run = run_dir(settings, session_id)
-    contract_path = run / "launch-contract.json"
+def repair_status(settings: Settings, agent_run_id: str) -> dict[str, Any]:
+    """Rebuild the mutable status projection from immutable/run-event authority."""
+    run = run_dir(settings, agent_run_id)
+    contract_path = run / "agent-run-contract.json"
     if not contract_path.is_file():
-        raise WorkflowError(
-            "pre-contract run has no launch authority; sealed evidence remains verifiable "
-            "but an unsealed projection cannot be repaired without its original provenance"
-        )
-    contract = read_launch_contract(contract_path)
+        raise WorkflowError("Agent Run has no immutable contract and cannot be repaired")
+    contract = read_agent_run_contract(contract_path)
     now = read_json(run / "run-provenance.json").get("started_at") or ""
     status: dict[str, Any] = {
         "schema": STATUS_SCHEMA,
-        "session_id": session_id,
+        "agent_run_id": agent_run_id,
         "ticket_id": contract.get("ticket"),
         "pack_id": contract["pack"].get("id"),
         "status": "prepared",
@@ -215,10 +200,13 @@ def repair_status(settings: Settings, session_id: str) -> dict[str, Any]:
         "workdir": contract["worktree"]["path"],
         "prompt_path": str(run / "prompt.md"),
         "prompt_source": contract["prompt"]["source"],
-        "executor": contract["command_plan"].get("executor"),
-        "model": contract["command_plan"].get("model"),
-        "interactive": contract["command_plan"]["interactive"],
-        "executor_interactive": contract["command_plan"]["executor_interactive"],
+        "executor": contract["worker_plan"].get("executor"),
+        "model": contract["worker_plan"].get("model"),
+        "worker_mode": contract["worker_plan"]["mode"],
+        "worker_id": None,
+        "worker_pid": None,
+        "worker_process_group_id": None,
+        "worker_alive": None,
         "prompt_sha256": contract["prompt"]["sha256"],
         "prompt_pack_root": contract["pack"].get("root"),
         "result_contract": contract["paths"].get("result_contract"),
@@ -234,13 +222,9 @@ def repair_status(settings: Settings, session_id: str) -> dict[str, Any]:
         "stderr_path": str(run / "executor-stderr.log"),
         "final_receipt_path": None,
         "source_baseline_path": str(run / "source-baseline.json"),
-        "launch_contract_path": str(contract_path),
-        "tmux_session": session_id,
-        "tmux_target": session_id,
-        "tmux_pane_id": None,
-        "tmux_window_target": None,
-        "tmux_mode": "dedicated_session",
+        "agent_run_contract_path": str(contract_path),
     }
+
     from .receipts import read_sealed_contract, verify_seal_details
 
     receipt_path = run / "final-receipt.json"
@@ -251,11 +235,46 @@ def repair_status(settings: Settings, session_id: str) -> dict[str, Any]:
         status["final_receipt_path"] = str(receipt_path)
         status["final_receipt_sha256"] = digest
         status["sealed_artifact_count"] = len(receipt.get("artifacts", []))
+
+        # Review/acceptance happens after execution sealing, so rebuild that
+        # orthogonal disposition from its immutable receipt authority rather
+        # than from the pre-review final-status snapshot.
+        from .approval import lifecycle_disposition
+
+        disposition = lifecycle_disposition(run)
+        if disposition is None:
+            status["disposition"] = None
+        else:
+            action = str(disposition["action"])
+            status["disposition"] = action
+            status["disposition_at"] = disposition["receipt"].get("created_at")
+            status["disposition_actor"] = disposition["receipt"].get("actor")
+            if action == "force-accepted":
+                status["force_accept_receipt_path"] = disposition["receipt_path"]
+            else:
+                status["lifecycle_receipt_path"] = disposition["receipt_path"]
+            if action == "accepted":
+                status["accepted_revision"] = disposition.get("revision")
     else:
         from .events import reconstruct_lifecycle
-        lifecycle = reconstruct_lifecycle(run / "events.jsonl") if (run / "events.jsonl").is_file() else {"state": {}}
-        status["status"] = lifecycle.get("state", {}).get("execution", "prepared")
+
+        events_path = run / "events.jsonl"
+        if not events_path.is_file():
+            raise WorkflowError(
+                "Agent Run has no lifecycle journal and cannot be repaired"
+            )
+        lifecycle = reconstruct_lifecycle(events_path)
+        execution = lifecycle.get("state", {}).get("execution")
+        if not isinstance(execution, str) or not execution:
+            raise WorkflowError(
+                "Agent Run lifecycle journal has no execution authority"
+            )
+        status["status"] = execution
         status["disposition"] = lifecycle.get("state", {}).get("review")
-    status = _stamp_projection(status, source="repair", freshness="snapshot")
-    atomic_write_json(status_path(settings, session_id), status)
-    return status
+    return write_projection(
+        settings,
+        agent_run_id,
+        status,
+        projection_source="repair",
+        projection_freshness="snapshot",
+    )

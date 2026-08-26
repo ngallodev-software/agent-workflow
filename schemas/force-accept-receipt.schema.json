@@ -2,10 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "agent-workflow/force-accept-receipt/v1",
   "type": "object",
-  "required": ["schema", "session_id", "actor", "created_at", "reason", "acknowledgement", "command", "command_sha256", "final_receipt_sha256", "normal_gate_failures"],
+  "required": ["schema", "agent_run_id", "actor", "created_at", "reason", "acknowledgement", "command", "command_sha256", "final_receipt_sha256", "normal_gate_failures"],
   "properties": {
     "schema": {"const": "agent-workflow/force-accept-receipt/v1"},
-    "session_id": {"type": "string", "minLength": 1},
+    "agent_run_id": {"type": "string", "minLength": 1},
     "actor": {"type": "string", "minLength": 1},
     "created_at": {"type": "string", "minLength": 1},
     "reason": {"type": "string", "minLength": 1},

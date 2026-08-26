@@ -66,9 +66,9 @@ def _binding_history(events_path: Path) -> dict[str, list[dict[str, Any]]]:
         node_id = str(event.get("node_id", ""))
         result.setdefault(node_id, []).append(
             {
-                "run_id": binding.get("run_id"),
+                "agent_run_id": binding.get("agent_run_id"),
                 "attempt": binding.get("attempt"),
-                "retry_of_run_id": binding.get("retry_of_run_id"),
+                "retry_of_agent_run_id": binding.get("retry_of_agent_run_id"),
                 "bound_at": binding.get("bound_at"),
             }
         )
@@ -76,30 +76,30 @@ def _binding_history(events_path: Path) -> dict[str, list[dict[str, Any]]]:
 
 
 def _task_receipt(settings: Any, node_status: Mapping[str, Any]) -> dict[str, Any]:
-    run_id = node_status.get("run_id")
-    if not isinstance(run_id, str) or not run_id:
+    agent_run_id = node_status.get("agent_run_id")
+    if not isinstance(agent_run_id, str) or not agent_run_id:
         if node_status.get("state") == "completed":
             raise WorkflowError(
-                f"completed task {node_status.get('node_id')} has no child run binding"
+                f"completed task {node_status.get('node_id')} has no child Agent Run binding"
             )
         return {
-            "child_run_id": None,
+            "child_agent_run_id": None,
             "child_final_receipt_sha256": None,
             "child_completion_sha256": None,
         }
-    child = session_run_dir(settings, run_id).resolve()
+    child = session_run_dir(settings, agent_run_id).resolve()
     receipt_path = child / "final-receipt.json"
     if not receipt_path.is_file():
         if node_status.get("state") == "completed":
-            raise WorkflowError(f"completed task child run is not sealed: {run_id}")
+            raise WorkflowError(f"completed task child Agent Run is not sealed: {agent_run_id}")
         return {
-            "child_run_id": run_id,
+            "child_agent_run_id": agent_run_id,
             "child_final_receipt_sha256": None,
             "child_completion_sha256": None,
         }
     final_receipt, expected = verify_seal_details(child)
-    if final_receipt.get("session_id") != run_id:
-        raise WorkflowError(f"child final receipt belongs to another run: {run_id}")
+    if final_receipt.get("agent_run_id") != agent_run_id:
+        raise WorkflowError(f"child final receipt belongs to another run: {agent_run_id}")
     _, completion_digest = read_sealed_contract(
         child,
         final_receipt,
@@ -107,7 +107,7 @@ def _task_receipt(settings: Any, node_status: Mapping[str, Any]) -> dict[str, An
         "agent-workflow/completion/v1",
     )
     return {
-        "child_run_id": run_id,
+        "child_agent_run_id": agent_run_id,
         "child_final_receipt_sha256": expected,
         "child_completion_sha256": completion_digest,
     }
@@ -133,12 +133,12 @@ def _approval_receipt_digest(
         )
     subject_id = str(node.get("approval_for", ""))
     subject_status = status_by_id.get(subject_id)
-    run_id = subject_status.get("run_id") if isinstance(subject_status, Mapping) else None
-    if not isinstance(run_id, str) or not run_id:
+    agent_run_id = subject_status.get("agent_run_id") if isinstance(subject_status, Mapping) else None
+    if not isinstance(agent_run_id, str) or not agent_run_id:
         raise WorkflowError(
             f"approval node {node_status.get('node_id')} has no authoritative subject run"
         )
-    disposition = lifecycle_disposition(session_run_dir(settings, run_id))
+    disposition = lifecycle_disposition(session_run_dir(settings, agent_run_id))
     if disposition is None:
         raise WorkflowError(
             f"approval node {node_status.get('node_id')} has no canonical lifecycle disposition"
@@ -187,7 +187,7 @@ def _build_workflow_receipt_unlocked(
             _task_receipt(settings, node_status)
             if kind == "task"
             else {
-                "child_run_id": None,
+                "child_agent_run_id": None,
                 "child_final_receipt_sha256": None,
                 "child_completion_sha256": None,
             }
@@ -209,7 +209,7 @@ def _build_workflow_receipt_unlocked(
                 "state": node_status["state"],
                 "terminal_reason": node_status.get("terminal_reason"),
                 "attempt": node_status.get("attempt"),
-                "retry_of_run_id": node_status.get("retry_of_run_id"),
+                "retry_of_agent_run_id": node_status.get("retry_of_agent_run_id"),
                 "binding_history": histories.get(node_id, []),
                 "input_binding_sha256": node_status.get("input_binding_sha256"),
                 "approval_receipt_sha256": approval_digest,

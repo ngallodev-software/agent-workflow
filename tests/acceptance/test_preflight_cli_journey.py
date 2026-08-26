@@ -6,7 +6,7 @@ from pathlib import Path
 from tests.conftest import InstalledProduct, git_repo
 
 
-def test_installed_cli_records_failed_preflight_without_running_session(
+def test_installed_cli_records_failed_preflight_without_starting_worker(
     installed_product: InstalledProduct, product_env: dict[str, str], tmp_path: Path
 ) -> None:
     repo = tmp_path / "repo"
@@ -14,7 +14,7 @@ def test_installed_cli_records_failed_preflight_without_running_session(
     prompt = tmp_path / "prompt.md"
     prompt.write_text("preflight test\n", encoding="utf-8")
     result = installed_product.run(
-        "launch", "preflight-failure", repo, prompt,
+        "agent-run", "prepare", "preflight-failure", repo, prompt,
         "--prerequisite", "missing-prerequisite", env=product_env,
     )
     assert result.returncode == 2
@@ -24,5 +24,6 @@ def test_installed_cli_records_failed_preflight_without_running_session(
     assert status["status"] == "failed"
     assert status["failure_category"] == "preflight_failed"
     assert status["preflight"]["status"] == "missing"
-    assert status["tmux_session"] is None
+    assert status.get("worker_id") is None
+    assert status.get("worker_pid") is None
     assert not (run / "final-receipt.json").exists()

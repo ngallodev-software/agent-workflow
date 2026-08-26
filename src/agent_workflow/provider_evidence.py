@@ -139,12 +139,12 @@ def normalize_provider_usage(usage: Mapping[str, Any]) -> dict[str, Any]:
     if reasoning is None:
         reasoning = _number(output_details.get("reasoning_tokens"))
     billed = first("provider_billed_cost", "total_cost_usd")
-    legacy_cost = first("cost", "total_cost")
-    if billed is None and legacy_cost is not None and usage.get("cost_source") == "provider":
-        billed = legacy_cost
+    untyped_cost = first("cost", "total_cost")
+    if billed is None and untyped_cost is not None and usage.get("cost_source") == "provider":
+        billed = untyped_cost
     estimated = first("local_estimated_cost")
-    if estimated is None and legacy_cost is not None and usage.get("cost_source") == "local_estimate":
-        estimated = legacy_cost
+    if estimated is None and untyped_cost is not None and usage.get("cost_source") == "local_estimate":
+        estimated = untyped_cost
     currency = usage.get("currency")
     return {
         "input_tokens": first("input_tokens", "prompt_tokens"),
@@ -285,7 +285,7 @@ def build_provider_evidence(
     events_path: Path,
     stream_format: str,
     executor: str | None,
-    session_id: str,
+    agent_run_id: str,
     retry_of: str | None = None,
     capture_exceeded: bool = False,
 ) -> dict[str, Any]:
@@ -362,7 +362,7 @@ def build_provider_evidence(
         reasons.append("RAW_EVENT_CAPTURE_LIMIT_EXCEEDED")
     evidence = {
         "schema": PROVIDER_EVIDENCE_SCHEMA,
-        "session_id": session_id,
+        "agent_run_id": agent_run_id,
         "executor": executor,
         "stream_format": stream_format,
         "created_at": utc_now(),
@@ -373,7 +373,7 @@ def build_provider_evidence(
         "capture_complete": not capture_exceeded,
         "malformed_event_count": malformed,
         "classified_usage_count": len(classified),
-        "retry_of_run_id": retry_of,
+        "retry_of_agent_run_id": retry_of,
         "usage_complete": (
             usage_complete
             and not capture_exceeded
@@ -410,10 +410,10 @@ def write_provider_evidence(
             if executor is not None
             else (str(provenance["executor"]) if provenance.get("executor") else None)
         ),
-        session_id=str(provenance["session_id"]),
+        agent_run_id=str(provenance["agent_run_id"]),
         retry_of=(
-            str(provenance["retry_of_run_id"])
-            if provenance.get("retry_of_run_id")
+            str(provenance["retry_of_agent_run_id"])
+            if provenance.get("retry_of_agent_run_id")
             else None
         ),
         capture_exceeded=capture_exceeded,

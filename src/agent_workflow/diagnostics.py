@@ -49,9 +49,7 @@ def diagnose_observation(observation: dict[str, Any]) -> tuple[str | None, str, 
     if observed == "possibly_stalled":
         return "process_alive_no_progress", "high", "executor is alive but semantic progress is stale"
     if observed == "orphaned":
-        return "process_missing", "high", "durable run is active but its tmux/process presentation is gone"
-    if observed == "terminal_unavailable":
-        return "terminal_unavailable", "medium", "tmux state could not be inspected"
+        return "process_missing", "high", "durable Agent Run is active but its worker process is gone"
     if process.get("alive") is False and observed in {"running", "blocked_permission"}:
         return "process_missing", "high", "executor process is no longer alive"
     disk_free = host.get("disk_free_bytes")

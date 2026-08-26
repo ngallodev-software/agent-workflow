@@ -53,7 +53,7 @@ def build_parser(plugin_registry: PluginRegistry | None = None) -> argparse.Argu
     wf_resume = workflow_commands.add_parser("resume", help="resume a workflow after restart")
     wf_resume.add_argument("run_dir", type=Path)
     wf_resume.add_argument("snapshot", type=Path)
-    wf_seal = workflow_commands.add_parser("seal", help="seal terminal workflow evidence")
+    wf_seal = workflow_commands.add_parser("seal", help="seal workflow evidence")
     wf_seal.add_argument("run_dir", type=Path)
     wf_seal.add_argument("snapshot", type=Path)
     wf_verify = workflow_commands.add_parser("verify", help="verify a workflow receipt")
@@ -85,19 +85,19 @@ def build_parser(plugin_registry: PluginRegistry | None = None) -> argparse.Argu
     registry_create.add_argument("--workflow-id")
     registry_inspect = registry_commands.add_parser("inspect", help="inspect an orchestrator registry")
     registry_inspect.add_argument("orchestrator_id")
-    registry_register = registry_commands.add_parser("register", help="register a launch-verified child session")
+    registry_register = registry_commands.add_parser("register", help="register a launch-verified child Agent Run")
     registry_register.add_argument("orchestrator_id")
-    registry_register.add_argument("session_id")
+    registry_register.add_argument("agent_run_id")
     registry_unregister = registry_commands.add_parser("unregister", help="mark a child completed or abandoned")
     registry_unregister.add_argument("orchestrator_id")
-    registry_unregister.add_argument("session_id")
+    registry_unregister.add_argument("agent_run_id")
     registry_unregister.add_argument("--state", choices=("completed", "abandoned"), required=True)
 
     inbox = orchestrator_commands.add_parser("inbox", help="aggregate orchestrator inbox")
     inbox_commands = inbox.add_subparsers(dest="inbox_command", required=True)
     inbox_import = inbox_commands.add_parser("import", help="import verified child journal events")
     inbox_import.add_argument("orchestrator_id")
-    inbox_import.add_argument("--session-id")
+    inbox_import.add_argument("--agent-run-id", dest="agent_run_id")
     inbox_import.add_argument("--max-per-child", type=int, default=100000)
     for name, help_text in (("list", "list bounded inbox metadata"), ("read", "read bounded inbox events")):
         inbox_read = inbox_commands.add_parser(name, help=help_text)
@@ -158,19 +158,22 @@ def build_parser(plugin_registry: PluginRegistry | None = None) -> argparse.Argu
     )
     closeout_verify.add_argument("receipt", type=Path)
 
-    launch = commands.add_parser(
-        "launch", help="launch a prompt in a fresh tmux session"
+    agent_run = commands.add_parser("agent-run", help="Agent Run lifecycle and durable-control commands")
+    agent_run_commands = agent_run.add_subparsers(dest="agent_run_command", required=True)
+
+    launch = agent_run_commands.add_parser(
+        "prepare", help="prepare an Agent Run without requiring a terminal host"
     )
-    launch.add_argument("session_id")
+    launch.add_argument("agent_run_id")
     launch.add_argument("workdir", type=Path)
     launch.add_argument("prompt", type=Path)
     launch.add_argument("--ticket")
     launch.add_argument("--tier", choices=("low", "medium", "high", "critical"))
     launch.add_argument("--pack")
     launch.add_argument("--job", type=Path, help="validated native JSON job in the prompt pack")
-    launch.add_argument("--prerequisite", action="append", dest="prerequisites", help="required prerequisite session ID; repeatable")
+    launch.add_argument("--prerequisite", action="append", dest="prerequisites", help="required prerequisite agent run ID; repeatable")
     launch.add_argument("--executor")
-    launch.add_argument("--agent-name", help="preferred configured agent/pane name")
+    launch.add_argument("--agent-name", help="preferred configured agent name")
     launch.add_argument("--agent-class", help="configured agent work classification")
     launch.add_argument("--model", help="configured executor model")
     launch.add_argument(
@@ -193,7 +196,7 @@ def build_parser(plugin_registry: PluginRegistry | None = None) -> argparse.Argu
         "--interactive",
         action=argparse.BooleanOptionalAction,
         default=None,
-        help="run implementation work in a visible or dedicated interactive executor",
+        help="prepare an interactive provider command for an external worker",
     )
     launch.add_argument(
         "--allow-dirty",
@@ -201,20 +204,22 @@ def build_parser(plugin_registry: PluginRegistry | None = None) -> argparse.Argu
         help="allow launching from a Git worktree with uncommitted changes",
     )
     launch.add_argument(
-        "--pane-limit-action",
-        choices=("prompt", "close-idle", "non-interactive", "cancel"),
-        default="prompt",
-        help="action when the interactive pane cap is reached",
+        "--worker-mode",
+        choices=("headless", "external"),
+        default="headless",
+        help="headless workers are AW-owned; external workers are prepared only",
     )
 
-    commands.add_parser("list", help="list delegation runs")
+    start = agent_run_commands.add_parser("start", help="start a prepared headless Agent Run")
+    start.add_argument("agent_run_id")
 
-    archive = commands.add_parser(
+    agent_run_commands.add_parser("list", help="list Agent Runs")
+
+    archive = agent_run_commands.add_parser(
         "archive",
-        aliases=["clear"],
         help="archive verified completed runs from the active list",
     )
-    archive.add_argument("session_ids", nargs="*", help="run IDs to archive")
+    archive.add_argument("agent_run_ids", nargs="*", help="run IDs to archive")
     archive.add_argument(
         "--all-verified",
         action="store_true",
@@ -242,19 +247,18 @@ def build_parser(plugin_registry: PluginRegistry | None = None) -> argparse.Argu
     ledger.add_argument("--runs-root", type=Path)
     ledger.add_argument("--output", type=Path)
 
-    status = commands.add_parser("status", help="inspect a delegation")
-    status.add_argument("session_id")
-    status.add_argument("--capture", type=int, nargs="?", const=-1, default=0)
+    status = agent_run_commands.add_parser("status", help="inspect a delegation")
+    status.add_argument("agent_run_id")
 
-    repair = commands.add_parser(
+    repair = agent_run_commands.add_parser(
         "repair", help="rebuild a mutable status projection from run authority"
     )
-    repair.add_argument("session_id")
+    repair.add_argument("agent_run_id")
 
-    finalize = commands.add_parser(
-        "finalize", help="idempotently finalize a terminal unsealed delegation"
+    finalize = agent_run_commands.add_parser(
+        "finalize", help="idempotently finalize an unsealed Agent Run"
     )
-    finalize.add_argument("session_id")
+    finalize.add_argument("agent_run_id")
 
     supervisor = commands.add_parser(
         "supervisor",
@@ -266,17 +270,12 @@ def build_parser(plugin_registry: PluginRegistry | None = None) -> argparse.Argu
 
     def add_supervisor_options(command: argparse.ArgumentParser) -> None:
         command.add_argument(
-            "--session",
+            "--agent-run",
+            dest="agent_runs",
             action="append",
             default=[],
-            help="limit supervision to a run ID; repeatable",
+            help="limit supervision to an Agent Run ID; repeatable",
         )
-        command.add_argument(
-            "--capture-interactive",
-            action=argparse.BooleanOptionalAction,
-            default=None,
-        )
-        command.add_argument("--capture-lines", type=int)
         command.add_argument(
             "--probe-stalled",
             action=argparse.BooleanOptionalAction,
@@ -286,13 +285,13 @@ def build_parser(plugin_registry: PluginRegistry | None = None) -> argparse.Argu
             "--interrupt-stalled",
             action=argparse.BooleanOptionalAction,
             default=None,
-            help="opt in to bounded Ctrl-C after the progress-probe allowance is exhausted",
+            help="opt in to bounded process interruption after the progress-probe allowance is exhausted",
         )
         command.add_argument(
             "--restart-orphaned",
             action=argparse.BooleanOptionalAction,
             default=None,
-            help="opt in to lineage-preserving restart of orphaned interactive runs",
+            help="opt in to lineage-preserving restart of orphaned headless Agent Runs",
         )
         command.add_argument("--max-remediation-attempts", type=int)
         command.add_argument(
@@ -323,7 +322,7 @@ def build_parser(plugin_registry: PluginRegistry | None = None) -> argparse.Argu
         ("rebuild", "recreate the projection from authoritative evidence"),
     ):
         index_write = index_commands.add_parser(name, help=help_text)
-        index_write.add_argument("--run", dest="session_id", help="limit indexing to one run ID")
+        index_write.add_argument("--run", dest="agent_run_id", help="limit indexing to one run ID")
         index_write.add_argument(
             "--active-only", action="store_true", help="exclude archived runs from discovery"
         )
@@ -334,28 +333,27 @@ def build_parser(plugin_registry: PluginRegistry | None = None) -> argparse.Argu
         "--full", action="store_true", help="rehash every indexed source artifact"
     )
     index_verify.add_argument(
-        "--review", dest="review_session_id",
+        "--review", dest="review_agent_run_id",
         help="verify one sealed, reviewed run and its direct gate evidence",
     )
     index_integrity = index_commands.add_parser(
-        "integrity", help="explicitly append or migrate integrity authority records"
+        "integrity", help="explicitly append integrity authority records"
     )
     index_integrity_commands = index_integrity.add_subparsers(dest="integrity_command", required=True)
     index_integrity_record = index_integrity_commands.add_parser("record")
-    index_integrity_record.add_argument("session_id")
+    index_integrity_record.add_argument("agent_run_id")
     index_integrity_record.add_argument("artifact_path")
     index_integrity_record.add_argument("error_id", type=int)
     index_integrity_record.add_argument("error_category")
     index_integrity_record.add_argument("error_detail")
-    index_integrity_commands.add_parser("migrate")
     index_query = index_commands.add_parser(
         "query", help="query curated read-only operational views"
     )
     index_query.add_argument(
         "kind",
-        choices=("runs", "incidents", "permissions", "performance", "workflows", "workflow-nodes", "repairs", "errors"),
+        choices=("runs", "incidents", "permissions", "performance", "workflows", "workflow-nodes", "errors"),
     )
-    index_query.add_argument("--session", dest="session_id")
+    index_query.add_argument("--agent-run", dest="agent_run_id")
     index_query.add_argument("--state")
     index_query.add_argument("--category")
     index_query.add_argument("--executor")
@@ -363,31 +361,28 @@ def build_parser(plugin_registry: PluginRegistry | None = None) -> argparse.Argu
     index_query.add_argument("--pack", dest="pack_id")
     index_query.add_argument("--limit", type=int, default=100)
 
-    attach = commands.add_parser("attach", help="foreground a delegation")
-    attach.add_argument("session_id")
-
-    tail = commands.add_parser("tail", help="follow a delegation log")
-    tail.add_argument("session_id")
+    tail = agent_run_commands.add_parser("tail", help="follow a delegation log")
+    tail.add_argument("agent_run_id")
     tail.add_argument("--lines", type=int, default=50)
 
-    steer = commands.add_parser(
+    steer = agent_run_commands.add_parser(
         "steer", help="persist a parent-to-child steering request"
     )
-    steer.add_argument("session_id")
+    steer.add_argument("agent_run_id")
     steer.add_argument("content")
     steer.add_argument("--actor", required=True)
 
-    progress = commands.add_parser(
+    progress = agent_run_commands.add_parser(
         "progress", help="persist a child-to-parent progress update"
     )
-    progress.add_argument("session_id")
+    progress.add_argument("agent_run_id")
     progress.add_argument("content")
     progress.add_argument("--actor", required=True)
 
-    acknowledge = commands.add_parser(
+    acknowledge = agent_run_commands.add_parser(
         "ack", help="record application of a steering request"
     )
-    acknowledge.add_argument("session_id")
+    acknowledge.add_argument("agent_run_id")
     acknowledge.add_argument("correlation_id")
     acknowledge.add_argument("content")
     acknowledge.add_argument("--actor", required=True)
@@ -395,120 +390,65 @@ def build_parser(plugin_registry: PluginRegistry | None = None) -> argparse.Argu
         "--outcome", choices=("applied", "rejected"), default="applied"
     )
 
-    watch = commands.add_parser(
-        "watch", help="block until a durable session message arrives"
+    watch = agent_run_commands.add_parser(
+        "watch", help="block until a durable Agent Run message arrives"
     )
-    watch.add_argument("session_id")
+    watch.add_argument("agent_run_id")
     watch.add_argument("--after", type=int, default=0)
     watch.add_argument("--timeout", type=float)
 
-    interrupt = commands.add_parser(
-        "interrupt", help="send Ctrl-C without deleting the session"
+    interrupt = agent_run_commands.add_parser(
+        "interrupt", help="request interruption of an Agent Run worker"
     )
-    interrupt.add_argument("session_id")
+    interrupt.add_argument("agent_run_id")
 
-    terminate = commands.add_parser(
-        "terminate", help="interrupt, wait, then kill tmux if needed"
+    terminate = agent_run_commands.add_parser(
+        "terminate", help="terminate an Agent Run worker while preserving evidence"
     )
-    terminate.add_argument("session_id")
+    terminate.add_argument("agent_run_id")
     terminate.add_argument("--grace-seconds", type=int, default=8)
 
-    kill = commands.add_parser(
-        "kill", help="immediately kill tmux and preserve evidence"
+    restart = agent_run_commands.add_parser(
+        "restart", help="create a new Agent Run from a completed prior run"
     )
-    kill.add_argument("session_id")
+    restart.add_argument("agent_run_id")
+    restart.add_argument("--new-agent-run-id")
 
-    restart = commands.add_parser(
-        "restart", help="restart a saved delegation in a new session"
-    )
-    restart.add_argument("session_id")
-    restart.add_argument("--new-session")
-
-    agent = commands.add_parser("agent", help="interactive agent context and reuse")
+    agent = commands.add_parser("agent", help="Agent Run worker context and completion")
     agent_commands = agent.add_subparsers(dest="agent_command", required=True)
     agent_context = agent_commands.add_parser("context", help="show durable agent context")
-    agent_context.add_argument("session_id")
+    agent_context.add_argument("agent_run_id")
     agent_complete = agent_commands.add_parser(
-        "task-complete", help="mark the current interactive assignment complete"
+        "task-complete", help="publish structured completion for the current Agent Run"
     )
-    agent_complete.add_argument("session_id")
+    agent_complete.add_argument("agent_run_id")
     agent_complete.add_argument("--actor", required=True)
     agent_complete.add_argument("--summary", required=True)
     agent_complete.add_argument("--tag", action="append", default=[])
     agent_complete.add_argument("--file", action="append", default=[])
-    agent_complete.add_argument(
-        "--keep-alive", action="store_true",
-        help="keep the interactive executor available for explicit same-worktree reuse",
-    )
     agent_validate = agent_commands.add_parser(
         "completion-validate", help="validate the current completion handoff before exit"
     )
-    agent_validate.add_argument("session_id")
-    agent_candidates = agent_commands.add_parser(
-        "candidates", help="rank reusable agents for a worktree"
-    )
-    agent_candidates.add_argument("workdir", type=Path)
-    agent_candidates.add_argument("--ticket")
-    agent_candidates.add_argument("--pack")
-    agent_candidates.add_argument("--retry-of")
-    agent_candidates.add_argument("--agent-class")
-    agent_candidates.add_argument("--tag", action="append", default=[])
-    agent_reuse = agent_commands.add_parser(
-        "reuse", help="request a new assignment from one reusable agent"
-    )
-    agent_reuse.add_argument("session_id")
-    agent_reuse.add_argument("prompt", type=Path)
-    agent_reuse.add_argument("--actor", required=True)
-    agent_reuse.add_argument("--ticket")
-    agent_reuse.add_argument("--pack")
-    agent_reuse.add_argument("--retry-of")
-    agent_reuse.add_argument("--tag", action="append", default=[])
-    agent_auto = agent_commands.add_parser(
-        "auto-reuse", help="reuse only an exact ticket or retry-lineage match"
-    )
-    agent_auto.add_argument("workdir", type=Path)
-    agent_auto.add_argument("prompt", type=Path)
-    agent_auto.add_argument("--actor", required=True)
-    agent_auto.add_argument("--ticket")
-    agent_auto.add_argument("--pack")
-    agent_auto.add_argument("--retry-of")
-    agent_auto.add_argument("--agent-class")
-    agent_auto.add_argument("--tag", action="append", default=[])
+    agent_validate.add_argument("agent_run_id")
 
     for name in ("review", "accept", "reject"):
-        lifecycle = commands.add_parser(name, help=f"record {name} disposition")
-        lifecycle.add_argument("session_id")
+        lifecycle = agent_run_commands.add_parser(name, help=f"record {name} disposition")
+        lifecycle.add_argument("agent_run_id")
         lifecycle.add_argument("--actor", required=True)
         lifecycle.add_argument("--reason", required=True)
         if name == "accept":
             lifecycle.add_argument("--revision", required=True)
 
-    force = commands.add_parser(
+    force = agent_run_commands.add_parser(
         "force-accept", help="record an explicit local operator acceptance override"
     )
-    force.add_argument("session_id")
+    force.add_argument("agent_run_id")
     force.add_argument("--actor", required=True)
     force.add_argument("--reason", required=True)
     force.add_argument(
         "--acknowledge", required=True, choices=("FORCE-ACCEPT",),
         help="explicitly acknowledge the unauthenticated local override",
     )
-
-    evidence = commands.add_parser("evidence", help="append-only evidence repair commands")
-    evidence_commands = evidence.add_subparsers(dest="evidence_command", required=True)
-    evidence_repair = evidence_commands.add_parser(
-        "repair", help="normalize one sealed source artifact without mutating its run"
-    )
-    evidence_repair.add_argument("--source-run", required=True)
-    evidence_repair.add_argument("--source-receipt", required=True)
-    evidence_repair.add_argument("--artifact", required=True)
-    evidence_repair.add_argument("--adapter", default="completion-normalize-v1", choices=("completion-normalize-v1",))
-    evidence_repair.add_argument("--output-run", required=True, help="append-only repair identity")
-    evidence_repair.add_argument("--actor", required=True)
-    evidence_verify = evidence_commands.add_parser("verify", help="verify one supplemental evidence repair")
-    evidence_verify.add_argument("repair_id")
-    evidence_list = evidence_commands.add_parser("list", help="list verified and invalid evidence repairs")
-    evidence_list.add_argument("--source-run")
 
     evaluation = commands.add_parser("eval", help="evaluation commands")
     evaluation_commands = evaluation.add_subparsers(dest="eval_command", required=True)
@@ -632,7 +572,7 @@ def build_parser(plugin_registry: PluginRegistry | None = None) -> argparse.Argu
     for name, help_text in (
         ("run", "execute, capture, score, consolidate, and report a benchmark run"),
         ("resume", "resume an idempotent benchmark pipeline"),
-        ("status", "show benchmark state, pane identity, evidence, and live review URLs"),
+        ("status", "show benchmark state, evidence, and live review URLs"),
         ("live-start", "start or restore preserved live applications for human review"),
         ("live-stop", "stop preserved live applications without deleting evidence"),
         ("visual-capture", "capture pinned visual evidence for all arms"),

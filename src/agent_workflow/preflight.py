@@ -18,7 +18,7 @@ def resolve_prerequisites(settings: Settings, prerequisite_ids: list[str]) -> di
     """Resolve prerequisites without consulting mutable status projections."""
     if not prerequisite_ids:
         return {"schema": "agent-workflow/preflight/v1", "status": "accepted", "reason": "no prerequisites required", "prerequisites": []}
-    results = [_resolve_single(settings, session_id) for session_id in prerequisite_ids]
+    results = [_resolve_single(settings, agent_run_id) for agent_run_id in prerequisite_ids]
     statuses = {item["status"] for item in results}
     if statuses == {"accepted"}:
         status: PreflightStatus = "accepted"
@@ -35,20 +35,20 @@ def resolve_prerequisites(settings: Settings, prerequisite_ids: list[str]) -> di
     return {"schema": "agent-workflow/preflight/v1", "status": status, "reason": reason, "prerequisites": results}
 
 
-def _resolve_single(settings: Settings, session_id: str) -> dict[str, Any]:
-    run = run_dir(settings, session_id)
-    base = {"session_id": session_id}
+def _resolve_single(settings: Settings, agent_run_id: str) -> dict[str, Any]:
+    run = run_dir(settings, agent_run_id)
+    base = {"agent_run_id": agent_run_id}
     if not run.exists():
-        return {**base, "status": "missing", "reason": f"prerequisite session not found: {session_id}"}
+        return {**base, "status": "missing", "reason": f"prerequisite Agent Run not found: {agent_run_id}"}
     if not (run / "final-receipt.json").exists():
-        return {**base, "status": "missing", "reason": f"prerequisite has no sealed final receipt: {session_id}"}
+        return {**base, "status": "missing", "reason": f"prerequisite has no sealed final receipt: {agent_run_id}"}
     try:
         _final_receipt, final_digest = verify_seal_details(run)
         receipts = lifecycle_receipts(run, expected_final_receipt_sha256=final_digest)
     except WorkflowError as exc:
         return {**base, "status": "stale", "reason": f"prerequisite immutable evidence is stale: {exc}"}
     if not receipts:
-        return {**base, "status": "missing", "reason": f"prerequisite has no lifecycle receipts: {session_id}"}
+        return {**base, "status": "missing", "reason": f"prerequisite has no lifecycle receipts: {agent_run_id}"}
     latest = receipts[-1]
     action = latest["receipt"].get("action")
     evidence = {"receipt_sequence": latest["sequence"], "receipt_sha256": latest["sha256"], "final_receipt_sha256": final_digest}
@@ -60,9 +60,30 @@ def _resolve_single(settings: Settings, session_id: str) -> dict[str, Any]:
 
 
 def preflight_error(preflight: dict[str, Any]) -> WorkflowError:
-    return WorkflowError(f"launch preflight failed ({preflight.get('status')} prerequisites): {preflight.get('reason')}")
+    return WorkflowError(f"Agent Run preflight failed ({preflight.get('status')} prerequisites): {preflight.get('reason')}")
 
 
-def preflight_run_record(*, session_id: str, ticket_id: str | None, pack_id: str | None, workdir: Path, prompt_path: Path, log_path: Path, preflight: dict[str, Any], created_at: str) -> dict[str, Any]:
-    """Return a schema-valid terminal status for a rejected launch attempt."""
-    return {"schema": "agent-workflow/session-status/v2", "session_id": session_id, "ticket_id": ticket_id, "pack_id": pack_id, "status": "failed", "failure_category": "preflight_failed", "preflight": preflight, "disposition": None, "created_at": created_at, "updated_at": created_at, "workdir": str(workdir), "prompt_path": str(prompt_path), "prompt_source": str(prompt_path), "log_path": str(log_path), "interactive": False, "executor_interactive": False, "tmux_session": None, "tmux_target": None, "tmux_pane_id": None, "tmux_mode": None, "final_receipt_path": None}
+def preflight_run_record(*, agent_run_id: str, ticket_id: str | None, pack_id: str | None, workdir: Path, prompt_path: Path, log_path: Path, preflight: dict[str, Any], created_at: str) -> dict[str, Any]:
+    """Return a schema-valid failed status for a rejected preparation attempt."""
+    return {
+        "schema": "agent-workflow/agent-run-status/v1",
+        "agent_run_id": agent_run_id,
+        "ticket_id": ticket_id,
+        "pack_id": pack_id,
+        "status": "failed",
+        "failure_category": "preflight_failed",
+        "preflight": preflight,
+        "disposition": None,
+        "created_at": created_at,
+        "updated_at": created_at,
+        "workdir": str(workdir),
+        "prompt_path": str(prompt_path),
+        "prompt_source": str(prompt_path),
+        "log_path": str(log_path),
+        "worker_mode": "headless",
+        "worker_id": None,
+        "worker_pid": None,
+        "worker_process_group_id": None,
+        "worker_alive": None,
+        "final_receipt_path": None,
+    }

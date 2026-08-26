@@ -16,7 +16,7 @@ List repositories, branches/revisions, and the date the source was reviewed. The
 
 ## Universal delegation rules
 
-- Execute every ticket in a fresh named terminal session.
+- Execute every ticket in a fresh durable Agent Run.
 - Use an isolated worktree unless the ticket is explicitly read-only.
 - Read required references and current source before editing.
 - Follow writable-path restrictions.
@@ -25,5 +25,7 @@ List repositories, branches/revisions, and the date the source was reviewed. The
 - Produce a ticket completion report and preserve all command output.
 
 ## How to execute
+
+`pack.yaml` is the single authoritative machine-readable workflow manifest for the pack. Phase directories contain prompts and explanatory material only.
 
 See `EXECUTION_PROTOCOL.md`, `DELEGATION_RUNBOOK.md`, and each phase README.

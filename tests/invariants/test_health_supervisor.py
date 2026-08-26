@@ -11,47 +11,65 @@ import pytest
 from agent_workflow.config import defaults
 from agent_workflow.errors import WorkflowError
 from agent_workflow.health import (
-    last_event,
     read_events,
-    write_process_result,
     record_health_sample,
-    record_terminal_capture,
+    record_permission_event,
+    write_process_result,
 )
 from agent_workflow.supervisor import SupervisorOptions, supervise_once
 from agent_workflow.util import atomic_write_json
 
 
-def test_terminal_capture_is_change_driven_and_tracks_permission_transitions(
-    tmp_path: Path,
-) -> None:
-    first = record_terminal_capture(
+def _running_status(run: Path, agent_run_id: str = "run-1") -> None:
+    atomic_write_json(
+        run / "status.json",
+        {
+            "schema": "agent-workflow/agent-run-status/v1",
+            "agent_run_id": agent_run_id,
+            "status": "running",
+            "worker_mode": "headless",
+            "worker_id": f"worker-{agent_run_id}",
+            "runner_pid": None,
+            "executor_pid": None,
+            "started_at": None,
+            "completed_at": None,
+            "exit_code": None,
+            "failure_category": None,
+            "message": None,
+            "updated_at": "2026-08-24T00:00:00+00:00",
+        },
+    )
+
+
+def test_permission_journal_deduplicates_identical_evidence(tmp_path: Path) -> None:
+    first = record_permission_event(
         tmp_path,
-        session_id="run-1",
-        pane_id="%1",
-        content="Approval required. Allow this command?",
+        agent_run_id="run-1",
+        state="pending",
+        source="executor_stderr",
+        evidence_sha256="a" * 64,
     )
     assert first is not None
-    assert first["stored"] is True
-    assert record_terminal_capture(
+    assert record_permission_event(
         tmp_path,
-        session_id="run-1",
-        pane_id="%1",
-        content="Approval required. Allow this command?",
+        agent_run_id="run-1",
+        state="pending",
+        source="executor_stderr",
+        evidence_sha256="a" * 64,
     ) is None
-    pending = last_event(tmp_path / "permission-events.jsonl")
-    assert pending is not None
-    assert pending["state"] == "pending"
 
-    record_terminal_capture(
+    second = record_permission_event(
         tmp_path,
-        session_id="run-1",
-        pane_id="%1",
-        content="Command completed successfully.",
+        agent_run_id="run-1",
+        state="denied",
+        source="executor_stderr",
+        evidence_sha256="b" * 64,
     )
-    cleared = last_event(tmp_path / "permission-events.jsonl")
-    assert cleared is not None
-    assert cleared["state"] == "cleared"
-    assert len(read_events(tmp_path / "terminal-events.jsonl")) == 2
+    assert second is not None
+    assert [event["state"] for event in read_events(tmp_path / "permission-events.jsonl")] == [
+        "pending",
+        "denied",
+    ]
 
 
 def test_health_sample_distinguishes_process_liveness_from_semantic_progress(
@@ -64,7 +82,7 @@ def test_health_sample_distinguishes_process_liveness_from_semantic_progress(
 
     sample = record_health_sample(
         tmp_path,
-        session_id="run-1",
+        agent_run_id="run-1",
         runner_pid=os.getpid(),
         executor_pid=os.getpid(),
     )
@@ -86,17 +104,7 @@ def test_supervisor_sends_only_one_bounded_stall_probe(
     )
     run = settings.state_root / "runs" / "run-1"
     run.mkdir(parents=True)
-    atomic_write_json(
-        run / "status.json",
-        {
-            "schema": "agent-workflow/session-status/v2",
-            "session_id": "run-1",
-            "status": "running",
-            "log_path": str(run / "output.log"),
-            "interactive": False,
-            "executor_interactive": False,
-        },
-    )
+    _running_status(run)
     (run / "output.log").write_text("", encoding="utf-8")
 
     monkeypatch.setattr(supervisor, "record_health_sample", lambda *args, **kwargs: {})
@@ -108,18 +116,17 @@ def test_supervisor_sends_only_one_bounded_stall_probe(
             "failure_category": "stalled",
             "permission_state": None,
             "seconds_since_semantic_progress": 999,
-            "tmux_alive": True,
             "latest_health": {"executor": {"alive": True}},
         },
     )
     calls: list[str] = []
 
-    def fake_steer(_settings, session_id, *, actor, content):
-        calls.append(session_id)
+    def fake_steer(_settings, agent_run_id, *, actor, content):
+        calls.append(agent_run_id)
         return {"message_id": "message-1", "delivery_outcome": "queued"}
 
     monkeypatch.setattr(supervisor, "steer", fake_steer)
-    options = SupervisorOptions.from_settings(settings, capture_interactive=False)
+    options = SupervisorOptions.from_settings(settings)
 
     first = supervise_once(settings, options=options)
     second = supervise_once(settings, options=options)
@@ -141,17 +148,8 @@ def test_failed_stall_probe_consumes_its_bounded_attempt(tmp_path: Path, monkeyp
     )
     run = settings.state_root / "runs" / "run-1"
     run.mkdir(parents=True)
-    atomic_write_json(
-        run / "status.json",
-        {
-            "schema": "agent-workflow/session-status/v2",
-            "session_id": "run-1",
-            "status": "running",
-            "log_path": str(run / "output.log"),
-            "interactive": False,
-            "executor_interactive": False,
-        },
-    )
+    _running_status(run)
+
     monkeypatch.setattr(supervisor, "record_health_sample", lambda *args, **kwargs: {})
     monkeypatch.setattr(
         supervisor,
@@ -160,7 +158,6 @@ def test_failed_stall_probe_consumes_its_bounded_attempt(tmp_path: Path, monkeyp
             "observed_state": "possibly_stalled",
             "failure_category": "stalled",
             "seconds_since_semantic_progress": 999,
-            "tmux_alive": True,
             "latest_health": {"executor": {"alive": True}},
         },
     )
@@ -172,7 +169,7 @@ def test_failed_stall_probe_consumes_its_bounded_attempt(tmp_path: Path, monkeyp
         raise WorkflowError("delivery unavailable")
 
     monkeypatch.setattr(supervisor, "steer", failing_steer)
-    options = SupervisorOptions.from_settings(settings, capture_interactive=False)
+    options = SupervisorOptions.from_settings(settings)
 
     first = supervise_once(settings, options=options)
     second = supervise_once(settings, options=options)
@@ -194,23 +191,13 @@ def test_successful_stall_probe_records_authoritative_post_action_observation(
     )
     run = settings.state_root / "runs" / "run-1"
     run.mkdir(parents=True)
-    atomic_write_json(
-        run / "status.json",
-        {
-            "schema": "agent-workflow/session-status/v2",
-            "session_id": "run-1",
-            "status": "running",
-            "log_path": str(run / "output.log"),
-            "interactive": False,
-            "executor_interactive": False,
-        },
-    )
+    _running_status(run)
+
     monkeypatch.setattr(supervisor, "record_health_sample", lambda *args, **kwargs: {})
     observation = {
         "observed_state": "possibly_stalled",
         "failure_category": "stalled",
         "seconds_since_semantic_progress": 999,
-        "tmux_alive": True,
         "status": "running",
         "latest_health": {"executor": {"alive": True}},
         "last_event": {"event": "steer-delivered"},
@@ -224,7 +211,7 @@ def test_successful_stall_probe_records_authoritative_post_action_observation(
             "delivery_outcome": "queued",
         },
     )
-    options = SupervisorOptions.from_settings(settings, capture_interactive=False)
+    options = SupervisorOptions.from_settings(settings)
 
     report = supervise_once(settings, options=options)
 
@@ -233,23 +220,18 @@ def test_successful_stall_probe_records_authoritative_post_action_observation(
     assert details["post_action_observation"]["observed_state"] == "possibly_stalled"
     assert details["post_action_observation"]["last_event"] == {"event": "steer-delivered"}
 
-def test_health_journals_validate_on_read_and_terminal_capture_redacts_secrets(
-    tmp_path: Path,
-) -> None:
-    event = record_terminal_capture(
-        tmp_path,
-        session_id="run-1",
-        pane_id="%1",
-        content="token=secret-value\x1b[31m waiting\x1b[0m",
-        secret_values=("secret-value",),
-    )
-    assert event is not None
-    assert "secret-value" not in event["content"]
-    assert "\x1b" not in event["content"]
 
-    journal = tmp_path / "terminal-events.jsonl"
+def test_health_journals_validate_on_read(tmp_path: Path) -> None:
+    record_permission_event(
+        tmp_path,
+        agent_run_id="run-1",
+        state="pending",
+        source="executor_stderr",
+        evidence_sha256="c" * 64,
+    )
+    journal = tmp_path / "permission-events.jsonl"
     value = json.loads(journal.read_text(encoding="utf-8"))
-    value["content_bytes"] = -1
+    value["state"] = "not-a-valid-state"
     journal.write_text(json.dumps(value) + "\n", encoding="utf-8")
     with pytest.raises(WorkflowError, match="invalid"):
         read_events(journal)

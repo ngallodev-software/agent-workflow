@@ -10,105 +10,87 @@ agent-workflow pack validate /path/to/prompt-pack
 agent-workflow worktree create /path/to/repository TICKET-ID HEAD
 ```
 
-Confirm the ticket's `backlog_id` is owned by exactly one active prompt pack and that all external prerequisites are complete before launch.
+Confirm the ticket's `backlog_id` is owned by exactly one active prompt pack and that all external prerequisites are complete before preparing an Agent Run.
 
-Immediately after worktree creation, apply the repository procedure in
-`docs/references/WORKTREE_PREFLIGHT.md`: probe the optional codebase-memory
-service once and, when available, index the exact worktree, verify readiness,
-and record identity/counts. Do not substitute an index from the main checkout.
-When unavailable, record the limitation and use bounded RTK shell discovery;
-do not retry or block the run. This operator check must not become an
-`agent-workflow` package or runtime dependency.
+Apply `docs/references/WORKTREE_PREFLIGHT.md` to the exact worktree. Optional discovery/indexing services remain operator conveniences and must not become runtime dependencies.
 
-## Parallel launch
+## Prepare and start Agent Runs
 
-Tasks with no dependency edge between them may run concurrently in separate worktrees and sessions. Never place two agents in the same writable worktree.
+Tasks with no dependency edge may run concurrently in separate worktrees. Never place two workers in the same writable worktree.
+
+For an Agent-Workflow-owned headless worker:
 
 ```bash
-agent-workflow launch project-ticket-a /path/to/worktree-a /path/to/pack/phase-0/tickets/TICKET-A.md \
-  --ticket TICKET-A --pack /path/to/pack --executor codex
-agent-workflow launch project-ticket-b /path/to/worktree-b /path/to/pack/phase-0/tickets/TICKET-B.md \
-  --ticket TICKET-B --pack /path/to/pack --executor claude
+agent-workflow agent-run prepare project-ticket-a /path/to/worktree-a /path/to/pack/phase-0/tickets/TICKET-A.md \
+  --ticket TICKET-A --pack /path/to/pack --executor codex --worker-mode headless
+agent-workflow agent-run start project-ticket-a
 ```
 
-The prompt is passed to the command over standard input. Use the pack's dependency graph as the authority for parallelism; prose ordering does not override manifest dependencies.
-
-## Workflow skills
-
-| Purpose | Codex | Claude |
-|---|---|---|
-| Build a prompt pack | `$prompt-pack-builder` | `/prompt-pack-builder` |
-| Implement one ticket | `$delegated-implementation` | `/delegated-implementation` |
-| Review a completed phase | `$phase-gate-review` | `/phase-gate-review` |
-| Audit backlog, pack, docs, and release drift | `$release-drift-auditor` | `/release-drift-auditor` |
-
-## Observe and foreground
+For a future external interactive host, prepare only:
 
 ```bash
-agent-workflow list
-agent-workflow status SESSION --capture 60
-agent-workflow attach SESSION
-agent-workflow tail SESSION
+agent-workflow agent-run prepare project-ticket-b /path/to/worktree-b /path/to/pack/phase-0/tickets/TICKET-B.md \
+  --ticket TICKET-B --pack /path/to/pack --executor claude --worker-mode external
 ```
 
-`possibly_stalled` is advisory. It means tmux is alive while the log has not grown during the configured threshold.
+The external host owns presentation and live interaction. Agent-Workflow remains authoritative for the Agent Run, durable messages, evidence, completion, evaluation, and review.
+
+## Observe
+
+```bash
+agent-workflow agent-run list
+agent-workflow agent-run status AGENT-RUN-ID
+agent-workflow agent-run tail AGENT-RUN-ID
+```
+
+`possibly_stalled` is advisory. It means the worker is still observed as running while durable/log progress has not advanced during the configured threshold. Inspect evidence before interrupting it.
+
+## Durable communication
+
+Persist workflow instructions before attempting any live delivery:
+
+```bash
+agent-workflow agent-run steer AGENT-RUN-ID "Re-run the integration suite"
+agent-workflow agent-run progress AGENT-RUN-ID --message "Integration suite running"
+agent-workflow agent-run ack AGENT-RUN-ID MESSAGE-ID
+```
+
+Delivery by an external host is not an acknowledgement. The worker records the acknowledgement through Agent-Workflow.
 
 ## Retire verified runs
 
-`agent-workflow list` is the active-run view. Retire completed work only through
-the recoverable archive command; never delete a run directory by hand:
+`agent-workflow agent-run list` is the active Agent Run view. Retire completed work only through the recoverable archive command; never delete a run directory by hand:
 
 ```bash
 agent-workflow archive --all-verified --dry-run --json
-agent-workflow archive SESSION-ID --verified --reason "accepted and no longer active"
+agent-workflow archive AGENT-RUN-ID --verified --reason "accepted and no longer active"
 ```
 
-The command rechecks the sealed receipt, completion collection, accepted
-lifecycle chain, revision, evaluation score digest when present, and tmux
-closure before moving the directory from the active `runs/` root to the state
-`archive/` root. Failed candidates remain in `list` with their evidence and
-are reported by the bulk dry run.
+The command rechecks durable evidence and accepted lifecycle state before moving the Agent Run from the active root to archive storage.
 
 ## Stall handling
 
-1. Run `status --capture 100`.
-2. Attach to the session.
-3. Classify input wait, package/network wait, test deadlock, model loop, or legitimate long operation.
-4. Interrupt without deleting evidence.
-5. Correct the prompt or environment.
-6. Restart into a new retry session so lineage remains explicit.
+1. Inspect `status` and `tail`.
+2. Classify input wait, package/network wait, test deadlock, model loop, or legitimate long operation.
+3. Interrupt without deleting evidence.
+4. Correct the prompt or environment.
+5. Restart into a new Agent Run so lineage remains explicit.
 
-## Stop controls
+## Lifecycle controls
 
-Only the host orchestrator may use lifecycle controls. A sandboxed child must
-write its completion handoff, invoke `agent task-complete` once, and exit
-normally; the host runner owns tmux, canonical state, and final sealing.
-
-Before writing a completed handoff, an implementation agent commits all source,
-test, and documentation changes. Its sidecar records the launch baseline and
-the exact post-commit `git rev-parse HEAD`; every command has an absolute `cwd`
-and an exit code. Structured non-interactive runs do not invoke
-`agent task-complete`; they write the sidecar and exit for collection. Review
-runs follow the same schema-valid sidecar contract and report independently
-collected command receipts and criterion evidence. In `completion.json`, each
-command object must use `argv`, absolute `cwd`, integer `exit_code`, and string
-`receipt`; `commands[].evidence` is invalid.
-
-Sandboxed reviewers report a disposition recommendation only. The host
-orchestrator records `review`, `accept`, or `reject` after inspecting evidence;
-children must not attempt lifecycle-disposition commands.
+Only the workflow authority should issue semantic lifecycle controls:
 
 ```bash
-agent-workflow interrupt SESSION
-agent-workflow terminate SESSION --grace-seconds 8
-agent-workflow kill SESSION
+agent-workflow agent-run interrupt AGENT-RUN-ID
+agent-workflow agent-run terminate AGENT-RUN-ID --grace-seconds 8
+agent-workflow agent-run restart AGENT-RUN-ID
 ```
 
-Use immediate kill only for an unresponsive process. All controls preserve durable evidence.
+For headless workers, Agent-Workflow signals its owned process group. For externally hosted workers, Agent-Workflow records the requested semantic action for the host to reconcile. Controls preserve durable evidence.
 
 ## Completion, integration, and review
 
-Require a ticket completion report. Integrate parallel tickets only after inspecting each complete diff and resolving overlap intentionally. Rerun the shared acceptance journeys after integration, not only in each ticket worktree.
+Require a structured completion report. Integrate parallel tickets only after inspecting each complete diff and resolving overlap intentionally. Rerun shared acceptance journeys after integration.
 
 Before the phase gate:
 
@@ -118,4 +100,4 @@ agent-workflow pack validate /path/to/prompt-pack
 pytest
 ```
 
-Then apply the `phase-gate-review` and `release-drift-auditor` skills. A high-risk implementer must not be the only reviewer, and actor labels alone do not prove reviewer independence.
+A high-risk implementer must not be the only reviewer. Actor labels alone do not prove reviewer independence.

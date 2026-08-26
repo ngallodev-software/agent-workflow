@@ -11,9 +11,9 @@ from typing import Any, Iterator
 
 from .contracts import (
     read_contract,
-    read_launch_contract,
+    read_agent_run_contract,
     validate_instance,
-    validate_launch_contract_value,
+    validate_agent_run_contract_value,
 )
 from .errors import WorkflowError
 from .util import atomic_write_json, fsync_directory, sha256_file, utc_now
@@ -22,6 +22,9 @@ SEALED_ARTIFACTS = (
     "prompt.md",
     "launch-prompt.md",
     "command.json",
+    "agent-run-contract.json",
+    "command-catalog.json",
+    "command-card.md",
     "source-baseline.json",
     "completion.md",
     "completion.json",
@@ -32,9 +35,6 @@ SEALED_ARTIFACTS = (
     "final-status.json",
     "patch.diff",
     "collections/completion.json",
-)
-LEGACY_SEALED_ARTIFACTS = tuple(
-    artifact for artifact in SEALED_ARTIFACTS if artifact != "collections/completion.json"
 )
 SEALED_TREES = ("collections", "scope")
 SEALED_OPTIONAL_ARTIFACTS = (
@@ -51,8 +51,6 @@ SEALED_OPTIONAL_ARTIFACTS = (
     "provider-evidence.json",
     "assignments.jsonl",
     "steering-delivery.jsonl",
-    "command-catalog.json",
-    "command-card.md",
     "run-health-samples.jsonl",
     "terminal-events.jsonl",
     "permission-events.jsonl",
@@ -248,14 +246,14 @@ def read_sealed_contract(
 
 def initial_completion(
     *,
-    session_id: str,
+    agent_run_id: str,
     ticket_id: str | None,
     pack_id: str | None,
     base_revision: str | None,
 ) -> dict[str, Any]:
     return {
         "schema": "agent-workflow/completion/v1",
-        "session_id": session_id,
+        "agent_run_id": agent_run_id,
         "ticket_id": ticket_id,
         "pack_id": pack_id,
         "result": "blocked",
@@ -272,7 +270,7 @@ def initial_completion(
 
 def completion_template(
     *,
-    session_id: str,
+    agent_run_id: str,
     ticket_id: str | None,
     pack_id: str | None,
     base_revision: str | None,
@@ -280,7 +278,7 @@ def completion_template(
 ) -> dict[str, Any]:
     """Return a complete, editable starting point for a child handoff."""
     value = initial_completion(
-        session_id=session_id,
+        agent_run_id=agent_run_id,
         ticket_id=ticket_id,
         pack_id=pack_id,
         base_revision=base_revision,
@@ -310,7 +308,7 @@ def completion_template(
 
 def initial_provenance(
     *,
-    session_id: str,
+    agent_run_id: str,
     executor: str | None,
     argv: list[str],
     stream_format: str,
@@ -328,13 +326,13 @@ def initial_provenance(
     source_revision: str | None,
     worktree: Path,
     environment: dict[str, Any],
-    retry_of_run_id: str | None = None,
+    retry_of_agent_run_id: str | None = None,
     budgets: dict[str, Any] | None = None,
     job_binding: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "schema": "agent-workflow/run-provenance/v1",
-        "session_id": session_id,
+        "agent_run_id": agent_run_id,
         "executor": executor,
         "agent_name": agent_name,
         "agent_class": agent_class,
@@ -356,7 +354,7 @@ def initial_provenance(
         "source_revision": source_revision,
         "worktree": str(worktree),
         "environment": environment,
-        "retry_of_run_id": retry_of_run_id,
+        "retry_of_agent_run_id": retry_of_agent_run_id,
         "budgets": budgets or {},
         "job_binding": job_binding,
         "usage": None,
@@ -400,7 +398,7 @@ def _artifact_receipt(path: Path, root: Path) -> dict[str, Any]:
     }
 
 
-def _seal_run_unlocked(run_dir: Path, *, session_id: str) -> dict[str, Any]:
+def _seal_run_unlocked(run_dir: Path, *, agent_run_id: str) -> dict[str, Any]:
     run_dir = run_dir.resolve()
     final_receipt = run_dir / "final-receipt.json"
     if final_receipt.exists() or final_receipt.is_symlink():
@@ -412,9 +410,7 @@ def _seal_run_unlocked(run_dir: Path, *, session_id: str) -> dict[str, Any]:
         for name in SEALED_ARTIFACTS
         if (path := run_dir / name).is_file()
     ]
-    launch_contract = run_dir / "launch-contract.json"
-    if launch_contract.is_file():
-        artifacts.append(_artifact_receipt(launch_contract, run_dir))
+    launch_contract = run_dir / "agent-run-contract.json"
     artifacts.extend(
         _artifact_receipt(path, run_dir)
         for name in SEALED_OPTIONAL_ARTIFACTS
@@ -455,27 +451,17 @@ def _seal_run_unlocked(run_dir: Path, *, session_id: str) -> dict[str, Any]:
         unique_artifacts[path] = artifact
     artifacts = list(unique_artifacts.values())
     required = set(SEALED_ARTIFACTS)
-    if launch_contract.is_file():
-        required.add("launch-contract.json")
     present = {item["path"] for item in artifacts}
     missing = sorted(required - present)
     if missing:
         raise WorkflowError(f"cannot seal run; missing artifacts: {missing}")
-    launch_value = read_launch_contract(launch_contract) if launch_contract.is_file() else None
-    if (
-        launch_value is not None
-        and launch_value.get("schema") == "agent-workflow/launch-contract/v2"
-    ):
-        required.update({"command-catalog.json", "command-card.md"})
-        missing = sorted(required - present)
-        if missing:
-            raise WorkflowError(f"cannot seal run; missing artifacts: {missing}")
+    read_agent_run_contract(launch_contract)
     for name, schema in {
         "command.json": "agent-workflow/command/v1",
         "source-baseline.json": "agent-workflow/source-baseline/v1",
         "completion.json": "agent-workflow/completion/v1",
         "run-provenance.json": "agent-workflow/run-provenance/v1",
-        "final-status.json": "agent-workflow/session-status/v2",
+        "final-status.json": "agent-workflow/agent-run-status/v1",
         "collections/completion.json": "agent-workflow/completion-collection/v1",
     }.items():
         read_contract(run_dir / name, schema)
@@ -508,7 +494,7 @@ def _seal_run_unlocked(run_dir: Path, *, session_id: str) -> dict[str, Any]:
             validate_instance(event, "agent-workflow/control-event/v1", artifact=str(controls))
     receipt = {
         "schema": "agent-workflow/final-receipt/v1",
-        "session_id": session_id,
+        "agent_run_id": agent_run_id,
         "sealed_at": utc_now(),
         "artifacts": artifacts,
     }
@@ -521,10 +507,10 @@ def _seal_run_unlocked(run_dir: Path, *, session_id: str) -> dict[str, Any]:
     return receipt
 
 
-def seal_run(run_dir: Path, *, session_id: str) -> dict[str, Any]:
+def seal_run(run_dir: Path, *, agent_run_id: str) -> dict[str, Any]:
     run_dir = run_dir.resolve()
     with _seal_lock(run_dir, exclusive=True):
-        return _seal_run_unlocked(run_dir, session_id=session_id)
+        return _seal_run_unlocked(run_dir, agent_run_id=agent_run_id)
 
 
 def _verify_seal_unlocked(
@@ -542,45 +528,32 @@ def _verify_seal_unlocked(
         for item in receipt["artifacts"]
         if isinstance(item, dict)
     }
-    # The launch contract was introduced after v1 runs existed. Legacy sealed
-    # receipts remain verifiable; launched runs carry the contract as an artifact.
     required = set(SEALED_ARTIFACTS)
-    if "launch-contract.json" not in listed and path.exists():
-        # A receipt without the contract is a pre-contract authority version.
-        required.discard("launch-contract.json")
     missing = sorted(required - listed)
     if missing:
         raise WorkflowError(f"final receipt omits required artifacts: {missing}")
-    if "launch-contract.json" in listed:
-        launch_value, _ = read_sealed_json(run_dir, receipt, "launch-contract.json")
-        if not isinstance(launch_value, dict):
-            raise WorkflowError("sealed launch contract must be a JSON object")
-        launch_schema = validate_launch_contract_value(
-            launch_value, artifact=str(run_dir / "launch-contract.json")
-        )
-        if launch_schema == "agent-workflow/launch-contract/v2":
-            command_required = {"command-catalog.json", "command-card.md"}
-            command_missing = sorted(command_required - listed)
-            if command_missing:
-                raise WorkflowError(
-                    f"final receipt omits launch command artifacts: {command_missing}"
-                )
-            command_binding = launch_value["command_catalog"]
-            catalog_value, catalog_digest = read_sealed_json(
-                run_dir, receipt, command_binding["catalog_path"]
-            )
-            _, card_digest = read_sealed_artifact_bytes(
-                run_dir, receipt, command_binding["card_path"]
-            )
-            if catalog_digest != command_binding["catalog_sha256"]:
-                raise WorkflowError("sealed command catalog disagrees with launch binding")
-            if card_digest != command_binding["card_sha256"]:
-                raise WorkflowError("sealed command card disagrees with launch binding")
-            validate_instance(
-                catalog_value,
-                command_binding["catalog_schema"],
-                artifact=str(run_dir / command_binding["catalog_path"]),
-            )
+    launch_value, _ = read_sealed_json(run_dir, receipt, "agent-run-contract.json")
+    if not isinstance(launch_value, dict):
+        raise WorkflowError("sealed launch contract must be a JSON object")
+    validate_agent_run_contract_value(
+        launch_value, artifact=str(run_dir / "agent-run-contract.json")
+    )
+    command_binding = launch_value["command_catalog"]
+    catalog_value, catalog_digest = read_sealed_json(
+        run_dir, receipt, command_binding["catalog_path"]
+    )
+    _, card_digest = read_sealed_artifact_bytes(
+        run_dir, receipt, command_binding["card_path"]
+    )
+    if catalog_digest != command_binding["catalog_sha256"]:
+        raise WorkflowError("sealed command catalog disagrees with launch binding")
+    if card_digest != command_binding["card_sha256"]:
+        raise WorkflowError("sealed command card disagrees with launch binding")
+    validate_instance(
+        catalog_value,
+        command_binding["catalog_schema"],
+        artifact=str(run_dir / command_binding["catalog_path"]),
+    )
     for item in receipt["artifacts"]:
         if not isinstance(item, dict) or not isinstance(item.get("path"), str):
             raise WorkflowError(f"invalid artifact entry in {path}")
@@ -603,34 +576,6 @@ def verify_seal_details(
     run_dir = run_dir.resolve()
     with _seal_lock(run_dir, exclusive=False):
         return _verify_seal_unlocked(run_dir, expected_sha256=expected_sha256)
-
-
-def verify_legacy_seal_details(run_dir: Path) -> tuple[dict[str, Any], str]:
-    """Verify finite historical receipt formats for index compatibility.
-
-    This is deliberately not used by acceptance or lifecycle authority.  It
-    accepts only the old required artifact set and still rehashes every listed
-    artifact before an index may quarantine historical evidence.
-    """
-    run_dir = run_dir.resolve()
-    with _seal_lock(run_dir, exclusive=False):
-        path = run_dir / "final-receipt.json"
-        receipt, actual = _read_final_receipt(path)
-        listed = {item.get("path") for item in receipt["artifacts"] if isinstance(item, dict)}
-        required = SEALED_ARTIFACTS if "launch-contract.json" in listed else LEGACY_SEALED_ARTIFACTS
-        if not set(required).issubset(listed):
-            raise WorkflowError("receipt does not contain its versioned required artifacts")
-        for item in receipt["artifacts"]:
-            if not isinstance(item, dict) or not isinstance(item.get("path"), str):
-                raise WorkflowError(f"invalid artifact entry in {path}")
-            relative_path = item["path"]
-            _artifact_parts(relative_path)
-            _, size, digest = _read_artifact_descriptor(run_dir, relative_path, capture_bytes=False)
-            if size != item.get("size"):
-                raise WorkflowError(f"sealed artifact size mismatch: {relative_path}")
-            if digest != item.get("sha256"):
-                raise WorkflowError(f"sealed artifact checksum mismatch: {relative_path}")
-        return receipt, actual
 
 
 def verify_seal(

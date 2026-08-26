@@ -1,7 +1,7 @@
 {
   "schema": "agent-workflow/release-policy/v1",
   "project": "agent-workflow",
-  "version": "0.7.9",
+  "version": "0.8.0",
   "license": {
     "status": "configured",
     "backlog_id": "REL-001",
@@ -26,40 +26,40 @@
         "status": "candidate",
         "host": "Linux distribution and kernel to be pinned by REL-003",
         "python": "3.11",
-        "tmux": "version to be pinned by HARD-008/REL-003",
         "executor": "deterministic fixture",
         "executor_version": "repository fixture",
-        "notes": "Default installed-product lane; not public-support evidence."
+        "notes": "Default installed-product lane; not public-support evidence.",
+        "execution_mode": "headless"
       },
       {
         "id": "linux-py312-codex",
         "status": "candidate",
         "host": "Linux distribution and kernel to be pinned by REL-003",
         "python": "3.12",
-        "tmux": "version to be pinned by HARD-008/REL-003",
         "executor": "Codex CLI",
         "executor_version": null,
-        "notes": "Requires clean-host live evidence and an executor compatibility decision."
+        "notes": "Requires clean-host live evidence and an executor compatibility decision.",
+        "execution_mode": "headless"
       },
       {
         "id": "linux-py312-claude",
         "status": "candidate",
         "host": "Linux distribution and kernel to be pinned by REL-003",
         "python": "3.12",
-        "tmux": "version to be pinned by HARD-008/REL-003",
         "executor": "Claude Code",
         "executor_version": null,
-        "notes": "Requires clean-host live evidence and an executor compatibility decision."
+        "notes": "Requires clean-host live evidence and an executor compatibility decision.",
+        "execution_mode": "headless"
       },
       {
         "id": "linux-py313-fixture",
         "status": "candidate",
         "host": "Linux distribution and kernel to be pinned by REL-003",
         "python": "3.13",
-        "tmux": "version to be pinned by HARD-008/REL-003",
         "executor": "deterministic fixture",
         "executor_version": "repository fixture",
-        "notes": "CI candidate only; not public-support evidence."
+        "notes": "CI candidate only; not public-support evidence.",
+        "execution_mode": "headless"
       }
     ],
     "evidence": []

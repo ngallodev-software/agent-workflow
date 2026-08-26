@@ -19,7 +19,7 @@ import jsonschema
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-TERMINAL_STATES = {"completed", "failed", "interrupted", "killed"}
+TERMINAL_STATES = {"completed", "failed", "interrupted", "terminated"}
 
 
 @dataclass(frozen=True)
@@ -170,222 +170,8 @@ def _write_executable(path: Path, content: str) -> None:
 def product_env(tmp_path: Path, installed_product: InstalledProduct) -> dict[str, str]:
     home = tmp_path / "home"
     fake_bin = tmp_path / "bin"
-    tmux_state = tmp_path / "fake-tmux"
-    for path in (home, fake_bin, tmux_state):
+    for path in (home, fake_bin):
         path.mkdir(parents=True)
-
-    _write_executable(
-        fake_bin / "tmux",
-        r'''#!/usr/bin/env python3
-import json
-import os
-import signal
-import subprocess
-import sys
-from pathlib import Path
-
-root = Path(os.environ["FAKE_TMUX_STATE"])
-root.mkdir(parents=True, exist_ok=True)
-args = sys.argv[1:]
-command = args[0] if args else ""
-
-def value(flag, default=None):
-    try:
-        return args[args.index(flag) + 1]
-    except (ValueError, IndexError):
-        return default
-
-def marker(session):
-    return root / f"{session}.json"
-
-def session_for_target(target):
-    if target.startswith("%"):
-        for path in root.glob("*.json"):
-            try:
-                data = json.loads(path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
-                continue
-            if any(pane.get("id") == target for pane in data.get("panes", [])):
-                return path.stem
-        return None
-    return target.split(":", 1)[0]
-
-def load_session(session):
-    path = marker(session)
-    if not path.exists():
-        return None, path
-    data = json.loads(path.read_text(encoding="utf-8"))
-    data.setdefault("panes", [])
-    return data, path
-
-def save_session(path, data):
-    path.write_text(json.dumps(data), encoding="utf-8")
-
-def pane_for_target(target):
-    session = session_for_target(target)
-    data, _ = load_session(session) if session else (None, None)
-    if not data:
-        return None, data
-    panes = data.get("panes", [])
-    if target.startswith("%"):
-        return next((pane for pane in panes if pane.get("id") == target), None), data
-    if ":" in target and "." in target:
-        index = target.rsplit(".", 1)[1]
-        return next((pane for pane in panes if str(pane.get("index")) == index), None), data
-    return panes[0] if panes else None, data
-
-def pane_line(pane, session):
-    return "\t".join(
-        [
-            str(pane.get("id", "")),
-            str(pane.get("pid", 0)),
-            "1" if pane.get("dead") else "0",
-            "python3",
-            session,
-            "0",
-            str(pane.get("run_id", "")),
-            str(pane.get("assignment_id", "")),
-        ]
-    )
-
-if command in {"wait-for"}:
-    raise SystemExit(0)
-if command in {"set-option", "select-pane"}:
-    target = value("-t", "")
-    session = session_for_target(target)
-    data, path = load_session(session) if session else (None, None)
-    pane = None
-    if data is not None:
-        panes = data.get("panes", [])
-        if target.startswith("%"):
-            pane = next((item for item in panes if item.get("id") == target), None)
-        elif ":" in target and "." in target:
-            index = target.rsplit(".", 1)[1]
-            pane = next((item for item in panes if str(item.get("index")) == index), None)
-        elif panes:
-            pane = panes[0]
-    if data is not None and pane is not None and command == "set-option":
-        option = next((item for item in args if item.startswith("@")), "")
-        option_value = args[args.index(option) + 1] if option else ""
-        field = {
-            "@agent-workflow-session-id": "run_id",
-            "@agent-workflow-assignment-id": "assignment_id",
-            "@agent-workflow-role": "role",
-            "@agent-workflow-column": "column",
-        }.get(option)
-        if field:
-            pane[field] = option_value
-        save_session(path, data)
-    raise SystemExit(0)
-if command in {"send-keys"}:
-    raise SystemExit(0)
-if command == "has-session":
-    raise SystemExit(0 if marker(value("-t", "")).exists() else 1)
-if command == "new-session":
-    session = value("-s")
-    workdir = value("-c", os.getcwd())
-    runner = args[-1]
-    process = subprocess.Popen(
-        [runner], cwd=workdir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        start_new_session=True,
-    )
-    marker(session).write_text(
-        json.dumps(
-            {
-                "pid": process.pid,
-                "runner": runner,
-                "panes": [
-                    {
-                        "id": "%1",
-                        "pid": process.pid,
-                        "index": 0,
-                        "role": "orchestrator",
-                    }
-                ],
-            }
-        ),
-        encoding="utf-8",
-    )
-    raise SystemExit(0)
-if command == "list-panes":
-    session = value("-t", "")
-    data = json.loads(marker(session).read_text(encoding="utf-8")) if marker(session).exists() else {"pid": 0}
-    fmt = value("-F", "")
-    if "@agent-workflow-session-id" in fmt:
-        for pane in data.get("panes", []):
-            print(pane_line(pane, session))
-    elif "pane_pid" in fmt:
-        pane = data.get("panes", [{}])[0]
-        print(f"{pane.get('pid', data['pid'])}\t0\tpython3")
-    elif "pane_left" in fmt:
-        print("%1\torchestrator\t0\t0\t0\t")
-    elif "pane_id" in fmt:
-        print("%1\torchestrator\t0")
-        for index in range(int(os.environ.get("FAKE_TMUX_AGENT_COUNT", "0"))):
-            print(f"%{index + 1}\tagent\t0")
-    raise SystemExit(0)
-if command == "kill-session":
-    session = value("-t", "")
-    path = marker(session)
-    if path.exists():
-        data = json.loads(path.read_text(encoding="utf-8"))
-        try:
-            os.killpg(int(data["pid"]), signal.SIGTERM)
-        except (ProcessLookupError, PermissionError, ValueError):
-            pass
-        path.unlink(missing_ok=True)
-    raise SystemExit(0)
-if command == "capture-pane":
-    raise SystemExit(0)
-if command == "display-message":
-    target = value("-t", "")
-    fmt = value("-F", "")
-    if "@agent-workflow-session-id" in fmt:
-        pane, _ = pane_for_target(target)
-        session = session_for_target(target)
-        if pane is None or session is None:
-            raise SystemExit(1)
-        print(pane_line(pane, session))
-    else:
-        print("fake:0")
-    raise SystemExit(0)
-if command == "split-window":
-    target = value("-t", "fake:0")
-    session = session_for_target(target) or "fake"
-    data, path = load_session(session)
-    if data is None:
-        data = {"pid": 0, "panes": [{"id": "%1", "pid": 0, "index": 0, "role": "orchestrator"}]}
-        path = marker(session)
-    panes = data.setdefault("panes", [])
-    next_id = max([int(str(p.get("id", "%1")).lstrip("%")) for p in panes] or [1]) + 1
-    pane_id = f"%{next_id}"
-    workdir = value("-c", os.getcwd())
-    runner = args[-1]
-    process = subprocess.Popen(
-        [runner], cwd=workdir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        start_new_session=True,
-    )
-    panes.append({"id": pane_id, "pid": process.pid, "index": len(panes), "role": "agent"})
-    save_session(path, data)
-    print(pane_id)
-    raise SystemExit(0)
-if command == "kill-pane":
-    target = value("-t", "")
-    pane, data = pane_for_target(target)
-    session = session_for_target(target)
-    if pane is not None and data is not None and session is not None:
-        try:
-            os.killpg(int(pane.get("pid", 0)), signal.SIGTERM)
-        except (ProcessLookupError, PermissionError, ValueError):
-            pass
-        data["panes"] = [item for item in data.get("panes", []) if item is not pane]
-        for index, item in enumerate(data["panes"]):
-            item["index"] = index
-        save_session(marker(session), data)
-    raise SystemExit(0)
-raise SystemExit(0)
-''',
-    )
 
     _write_executable(
         fake_bin / "fake-agent",
@@ -416,6 +202,15 @@ handoff.mkdir(parents=True, exist_ok=True)
     ),
     encoding="utf-8",
 )
+if os.environ.get("FAKE_AGENT_EMIT_PROGRESS") == "1":
+    subprocess.run(
+        [
+            os.environ["AGENT_WORKFLOW_CLI"], "agent-run", "progress",
+            os.environ["AGENT_WORKFLOW_AGENT_RUN_ID"],
+            "fixture durable progress", "--actor", "fixture-child",
+        ],
+        check=True,
+    )
 if mode == "slow":
     deadline = time.monotonic() + float(os.environ.get("FAKE_AGENT_DELAY", "1.0"))
     steering_inbox = Path(os.environ["AGENT_WORKFLOW_STEERING_INBOX"])
@@ -433,8 +228,8 @@ if mode == "slow":
             outcome = os.environ.get("FAKE_AGENT_STEER_OUTCOME", "applied")
             subprocess.run(
                 [
-                    os.environ["AGENT_WORKFLOW_CLI"], "ack",
-                    os.environ["AGENT_WORKFLOW_SESSION_ID"],
+                    os.environ["AGENT_WORKFLOW_CLI"], "agent-run", "ack",
+                    os.environ["AGENT_WORKFLOW_AGENT_RUN_ID"],
                     request["message_id"],
                     f"Fixture executor {outcome} steering",
                     "--actor", "fixture-child", "--outcome", outcome,
@@ -461,7 +256,7 @@ if result_json:
         ticket_override = None
 completion = {
     "schema": "agent-workflow/completion/v1",
-    "session_id": os.environ["AGENT_WORKFLOW_SESSION_ID"],
+    "agent_run_id": os.environ["AGENT_WORKFLOW_AGENT_RUN_ID"],
     "ticket_id": ticket_override or os.environ.get("FAKE_AGENT_TICKET_ID", os.environ.get("AGENT_WORKFLOW_TICKET_ID")),
     "pack_id": os.environ.get("AGENT_WORKFLOW_PACK_ID"),
     "result": result,
@@ -504,7 +299,7 @@ if mode in {"task-complete", "task-complete-terminate"}:
     subprocess.run(
         [
             os.environ["AGENT_WORKFLOW_CLI"], "agent", "task-complete",
-            os.environ["AGENT_WORKFLOW_SESSION_ID"],
+            os.environ["AGENT_WORKFLOW_AGENT_RUN_ID"],
             "--actor", "fixture-child", "--summary", "fixture assignment complete",
         ],
         check=True,
@@ -513,7 +308,7 @@ if mode == "task-complete-mutate":
     subprocess.run(
         [
             os.environ["AGENT_WORKFLOW_CLI"], "agent", "task-complete",
-            os.environ["AGENT_WORKFLOW_SESSION_ID"],
+            os.environ["AGENT_WORKFLOW_AGENT_RUN_ID"],
             "--actor", "fixture-child", "--summary", "fixture assignment complete",
         ],
         check=True,
@@ -524,8 +319,8 @@ if mode == "task-complete-mutate":
 if mode == "task-complete-terminate":
     subprocess.run(
         [
-            os.environ["AGENT_WORKFLOW_CLI"], "terminate",
-            os.environ["AGENT_WORKFLOW_SESSION_ID"], "--grace-seconds", "0",
+            os.environ["AGENT_WORKFLOW_CLI"], "agent-run", "terminate",
+            os.environ["AGENT_WORKFLOW_AGENT_RUN_ID"], "--grace-seconds", "0",
         ],
         check=True,
     )
@@ -534,7 +329,7 @@ if mode == "post-exit-intent":
     intent = {
         "schema": "agent-workflow/control-intent/v1",
         "request_id": request_id,
-        "session_id": os.environ["AGENT_WORKFLOW_SESSION_ID"],
+        "agent_run_id": os.environ["AGENT_WORKFLOW_AGENT_RUN_ID"],
         "sequence": 1,
         "kind": "progress",
         "actor": "fixture-child",
@@ -571,17 +366,12 @@ if mode == "fail":
     )
 
     environment = os.environ.copy()
-    # The fake tmux executable models a dedicated session. Do not let the
-    # host test runner's real tmux topology select its unsupported shared path.
-    environment.pop("TMUX", None)
-    environment.pop("TMUX_PANE", None)
     environment.update(
         {
             "HOME": str(home),
             "XDG_CONFIG_HOME": str(tmp_path / "config"),
             "XDG_DATA_HOME": str(tmp_path / "data"),
             "XDG_STATE_HOME": str(tmp_path / "state"),
-            "FAKE_TMUX_STATE": str(tmux_state),
             "PATH": os.pathsep.join(
                 [str(fake_bin), str(installed_product.cli.parent), environment.get("PATH", "")]
             ),
@@ -597,18 +387,16 @@ if mode == "fail":
         # Reap every fixture-owned group so one assertion-dense journey cannot
         # leak lifecycle state into the next journey.
         pids: set[int] = set()
-        for marker_path in tmux_state.glob("*.json"):
+        runs_root = Path(environment["XDG_STATE_HOME"]) / "agent-workflow" / "runs"
+        for status_path in runs_root.glob("*/status.json"):
             try:
-                marker_value = json.loads(marker_path.read_text(encoding="utf-8"))
+                status = json.loads(status_path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError):
                 continue
-            for candidate in [
-                marker_value.get("pid"),
-                *(pane.get("pid") for pane in marker_value.get("panes", []) if isinstance(pane, dict)),
-            ]:
+            for key in ("worker_pid", "worker_process_group_id"):
+                candidate = status.get(key)
                 if isinstance(candidate, int) and candidate > 1:
                     pids.add(candidate)
-        runs_root = Path(environment["XDG_STATE_HOME"]) / "agent-workflow" / "runs"
         for heartbeat_path in runs_root.glob("*/heartbeat.json"):
             try:
                 heartbeat = json.loads(heartbeat_path.read_text(encoding="utf-8"))
@@ -631,6 +419,24 @@ if mode == "fail":
                 time.sleep(0.05)
 
 
+
+def prepare_and_start_agent_run(
+    installed_product: InstalledProduct,
+    *prepare_args: str | os.PathLike[str],
+    env: dict[str, str] | None = None,
+    cwd: Path | None = None,
+    timeout: float = 30,
+) -> dict[str, Any]:
+    """Exercise the public two-step headless Agent Run API in one test helper."""
+    prepared = installed_product.json(
+        "agent-run", "prepare", *prepare_args, env=env, cwd=cwd, timeout=timeout
+    )
+    agent_run_id = str(prepare_args[0])
+    started = installed_product.json(
+        "agent-run", "start", agent_run_id, env=env, cwd=cwd, timeout=timeout
+    )
+    return {"prepared": prepared, "started": started}
+
 def git_repo(path: Path) -> str:
     path.mkdir(parents=True, exist_ok=True)
     subprocess.run(["git", "init", "-q", str(path)], check=True)
@@ -647,8 +453,8 @@ def git_repo(path: Path) -> str:
     ).stdout.strip()
 
 
-def wait_for_status(env: dict[str, str], session_id: str, *, timeout: float = 20) -> dict[str, Any]:
-    status_path = Path(env["XDG_STATE_HOME"]) / "agent-workflow" / "runs" / session_id / "status.json"
+def wait_for_status(env: dict[str, str], agent_run_id: str, *, timeout: float = 20) -> dict[str, Any]:
+    status_path = Path(env["XDG_STATE_HOME"]) / "agent-workflow" / "runs" / agent_run_id / "status.json"
     deadline = time.monotonic() + timeout
     last: dict[str, Any] | None = None
     while time.monotonic() < deadline:
@@ -660,7 +466,7 @@ def wait_for_status(env: dict[str, str], session_id: str, *, timeout: float = 20
             if last and last.get("status") in TERMINAL_STATES:
                 return last
         time.sleep(0.05)
-    raise AssertionError(f"session did not reach a terminal state: {session_id}; last={last}")
+    raise AssertionError(f"Agent Run did not reach a terminal state: {agent_run_id}; last={last}")
 
 
 def write_config(env: dict[str, str], *, fake_agent: Path, structured_executor: bool = False) -> Path:
@@ -676,7 +482,7 @@ def write_config(env: dict[str, str], *, fake_agent: Path, structured_executor: 
                 'model_arg = ["--model"]',
                 'interactive_permission_args = []',
                 'non_interactive_permission_args = []',
-                'environment_allowlist = ["FAKE_AGENT_MODE", "FAKE_AGENT_DELAY", "FAKE_AGENT_RESULT_JSON", "FAKE_AGENT_AUTO_STEER", "FAKE_AGENT_EMPTY_COMPLETION", "FAKE_AGENT_STEER_OUTCOME", "FAKE_AGENT_TICKET_ID"]',
+                'environment_allowlist = ["FAKE_AGENT_MODE", "FAKE_AGENT_DELAY", "FAKE_AGENT_RESULT_JSON", "FAKE_AGENT_AUTO_STEER", "FAKE_AGENT_EMPTY_COMPLETION", "FAKE_AGENT_STEER_OUTCOME", "FAKE_AGENT_TICKET_ID", "FAKE_AGENT_EMIT_PROGRESS"]',
                 'steering_adapter = "control-file-v1"',
                 "",
                 "[git]",

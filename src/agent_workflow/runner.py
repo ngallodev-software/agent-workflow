@@ -14,22 +14,18 @@ import uuid
 from pathlib import Path
 from typing import Any, BinaryIO
 
-from . import tmux
+from .agent_run_paths import AgentRunPaths
+from .run_collections import capture_patch, collect_completion, collect_task_result
 from .errors import WorkflowError
-from .contracts import read_launch_contract
-from .completion import (
-    completion_revision_errors,
-    substantive_completion_errors,
-    validate_completion_repository_closeout,
-)
-from .events import append_lifecycle_event
+from .run_lifecycle import transition_execution_path
+from .state import read_status_path, update_projection_path
+from .contracts import read_agent_run_contract
 from .diagnostics import classify_failure
 from .health import (
     PROCESS_RESULT_SCHEMA,
     last_event,
     record_health_sample,
     record_incident,
-    record_terminal_capture,
     write_process_result,
 )
 from .eval.commands import collect_commands, specs_from_data
@@ -56,10 +52,7 @@ from .process import (
     EnvironmentPolicy,
     ProcessRequest,
     redact_argv,
-    redact_bytes,
     redact_text,
-    run_bytes,
-    run,
     secret_values_from_argv,
     spawn,
 )
@@ -68,12 +61,11 @@ from .path import read_regular_file
 from .policy import evaluate_budgets
 
 
-MAX_COMPLETION_HANDOFF_BYTES = 1024 * 1024
 MAX_EXECUTOR_STDOUT_BYTES = 16 * 1024 * 1024
 MAX_EXECUTOR_STDERR_BYTES = 16 * 1024 * 1024
 CONTROL_POLL_SECONDS = 0.25
 _RUNTIME_ENVIRONMENT = (
-    "AGENT_WORKFLOW_SESSION_ID",
+    "AGENT_WORKFLOW_AGENT_RUN_ID",
     "AGENT_WORKFLOW_TICKET_ID",
     "AGENT_WORKFLOW_PACK_ID",
     "AGENT_WORKFLOW_PROMPT_SOURCE",
@@ -82,7 +74,6 @@ _RUNTIME_ENVIRONMENT = (
     "AGENT_WORKFLOW_COMMAND_CATALOG",
     "AGENT_WORKFLOW_COMMAND_CARD",
     "AGENT_WORKFLOW_CLI",
-    "AGENT_WORKFLOW_TMUX_SESSION",
     CONTROL_BRIDGE_ENV,
     "XDG_CONFIG_HOME",
     "XDG_DATA_HOME",
@@ -99,14 +90,15 @@ _RUNTIME_ENVIRONMENT = (
 def _drain_control_bridge(
     run_dir: Path, *, active: bool, allow_terminal_at_exit: bool = False
 ) -> bool:
-    """Consume bounded child intents using host-owned state and tmux authority."""
-    launch = read_launch_contract(run_dir / "launch-contract.json")
-    session_id = str(launch["session"]["id"])
+    """Consume bounded child intents using host-owned durable state."""
+    paths = AgentRunPaths(run_dir)
+    launch = read_agent_run_contract(paths.contract)
+    agent_run_id = str(launch["agent_run"]["id"])
     handoff = Path(str(launch["paths"].get("handoff_dir", ""))).resolve()
     bridge = handoff / "control-intents"
     if bridge.parent != handoff or bridge.is_symlink() or not bridge.is_dir():
         return False
-    evidence_path = run_dir / "control-intents.jsonl"
+    evidence_path = paths.control_intents
     processed: set[str] = set()
     processed_requests: set[str] = set()
     processed_sequences: set[int] = set()
@@ -167,7 +159,7 @@ def _drain_control_bridge(
                 raise WorkflowError("stale or duplicate control sequence")
             body = {key: item for key, item in value.items() if key != "digest"}
             digest = "sha256:" + hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-            if value.get("session_id") != session_id or value.get("digest") != digest:
+            if value.get("agent_run_id") != agent_run_id or value.get("digest") != digest:
                 raise WorkflowError("control intent identity or digest mismatch")
             intent_kind = str(value["kind"])
             if intent_kind not in {"progress", "ack", "task_complete"}:
@@ -190,7 +182,7 @@ def _drain_control_bridge(
                     or any(character not in "0123456789abcdef" for character in completion_sha256)
                 ):
                     raise WorkflowError("task completion intent requires a completion handoff digest")
-                completion = _collect_completion(
+                completion = collect_completion(
                     run_dir,
                     Path(str(launch["worktree"]["path"])),
                     expected_source_sha256=completion_sha256,
@@ -200,7 +192,7 @@ def _drain_control_bridge(
                     raise WorkflowError(f"task completion handoff is invalid: {details}")
                 apply_bridged_completion(
                     run_dir,
-                    session_id,
+                    agent_run_id,
                     actor=str(value["actor"]),
                     summary=str(value["content"]),
                     terminal=terminal,
@@ -225,7 +217,7 @@ def _drain_control_bridge(
                     )
                 else:
                     append_message(
-                        run_dir, session_id=session_id, direction="child_to_parent",
+                        run_dir, agent_run_id=agent_run_id, direction="child_to_parent",
                         kind=intent_kind, actor=str(value["actor"]),
                         content=str(value["content"]),
                         correlation_id=correlation_id,
@@ -239,7 +231,7 @@ def _drain_control_bridge(
                     outcome, reason = "applied", "authoritative host append"
             else:
                 append_message(
-                    run_dir, session_id=session_id, direction="child_to_parent",
+                    run_dir, agent_run_id=agent_run_id, direction="child_to_parent",
                     kind=intent_kind, actor=str(value["actor"]),
                     content=str(value["content"]),
                     correlation_id=value.get("correlation_id"),
@@ -253,7 +245,7 @@ def _drain_control_bridge(
             except ValueError:
                 correlation_id = None
             append_message(
-                run_dir, session_id=session_id, direction="child_to_parent", kind="error",
+                run_dir, agent_run_id=agent_run_id, direction="child_to_parent", kind="error",
                 actor="agent-workflow-host",
                 content=json.dumps({"outcome": outcome, "request_id": request_id, "reason": reason}, sort_keys=True),
                 correlation_id=correlation_id if isinstance(correlation_id, str) else None,
@@ -266,298 +258,14 @@ def _drain_control_bridge(
     return terminal_completion
 
 
-def _read_handoff_completion(path: Path) -> bytes:
-    """Read one bounded regular file without following an executor-controlled link."""
-    try:
-        mode = path.lstat().st_mode
-    except FileNotFoundError:
-        raise
-    except OSError as exc:
-        raise WorkflowError(f"cannot inspect completion handoff: {exc}") from exc
-    if stat.S_ISLNK(mode) or not stat.S_ISREG(mode):
-        raise WorkflowError("completion handoff must be a regular non-symlink file")
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
-    try:
-        descriptor = os.open(path, flags)
-    except OSError as exc:
-        raise WorkflowError(f"cannot open completion handoff safely: {exc}") from exc
-    try:
-        info = os.fstat(descriptor)
-        if not stat.S_ISREG(info.st_mode):
-            raise WorkflowError("completion handoff must be a regular file")
-        if info.st_size > MAX_COMPLETION_HANDOFF_BYTES:
-            raise WorkflowError(
-                f"completion handoff exceeds {MAX_COMPLETION_HANDOFF_BYTES} bytes"
-            )
-        chunks: list[bytes] = []
-        remaining = MAX_COMPLETION_HANDOFF_BYTES + 1
-        while remaining:
-            chunk = os.read(descriptor, min(1024 * 1024, remaining))
-            if not chunk:
-                break
-            chunks.append(chunk)
-            remaining -= len(chunk)
-        data = b"".join(chunks)
-        if len(data) > MAX_COMPLETION_HANDOFF_BYTES:
-            raise WorkflowError(
-                f"completion handoff exceeds {MAX_COMPLETION_HANDOFF_BYTES} bytes"
-            )
-        return data
-    finally:
-        os.close(descriptor)
-
-
-def _require_real_handoff_dir(handoff: Path, workdir: Path) -> None:
-    try:
-        relative = handoff.relative_to(workdir)
-    except ValueError as exc:
-        raise WorkflowError("completion handoff escapes worktree") from exc
-    current = workdir
-    for component in relative.parts:
-        current = current / component
-        try:
-            mode = current.lstat().st_mode
-        except OSError as exc:
-            raise WorkflowError(f"cannot inspect completion handoff directory: {exc}") from exc
-        if stat.S_ISLNK(mode) or not stat.S_ISDIR(mode):
-            raise WorkflowError("completion handoff directory must not contain symlinks")
-
-
-def _worktree_head_revision(workdir: Path) -> str:
-    result = run(
-        ["git", "-C", str(workdir), "rev-parse", "--verify", "HEAD"],
-        check=False,
-        max_stdout_bytes=128,
-        max_stderr_bytes=1024,
-    )
-    head = result.stdout.strip()
-    if result.returncode != 0 or not head:
-        raise WorkflowError("completion requires a readable worktree Git HEAD")
-    return head
-
-
-def _collect_completion(
-    run_dir: Path,
-    workdir: Path,
-    *,
-    secret_values: tuple[str, ...] = (),
-    expected_source_sha256: str | None = None,
-) -> dict[str, Any]:
-    """Collect native executor evidence before downstream collectors and sealing."""
-    launch = read_launch_contract(run_dir / "launch-contract.json")
-    session_id = str(launch["session"]["id"])
-    contract_workdir = Path(str(launch["worktree"]["path"]))
-    handoff_value = launch["paths"].get("handoff_dir")
-    handoff = Path(handoff_value) if isinstance(handoff_value, str) else None
-    source = handoff / "completion.json" if handoff is not None else None
-    receipt: dict[str, Any] = {
-        "schema": "agent-workflow/completion-collection/v1",
-        "session_id": session_id,
-        "adapter": "native",
-        "adapter_version": "1",
-        "source_path": str(source) if source is not None else None,
-        "source_sha256": None,
-        "canonical_mapping": None,
-        "canonical_sha256": None,
-        "validation_status": "missing",
-        "validation_errors": [],
-        "collected_at": utc_now(),
-        "stored_path": None,
-        "repository_closeout_source_path": None,
-        "repository_closeout_source_sha256": None,
-        "repository_closeout_stored_path": None,
-        "repository_closeout_payload_sha256": None,
-        "repository_closeout_claims": None,
-    }
-    try:
-        if handoff is None:
-            raise FileNotFoundError("launch has no completion handoff")
-        _require_real_handoff_dir(handoff, contract_workdir)
-        assert source is not None
-        source_data = _read_handoff_completion(source)
-        if (
-            expected_source_sha256 is not None
-            and hashlib.sha256(source_data).hexdigest() != expected_source_sha256
-        ):
-            raise WorkflowError("task completion handoff changed after task-complete intent")
-        data = redact_bytes(source_data, secret_values)
-    except FileNotFoundError as exc:
-        receipt["validation_errors"] = [str(exc)]
-    except WorkflowError as exc:
-        receipt["validation_status"] = "invalid"
-        receipt["validation_errors"] = [str(exc)]
-    else:
-        receipt["source_sha256"] = hashlib.sha256(data).hexdigest()
-        try:
-            value = json.loads(data.decode("utf-8"))
-            if not isinstance(value, dict):
-                raise WorkflowError("completion handoff must be a JSON object")
-            if value.get("session_id") != session_id:
-                raise WorkflowError("completion handoff session_id does not match run")
-            from .contracts import validate_instance
-            validate_instance(value, "agent-workflow/completion/v1", artifact=str(source))
-            ticket_identity = launch.get("ticket_identity")
-            expected_ticket = launch.get("ticket")
-            if isinstance(ticket_identity, dict):
-                expected_ticket = ticket_identity.get("value")
-            semantic_errors = substantive_completion_errors(
-                value,
-                session_id=session_id,
-                ticket_id=expected_ticket,
-                pack_id=(
-                    launch.get("pack", {}).get("id")
-                    if isinstance(launch.get("pack"), dict)
-                    else None
-                ),
-            )
-            if semantic_errors:
-                raise WorkflowError("; ".join(semantic_errors))
-            revision_errors = completion_revision_errors(
-                value,
-                expected_base_revision=launch["worktree"].get("source_revision"),
-                actual_head_revision=_worktree_head_revision(contract_workdir),
-            )
-            if revision_errors:
-                raise WorkflowError("; ".join(revision_errors))
-            repository_summary = validate_completion_repository_closeout(
-                value,
-                handoff=handoff,
-                expected_worktree=contract_workdir,
-            )
-            repository_data = None
-            if repository_summary is not None:
-                repository_source = handoff / "repository-closeout.json"
-                repository_data = _read_handoff_completion(repository_source)
-                receipt["repository_closeout_source_path"] = str(repository_source)
-                receipt["repository_closeout_source_sha256"] = hashlib.sha256(repository_data).hexdigest()
-            completion_path = run_dir / "completion.json"
-            temporary = completion_path.with_name(f".{completion_path.name}.handoff")
-            temporary.write_bytes(data)
-            os.replace(temporary, completion_path)
-            if repository_data is not None and repository_summary is not None:
-                repository_path = run_dir / "repository-closeout.json"
-                repository_temporary = repository_path.with_name(f".{repository_path.name}.handoff")
-                repository_temporary.write_bytes(repository_data)
-                os.replace(repository_temporary, repository_path)
-                receipt["repository_closeout_stored_path"] = "repository-closeout.json"
-                receipt["repository_closeout_payload_sha256"] = repository_summary["payload_sha256"]
-                receipt["repository_closeout_claims"] = repository_summary["claims"]
-            receipt["stored_path"] = "completion.json"
-            receipt["canonical_mapping"] = "identity"
-            receipt["canonical_sha256"] = hashlib.sha256(completion_path.read_bytes()).hexdigest()
-            receipt["validation_status"] = "valid"
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError, WorkflowError) as exc:
-            receipt["validation_status"] = "invalid"
-            receipt["validation_errors"] = [str(exc)]
-    receipt_path = run_dir / "collections" / "completion.json"
-    atomic_write_json(receipt_path, receipt)
-    _update_status(
-        run_dir / "status.json",
-        completion_collection_path=str(receipt_path),
-        completion_validation_status=receipt["validation_status"],
-    )
-    return receipt
-
-
-def _collect_task_result(
-    run_dir: Path, workdir: Path, *, secret_values: tuple[str, ...] = ()
-) -> dict[str, Any] | None:
-    """Collect and validate an optional ticket-specific structured result."""
-    launch = read_launch_contract(run_dir / "launch-contract.json")
-    session_id = str(launch["session"]["id"])
-    contract_workdir = Path(str(launch["worktree"]["path"]))
-    contract = launch["paths"].get("result_contract")
-    if not isinstance(contract, dict):
-        return None
-    required = bool(contract.get("required", True))
-    schema_rel = contract.get("schema")
-    pack_root_value = launch["pack"].get("root")
-    handoff_value = launch["paths"].get("handoff_dir")
-    handoff = Path(handoff_value) if isinstance(handoff_value, str) else None
-    source = handoff / "result.json" if handoff is not None else None
-    receipt: dict[str, Any] = {
-        "schema": "agent-workflow/task-result-collection/v1",
-        "session_id": session_id,
-        "required": required,
-        "schema_path": str(schema_rel) if isinstance(schema_rel, str) else None,
-        "source_path": str(source) if source is not None else None,
-        "source_sha256": None,
-        "stored_path": None,
-        "stored_sha256": None,
-        "validation_status": "missing",
-        "validation_errors": [],
-        "collected_at": utc_now(),
-    }
-    try:
-        if handoff is None:
-            raise FileNotFoundError("launch has no completion handoff")
-        _require_real_handoff_dir(handoff, contract_workdir)
-        if not isinstance(schema_rel, str) or not schema_rel:
-            raise WorkflowError("result contract schema path is missing")
-        if not isinstance(pack_root_value, str):
-            raise WorkflowError("result contract has no prompt pack root")
-        pack_root = Path(pack_root_value)
-        schema_path = pack_root / schema_rel
-        try:
-            schema_path.relative_to(pack_root)
-        except ValueError as exc:
-            raise WorkflowError("result contract schema escapes prompt pack root") from exc
-        schema_read = read_regular_file(schema_path)
-        expected_schema = launch["schemas"].get("task_result")
-        if not isinstance(expected_schema, dict) or schema_read.sha256 != expected_schema.get("sha256"):
-            raise WorkflowError("result contract schema changed after launch")
-        assert source is not None
-        data = redact_bytes(_read_handoff_completion(source), secret_values)
-        value = json.loads(data.decode("utf-8"))
-        schema_value = json.loads(schema_read.data.decode("utf-8"))
-        if not isinstance(value, dict):
-            raise WorkflowError("task result must be a JSON object")
-        if not isinstance(schema_value, dict):
-            raise WorkflowError("task result schema must be a JSON object")
-        try:
-            import jsonschema
-        except ImportError as exc:
-            raise WorkflowError("task result validation requires jsonschema") from exc
-        errors = sorted(
-            jsonschema.Draft202012Validator(schema_value).iter_errors(value),
-            key=lambda item: list(item.path),
-        )
-        if errors:
-            details = []
-            for error in errors[:20]:
-                location = ".".join(str(part) for part in error.absolute_path) or "$"
-                details.append(f"{location}: {error.message}")
-            raise WorkflowError("invalid task result: " + "; ".join(details))
-        receipt["source_sha256"] = hashlib.sha256(data).hexdigest()
-        stored = run_dir / "result.json"
-        temporary = stored.with_name(f".{stored.name}.handoff")
-        temporary.write_bytes(data)
-        os.replace(temporary, stored)
-        receipt["stored_path"] = "result.json"
-        receipt["stored_sha256"] = hashlib.sha256(stored.read_bytes()).hexdigest()
-        receipt["validation_status"] = "valid"
-    except FileNotFoundError as exc:
-        receipt["validation_errors"] = [str(exc)]
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError, WorkflowError) as exc:
-        receipt["validation_status"] = "invalid"
-        receipt["validation_errors"] = [str(exc)]
-    receipt_path = run_dir / "collections" / "task-result.json"
-    atomic_write_json(receipt_path, receipt)
-    _update_status(
-        run_dir / "status.json",
-        task_result_collection_path=str(receipt_path),
-        task_result_validation_status=receipt["validation_status"],
-    )
-    return receipt
-
-
 def _authoritative_projection(
     launch: dict[str, Any], run_dir: Path, current: dict[str, Any]
 ) -> dict[str, Any]:
     """Overlay only launch-bound identity and paths onto the status projection."""
-    session = launch["session"]
+    paths_obj = AgentRunPaths(run_dir)
+    agent_run = launch["agent_run"]
     worktree = launch["worktree"]
-    command = launch["command_plan"]
+    command = launch["worker_plan"]
     pack = launch["pack"]
     paths = launch["paths"]
     evaluation = launch["evaluation_policy"]
@@ -576,18 +284,26 @@ def _authoritative_projection(
             "final_receipt_path",
             "final_receipt_sha256",
             "sealed_artifact_count",
+            # Projection metadata describes the mutable status cache, not the
+            # immutable terminal authority. Carrying it into final-status.json
+            # also collides with the explicit projection metadata supplied
+            # when the sealed result is projected back to status.json.
+            "projection_generated_at",
+            "projection_source",
+            "projection_freshness",
+            "projection_authority",
         }
     }
     projected.update(
         {
-            "schema": "agent-workflow/session-status/v2",
-            "session_id": session["id"],
+            "schema": "agent-workflow/agent-run-status/v1",
+            "agent_run_id": agent_run["id"],
             "ticket_id": launch.get("ticket"),
-            "agent_name": session.get("agent_name"),
-            "agent_class": session.get("agent_class"),
-            "tier": session.get("tier"),
-            "retry_of": session.get("retry_of"),
-            "created_at": session["created_at"],
+            "agent_name": agent_run.get("agent_name"),
+            "agent_class": agent_run.get("agent_class"),
+            "tier": agent_run.get("tier"),
+            "retry_of": agent_run.get("retry_of_agent_run_id"),
+            "created_at": agent_run["created_at"],
             "workdir": worktree["path"],
             "source_revision": worktree.get("source_revision"),
             "branch": worktree.get("branch"),
@@ -601,17 +317,17 @@ def _authoritative_projection(
             "launch_prompt_path": str(run_dir / launch["prompt"]["launch_stored"]),
             "launch_prompt_sha256": launch["prompt"]["launch_sha256"],
             "log_path": str(run_dir / launch["expected_outputs"]["output_log"]),
-            "command_path": str(run_dir / "command.json"),
+            "command_path": str(paths_obj.command),
             "handoff_dir": paths["handoff_dir"],
-            "provenance_path": str(run_dir / "run-provenance.json"),
-            "events_path": str(run_dir / "executor-events.jsonl"),
-            "stderr_path": str(run_dir / "executor-stderr.log"),
+            "provenance_path": str(paths_obj.provenance),
+            "events_path": str(paths_obj.executor_events),
+            "stderr_path": str(paths_obj.executor_stderr),
             "source_baseline_path": str(run_dir / launch["source_baseline"]["path"]),
-            "launch_contract_path": str(run_dir / "launch-contract.json"),
+            "launch_contract_path": str(paths_obj.contract),
             "executor": command.get("executor"),
             "model": command.get("model"),
-            "interactive": command["interactive"],
-            "executor_interactive": command["executor_interactive"],
+            "worker_mode": command["mode"],
+            "interactive_stdio": command["interactive_stdio"],
             "evaluation_path": evaluation.get("path"),
             "disposition": None,
         }
@@ -619,98 +335,17 @@ def _authoritative_projection(
     return projected
 
 
-def _read_status(path: Path) -> dict[str, Any]:
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise WorkflowError(f"cannot read runner status {path}: {exc}") from exc
-    if not isinstance(value, dict):
-        raise WorkflowError(f"runner status must be an object: {path}")
-    return value
-
-
-def _update_status(path: Path, **changes: Any) -> dict[str, Any]:
-    value = _read_status(path)
-    if "status" in changes and changes["status"] != value.get("status"):
-        append_lifecycle_event(
-            path.parent,
-            dimension="execution",
-            prior=value.get("status"),
-            new=changes["status"],
-            actor="runner",
-            reason="executor state changed",
-        )
-    value.update(changes)
-    value["updated_at"] = utc_now()
-    atomic_write_json(path, value)
-    return value
-
-
 def _write_bytes(stream: BinaryIO, data: bytes) -> None:
     stream.write(data)
     stream.flush()
 
 
-def _mirror_terminal(stream: BinaryIO, data: bytes) -> None:
-    """Best-effort pane output; durable run artifacts remain authoritative."""
+def _mirror_output(stream: BinaryIO, data: bytes) -> None:
+    """Best-effort output mirroring; durable Agent Run artifacts remain authoritative."""
     try:
         _write_bytes(stream, data)
     except (BrokenPipeError, OSError, ValueError):
         pass
-
-
-def _capture_patch(workdir: Path, run_dir: Path, path: Path) -> None:
-    baseline = None
-    try:
-        source = json.loads(
-            (run_dir / "source-baseline.json").read_text(encoding="utf-8")
-        )
-        baseline = source.get("components", {}).get("primary", {}).get("head")
-    except (OSError, json.JSONDecodeError, AttributeError):
-        pass
-    result = run_bytes(
-        [
-            "git", "-C", str(workdir), "diff", "--binary", "--full-index",
-            str(baseline or "HEAD"),
-        ],
-        check=False,
-        timeout_seconds=60,
-        max_stdout_bytes=MAX_EXECUTOR_STDOUT_BYTES,
-        max_stderr_bytes=64 * 1024,
-    )
-    patch = bytearray(result.stdout if result.returncode == 0 else b"")
-    untracked = run_bytes(
-        ["git", "-C", str(workdir), "ls-files", "--others", "--exclude-standard", "-z"],
-        check=False,
-        timeout_seconds=60,
-        max_stdout_bytes=MAX_EXECUTOR_STDOUT_BYTES,
-        max_stderr_bytes=64 * 1024,
-    )
-    if untracked.returncode == 0:
-        for raw in untracked.stdout.split(b"\0"):
-            if not raw:
-                continue
-            relative = raw.decode("utf-8", errors="surrogateescape")
-            addition = run_bytes(
-                [
-                    "git",
-                    "-C",
-                    str(workdir),
-                    "diff",
-                    "--no-index",
-                    "--binary",
-                    "--",
-                    "/dev/null",
-                    relative,
-                ],
-                check=False,
-                timeout_seconds=60,
-                max_stdout_bytes=MAX_EXECUTOR_STDOUT_BYTES,
-                max_stderr_bytes=64 * 1024,
-            )
-            if addition.returncode in {0, 1}:
-                patch.extend(addition.stdout)
-    path.write_bytes(patch)
 
 
 def _child_environment(
@@ -725,7 +360,7 @@ def _child_environment(
     names = set(_RUNTIME_ENVIRONMENT)
     if isinstance(configured, list):
         names.update(value for value in configured if isinstance(value, str) and value)
-    names.difference_update({"TMUX", "TMUX_PANE", "XDG_STATE_HOME"})
+    names.discard("XDG_STATE_HOME")
     values = {
         CONTROL_BRIDGE_ENV: str(bridge_dir),
         STEERING_INBOX_ENV: str(steering_dir),
@@ -741,6 +376,62 @@ def _child_environment(
     )
 
 
+
+def _seal_terminal_run(
+    run_dir: Path,
+    launch: dict[str, Any],
+    final_status: dict[str, Any],
+    *,
+    elapsed_seconds: float,
+    seal_failure_reason: str,
+    terminal_reason: str,
+    seal_failure_exit: int,
+) -> int | None:
+    """Seal one terminal result and synchronize its mutable projection."""
+    paths = AgentRunPaths(run_dir)
+    atomic_write_json(paths.final_status, final_status)
+    write_execution_evidence(run_dir, elapsed_seconds=elapsed_seconds)
+    try:
+        receipt = seal_run(run_dir, agent_run_id=str(launch["agent_run"]["id"]))
+        receipt_hash = final_receipt_sha256(run_dir)
+    except Exception as exc:
+        transition_execution_path(
+            paths.status,
+            "failed",
+            actor="runner",
+            reason=seal_failure_reason,
+            projection_source="runner-final",
+            finished_at=utc_now(),
+            exit_code=seal_failure_exit,
+            failure_category="seal_failed",
+            seal_error=str(exc),
+        )
+        return seal_failure_exit
+
+    transition_execution_path(
+        paths.status,
+        str(final_status["status"]),
+        actor="runner",
+        reason=terminal_reason,
+        projection_source="runner-final",
+        **{key: value for key, value in final_status.items() if key != "status"},
+        final_receipt_path=str(paths.final_receipt),
+        final_receipt_sha256=receipt_hash,
+        sealed_artifact_count=len(receipt["artifacts"]),
+    )
+    make_read_only(run_dir)
+    try:
+        attempt = emit_attempt_artifacts(run_dir)
+        update_projection_path(paths.status, projection_source="evaluation", **attempt)
+    except Exception as eval_exc:
+        update_projection_path(
+            paths.status,
+            projection_source="evaluation",
+            evaluation_state="not_verified",
+            evaluation_error=str(eval_exc),
+        )
+    return None
+
 def execute(
     run_dir: Path,
     workdir: Path,
@@ -751,32 +442,31 @@ def execute(
     heartbeat_seconds: float = 5.0,
 ) -> int:
     run_dir = run_dir.resolve()
-    launch = read_launch_contract(run_dir / "launch-contract.json")
+    paths = AgentRunPaths(run_dir)
+    launch = read_agent_run_contract(paths.contract)
     contract_workdir = Path(str(launch["worktree"]["path"]))
     workdir = contract_workdir
-    command_plan = launch["command_plan"]
-    contract_command = [str(value) for value in command_plan["argv"]]
+    worker_plan = launch["worker_plan"]
+    contract_command = [str(value) for value in worker_plan["argv"]]
     if command:
         encoded = json.dumps(command, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         actual_digest = hashlib.sha256(encoded).hexdigest()
-        expected_digest = command_plan.get("command_sha256")
+        expected_digest = worker_plan.get("command_sha256")
         if not isinstance(expected_digest, str) or actual_digest != expected_digest:
             raise WorkflowError("runtime command does not match immutable launch contract")
     else:
-        # Direct callers and legacy wrappers can still execute a redacted
-        # contract command; generated runners always provide the bound argv.
         command = contract_command
-    stream_format = str(command_plan["stream_format"])
-    interactive = bool(command_plan["executor_interactive"])
-    status_path = run_dir / "status.json"
+    stream_format = str(worker_plan["stream_format"])
+    interactive = bool(worker_plan["interactive_stdio"])
+    status_path = paths.status
     prompt_read = read_regular_file(run_dir / launch["prompt"]["launch_stored"])
     if prompt_read.sha256 != launch["prompt"]["launch_sha256"]:
         raise WorkflowError("launch prompt changed after contract creation")
     prompt = prompt_read.data
-    output_path = run_dir / "output.log"
-    events_path = run_dir / "executor-events.jsonl"
-    stderr_path = run_dir / "executor-stderr.log"
-    heartbeat_path = run_dir / "heartbeat.json"
+    output_path = paths.output_log
+    events_path = paths.executor_events
+    stderr_path = paths.executor_stderr
+    heartbeat_path = paths.heartbeat
     lock = threading.Lock()
     usage: dict[str, Any] | None = None
     provider_event_bytes = 0
@@ -791,7 +481,7 @@ def execute(
     # (including writable/disposable scope). Merge them before post-run
     # collectors so scope evidence is collected under the same policy used at
     # launch. Older contracts may omit the persisted policy entirely.
-    persisted_runtime_path = run_dir / "evaluation-runtime.json"
+    persisted_runtime_path = paths.evaluation_runtime
     if persisted_runtime_path.is_file():
         try:
             persisted_runtime = json.loads(
@@ -805,7 +495,7 @@ def execute(
                 merged_runtime.update(runtime)
             runtime = merged_runtime
     provenance_initial = json.loads(
-        (run_dir / "run-provenance.json").read_text(encoding="utf-8")
+        (paths.provenance).read_text(encoding="utf-8")
     )
     initial_budgets = runtime.get("budgets", {}) if isinstance(runtime, dict) else {}
     plan_timeout = (
@@ -825,7 +515,14 @@ def execute(
         else None
     )
 
-    _update_status(status_path, status="running", started_at=utc_now())
+    transition_execution_path(
+        status_path,
+        "running",
+        actor="runner",
+        reason="executor started",
+        projection_source="runner",
+        started_at=utc_now(),
+    )
     secret_values = secret_values_from_argv(command)
     try:
         launch_command = command + ([prompt.decode("utf-8")] if interactive else [])
@@ -838,7 +535,7 @@ def execute(
             max_stdout_bytes=MAX_EXECUTOR_STDOUT_BYTES,
             max_stderr_bytes=MAX_EXECUTOR_STDERR_BYTES,
             environment=_child_environment(
-                launch["command_plan"].get("environment_allowlist", []),
+                launch["worker_plan"].get("environment_allowlist", []),
                 bridge_dir=Path(str(launch["paths"]["handoff_dir"])) / "control-intents",
                 steering_dir=Path(str(launch["paths"]["handoff_dir"])) / "steering-inbox",
                 ticket_id=launch.get("ticket"),
@@ -856,7 +553,7 @@ def execute(
         finished_at = utc_now()
         category = classify_failure(exit_code=127, stderr=str(exc))
         write_process_result(
-            run_dir / "process-result.json",
+            paths.process_result,
             {
                 "schema": PROCESS_RESULT_SCHEMA,
                 "argv": list(redact_argv(command, secret_values=secret_values)),
@@ -879,7 +576,7 @@ def execute(
         )
         record_incident(
             run_dir,
-            session_id=str(launch["session"]["id"]),
+            agent_run_id=str(launch["agent_run"]["id"]),
             category=category or "spawn_error",
             severity="high",
             summary="executor could not be started",
@@ -890,10 +587,10 @@ def execute(
             finished_at=finished_at,
             exit_code=127,
         )
-        _capture_patch(workdir, run_dir, run_dir / "patch.diff")
-        _collect_completion(run_dir, workdir, secret_values=secret_values)
-        _collect_task_result(run_dir, workdir, secret_values=secret_values)
-        current = _read_status(status_path)
+        capture_patch(workdir, run_dir, paths.patch)
+        collect_completion(run_dir, workdir, secret_values=secret_values)
+        collect_task_result(run_dir, workdir, secret_values=secret_values)
+        current = read_status_path(status_path)
         final_status = {
             **_authoritative_projection(launch, run_dir, current),
             "status": "failed",
@@ -902,7 +599,6 @@ def execute(
             "failure_category": category,
             "updated_at": finished_at,
         }
-        atomic_write_json(run_dir / "final-status.json", final_status)
         provider = write_provider_evidence(
             run_dir, stream_format=stream_format, executor=provenance_initial.get("executor")
         )
@@ -910,33 +606,22 @@ def execute(
             run_dir,
             provider_evidence={
                 "path": "provider-evidence.json",
-                "sha256": sha256_file(run_dir / "provider-evidence.json"),
+                "sha256": sha256_file(paths.provider_evidence),
                 "usage_complete": provider["usage_complete"],
                 "capture_complete": provider["capture_complete"],
             },
             usage=provider["aggregate"],
         )
-        write_execution_evidence(run_dir, elapsed_seconds=time.monotonic() - wall_started)
-        receipt = seal_run(run_dir, session_id=str(launch["session"]["id"]))
-        receipt_hash = final_receipt_sha256(run_dir)
-        _update_status(
-            status_path,
-            **{
-                key: value
-                for key, value in final_status.items()
-                if key not in {"final_receipt_path", "final_receipt_sha256"}
-            },
-            final_receipt_path=str(run_dir / "final-receipt.json"),
-            final_receipt_sha256=receipt_hash,
-            sealed_artifact_count=len(receipt["artifacts"]),
+        seal_failure = _seal_terminal_run(
+            run_dir,
+            launch,
+            final_status,
+            elapsed_seconds=time.monotonic() - wall_started,
+            seal_failure_reason="executor spawn evidence could not be sealed",
+            terminal_reason="executor failed to start and terminal evidence sealed",
+            seal_failure_exit=127,
         )
-        make_read_only(run_dir)
-        try:
-            attempt = emit_attempt_artifacts(run_dir)
-            _update_status(status_path, **attempt)
-        except Exception as eval_exc:
-            _update_status(status_path, evaluation_state="not_verified", evaluation_error=str(eval_exc))
-        return 127
+        return seal_failure or 127
     if not interactive:
         assert process.process.stdin is not None
         assert process.stdout is not None
@@ -962,7 +647,7 @@ def execute(
                     if stream_format == "text":
                         with lock:
                             _write_bytes(output, raw)
-                            _mirror_terminal(sys.stdout.buffer, raw)
+                            _mirror_output(sys.stdout.buffer, raw)
                     else:
                         if provider_event_bytes + len(raw) <= MAX_PROVIDER_EVENT_BYTES:
                             _write_bytes(events, raw)
@@ -974,7 +659,7 @@ def execute(
                         if event is None:
                             with lock:
                                 _write_bytes(output, raw)
-                                _mirror_terminal(sys.stdout.buffer, raw)
+                                _mirror_output(sys.stdout.buffer, raw)
                             continue
                         usage_value = usage_update(event)
                         if usage_value is not None:
@@ -988,7 +673,7 @@ def execute(
                             with lock:
                                 visible = (normalized + "\n").encode()
                                 _write_bytes(output, visible)
-                                _mirror_terminal(sys.stdout.buffer, visible)
+                                _mirror_output(sys.stdout.buffer, visible)
         except Exception as exc:  # pragma: no cover - defensive thread boundary
             pump_errors.append(redact_text(f"stdout: {exc}", secret_values))
 
@@ -1002,7 +687,7 @@ def execute(
                     _write_bytes(errors, raw)
                     with lock:
                         _write_bytes(output, raw)
-                        _mirror_terminal(sys.stderr.buffer, raw)
+                        _mirror_output(sys.stderr.buffer, raw)
         except Exception as exc:  # pragma: no cover - defensive thread boundary
             pump_errors.append(redact_text(f"stderr: {exc}", secret_values))
 
@@ -1029,33 +714,11 @@ def execute(
                     "at": utc_now(),
                 },
             )
-            pane_id = os.environ.get("TMUX_PANE") if interactive else None
-            if pane_id:
-                try:
-                    record_terminal_capture(
-                        run_dir,
-                        session_id=str(launch["session"]["id"]),
-                        pane_id=pane_id,
-                        content=tmux.capture(pane_id, 200),
-                        secret_values=secret_values,
-                    )
-                except WorkflowError as exc:
-                    # Terminal capture is observability evidence, not execution
-                    # authority. Record the failure without terminating useful work.
-                    record_incident(
-                        run_dir,
-                        session_id=str(launch["session"]["id"]),
-                        category="terminal_capture_unavailable",
-                        severity="medium",
-                        summary="interactive pane capture failed",
-                        evidence={"error": str(exc), "pane_id": pane_id},
-                    )
             record_health_sample(
                 run_dir,
-                session_id=str(launch["session"]["id"]),
+                agent_run_id=str(launch["agent_run"]["id"]),
                 runner_pid=os.getpid(),
                 executor_pid=process.pid,
-                tmux_pane_id=pane_id,
             )
             last_health_at = now
         # Drain child intents before acting on executor exit. A cooperative
@@ -1070,7 +733,7 @@ def execute(
             # A valid terminal handoff is authoritative completion, not an
             # operator cancellation. Close the live interactive executor when
             # it is still present so the runner can seal the run and retire
-            # its pane.
+            # the worker cleanly.
             completed_by_child = True
             if active:
                 process.close_after_completion()
@@ -1128,7 +791,7 @@ def execute(
             pump_errors.append("stream pump did not stop after descriptor close")
     process_result = process.result()
     write_process_result(
-        run_dir / "process-result.json",
+        paths.process_result,
         {
             "schema": PROCESS_RESULT_SCHEMA,
             **process_result.as_dict(include_output=False),
@@ -1147,7 +810,7 @@ def execute(
     if pump_errors:
         return_code = return_code or 1
 
-    completion_collection = _collect_completion(
+    completion_collection = collect_completion(
         run_dir, workdir, secret_values=secret_values
     )
     if completion_collection["validation_status"] != "valid":
@@ -1156,15 +819,7 @@ def execute(
             + "; ".join(completion_collection.get("validation_errors", []))
         )
         return_code = return_code or 1
-    context_path = run_dir / "agent-context.json"
-    try:
-        context = json.loads(context_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        context = {}
-    if context.get("state") == "reuse_pending":
-        pump_errors.append("assignment: reused agent exited before acknowledging the pending assignment")
-        return_code = return_code or 1
-    _collect_task_result(run_dir, workdir, secret_values=secret_values)
+    collect_task_result(run_dir, workdir, secret_values=secret_values)
 
     if isinstance(runtime, dict):
         try:
@@ -1179,7 +834,7 @@ def execute(
                 workdir,
                 phase="post",
                 policy=policy,
-                receipt_dir=run_dir / "scope",
+                receipt_dir=paths.scope,
             )
             commands = runtime.get("acceptance_commands", [])
             if commands or runtime.get("native_job_binding_sha256"):
@@ -1187,7 +842,7 @@ def execute(
                     workdir,
                     specs_from_data(commands),
                     phase="post",
-                    receipt_dir=run_dir / "collections",
+                    receipt_dir=paths.collections,
                 )
         except Exception as exc:
             pump_errors.append(f"collectors: {exc}")
@@ -1223,7 +878,6 @@ def execute(
         else None,
         wall_seconds=wall_seconds,
     )
-    budget_exceeded = list(policy["budget_exceeded"])
     if timed_out:
         executor_status = "failed"
         return_code = 124
@@ -1236,18 +890,15 @@ def execute(
         usage=usage,
         provider_evidence={
             "path": "provider-evidence.json",
-            "sha256": sha256_file(run_dir / "provider-evidence.json"),
+            "sha256": sha256_file(paths.provider_evidence),
             "usage_complete": provider["usage_complete"],
             "capture_complete": provider["capture_complete"],
         },
     )
-    current = _read_status(status_path)
-    terminal_event = last_event(run_dir / "terminal-events.jsonl")
+    current = read_status_path(status_path)
     diagnostic_stderr = stderr_path.read_text(
         encoding="utf-8", errors="replace"
     )[-8192:]
-    if terminal_event and isinstance(terminal_event.get("content"), str):
-        diagnostic_stderr += "\n" + str(terminal_event["content"])[-8192:]
     failure_category = (
         "timeout"
         if timed_out
@@ -1278,22 +929,20 @@ def execute(
         "stderr_bytes": process_result.stderr_bytes,
         "stdout_truncated": process_result.stdout_truncated,
         "stderr_truncated": process_result.stderr_truncated,
-        "budget_exceeded": budget_exceeded,
         "wall_seconds": round(wall_seconds, 6),
         "updated_at": finished_at,
     }
-    _capture_patch(workdir, run_dir, run_dir / "patch.diff")
+    capture_patch(workdir, run_dir, paths.patch)
     record_health_sample(
         run_dir,
-        session_id=str(launch["session"]["id"]),
+        agent_run_id=str(launch["agent_run"]["id"]),
         runner_pid=os.getpid(),
         executor_pid=process.pid,
-        tmux_pane_id=os.environ.get("TMUX_PANE") if interactive else None,
     )
     if failure_category:
         record_incident(
             run_dir,
-            session_id=str(launch["session"]["id"]),
+            agent_run_id=str(launch["agent_run"]["id"]),
             category=failure_category,
             severity="high",
             summary="executor finished with a classified failure",
@@ -1307,7 +956,7 @@ def execute(
     if policy["policy_result"] == "failed":
         record_incident(
             run_dir,
-            session_id=str(launch["session"]["id"]),
+            agent_run_id=str(launch["agent_run"]["id"]),
             category="budget_policy_failed",
             severity="medium",
             summary="executor completed with one or more budget-policy violations",
@@ -1316,49 +965,22 @@ def execute(
                 "policy_failures": policy["policy_failures"],
             },
         )
-    atomic_write_json(run_dir / "final-status.json", final_status)
-    write_execution_evidence(run_dir, elapsed_seconds=wall_seconds)
-    try:
-        receipt = seal_run(run_dir, session_id=str(launch["session"]["id"]))
-        receipt_hash = final_receipt_sha256(run_dir)
-        _update_status(
-            status_path,
-            **{
-                **final_status,
-                "final_receipt_path": str(run_dir / "final-receipt.json"),
-                "final_receipt_sha256": receipt_hash,
-                "sealed_artifact_count": len(receipt["artifacts"]),
-            },
-        )
-        make_read_only(run_dir)
-        try:
-            attempt = emit_attempt_artifacts(run_dir)
-            _update_status(status_path, **attempt)
-        except Exception as eval_exc:
-            _update_status(status_path, evaluation_state="not_verified", evaluation_error=str(eval_exc))
-    except Exception as exc:
-        _update_status(
-            status_path,
-            status="failed",
-            finished_at=utc_now(),
-            exit_code=return_code or 1,
-            failure_category="seal_failed",
-            seal_error=str(exc),
-        )
-        return return_code or 1
-    return return_code
+    seal_failure = _seal_terminal_run(
+        run_dir,
+        launch,
+        final_status,
+        elapsed_seconds=wall_seconds,
+        seal_failure_reason="terminal evidence sealing failed",
+        terminal_reason="executor terminal evidence sealed",
+        seal_failure_exit=return_code or 1,
+    )
+    return seal_failure if seal_failure is not None else return_code
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--run-dir", type=Path, required=True)
-    # These legacy options are accepted only so an old shell wrapper fails at
-    # the immutable-contract boundary rather than selecting new authority.
-    parser.add_argument("--workdir", type=Path)
-    parser.add_argument("--stream-format")
-    parser.add_argument("--interactive", action="store_true")
     parser.add_argument("--command-b64")
-    parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     command: list[str] = []
     if args.command_b64:
@@ -1372,10 +994,10 @@ def main(argv: list[str] | None = None) -> int:
         command = value
     return execute(
         args.run_dir,
-        args.workdir or args.run_dir,
+        args.run_dir,
         command,
-        stream_format=args.stream_format or "text",
-        interactive=args.interactive,
+        stream_format="text",
+        interactive=False,
     )
 
 

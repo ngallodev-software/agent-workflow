@@ -1,9 +1,0 @@
-phase: "0"
-name: "config-and-executor-trust"
-mandatory_order: []
-tasks:
-  - id: "HARD-008"
-    tier: A
-    session: "hardening-config-executor-trust"
-    prompt: "tickets/HARD-008-config-executor-trust.md"
-    backlog_id: "HARD-008"

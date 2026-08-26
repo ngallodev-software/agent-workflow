@@ -350,6 +350,6 @@ def usage_update(event: dict[str, Any]) -> tuple[dict[str, Any], str] | None:
     mode = usage.pop("mode", event.get("usage_mode", event.get("usage_type", None)))
     if mode in {"delta", "cumulative", "terminal"}:
         return usage, mode
-    # Compatibility boundary: legacy adapters expose only a final usage object.
+    # Interoperability boundary: summary-only adapters expose only a final usage object.
     # A provider that streams interim usage must label those updates explicitly.
     return usage, "terminal"

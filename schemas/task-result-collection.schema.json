@@ -4,7 +4,7 @@
   "type": "object",
   "required": [
     "schema",
-    "session_id",
+    "agent_run_id",
     "required",
     "schema_path",
     "source_path",
@@ -19,7 +19,7 @@
     "schema": {
       "const": "agent-workflow/task-result-collection/v1"
     },
-    "session_id": {
+    "agent_run_id": {
       "type": "string"
     },
     "required": {

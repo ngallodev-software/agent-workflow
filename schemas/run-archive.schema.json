@@ -2,10 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "agent-workflow/run-archive/v1",
   "type": "object",
-  "required": ["schema", "session_id", "source_run", "archived_run", "archived_at", "reason", "final_receipt_sha256", "accepted_revision", "operation"],
+  "required": ["schema", "agent_run_id", "source_run", "archived_run", "archived_at", "reason", "final_receipt_sha256", "accepted_revision", "operation"],
   "properties": {
     "schema": {"const": "agent-workflow/run-archive/v1"},
-    "session_id": {"type": "string", "minLength": 1},
+    "agent_run_id": {"type": "string", "minLength": 1},
     "source_run": {"type": "string", "minLength": 1},
     "archived_run": {"type": "string", "minLength": 1},
     "archived_at": {"type": "string", "minLength": 1},

@@ -23,7 +23,6 @@ _ALLOWED_KEYS = ("executors", "models", "agent_classes", "permissions", "command
 _BUDGET_KEYS = (
     "max_workers",
     "max_concurrent_workers",
-    "max_interactive_panes",
     "max_retries",
     "max_wall_seconds",
 )
@@ -72,7 +71,7 @@ def _team_map(hierarchy: Mapping[str, Any]) -> dict[str, str]:
     result: dict[str, str] = {}
     for item in hierarchy["teams"]:
         team_id = validate_id(item["team_id"], "team id")
-        lead_id = validate_id(item["team_lead_session_id"], "team lead session id")
+        lead_id = validate_id(item["team_lead_agent_run_id"], "team lead Agent Run ID")
         if team_id in result:
             raise WorkflowError(f"duplicate team id in hierarchy contract: {team_id}")
         result[team_id] = lead_id
@@ -116,7 +115,6 @@ def validate_hierarchy_contract(value: Mapping[str, Any]) -> None:
     validate_id(contract["orchestration_id"], "orchestration id")
     validate_id(contract["root_orchestrator_id"], "root orchestrator id")
     validate_id(contract["workflow_id"], "workflow id")
-    validate_id(contract["tmux_session_name"], "tmux session name")
     teams = _team_map(contract)
     _validate_unique_authority_identities(contract, teams)
     budgets = contract["budgets"]
@@ -124,14 +122,6 @@ def validate_hierarchy_contract(value: Mapping[str, Any]) -> None:
         raise WorkflowError("hierarchy declares more teams than max_teams")
     if budgets["max_concurrent_workers"] > budgets["max_total_workers"]:
         raise WorkflowError("hierarchy max_concurrent_workers exceeds max_total_workers")
-    if budgets["max_interactive_panes"] > budgets["max_total_workers"] + len(teams) + 1:
-        raise WorkflowError("hierarchy max_interactive_panes exceeds root, team leads, and workers")
-    terminal_policy = contract["terminal_policy"]
-    external_enabled = "external-window" in terminal_policy["allowed_modes"]
-    if external_enabled != bool(terminal_policy["external_argv_prefixes"]):
-        raise WorkflowError(
-            "external terminal argv prefixes must be present exactly when external-window is allowed"
-        )
     for key in _ALLOWED_KEYS:
         _validate_unique_strings(contract["allowed"][key], label=f"hierarchy allowed.{key}")
     _validate_unique_strings(contract["allowed_routes"], label="hierarchy allowed_routes")
@@ -167,19 +157,18 @@ def validate_team_delegation_contract(
         raise WorkflowError("team contract hierarchy digest does not match hierarchy")
 
     team_id = validate_id(contract["team_id"], "team id")
-    validate_id(contract["team_lead_session_id"], "team lead session id")
+    validate_id(contract["team_lead_agent_run_id"], "team lead Agent Run ID")
     declared = _team_map(hierarchy)
     if team_id not in declared:
         raise WorkflowError(f"team contract references undeclared team: {team_id}")
-    if contract["team_lead_session_id"] != declared[team_id]:
-        raise WorkflowError("team lead session identity does not match hierarchy")
+    if contract["team_lead_agent_run_id"] != declared[team_id]:
+        raise WorkflowError("team lead Agent Run IDentity does not match hierarchy")
 
     parent_budget = hierarchy["budgets"]
     team_budget = contract["budgets"]
     comparisons = {
         "max_workers": "max_total_workers",
         "max_concurrent_workers": "max_concurrent_workers",
-        "max_interactive_panes": "max_interactive_panes",
         "max_retries": "max_retries_per_worker",
         "max_wall_seconds": "max_wall_seconds",
     }
@@ -191,8 +180,6 @@ def validate_team_delegation_contract(
             )
     if team_budget["max_concurrent_workers"] > team_budget["max_workers"]:
         raise WorkflowError("team max_concurrent_workers exceeds max_workers")
-    if team_budget["max_interactive_panes"] > team_budget["max_workers"] + 1:
-        raise WorkflowError("team max_interactive_panes exceeds team lead plus workers")
 
     for key in _ALLOWED_KEYS:
         child = set(_validate_unique_strings(contract["allowed"][key], label=f"team allowed.{key}"))

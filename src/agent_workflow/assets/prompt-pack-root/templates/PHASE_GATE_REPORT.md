@@ -2,7 +2,7 @@
 schema: agent-workflow/phase-gate/v1
 pack_id: ""
 phase: ""
-review_session: ""
+review_agent_run: ""
 decision: "accepted|rejected|accepted_with_follow_up"
 ---
 

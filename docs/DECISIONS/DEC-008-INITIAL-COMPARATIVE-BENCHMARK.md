@@ -3,7 +3,7 @@
 - **Status:** decided
 - **Date:** 2026-08-01
 - **Scope:** first `agent-workflow` paired comparative benchmark
-- **Design authority:** [`COMPARATIVE_BENCHMARK_SPEC.md`](../COMPARATIVE_BENCHMARK_SPEC.md)
+- **Design/operating guide:** [`BENCHMARKS.md`](../BENCHMARKS.md); frozen suite assets remain machine authority
 
 ## Decision
 
@@ -32,7 +32,7 @@ The paired design measures the actual product question: whether the complete `ag
 
 ## Consequences
 
-- `BKL-011` is complete: the canonical task and requirement-to-evaluation matrix are frozen with the implemented `priority-picker-v1` suite.
+- The canonical task and requirement-to-evaluation matrix are frozen with the implemented `priority-picker-v1` suite.
 - `BKL-010` owns the content-addressed browser image, verified font manifest, and trusted pre-seal visual-evidence bridge required for publication-grade human-review claims; development capture is implemented.
 - `BKL-004` must compare explicit `control_raw` and `workflow_full` arms rather than generic cohorts and must preserve separate task, wrapper, and effective-prompt digests.
 - Benchmark processing belongs in a modular `agent_workflow.benchmarking` boundary that can later become a first-party plugin after the interfaces have real use evidence.

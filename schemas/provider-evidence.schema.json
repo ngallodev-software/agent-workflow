@@ -2,10 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "agent-workflow/provider-evidence/v1",
   "type": "object",
-  "required": ["schema", "session_id", "executor", "stream_format", "created_at", "raw_events_path", "raw_events_sha256", "raw_event_bytes", "capture_limit_bytes", "capture_complete", "malformed_event_count", "classified_usage_count", "retry_of_run_id", "usage_complete", "incomplete_reasons", "usage_events", "aggregate"],
+  "required": ["schema", "agent_run_id", "executor", "stream_format", "created_at", "raw_events_path", "raw_events_sha256", "raw_event_bytes", "capture_limit_bytes", "capture_complete", "malformed_event_count", "classified_usage_count", "retry_of_agent_run_id", "usage_complete", "incomplete_reasons", "usage_events", "aggregate"],
   "properties": {
     "schema": {"const": "agent-workflow/provider-evidence/v1"},
-    "session_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"},
+    "agent_run_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"},
     "executor": {"type": ["string", "null"]},
     "stream_format": {"type": "string"},
     "created_at": {"type": "string"},
@@ -16,7 +16,7 @@
     "capture_complete": {"type": "boolean"},
     "malformed_event_count": {"type": "integer", "minimum": 0},
     "classified_usage_count": {"type": "integer", "minimum": 0},
-    "retry_of_run_id": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"},
+    "retry_of_agent_run_id": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"},
     "usage_complete": {"type": "boolean"},
     "incomplete_reasons": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
     "usage_events": {

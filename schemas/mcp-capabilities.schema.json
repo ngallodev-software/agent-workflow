@@ -40,8 +40,8 @@
     "launch_contracts": {
       "items": {
         "enum": [
-          "agent-workflow/launch-contract/v1",
-          "agent-workflow/launch-contract/v2"
+          "agent-workflow/agent-run-contract/v1",
+          "agent-workflow/agent-run-contract/v1"
         ]
       },
       "minItems": 2,

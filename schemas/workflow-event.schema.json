@@ -23,11 +23,11 @@
     },
     "binding": {
       "type": ["object", "null"],
-      "required": ["run_id", "attempt", "bound_at", "current"],
+      "required": ["agent_run_id", "attempt", "bound_at", "current"],
       "properties": {
-        "run_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"},
+        "agent_run_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"},
         "attempt": {"type": "integer", "minimum": 1},
-        "retry_of_run_id": {
+        "retry_of_agent_run_id": {
           "type": ["string", "null"],
           "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
         },

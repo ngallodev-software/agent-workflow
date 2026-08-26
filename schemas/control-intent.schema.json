@@ -5,7 +5,7 @@
   "required": [
     "schema",
     "request_id",
-    "session_id",
+    "agent_run_id",
     "sequence",
     "kind",
     "actor",
@@ -16,7 +16,7 @@
   "properties": {
     "schema": {"const": "agent-workflow/control-intent/v1"},
     "request_id": {"type": "string", "format": "uuid"},
-    "session_id": {"type": "string", "minLength": 1},
+    "agent_run_id": {"type": "string", "minLength": 1},
     "sequence": {"type": "integer", "minimum": 1},
     "kind": {"enum": ["progress", "ack", "task_complete"]},
     "actor": {"type": "string", "minLength": 1},

@@ -7,7 +7,6 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-from . import tmux
 from .config import Settings, enforce_trust
 from .contracts import validate_instance
 from .errors import WorkflowError
@@ -54,18 +53,18 @@ def _read_score_set(run: Path, path: Path, *, final_receipt: dict[str, Any], fin
     return digest
 
 
-def verify_archive_candidate(settings: Settings, session_id: str) -> dict[str, Any]:
+def verify_archive_candidate(settings: Settings, agent_run_id: str) -> dict[str, Any]:
     """Verify the immutable acceptance chain before a run leaves ``runs/``."""
-    validate_id(session_id, "session ID")
-    source = run_dir(settings, session_id)
+    validate_id(agent_run_id, "agent run ID")
+    source = run_dir(settings, agent_run_id)
     if source.is_symlink() or not source.is_dir():
         raise WorkflowError(f"active run directory is missing or unsafe: {source}")
 
     final_receipt, final_hash = verify_seal_details(source)
     final_status, _ = read_sealed_contract(
-        source, final_receipt, "final-status.json", "agent-workflow/session-status/v2"
+        source, final_receipt, "final-status.json", "agent-workflow/agent-run-status/v1"
     )
-    if final_status.get("session_id") != session_id:
+    if final_status.get("agent_run_id") != agent_run_id:
         raise WorkflowError("final status belongs to another run")
     if final_status.get("status") != "completed":
         raise WorkflowError("only completed runs can be archived")
@@ -100,17 +99,10 @@ def verify_archive_candidate(settings: Settings, session_id: str) -> dict[str, A
         if actual_score_hash != score_hash:
             raise WorkflowError("accepted score set changed after acceptance")
 
-    host_session = final_status.get("tmux_session")
-    if isinstance(host_session, str) and host_session:
-        if shutil.which("tmux") is None:
-            raise WorkflowError("cannot verify tmux closure because tmux is unavailable")
-        if tmux.session_exists(host_session):
-            raise WorkflowError(
-                f"tmux session is still live; terminate it before archiving: {host_session}"
-            )
+
 
     return {
-        "session_id": session_id,
+        "agent_run_id": agent_run_id,
         "source": str(source),
         "final_receipt_sha256": final_hash,
         "accepted_revision": completion.get("head_revision"),
@@ -121,7 +113,7 @@ def verify_archive_candidate(settings: Settings, session_id: str) -> dict[str, A
 def _archive_one(settings: Settings, candidate: dict[str, Any], *, reason: str) -> dict[str, Any]:
     source = Path(candidate["source"])
     root = _archive_root(settings)
-    destination = root / candidate["session_id"]
+    destination = root / candidate["agent_run_id"]
     if destination.exists() or destination.is_symlink():
         raise WorkflowError(f"archive destination already exists: {destination}")
     try:
@@ -131,7 +123,7 @@ def _archive_one(settings: Settings, candidate: dict[str, Any], *, reason: str) 
     fsync_directory(root)
     manifest = {
         "schema": ARCHIVE_SCHEMA,
-        "session_id": candidate["session_id"],
+        "agent_run_id": candidate["agent_run_id"],
         "source_run": str(source),
         "archived_run": str(destination),
         "archived_at": utc_now(),
@@ -147,17 +139,17 @@ def _archive_one(settings: Settings, candidate: dict[str, Any], *, reason: str) 
 
 def archive_runs(
     settings: Settings,
-    session_ids: list[str],
+    agent_run_ids: list[str],
     *,
     all_verified: bool = False,
     confirmed: bool = False,
     dry_run: bool = False,
     reason: str = "verified completed work no longer needed in the active run list",
 ) -> dict[str, Any]:
-    if not session_ids and not all_verified:
-        raise WorkflowError("provide one or more session IDs or use --all-verified")
-    if session_ids and all_verified:
-        raise WorkflowError("session IDs and --all-verified are mutually exclusive")
+    if not agent_run_ids and not all_verified:
+        raise WorkflowError("provide one or more agent run IDs or use --all-verified")
+    if agent_run_ids and all_verified:
+        raise WorkflowError("agent run IDs and --all-verified are mutually exclusive")
     if not dry_run and not confirmed:
         raise WorkflowError("archiving changes state; repeat with --verified")
     if not reason.strip():
@@ -166,23 +158,23 @@ def archive_runs(
     if all_verified:
         selected = sorted(
             {
-                str(item.get("session_id"))
+                str(item.get("agent_run_id"))
                 for item in list_statuses(settings)
-                if item.get("session_id")
+                if item.get("agent_run_id")
             }
         )
     else:
-        selected = list(dict.fromkeys(session_ids))
+        selected = list(dict.fromkeys(agent_run_ids))
 
     eligible: list[dict[str, Any]] = []
     skipped: list[dict[str, str]] = []
-    for session_id in selected:
+    for agent_run_id in selected:
         try:
-            candidate = verify_archive_candidate(settings, session_id)
+            candidate = verify_archive_candidate(settings, agent_run_id)
         except WorkflowError as exc:
             if not all_verified:
-                raise WorkflowError(f"cannot archive {session_id}: {exc}") from exc
-            skipped.append({"session_id": session_id, "reason": str(exc)})
+                raise WorkflowError(f"cannot archive {agent_run_id}: {exc}") from exc
+            skipped.append({"agent_run_id": agent_run_id, "reason": str(exc)})
         else:
             eligible.append(candidate)
 
@@ -194,7 +186,7 @@ def archive_runs(
         "archive_root": str(_archive_root(settings)),
         "dry_run": dry_run,
         "requested": selected,
-        "eligible": [item["session_id"] for item in eligible],
+        "eligible": [item["agent_run_id"] for item in eligible],
         "archived": archived,
         "skipped": skipped,
     }

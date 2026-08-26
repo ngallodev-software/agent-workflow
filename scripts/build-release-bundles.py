@@ -22,7 +22,7 @@ REQUIRED_FILES = (
     "bin/agent-workflow",
     "config/agent-workflow.example.toml",
 )
-REQUIRED_TREES = ("schemas", "evals", "prompt-packs", "docs/man", "skills", "scripts/hooks")
+REQUIRED_TREES = ("schemas", "evals", "docs/man", "skills", "scripts/hooks")
 REPOSITORY_ONLY_PATHS = (
     "Jenkinsfile",
     "scripts/jenkins-local-job.sh",

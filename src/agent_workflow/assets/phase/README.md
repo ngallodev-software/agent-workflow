@@ -9,7 +9,7 @@
 
 ## Ordering
 
-Follow `task-manifest.yaml`. Do not execute dependent tickets concurrently.
+Follow the phase entry in root `pack.yaml`. Do not execute dependent tickets concurrently.
 
 ## Phase-wide constraints
 

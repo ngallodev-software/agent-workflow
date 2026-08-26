@@ -8,9 +8,10 @@ from pathlib import Path
 from typing import Any
 
 from .errors import WorkflowError
+from .events import append_lifecycle_event
 from .lifecycle import lifecycle_receipts
 from .receipts import read_sealed_contract, verify_seal_details
-from .state import TERMINAL_STATUSES, run_dir, read_status, update_status
+from .state import TERMINAL_STATUSES, run_dir, read_status, update_projection
 from .util import fsync_directory, utc_now
 from .contracts import validate_instance
 
@@ -40,7 +41,7 @@ def _read_override(run_dir: Path) -> tuple[dict[str, Any], str] | None:
 
 def force_accept(
     settings: Any,
-    session_id: str,
+    agent_run_id: str,
     *,
     actor: str,
     reason: str,
@@ -51,14 +52,14 @@ def force_accept(
         raise WorkflowError("force-accept actor and reason must be non-empty")
     if acknowledgement != "FORCE-ACCEPT":
         raise WorkflowError("force-accept requires acknowledgement FORCE-ACCEPT")
-    run = run_dir(settings, session_id)
+    run = run_dir(settings, agent_run_id)
     if _read_override(run) is not None:
         raise WorkflowError("force-accept override already exists")
     final_receipt, expected = verify_seal_details(run)
-    if final_receipt.get("session_id") != session_id:
+    if final_receipt.get("agent_run_id") != agent_run_id:
         raise WorkflowError("force-accept final receipt belongs to another run")
-    final_status, _ = read_sealed_contract(run, final_receipt, "final-status.json", "agent-workflow/session-status/v2")
-    if final_status.get("session_id") != session_id:
+    final_status, _ = read_sealed_contract(run, final_receipt, "final-status.json", "agent-workflow/agent-run-status/v1")
+    if final_status.get("agent_run_id") != agent_run_id:
         raise WorkflowError("force-accept final status belongs to another run")
     if final_status.get("status") not in TERMINAL_STATUSES:
         raise WorkflowError("force-accept requires a terminal run")
@@ -83,7 +84,7 @@ def force_accept(
     encoded_command = json.dumps(command, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     value = {
         "schema": "agent-workflow/force-accept-receipt/v1",
-        "session_id": session_id,
+        "agent_run_id": agent_run_id,
         "actor": actor,
         "created_at": utc_now(),
         "reason": reason,
@@ -105,10 +106,26 @@ def force_accept(
         stream.flush()
         os.fsync(stream.fileno())
     fsync_directory(run)
-    result = update_status(
-        settings, session_id, disposition="force-accepted", disposition_at=value["created_at"],
-        disposition_actor=actor, force_accept_receipt_path=str(path),
-        _actor=actor, _reason=reason, _receipt_refs=(str(path),),
+    prior_disposition = (
+        chain[-1]["receipt"].get("action") if chain else None
+    )
+    append_lifecycle_event(
+        run,
+        dimension="review",
+        prior=prior_disposition,
+        new="force-accepted",
+        actor=actor,
+        reason=reason,
+        receipt_refs=(str(path),),
+    )
+    result = update_projection(
+        settings,
+        agent_run_id,
+        disposition="force-accepted",
+        disposition_at=value["created_at"],
+        disposition_actor=actor,
+        force_accept_receipt_path=str(path),
+        projection_source="review-lifecycle",
     )
     return {**result, "force_accept_receipt": str(path), "normal_gate_failures": value["normal_gate_failures"]}
 
@@ -117,7 +134,7 @@ def lifecycle_disposition(run_dir: Path) -> dict[str, Any] | None:
     """Return the latest canonical lifecycle disposition for a sealed child run."""
     run_dir = run_dir.resolve()
     final_receipt, expected = verify_seal_details(run_dir)
-    if final_receipt.get("session_id") != run_dir.name:
+    if final_receipt.get("agent_run_id") != run_dir.name:
         raise WorkflowError("approval final receipt belongs to another run")
     completion, completion_digest = read_sealed_contract(
         run_dir,

@@ -1,0 +1,295 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/agent-run-status/v1",
+  "type": "object",
+  "required": [
+    "schema",
+    "agent_run_id",
+    "status",
+    "created_at",
+    "updated_at",
+    "workdir",
+    "prompt_path",
+    "log_path",
+    "worker_mode"
+  ],
+  "properties": {
+    "schema": {
+      "const": "agent-workflow/agent-run-status/v1"
+    },
+    "agent_run_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+    },
+    "ticket_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "pack_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "agent_name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "agent_class": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "tier": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "retry_of_agent_run_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "status": {
+      "enum": [
+        "prepared",
+        "running",
+        "interruption_requested",
+        "completed",
+        "failed",
+        "interrupted",
+        "terminated"
+      ]
+    },
+    "disposition": {
+      "enum": [
+        null,
+        "reviewed",
+        "accepted",
+        "force-accepted",
+        "rejected"
+      ]
+    },
+    "worker_mode": {
+      "enum": [
+        "headless",
+        "external"
+      ]
+    },
+    "worker_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "worker_pid": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1
+    },
+    "worker_process_group_id": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1
+    },
+    "worker_alive": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "worker_started_at": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "worker_last_observed_at": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "created_at": {
+      "type": "string"
+    },
+    "updated_at": {
+      "type": "string"
+    },
+    "workdir": {
+      "type": "string"
+    },
+    "prompt_path": {
+      "type": "string"
+    },
+    "prompt_source": {
+      "type": "string"
+    },
+    "log_path": {
+      "type": "string"
+    },
+    "prompt_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "completion_json_path": {
+      "type": "string"
+    },
+    "provenance_path": {
+      "type": "string"
+    },
+    "events_path": {
+      "type": "string"
+    },
+    "final_receipt_path": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "failure_category": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "observed_state": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "observed_failure_category": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "last_semantic_progress_at": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "last_semantic_progress_source": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "latest_health": {
+      "type": "object"
+    },
+    "permission_state": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "latest_permission_event": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "output_capture_exhausted": {
+      "type": "boolean"
+    },
+    "executor_result": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "completion_result": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "policy_result": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "policy_failures": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "policy_failure_category": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "acceptance_eligible": {
+      "type": "boolean"
+    },
+    "projection_generated_at": {
+      "type": "string"
+    },
+    "projection_source": {
+      "type": "string"
+    },
+    "projection_freshness": {
+      "enum": [
+        "snapshot",
+        "live"
+      ]
+    },
+    "projection_authority": {
+      "const": "cache"
+    },
+    "evaluation_state": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "evaluation_result": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "attempt_classification": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "ledger_row_path": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "evaluation_report_path": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "evaluation_error": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": true
+}

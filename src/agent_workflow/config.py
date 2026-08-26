@@ -63,13 +63,7 @@ class Settings:
     config_path: Path
     worktree_root: Path
     state_root: Path
-    terminal_backend: str = "tmux"
     stall_minutes: int = 10
-    capture_lines: int = 50
-    mouse: bool = True
-    orchestrator_side: str = "left"
-    max_interactive_agent_width: int = 2
-    max_interactive_agent_vertical: int = 3
     branch_prefix: str = "impl/"
     require_clean_source: bool = True
     archive_level: int = 19
@@ -81,10 +75,8 @@ class Settings:
     generated_agent_prefix: str = "agent"
     default_agent_executor: str = "codex"
     agent_profiles: dict[str, AgentProfile] = field(default_factory=dict)
-    non_interactive_tmux: str = "dedicated_session"
     default_agent_class: str = "implementation"
     agent_classes: dict[str, AgentClassPolicy] = field(default_factory=dict)
-    reuse_stale_minutes: int = 120
     config_schema_version: int = CONFIG_SCHEMA_VERSION
     security: SecurityPolicy = field(default_factory=SecurityPolicy)
     plugins_enabled: tuple[str, ...] = ()
@@ -94,13 +86,8 @@ class Settings:
     supervisor_interrupt_stalled: bool = False
     supervisor_restart_orphaned: bool = False
     supervisor_max_remediation_attempts: int = 1
-    supervisor_capture_interactive: bool = True
-    supervisor_capture_lines: int = 200
     supervisor_sync_index: bool = True
 
-    @property
-    def max_interactive_agent_panes(self) -> int:
-        return self.max_interactive_agent_width * self.max_interactive_agent_vertical
 
 
 def default_config_path() -> Path:
@@ -186,15 +173,14 @@ def _reject_unknown(table: object, allowed: set[str], label: str) -> None:
 def _validate_shape(data: dict[str, Any]) -> None:
     _reject_unknown(
         data,
-        {"schema_version", "paths", "terminal", "git", "pack", "agents", "agent_classes", "executors", "security", "supervisor", "plugins"},
+        {"schema_version", "paths", "git", "pack", "agents", "agent_classes", "executors", "security", "supervisor", "plugins"},
         "root",
     )
     sections = {
         "paths": {"worktree_root", "state_root"},
-        "terminal": {"backend", "stall_minutes", "capture_lines", "mouse", "orchestrator_side", "max_interactive_agent_width", "max_interactive_agent_vertical"},
         "git": {"branch_prefix", "require_clean_source", "repository_allowlist"},
         "pack": {"archive_level", "write_sha256", "validate_before_archive"},
-        "agents": {"preferred_names", "generated_prefix", "default_executor", "profiles", "non_interactive_tmux", "default_class", "reuse_stale_minutes"},
+        "agents": {"preferred_names", "generated_prefix", "default_executor", "profiles", "default_class"},
         "security": {"mode", "executable_digest", "policy_files"},
         "plugins": {"enabled"},
         "supervisor": {
@@ -203,8 +189,7 @@ def _validate_shape(data: dict[str, Any]) -> None:
             "interrupt_stalled",
             "restart_orphaned",
             "max_remediation_attempts",
-            "capture_interactive",
-            "capture_lines",
+            "stall_minutes",
             "sync_index",
         },
     }
@@ -214,7 +199,7 @@ def _validate_shape(data: dict[str, Any]) -> None:
     executors = data.get("executors", {})
     if not isinstance(executors, dict):
         raise WorkflowError("[executors] must contain executor tables")
-    executor_keys = {"command", "interactive_command", "models", "default_model", "no_go_models", "model_arg", "permission_args", "interactive_permission_args", "non_interactive_permission_args", "environment_allowlist", "steering_adapter", "reasoning_effort"}
+    executor_keys = {"command", "interactive_command", "models", "default_model", "no_go_models", "model_arg", "interactive_permission_args", "non_interactive_permission_args", "environment_allowlist", "steering_adapter", "reasoning_effort"}
     for name, entry in executors.items():
         _reject_unknown(entry, executor_keys, f"executors.{name}")
     classes = data.get("agent_classes", {})
@@ -319,7 +304,6 @@ def load_settings(path: Path | None = None) -> Settings:
         reasoning_effort = entry.get("reasoning_effort", prior.reasoning_effort)
         if reasoning_effort is not None and reasoning_effort not in LUNA_REASONING_EFFORTS:
             raise WorkflowError(f"executor {name!r} reasoning_effort must be low, medium, or high")
-        legacy_permission_args = strings("permission_args") if "permission_args" in entry else ()
         policies[name] = ExecutorPolicy(
             interactive_command=interactive_command,
             models=models,
@@ -327,12 +311,10 @@ def load_settings(path: Path | None = None) -> Settings:
             no_go_models=strings("no_go_models", prior.no_go_models),
             model_arg=strings("model_arg", prior.model_arg),
             interactive_permission_args=strings(
-                "interactive_permission_args",
-                legacy_permission_args or prior.interactive_permission_args,
+                "interactive_permission_args", prior.interactive_permission_args
             ),
             non_interactive_permission_args=strings(
-                "non_interactive_permission_args",
-                legacy_permission_args or prior.non_interactive_permission_args,
+                "non_interactive_permission_args", prior.non_interactive_permission_args
             ),
             environment_allowlist=strings(
                 "environment_allowlist", prior.environment_allowlist
@@ -340,20 +322,7 @@ def load_settings(path: Path | None = None) -> Settings:
             steering_adapter=steering_adapter,
             reasoning_effort=reasoning_effort,
         )
-    stall = _integer(data, "terminal", "stall_minutes", base.stall_minutes)
-    capture = _integer(data, "terminal", "capture_lines", base.capture_lines)
-    max_interactive_width = _integer(
-        data,
-        "terminal",
-        "max_interactive_agent_width",
-        base.max_interactive_agent_width,
-    )
-    max_interactive_vertical = _integer(
-        data,
-        "terminal",
-        "max_interactive_agent_vertical",
-        base.max_interactive_agent_vertical,
-    )
+    stall = _integer(data, "supervisor", "stall_minutes", base.stall_minutes)
     level = _integer(data, "pack", "archive_level", base.archive_level)
     supervisor_interval = _integer(
         data,
@@ -366,15 +335,6 @@ def load_settings(path: Path | None = None) -> Settings:
         "supervisor",
         "max_remediation_attempts",
         base.supervisor_max_remediation_attempts,
-    )
-    supervisor_capture_lines = _integer(
-        data,
-        "supervisor",
-        "capture_lines",
-        base.supervisor_capture_lines,
-    )
-    reuse_stale = _integer(
-        data, "agents", "reuse_stale_minutes", base.reuse_stale_minutes
     )
     agents = data.get("agents", {})
     if not isinstance(agents, dict):
@@ -464,16 +424,11 @@ def load_settings(path: Path | None = None) -> Settings:
         )
     if (
         stall < 1
-        or capture < 1
-        or max_interactive_width < 1
-        or max_interactive_vertical < 1
-        or reuse_stale < 1
         or supervisor_interval < 1
         or supervisor_attempts < 1
-        or supervisor_capture_lines < 1
         or not 1 <= level <= 22
     ):
-        raise WorkflowError("invalid stall_minutes, capture_lines, or archive_level")
+        raise WorkflowError("invalid stall_minutes, supervisor values, or archive_level")
     git = data.get("git", {})
     repository_allowlist = git.get("repository_allowlist", [])
     if not isinstance(repository_allowlist, list) or not all(
@@ -510,17 +465,7 @@ def load_settings(path: Path | None = None) -> Settings:
         state_root=absolute_path(
             Path(os.path.expandvars(os.path.expanduser(str(_nested(data, "paths", "state_root", base.state_root)))))
         ),
-        terminal_backend=str(
-            _nested(data, "terminal", "backend", base.terminal_backend)
-        ),
         stall_minutes=stall,
-        capture_lines=capture,
-        mouse=_boolean(data, "terminal", "mouse", base.mouse),
-        orchestrator_side=_choice(
-            data, "terminal", "orchestrator_side", base.orchestrator_side, {"left", "right"}
-        ),
-        max_interactive_agent_width=max_interactive_width,
-        max_interactive_agent_vertical=max_interactive_vertical,
         branch_prefix=str(_nested(data, "git", "branch_prefix", base.branch_prefix)),
         require_clean_source=_boolean(
             data, "git", "require_clean_source", base.require_clean_source
@@ -536,16 +481,8 @@ def load_settings(path: Path | None = None) -> Settings:
         generated_agent_prefix=generated_prefix,
         default_agent_executor=default_executor,
         agent_profiles=profiles,
-        non_interactive_tmux=_choice(
-            data,
-            "agents",
-            "non_interactive_tmux",
-            base.non_interactive_tmux,
-            {"dedicated_session", "shared_window"},
-        ),
         default_agent_class=default_agent_class,
         agent_classes=classes,
-        reuse_stale_minutes=reuse_stale,
         config_schema_version=schema_version,
         security=SecurityPolicy(
             mode=security_mode,
@@ -574,13 +511,6 @@ def load_settings(path: Path | None = None) -> Settings:
             base.supervisor_restart_orphaned,
         ),
         supervisor_max_remediation_attempts=supervisor_attempts,
-        supervisor_capture_interactive=_boolean(
-            data,
-            "supervisor",
-            "capture_interactive",
-            base.supervisor_capture_interactive,
-        ),
-        supervisor_capture_lines=supervisor_capture_lines,
         supervisor_sync_index=_boolean(
             data,
             "supervisor",
@@ -613,16 +543,6 @@ def as_dict(s: Settings) -> dict[str, Any]:
             "worktree_root": str(s.worktree_root),
             "state_root": str(s.state_root),
         },
-        "terminal": {
-            "backend": s.terminal_backend,
-            "stall_minutes": s.stall_minutes,
-            "capture_lines": s.capture_lines,
-            "mouse": s.mouse,
-            "orchestrator_side": s.orchestrator_side,
-            "max_interactive_agent_width": s.max_interactive_agent_width,
-            "max_interactive_agent_vertical": s.max_interactive_agent_vertical,
-            "max_interactive_agent_panes": s.max_interactive_agent_panes,
-        },
         "git": {
             "branch_prefix": s.branch_prefix,
             "require_clean_source": s.require_clean_source,
@@ -645,8 +565,7 @@ def as_dict(s: Settings) -> dict[str, Any]:
             "interrupt_stalled": s.supervisor_interrupt_stalled,
             "restart_orphaned": s.supervisor_restart_orphaned,
             "max_remediation_attempts": s.supervisor_max_remediation_attempts,
-            "capture_interactive": s.supervisor_capture_interactive,
-            "capture_lines": s.supervisor_capture_lines,
+            "stall_minutes": s.stall_minutes,
             "sync_index": s.supervisor_sync_index,
         },
         "executors": {
@@ -689,9 +608,7 @@ def as_dict(s: Settings) -> dict[str, Any]:
                 }
                 for name, profile in sorted(s.agent_profiles.items())
             },
-            "non_interactive_tmux": s.non_interactive_tmux,
             "default_class": s.default_agent_class,
-            "reuse_stale_minutes": s.reuse_stale_minutes,
         },
         "agent_classes": {
             name: {

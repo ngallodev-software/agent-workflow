@@ -32,9 +32,7 @@
     "root_orchestrator_id",
     "workflow_id",
     "allowed_depth",
-    "tmux_session_name",
     "budgets",
-    "terminal_policy",
     "allowed",
     "allowed_routes",
     "teams",
@@ -61,9 +59,6 @@
     "allowed_depth": {
       "const": 2
     },
-    "tmux_session_name": {
-      "$ref": "#/$defs/id"
-    },
     "budgets": {
       "type": "object",
       "additionalProperties": false,
@@ -71,59 +66,63 @@
         "max_teams",
         "max_total_workers",
         "max_concurrent_workers",
-        "max_interactive_panes",
         "max_retries_per_worker",
         "max_wall_seconds"
       ],
       "properties": {
-        "max_teams": {"type": "integer", "minimum": 1, "maximum": 64},
-        "max_total_workers": {"type": "integer", "minimum": 1, "maximum": 4096},
-        "max_concurrent_workers": {"type": "integer", "minimum": 1, "maximum": 1024},
-        "max_interactive_panes": {"type": "integer", "minimum": 1, "maximum": 4096},
-        "max_retries_per_worker": {"type": "integer", "minimum": 0, "maximum": 32},
-        "max_wall_seconds": {"type": "integer", "minimum": 1, "maximum": 31536000}
-      }
-    },
-    "terminal_policy": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["allowed_modes", "external_argv_prefixes"],
-      "properties": {
-        "allowed_modes": {
-          "type": "array",
-          "minItems": 1,
-          "maxItems": 2,
-          "uniqueItems": true,
-          "items": {
-            "enum": ["current", "external-window"]
-          }
+        "max_teams": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
         },
-        "external_argv_prefixes": {
-          "type": "array",
-          "maxItems": 16,
-          "items": {
-            "type": "array",
-            "minItems": 1,
-            "maxItems": 16,
-            "items": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 256
-            }
-          }
+        "max_total_workers": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4096
+        },
+        "max_concurrent_workers": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1024
+        },
+        "max_retries_per_worker": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 32
+        },
+        "max_wall_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 31536000
         }
       }
     },
     "allowed": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["executors", "models", "agent_classes", "permissions", "commands"],
+      "required": [
+        "executors",
+        "models",
+        "agent_classes",
+        "permissions",
+        "commands"
+      ],
       "properties": {
-        "executors": {"$ref": "#/$defs/boundedStringList"},
-        "models": {"$ref": "#/$defs/boundedStringList"},
-        "agent_classes": {"$ref": "#/$defs/boundedStringList"},
-        "permissions": {"$ref": "#/$defs/boundedStringList"},
-        "commands": {"$ref": "#/$defs/boundedStringList"}
+        "executors": {
+          "$ref": "#/$defs/boundedStringList"
+        },
+        "models": {
+          "$ref": "#/$defs/boundedStringList"
+        },
+        "agent_classes": {
+          "$ref": "#/$defs/boundedStringList"
+        },
+        "permissions": {
+          "$ref": "#/$defs/boundedStringList"
+        },
+        "commands": {
+          "$ref": "#/$defs/boundedStringList"
+        }
       }
     },
     "allowed_routes": {
@@ -136,11 +135,21 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["team_id", "team_lead_session_id", "parent_principal"],
+        "required": [
+          "team_id",
+          "team_lead_agent_run_id",
+          "parent_principal"
+        ],
         "properties": {
-          "team_id": {"$ref": "#/$defs/id"},
-          "team_lead_session_id": {"$ref": "#/$defs/id"},
-          "parent_principal": {"const": "root"}
+          "team_id": {
+            "$ref": "#/$defs/id"
+          },
+          "team_lead_agent_run_id": {
+            "$ref": "#/$defs/id"
+          },
+          "parent_principal": {
+            "const": "root"
+          }
         }
       }
     },
@@ -155,11 +164,25 @@
         "prompt_pack_sha256"
       ],
       "properties": {
-        "repository": {"type": "string", "minLength": 1, "maxLength": 2048},
-        "revision": {"type": "string", "minLength": 1, "maxLength": 256},
-        "snapshot_sha256": {"$ref": "#/$defs/sha256"},
-        "prompt_pack_id": {"$ref": "#/$defs/id"},
-        "prompt_pack_sha256": {"$ref": "#/$defs/sha256"}
+        "repository": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "revision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "snapshot_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "prompt_pack_id": {
+          "$ref": "#/$defs/id"
+        },
+        "prompt_pack_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
       }
     },
     "created_at": {

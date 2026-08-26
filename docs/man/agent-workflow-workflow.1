@@ -1,4 +1,4 @@
-.TH AGENT-WORKFLOW-WORKFLOW 1 "2026-08-02" "agent-workflow 0.7.9" "User Commands"
+.TH AGENT-WORKFLOW-WORKFLOW 1 "2026-08-02" "agent-workflow 0.8.0" "User Commands"
 .SH NAME
 agent-workflow-workflow \- restart-safe workflow graph commands
 .SH SYNOPSIS
@@ -25,7 +25,7 @@ agent-workflow-workflow \- restart-safe workflow graph commands
 .B agent-workflow workflow verify
 .I RUN_DIR SNAPSHOT
 .SH DESCRIPTION
-Workflow commands operate on a normalized immutable snapshot and an append-only event journal. start stores the canonical snapshot and schedules eligible nodes through the existing session launch service. status and resume replay durable events. seal creates a read-only aggregate workflow receipt after every node is terminal. verify rebuilds that receipt from current durable evidence.
+Workflow commands operate on a normalized immutable snapshot and an append-only event journal. start stores the canonical snapshot and schedules eligible nodes through the Agent Run launch service. status and resume replay durable events. seal creates a read-only aggregate workflow receipt after every node is terminal. verify rebuilds that receipt from current durable evidence.
 .SH TEMPLATES
 Authorized TEMPLATE values are pipeline, parallel-review-fan-in, and implementation-independent-review. Template expansion is deterministic and produces the canonical workflow snapshot schema.
 .SH APPROVALS
@@ -37,4 +37,4 @@ Every command after start must supply a snapshot whose normalized SHA-256 matche
 .SH FILES
 Within RUN_DIR: workflow-snapshot.json, workflow-events.jsonl, workflow-status.json, workflow-run.json, bindings/, and optional workflow-receipt.json.
 .SH SEE ALSO
-agent-workflow(1), agent-workflow-index(1), docs/ARCHITECTURE.md, docs/diagrams/REPOSITORY_CHART_PACK.md
+agent-workflow(1), agent-workflow-index(1), docs/ARCHITECTURE.md, docs/OPERATIONS.md

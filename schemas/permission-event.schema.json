@@ -2,11 +2,11 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "agent-workflow/permission-event/v1",
   "type": "object",
-  "required": ["schema", "event_id", "session_id", "recorded_at", "principal", "operation", "resource_class", "target", "requested_access", "state", "source", "policy_rule_id", "evidence_sha256", "remediation_class"],
+  "required": ["schema", "event_id", "agent_run_id", "recorded_at", "principal", "operation", "resource_class", "target", "requested_access", "state", "source", "policy_rule_id", "evidence_sha256", "remediation_class"],
   "properties": {
     "schema": {"const": "agent-workflow/permission-event/v1"},
     "event_id": {"type": "string", "pattern": "^[0-9a-f]{24}$"},
-    "session_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "agent_run_id": {"type": "string", "minLength": 1, "maxLength": 128},
     "recorded_at": {"type": "string", "minLength": 1, "maxLength": 64},
     "principal": {"type": ["string", "null"], "maxLength": 256},
     "operation": {"type": "string", "minLength": 1, "maxLength": 128},

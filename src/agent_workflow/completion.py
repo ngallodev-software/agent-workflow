@@ -11,7 +11,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from .contracts import read_launch_contract, validate_instance
+from .contracts import read_agent_run_contract, validate_instance
 from .errors import WorkflowError
 from .path import read_regular_file
 from .process import run
@@ -36,7 +36,7 @@ def _empty_or_placeholder(value: object) -> bool:
 def substantive_completion_errors(
     value: dict[str, Any],
     *,
-    session_id: str,
+    agent_run_id: str,
     ticket_id: str | None,
     pack_id: str | None,
 ) -> list[str]:
@@ -47,8 +47,8 @@ def substantive_completion_errors(
     request changes without being mislabeled as a failed or partial executor.
     """
     errors: list[str] = []
-    if value.get("session_id") != session_id:
-        errors.append("completion session_id does not match launch contract")
+    if value.get("agent_run_id") != agent_run_id:
+        errors.append("completion agent_run_id does not match launch contract")
     if value.get("ticket_id") != ticket_id:
         errors.append("completion ticket_id does not match launch contract")
     if value.get("pack_id") != pack_id:
@@ -205,8 +205,8 @@ def validate_completion_handoff(run_dir: Path) -> dict[str, Any]:
     contract for identity, worktree, and schema bindings, allowing an agent to
     detect field-level errors before it exits or emits ``task-complete``.
     """
-    launch = read_launch_contract(run_dir / "launch-contract.json")
-    session_id = str(launch["session"]["id"])
+    launch = read_agent_run_contract(run_dir / "agent-run-contract.json")
+    agent_run_id = str(launch["agent_run"]["id"])
     handoff = Path(str(launch["paths"]["handoff_dir"]))
     source = handoff / "completion.json"
     read = read_regular_file(source, max_bytes=1024 * 1024)
@@ -223,7 +223,7 @@ def validate_completion_handoff(run_dir: Path) -> dict[str, Any]:
         expected_ticket = ticket_identity.get("value")
     semantic = substantive_completion_errors(
         value,
-        session_id=session_id,
+        agent_run_id=agent_run_id,
         ticket_id=expected_ticket,
         pack_id=(
             launch.get("pack", {}).get("id")
@@ -261,7 +261,7 @@ def validate_completion_handoff(run_dir: Path) -> dict[str, Any]:
         raise WorkflowError("invalid completion handoff: " + "; ".join(errors))
     return {
         "schema": "agent-workflow/completion-validation/v1",
-        "session_id": session_id,
+        "agent_run_id": agent_run_id,
         "source_path": str(source),
         "source_sha256": read.sha256,
         "validation_status": "valid",

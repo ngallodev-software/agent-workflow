@@ -31,7 +31,6 @@ _BUDGET_USAGE_KEYS = frozenset(
     {
         "workers_started",
         "peak_concurrent_workers",
-        "peak_interactive_panes",
         "retries",
         "wall_seconds",
     }
@@ -269,7 +268,6 @@ def _validate_budget_usage(
     comparisons = {
         "workers_started": "max_workers",
         "peak_concurrent_workers": "max_concurrent_workers",
-        "peak_interactive_panes": "max_interactive_panes",
         "retries": "max_retries",
         "wall_seconds": "max_wall_seconds",
     }
@@ -296,7 +294,6 @@ def _validate_aggregate_budget_usage(
     comparisons = {
         "workers_started": limits["max_total_workers"],
         "peak_concurrent_workers": limits["max_concurrent_workers"],
-        "peak_interactive_panes": limits["max_interactive_panes"],
         "wall_seconds": limits["max_wall_seconds"],
         "retries": limits["max_total_workers"] * limits["max_retries_per_worker"],
     }

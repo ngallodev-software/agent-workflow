@@ -4,7 +4,7 @@
   "type": "object",
   "required": [
     "schema",
-    "session_id",
+    "agent_run_id",
     "result",
     "base_revision",
     "head_revision",
@@ -17,7 +17,7 @@
     "schema": {
       "const": "agent-workflow/completion/v1"
     },
-    "session_id": {
+    "agent_run_id": {
       "type": "string"
     },
     "ticket_id": {

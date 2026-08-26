@@ -2,42 +2,81 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "agent-workflow/index-sync-report/v1",
   "type": "object",
-  "required": ["schema", "database", "authority", "indexed", "indexed_count", "skipped", "skipped_count", "pruned", "error_count", "errors", "quarantined", "quarantined_count"],
+  "required": [
+    "schema",
+    "database",
+    "authority",
+    "indexed",
+    "indexed_count",
+    "skipped",
+    "skipped_count",
+    "pruned",
+    "error_count",
+    "errors"
+  ],
   "properties": {
-    "schema": {"const": "agent-workflow/index-sync-report/v1"},
-    "database": {"type": "string", "minLength": 1},
-    "authority": {"const": "json-jsonl-sealed-receipts"},
-    "indexed": {"type": "array", "items": {"type": "object"}},
-    "indexed_count": {"type": "integer", "minimum": 0},
-    "skipped": {"type": "array", "items": {"type": "string"}},
-    "skipped_count": {"type": "integer", "minimum": 0},
-    "pruned": {"type": "array", "items": {"type": "string"}},
-    "error_count": {"type": "integer", "minimum": 0},
+    "schema": {
+      "const": "agent-workflow/index-sync-report/v1"
+    },
+    "database": {
+      "type": "string",
+      "minLength": 1
+    },
+    "authority": {
+      "const": "json-jsonl-sealed-receipts"
+    },
+    "indexed": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "indexed_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "skipped": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "skipped_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "pruned": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "error_count": {
+      "type": "integer",
+      "minimum": 0
+    },
     "errors": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["session_id", "error"],
+        "required": [
+          "agent_run_id",
+          "error"
+        ],
         "properties": {
-          "session_id": {"type": ["string", "null"]},
-          "error": {"type": "string"}
+          "agent_run_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error": {
+            "type": "string"
+          }
         },
         "additionalProperties": false
       }
-    },
-    "quarantined": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["session_id", "classification"],
-        "properties": {
-          "session_id": {"type": "string"},
-          "classification": {"const": "historical_artifact"}
-        },
-        "additionalProperties": false
-      }
-    },
-    "quarantined_count": {"type": "integer", "minimum": 0}
+    }
   },
   "additionalProperties": false
 }

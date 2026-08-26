@@ -3,12 +3,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import platform
 import re
 import subprocess
 import sys
-import tempfile
 import tomllib
 import uuid
 import xml.etree.ElementTree as ET
@@ -18,6 +16,8 @@ from pathlib import Path
 from typing import Any, Iterable
 
 import jsonschema
+
+from .util import atomic_write_canonical_json, sha256_bytes, sha256_file
 
 
 SCHEMA = "agent-workflow/release-evidence/v1"
@@ -62,22 +62,6 @@ def _utc_now() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def _canonical_json(value: Any) -> bytes:
-    return (json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n").encode("utf-8")
-
-
-def _sha256_bytes(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def _display_path(path: Path, root: Path, output_dir: Path) -> str:
     for parent in (root, output_dir):
         try:
@@ -92,29 +76,9 @@ def _file_evidence(path: Path, root: Path, output_dir: Path) -> FileEvidence:
         raise ValueError(f"evidence path must be a regular file: {path}")
     return FileEvidence(
         path=_display_path(path, root, output_dir),
-        sha256=_sha256_file(path),
+        sha256=sha256_file(path),
         size_bytes=path.stat().st_size,
     )
-
-
-def _atomic_write(path: Path, data: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
-    temp_path = Path(temporary)
-    try:
-        with os.fdopen(fd, "wb") as handle:
-            handle.write(data)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.chmod(temp_path, 0o600)
-        os.replace(temp_path, path)
-        directory_fd = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
-        try:
-            os.fsync(directory_fd)
-        finally:
-            os.close(directory_fd)
-    finally:
-        temp_path.unlink(missing_ok=True)
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -311,7 +275,7 @@ def _compatibility_evidence_errors(root: Path, compatibility: dict[str, Any]) ->
         path = _repo_regular_file(root, item["path"])
         if path is None:
             errors.append(f"compatibility evidence is missing or outside the repository: {item['path']}")
-        elif _sha256_file(path) != item["sha256"]:
+        elif sha256_file(path) != item["sha256"]:
             errors.append(f"compatibility evidence digest mismatch: {item['path']}")
     return errors
 
@@ -358,12 +322,12 @@ def _policy_checks(root: Path, policy: dict[str, Any]) -> list[dict[str, Any]]:
         )
     else:
         contact = str(security_policy.get("contact") or "").strip()
-        security_text = (root / "docs" / "SECURITY.md").read_text(encoding="utf-8")
+        security_text = (root / "SECURITY.md").read_text(encoding="utf-8")
         placeholder = not contact or any(token in contact.lower() for token in ("example.", "placeholder", "todo"))
         if placeholder:
             status, detail = "fail", "Configured security contact is empty or a placeholder."
         elif contact not in security_text:
-            status, detail = "fail", "Configured security contact is not published in docs/SECURITY.md."
+            status, detail = "fail", "Configured security contact is not published in SECURITY.md."
         elif not security_policy.get("response_policy"):
             status, detail = "fail", "Configured security channel is missing a response policy."
         else:
@@ -522,7 +486,7 @@ def collect_release_evidence(
     tree_digest = source_tree_sha256(root, output_dir)
     sbom = _cyclonedx_sbom(policy["project"], expected_version, lock, tree_digest)
     sbom_path = output_dir / "sbom.cdx.json"
-    _atomic_write(sbom_path, _canonical_json(sbom))
+    atomic_write_canonical_json(sbom_path, sbom, mode=0o600, ensure_ascii=False)
 
     policy_evidence = _file_evidence(policy_path, root, output_dir)
     lock_evidence = _file_evidence(lock_path, root, output_dir)
@@ -557,7 +521,7 @@ def collect_release_evidence(
     }
     _validate(root, provenance, "build-provenance.schema.json")
     provenance_path = output_dir / "build-provenance.json"
-    _atomic_write(provenance_path, _canonical_json(provenance))
+    atomic_write_canonical_json(provenance_path, provenance, mode=0o600, ensure_ascii=False)
     provenance_evidence = _file_evidence(provenance_path, root, output_dir)
 
     if technical_exit_code != 0 or any(check["status"] == "fail" for check in checks):
@@ -584,7 +548,7 @@ def collect_release_evidence(
         },
     }
     _validate(root, summary, "release-evidence.schema.json")
-    _atomic_write(output_dir / "release-evidence.json", _canonical_json(summary))
+    atomic_write_canonical_json(output_dir / "release-evidence.json", summary, mode=0o600, ensure_ascii=False)
     return summary
 
 

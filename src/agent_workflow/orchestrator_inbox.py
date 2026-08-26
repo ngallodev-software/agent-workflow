@@ -1,24 +1,24 @@
 """Immutable orchestrator identity registry and durable aggregate inbox.
 
-The registry binds child sessions to their launch and assignment evidence.  The
+The registry binds child Agent Runs to their launch and assignment evidence.  The
 inbox is a delivery projection: child message journals and lifecycle evidence
 remain authoritative for what a child actually did.
 """
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import json
 import os
 import stat
 import uuid
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Mapping
 
 from .config import Settings
-from .contracts import read_contract, read_launch_contract, validate_instance
+from .contracts import read_contract, read_agent_run_contract, validate_instance
 from .errors import WorkflowError
+from .journal import JournalTransactionResult, locked_file, read_jsonl, transact_jsonl
 from .messages import message_digest, validate_message
 from .path import read_regular_file
 from .receipts import verify_seal_details
@@ -117,14 +117,6 @@ def orchestrator_key(orchestrator_id: str) -> str:
     return hashlib.sha256(orchestrator_id.encode("utf-8")).hexdigest()
 
 
-def orchestrator_wakeup_channel(orchestrator_id: str) -> str:
-    """Return a stable diagnostic identifier for polling-based supervisors."""
-    validate_id(orchestrator_id, "orchestrator ID")
-    return "agent-workflow/v1/orchestrator/" + hashlib.sha256(
-        orchestrator_id.encode("utf-8")
-    ).hexdigest()
-
-
 def orchestrator_dir(settings: Settings, orchestrator_id: str, *, create: bool = False) -> Path:
     root = _real_directory(_state_root(settings) / "orchestrators", create=create, label="orchestrator root")
     path = root / orchestrator_key(orchestrator_id)
@@ -177,7 +169,7 @@ def create_registry(settings: Settings, orchestrator_id: str, *, workflow_id: st
         prior = _read_registry(settings, orchestrator_id)
         if prior.get("workflow_id") != workflow_id:
             raise OrchestratorInboxError("orchestrator registry already exists with a different identity")
-        return {"registry": prior, "path": str(path), "wakeup_channel": orchestrator_wakeup_channel(orchestrator_id)}
+        return {"registry": prior, "path": str(path)}
     now = utc_now()
     registry = {
         "schema": REGISTRY_SCHEMA,
@@ -196,98 +188,68 @@ def create_registry(settings: Settings, orchestrator_id: str, *, workflow_id: st
     fsync_directory(directory)
     # Create the append-only authority eagerly so a missing inbox cannot be
     # confused with an uninitialized registry after a restart.
-    _append_records(directory / INBOX_NAME, [], expected_schema=EVENT_SCHEMA)
-    return {"registry": registry, "path": str(path), "wakeup_channel": orchestrator_wakeup_channel(orchestrator_id)}
+    with locked_file(directory / INBOX_NAME, exclusive=True, create=True, create_parent=True):
+        pass
+    return {"registry": registry, "path": str(path)}
 
 
-def _read_jsonl(path: Path, *, schema: str, max_records: int) -> list[dict[str, Any]]:
-    _regular_file(path, label=f"{path.name} journal")
-    try:
-        raw = read_regular_file(path, max_bytes=MAX_JOURNAL_BYTES).data
-    except WorkflowError as exc:
-        raise OrchestratorInboxError(f"cannot read {path.name}") from exc
-    records: list[dict[str, Any]] = []
-    for line_number, raw_line in enumerate(raw.splitlines(), start=1):
-        if not raw_line.strip():
-            raise OrchestratorInboxError(f"blank record in {path.name} line {line_number}")
-        if len(raw_line) > MAX_RECORD_BYTES:
-            raise OrchestratorInboxError(f"{path.name} record exceeds bounded size")
-        try:
-            value = json.loads(raw_line.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise OrchestratorInboxError(f"invalid UTF-8 or JSON in {path.name} line {line_number}") from exc
+def _journal_validator(schema: str, path: Path):
+    def validate(value: object, line_number: int) -> dict[str, Any]:
         if not isinstance(value, dict):
             raise OrchestratorInboxError(f"{path.name} line {line_number} is not an object")
         if schema == EVENT_SCHEMA:
             record = _validate_event(value)
             if record["sequence"] != line_number:
                 raise OrchestratorInboxError(f"inbox sequence mismatch at line {line_number}")
-        elif schema == "agent-workflow/session-message/v1":
-            record = validate_message(value, expected_sequence=line_number)
-        elif schema == "agent-workflow/lifecycle-event/v1":
-            required = {"schema", "sequence", "timestamp", "dimension", "prior", "new", "actor", "reason", "receipt_refs"}
+            return record
+        if schema == "agent-workflow/agent-run-message/v1":
+            return validate_message(value, expected_sequence=line_number)
+        if schema == "agent-workflow/lifecycle-event/v1":
+            required = {
+                "schema", "sequence", "timestamp", "dimension", "prior", "new",
+                "actor", "reason", "receipt_refs",
+            }
             if set(value) != required or value.get("schema") != schema or value.get("sequence") != line_number:
                 raise OrchestratorInboxError(f"invalid lifecycle evidence at line {line_number}")
-            if not isinstance(value.get("receipt_refs"), list) or not all(isinstance(item, str) for item in value["receipt_refs"]):
+            if not isinstance(value.get("receipt_refs"), list) or not all(
+                isinstance(item, str) for item in value["receipt_refs"]
+            ):
                 raise OrchestratorInboxError(f"invalid lifecycle evidence references at line {line_number}")
-            record = value
-        else:
-            validate_instance(value, schema, artifact=f"{path.name} record")
-            record = value
-        records.append(record)
-        if len(records) > max_records:
-            raise OrchestratorInboxError(f"{path.name} exceeds the bounded record limit")
-    return records
+            return value
+        validate_instance(value, schema, artifact=f"{path.name} record")
+        return value
+
+    return validate
 
 
-def _append_records(path: Path, records: Iterable[Mapping[str, Any]], *, expected_schema: str) -> None:
-    directory = _real_directory(path.parent, create=True, label="journal parent")
-    encoded_records = []
-    for record in records:
-        value = dict(record)
-        if expected_schema == EVENT_SCHEMA:
-            _validate_event(value)
-        else:
-            validate_instance(value, expected_schema, artifact="journal record")
-        encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8") + b"\n"
-        if len(encoded) > MAX_RECORD_BYTES:
-            raise OrchestratorInboxError("journal record exceeds bounded size")
-        encoded_records.append(encoded)
-    _regular_file(path, label=f"{path.name} journal", required=False)
-    flags = os.O_RDWR | os.O_CREAT | os.O_APPEND | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+def _read_jsonl(path: Path, *, schema: str, max_records: int) -> list[dict[str, Any]]:
+    _regular_file(path, label=f"{path.name} journal")
     try:
-        descriptor = os.open(path, flags, 0o600)
-    except OSError as exc:
-        raise OrchestratorInboxError(f"cannot open {path.name} without following links") from exc
-    with os.fdopen(descriptor, "a+b") as stream:
-        fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
-        try:
-            for encoded in encoded_records:
-                stream.write(encoded)
-            stream.flush()
-            os.fsync(stream.fileno())
-        finally:
-            fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
-    fsync_directory(directory)
+        return read_jsonl(
+            path,
+            validator=_journal_validator(schema, path),
+            max_bytes=MAX_JOURNAL_BYTES,
+            max_record_bytes=MAX_RECORD_BYTES,
+            max_records=max_records,
+            sequence_field="sequence" if schema in {EVENT_SCHEMA, "agent-workflow/agent-run-message/v1", "agent-workflow/lifecycle-event/v1"} else None,
+        )
+    except WorkflowError as exc:
+        if isinstance(exc, OrchestratorInboxError):
+            raise
+        raise OrchestratorInboxError(f"cannot read {path.name}") from exc
 
 
 def _write_registry(settings: Settings, registry: dict[str, Any]) -> None:
     _validate_registry(registry)
     directory = orchestrator_dir(settings, registry["orchestrator_id"])
     lock = directory / ".registry.lock"
-    _append_records(lock, [], expected_schema=EVENT_SCHEMA)
-    with lock.open("a+b") as stream:
-        fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
-        try:
-            atomic_write_json(directory / REGISTRY_NAME, registry, mode=0o600)
-        finally:
-            fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+    with locked_file(lock, exclusive=True, create=True, create_parent=True):
+        atomic_write_json(directory / REGISTRY_NAME, registry, mode=0o600)
 
-
-def _assignment_evidence(run: Path, session_id: str, assignment_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
+def _assignment_evidence(run: Path, agent_run_id: str, assignment_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
     ledger = run / "assignments.jsonl"
     records = _read_jsonl(ledger, schema="agent-workflow/assignment-event/v1", max_records=MAX_SOURCE_RECORDS)
-    matching = [item for item in records if item.get("session_id") == session_id and item.get("assignment_id") == assignment_id]
+    matching = [item for item in records if item.get("agent_run_id") == agent_run_id and item.get("assignment_id") == assignment_id]
     completed = [item for item in matching if item.get("event") == "task_completed"]
     if not completed:
         raise OrchestratorInboxError("child assignment has no immutable task completion evidence")
@@ -297,60 +259,59 @@ def _assignment_evidence(run: Path, session_id: str, assignment_id: str) -> tupl
     if not assignment_events:
         raise OrchestratorInboxError("child completion lacks current assignment lifecycle evidence")
     current = assignment_events[-1]
-    if current.get("new") == "closed":
-        try:
-            receipt, _digest = verify_seal_details(run)
-        except WorkflowError as exc:
-            raise OrchestratorInboxError("terminal child completion lacks a valid sealed receipt") from exc
-        if receipt.get("session_id") != session_id:
-            raise OrchestratorInboxError("terminal child receipt belongs to another session")
-    elif current.get("new") != "idle_reusable":
-        raise OrchestratorInboxError("child completion lacks current terminal or idle_reusable lifecycle evidence")
+    if current.get("new") != "closed":
+        raise OrchestratorInboxError("child completion lacks current closed assignment lifecycle evidence")
+    try:
+        receipt, _digest = verify_seal_details(run)
+    except WorkflowError as exc:
+        raise OrchestratorInboxError("completed child lacks a valid sealed receipt") from exc
+    if receipt.get("agent_run_id") != agent_run_id:
+        raise OrchestratorInboxError("completed child receipt belongs to another Agent Run")
     return completed[-1], current
 
 
 def _child_evidence(settings: Settings, child: dict[str, Any]) -> tuple[dict[str, Any], Path, dict[str, Any]]:
-    session_id = child["session_id"]
-    run = run_dir(settings, session_id)
-    contract_path = run / "launch-contract.json"
+    agent_run_id = child["agent_run_id"]
+    run = run_dir(settings, agent_run_id)
+    contract_path = run / "agent-run-contract.json"
     _regular_file(contract_path, label="child launch contract")
     contract_read = read_regular_file(contract_path, max_bytes=MAX_RECORD_BYTES)
     if contract_read.mode & 0o222:
         raise OrchestratorInboxError("child launch contract is writable and cannot be trusted")
     if "sha256:" + contract_read.sha256 != child["launch_contract_digest"]:
         raise OrchestratorInboxError("child launch contract changed after registration")
-    contract = read_launch_contract(contract_path)
-    if contract["session"]["id"] != session_id:
-        raise OrchestratorInboxError("launch contract session identity does not match registered child")
+    contract = read_agent_run_contract(contract_path)
+    if contract["agent_run"]["id"] != agent_run_id:
+        raise OrchestratorInboxError("Agent Run contract identity does not match registered child")
     context_path = run / "agent-context.json"
     _regular_file(context_path, label="child agent context")
     try:
         context = read_contract(context_path, "agent-workflow/agent-context/v1")
     except WorkflowError as exc:
         raise OrchestratorInboxError("child agent context is not immutable evidence") from exc
-    if context.get("session_id") != session_id:
-        raise OrchestratorInboxError("agent context session identity does not match registered child")
+    if context.get("agent_run_id") != agent_run_id:
+        raise OrchestratorInboxError("agent context Agent Run identity does not match registered child")
     return contract, run, context
 
 
-def _child_identity(settings: Settings, session_id: str) -> tuple[str, Path, dict[str, Any], dict[str, Any], str]:
-    validate_id(session_id, "child session ID")
-    run = run_dir(settings, session_id)
-    contract_path = run / "launch-contract.json"
+def _child_identity(settings: Settings, agent_run_id: str) -> tuple[str, Path, dict[str, Any], dict[str, Any], str]:
+    validate_id(agent_run_id, "child agent run ID")
+    run = run_dir(settings, agent_run_id)
+    contract_path = run / "agent-run-contract.json"
     _regular_file(contract_path, label="child launch contract")
     contract_read = read_regular_file(contract_path, max_bytes=MAX_RECORD_BYTES)
-    contract = read_launch_contract(contract_path)
-    if contract["session"]["id"] != session_id:
-        raise OrchestratorInboxError("launch contract session identity does not match child session ID")
+    contract = read_agent_run_contract(contract_path)
+    if contract["agent_run"]["id"] != agent_run_id:
+        raise OrchestratorInboxError("Agent Run contract identity does not match child agent run ID")
     context_path = run / "agent-context.json"
     _regular_file(context_path, label="child agent context")
     context = read_contract(context_path, "agent-workflow/agent-context/v1")
-    if context.get("session_id") != session_id:
-        raise OrchestratorInboxError("agent context session identity does not match child session ID")
+    if context.get("agent_run_id") != agent_run_id:
+        raise OrchestratorInboxError("agent context Agent Run identity does not match child agent run ID")
     assignment = context.get("current_assignment")
     if not isinstance(assignment, dict):
-        completed = context.get("completed_assignments")
-        assignment = completed[-1] if isinstance(completed, list) and completed and isinstance(completed[-1], dict) else None
+        completed = context.get("completed_assignment")
+        assignment = completed if isinstance(completed, dict) else None
     if not isinstance(assignment, dict) or not isinstance(assignment.get("assignment_id"), str):
         raise OrchestratorInboxError("child has no launch-bound assignment identity")
     assignment_id = _uuid(assignment["assignment_id"], "assignment_id")
@@ -358,25 +319,25 @@ def _child_identity(settings: Settings, session_id: str) -> tuple[str, Path, dic
     return assignment_id, run, contract, context, launch_digest
 
 
-def register_child(settings: Settings, orchestrator_id: str, session_id: str) -> dict[str, Any]:
+def register_child(settings: Settings, orchestrator_id: str, agent_run_id: str) -> dict[str, Any]:
     registry = _read_registry(settings, orchestrator_id)
-    assignment_id, run, contract, context, launch_digest = _child_identity(settings, session_id)
+    assignment_id, run, contract, context, launch_digest = _child_identity(settings, agent_run_id)
     source_path = run / "messages.jsonl"
     source_journal_id = _digest({"schema": "agent-workflow/source-journal/v1", "path": str(source_path.resolve(strict=False))})
-    entry_identity = _digest({"schema": "agent-workflow/orchestrator-child/v1", "session_id": session_id, "assignment_id": assignment_id, "launch_contract_digest": launch_digest, "source_journal_id": source_journal_id})
-    prior = next((item for item in registry["children"] if item["session_id"] == session_id), None)
+    entry_identity = _digest({"schema": "agent-workflow/orchestrator-child/v1", "agent_run_id": agent_run_id, "assignment_id": assignment_id, "launch_contract_digest": launch_digest, "source_journal_id": source_journal_id})
+    prior = next((item for item in registry["children"] if item["agent_run_id"] == agent_run_id), None)
     if prior is not None:
         if prior["identity_digest"] != entry_identity:
-            raise OrchestratorInboxError("child session is already registered with conflicting immutable evidence")
+            raise OrchestratorInboxError("child Agent Run is already registered with conflicting immutable evidence")
         return {"registry": registry, "child": prior, "path": str(orchestrator_dir(settings, orchestrator_id) / REGISTRY_NAME)}
     if len(registry["children"]) >= MAX_CHILDREN:
         raise OrchestratorInboxError("orchestrator child registry is full")
     now = utc_now()
     child = {
         "schema": "agent-workflow/orchestrator-child/v1",
-        "session_id": session_id,
+        "agent_run_id": agent_run_id,
         "assignment_id": assignment_id,
-        "launch_contract_path": str(run / "launch-contract.json"),
+        "launch_contract_path": str(run / "agent-run-contract.json"),
         "launch_contract_digest": launch_digest,
         "source_journal_path": str(source_path),
         "source_journal_id": source_journal_id,
@@ -393,20 +354,20 @@ def register_child(settings: Settings, orchestrator_id: str, session_id: str) ->
     return {"registry": registry, "child": child, "path": str(orchestrator_dir(settings, orchestrator_id) / REGISTRY_NAME)}
 
 
-def unregister_child(settings: Settings, orchestrator_id: str, session_id: str, *, state: str) -> dict[str, Any]:
+def unregister_child(settings: Settings, orchestrator_id: str, agent_run_id: str, *, state: str) -> dict[str, Any]:
     if state not in {"completed", "abandoned"}:
         raise OrchestratorInboxError("unregistration state must be completed or abandoned")
     registry = _read_registry(settings, orchestrator_id)
-    child = next((item for item in registry["children"] if item["session_id"] == session_id), None)
+    child = next((item for item in registry["children"] if item["agent_run_id"] == agent_run_id), None)
     if child is None:
-        raise OrchestratorInboxError("child session is not registered")
+        raise OrchestratorInboxError("child Agent Run is not registered")
     if child["state"] not in {"active", state}:
-        raise OrchestratorInboxError("child session has a conflicting terminal registration state")
+        raise OrchestratorInboxError("child Agent Run has a conflicting terminal registration state")
     if state == "completed":
         _contract, run, context = _child_evidence(settings, child)
-        if context.get("state") not in {"closed", "idle_reusable"}:
-            raise OrchestratorInboxError("completed child unregister requires terminal or idle_reusable evidence")
-        _assignment_evidence(run, session_id, child["assignment_id"])
+        if context.get("state") != "closed":
+            raise OrchestratorInboxError("completed child unregister requires closed assignment evidence")
+        _assignment_evidence(run, agent_run_id, child["assignment_id"])
     child["state"] = state
     child["unregistered_at"] = child.get("unregistered_at") or utc_now()
     registry["updated_at"] = utc_now()
@@ -415,14 +376,14 @@ def unregister_child(settings: Settings, orchestrator_id: str, session_id: str, 
 
 
 def _source_records(path: Path) -> list[dict[str, Any]]:
-    return _read_jsonl(path, schema="agent-workflow/session-message/v1", max_records=MAX_SOURCE_RECORDS)
+    return _read_jsonl(path, schema="agent-workflow/agent-run-message/v1", max_records=MAX_SOURCE_RECORDS)
 
 
 def _verify_source(child: dict[str, Any], record: Mapping[str, Any], settings: Settings) -> tuple[dict[str, Any], Path, dict[str, Any], dict[str, Any] | None, str | None]:
     source = dict(record)
     validate_message(source)
-    if source["session_id"] != child["session_id"]:
-        raise OrchestratorInboxError("source record claims another registered session identity")
+    if source["agent_run_id"] != child["agent_run_id"]:
+        raise OrchestratorInboxError("source record claims another registered Agent Run identity")
     if source["kind"] not in _EVENT_KINDS:
         raise OrchestratorInboxError(f"source message kind is not allowed for aggregate delivery: {source['kind']}")
     contract, run, context = _child_evidence(settings, child)
@@ -438,9 +399,9 @@ def _verify_source(child: dict[str, Any], record: Mapping[str, Any], settings: S
     assignment_evidence = None
     completion_state = None
     if source["kind"] == "task_complete":
-        if context.get("state") not in {"closed", "idle_reusable"} or context.get("current_assignment") is not None:
-            raise OrchestratorInboxError("agent_idle source lacks current terminal or idle_reusable assignment evidence")
-        completed, lifecycle = _assignment_evidence(run, child["session_id"], child["assignment_id"])
+        if context.get("state") != "closed" or context.get("current_assignment") is not None:
+            raise OrchestratorInboxError("agent completion source lacks closed assignment evidence")
+        completed, lifecycle = _assignment_evidence(run, child["agent_run_id"], child["assignment_id"])
         if completed.get("summary") != source["content"]:
             raise OrchestratorInboxError("completion summary does not match assignment evidence")
         completion_state = lifecycle["new"]
@@ -448,8 +409,8 @@ def _verify_source(child: dict[str, Any], record: Mapping[str, Any], settings: S
     return source, run, contract, assignment_evidence, completion_state
 
 
-def _event_id(orchestrator_id: str, session_id: str, message_id: str) -> str:
-    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"agent-workflow/{orchestrator_key(orchestrator_id)}/{session_id}/{message_id}"))
+def _event_id(orchestrator_id: str, agent_run_id: str, message_id: str) -> str:
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"agent-workflow/{orchestrator_key(orchestrator_id)}/{agent_run_id}/{message_id}"))
 
 
 def _metadata(event: dict[str, Any], *, include_content: bool) -> dict[str, Any]:
@@ -460,23 +421,23 @@ def _metadata(event: dict[str, Any], *, include_content: bool) -> dict[str, Any]
     return result
 
 
-def import_message(settings: Settings, orchestrator_id: str, session_id: str, source_message: Mapping[str, Any]) -> dict[str, Any]:
+def import_message(settings: Settings, orchestrator_id: str, agent_run_id: str, source_message: Mapping[str, Any]) -> dict[str, Any]:
     registry = _read_registry(settings, orchestrator_id)
-    child = next((item for item in registry["children"] if item["session_id"] == session_id), None)
+    child = next((item for item in registry["children"] if item["agent_run_id"] == agent_run_id), None)
     if child is None or child["state"] != "active":
-        raise OrchestratorInboxError("child session is not an active registered source")
+        raise OrchestratorInboxError("child Agent Run is not an active registered source")
     source, _run, contract, assignment, completion_state = _verify_source(child, source_message, settings)
     source_digest = message_digest(source)
-    source_identity = f"{source['session_id']}:{source['message_id']}"
+    source_identity = f"{source['agent_run_id']}:{source['message_id']}"
     event = {
         "schema": EVENT_SCHEMA,
         "schema_version": 1,
         # The final sequence is allocated while holding the inbox lock.  A
         # positive placeholder keeps schema validation strict before commit.
         "sequence": 1,
-        "event_id": _event_id(orchestrator_id, source["session_id"], source["message_id"]),
+        "event_id": _event_id(orchestrator_id, source["agent_run_id"], source["message_id"]),
         "workflow_id": registry.get("workflow_id") or contract.get("pack", {}).get("id"),
-        "sender_session_id": source["session_id"],
+        "sender_agent_run_id": source["agent_run_id"],
         "recipient_id": orchestrator_id,
         "kind": _EVENT_KINDS[source["kind"]],
         "assignment_id": child["assignment_id"],
@@ -484,7 +445,7 @@ def import_message(settings: Settings, orchestrator_id: str, session_id: str, so
         "source_identity": source_identity,
         "source_message_id": source["message_id"],
         "source_sequence": source["sequence"],
-        "state": "idle_reusable" if completion_state == "idle_reusable" else None,
+        "state": "closed" if completion_state == "closed" else None,
         "summary": _bounded_text(source["content"], "event summary"),
         "created_at": source["timestamp"],
         "source_digest": source_digest,
@@ -492,46 +453,50 @@ def import_message(settings: Settings, orchestrator_id: str, session_id: str, so
     _validate_event(event)
     path = orchestrator_dir(settings, orchestrator_id) / INBOX_NAME
     _regular_file(path, label="orchestrator inbox")
-    flags = os.O_RDWR | os.O_APPEND | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+
+    def decide(existing: list[dict[str, Any]]) -> JournalTransactionResult[dict[str, Any]]:
+        for prior in existing:
+            if prior.get("source_identity") != source_identity:
+                continue
+            if prior.get("source_digest") != source_digest:
+                raise OrchestratorInboxError("source ID is reused with a different digest")
+            if prior.get("source_journal_id") != child["source_journal_id"]:
+                raise OrchestratorInboxError("source identity conflicts with another journal")
+            if any(prior.get(key) != event.get(key) for key in event if key != "sequence"):
+                raise OrchestratorInboxError("duplicate source identity has conflicting normalized bytes")
+            return JournalTransactionResult(
+                value={"event": prior, "duplicate": True, "content_available": True}
+            )
+        event["sequence"] = len(existing) + 1
+        _validate_event(event)
+        return JournalTransactionResult(
+            value={"event": event, "duplicate": False, "content_available": True},
+            record=event,
+        )
+
     try:
-        descriptor = os.open(path, flags)
-    except OSError as exc:
-        raise OrchestratorInboxError("cannot open orchestrator inbox without following links") from exc
-    with os.fdopen(descriptor, "a+b") as stream:
-        fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
-        try:
-            existing = _read_jsonl(path, schema=EVENT_SCHEMA, max_records=MAX_SOURCE_RECORDS)
-            for prior in existing:
-                if prior.get("source_identity") != source_identity:
-                    continue
-                if prior.get("source_digest") != source_digest:
-                    raise OrchestratorInboxError("source ID is reused with a different digest")
-                if prior.get("source_journal_id") != child["source_journal_id"]:
-                    raise OrchestratorInboxError("source identity conflicts with another journal")
-                if any(prior.get(key) != event.get(key) for key in event if key != "sequence"):
-                    raise OrchestratorInboxError("duplicate source identity has conflicting normalized bytes")
-                return {"event": prior, "duplicate": True, "content_available": True}
-            event["sequence"] = len(existing) + 1
-            _validate_event(event)
-            encoded = json.dumps(event, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8") + b"\n"
-            if len(encoded) > MAX_RECORD_BYTES:
-                raise OrchestratorInboxError("orchestrator inbox event exceeds bounded size")
-            stream.write(encoded)
-            stream.flush()
-            os.fsync(stream.fileno())
-        finally:
-            fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
-    fsync_directory(path.parent)
-    return {"event": event, "duplicate": False, "content_available": True}
+        return transact_jsonl(
+            path,
+            validator=_journal_validator(EVENT_SCHEMA, path),
+            transaction=decide,
+            max_bytes=MAX_JOURNAL_BYTES,
+            max_record_bytes=MAX_RECORD_BYTES,
+            max_records=MAX_SOURCE_RECORDS,
+            sequence_field="sequence",
+        )
+    except WorkflowError as exc:
+        if isinstance(exc, OrchestratorInboxError):
+            raise
+        raise OrchestratorInboxError("cannot update orchestrator inbox") from exc
 
 
-def import_registered(settings: Settings, orchestrator_id: str, *, session_id: str | None = None, max_per_child: int = MAX_SOURCE_RECORDS) -> dict[str, Any]:
+def import_registered(settings: Settings, orchestrator_id: str, *, agent_run_id: str | None = None, max_per_child: int = MAX_SOURCE_RECORDS) -> dict[str, Any]:
     if max_per_child < 1 or max_per_child > MAX_SOURCE_RECORDS:
         raise OrchestratorInboxError("max_per_child is outside the bounded import limit")
     registry = _read_registry(settings, orchestrator_id)
-    children = [item for item in registry["children"] if item["state"] == "active" and (session_id is None or item["session_id"] == session_id)]
-    if session_id is not None and not children:
-        raise OrchestratorInboxError("child session is not an active registered source")
+    children = [item for item in registry["children"] if item["state"] == "active" and (agent_run_id is None or item["agent_run_id"] == agent_run_id)]
+    if agent_run_id is not None and not children:
+        raise OrchestratorInboxError("child Agent Run is not an active registered source")
     imported: list[dict[str, Any]] = []
     for child in children:
         records = _source_records(Path(child["source_journal_path"]))
@@ -540,7 +505,7 @@ def import_registered(settings: Settings, orchestrator_id: str, *, session_id: s
         for source in records:
             if source["kind"] not in _EVENT_KINDS:
                 continue
-            result = import_message(settings, orchestrator_id, child["session_id"], source)
+            result = import_message(settings, orchestrator_id, child["agent_run_id"], source)
             imported.append(_metadata(result["event"], include_content=False) | {"duplicate": result["duplicate"]})
     return {"orchestrator_id": orchestrator_id, "imported": imported, "count": len(imported)}
 
@@ -596,9 +561,9 @@ def replay_registered(
     registry = _read_registry(settings, orchestrator_id)
     children = [item for item in registry["children"] if item["state"] == "active"]
     directory = orchestrator_dir(settings, orchestrator_id)
-    cursors = {child["session_id"]: _read_source_cursor(_cursor_path(directory, child), child) for child in children}
-    records_by_child = {child["session_id"]: _source_records(Path(child["source_journal_path"])) for child in children}
-    if any(cursors[child["session_id"]] > len(records_by_child[child["session_id"]]) for child in children):
+    cursors = {child["agent_run_id"]: _read_source_cursor(_cursor_path(directory, child), child) for child in children}
+    records_by_child = {child["agent_run_id"]: _source_records(Path(child["source_journal_path"])) for child in children}
+    if any(cursors[child["agent_run_id"]] > len(records_by_child[child["agent_run_id"]]) for child in children):
         raise OrchestratorInboxError("orchestrator source cursor is ahead of its journal")
     # Rotate the starting child from durable source progress. This preserves
     # bounded round-robin fairness even when a batch is smaller than the child
@@ -609,13 +574,13 @@ def replay_registered(
     imported: list[dict[str, Any]] = []
     advanced = 0
     position = 0
-    processed_by_child: dict[str, int] = {child["session_id"]: 0 for child in children}
+    processed_by_child: dict[str, int] = {child["agent_run_id"]: 0 for child in children}
     while position < batch_size and children:
         made_progress = False
         for child in children:
             if position >= batch_size:
                 break
-            sid = child["session_id"]
+            sid = child["agent_run_id"]
             if processed_by_child[sid] >= max_per_child:
                 continue
             sequence = cursors[sid]
@@ -640,7 +605,7 @@ def replay_registered(
         "advanced": advanced,
         "count": len(imported),
         "imported": imported,
-        "remaining": sum(max(0, len(records_by_child[c["session_id"]]) - cursors[c["session_id"]]) for c in children),
+        "remaining": sum(max(0, len(records_by_child[c["agent_run_id"]]) - cursors[c["agent_run_id"]]) for c in children),
     }
 
 

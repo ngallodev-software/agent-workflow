@@ -1,0 +1,430 @@
+{
+  "$id": "agent-workflow/agent-run-contract/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "agent_run": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_class": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "agent_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "created_at": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "retry_of_agent_run_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tier": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "agent_name",
+        "agent_class",
+        "tier",
+        "retry_of_agent_run_id",
+        "created_at"
+      ],
+      "type": "object"
+    },
+    "command_catalog": {
+      "additionalProperties": false,
+      "properties": {
+        "card_path": {
+          "const": "command-card.md"
+        },
+        "card_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "catalog_path": {
+          "const": "command-catalog.json"
+        },
+        "catalog_schema": {
+          "const": "agent-workflow/command-catalog/v1"
+        },
+        "catalog_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "cli_invocation": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "role": {
+          "enum": [
+            "orchestrator",
+            "implementation",
+            "review"
+          ]
+        }
+      },
+      "required": [
+        "role",
+        "catalog_path",
+        "catalog_sha256",
+        "catalog_schema",
+        "card_path",
+        "card_sha256",
+        "cli_invocation"
+      ],
+      "type": "object"
+    },
+    "evaluation_policy": {
+      "type": "object"
+    },
+    "expected_outputs": {
+      "additionalProperties": false,
+      "properties": {
+        "executor_events": {
+          "const": "executor-events.jsonl"
+        },
+        "executor_stderr": {
+          "const": "executor-stderr.log"
+        },
+        "final_receipt": {
+          "const": "final-receipt.json"
+        },
+        "final_status": {
+          "const": "final-status.json"
+        },
+        "output_log": {
+          "const": "output.log"
+        }
+      },
+      "required": [
+        "output_log",
+        "executor_events",
+        "executor_stderr",
+        "final_status",
+        "final_receipt"
+      ],
+      "type": "object"
+    },
+    "pack": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "manifest_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "root": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "root",
+        "manifest_sha256"
+      ],
+      "type": "object"
+    },
+    "paths": {
+      "additionalProperties": false,
+      "properties": {
+        "completion": {
+          "const": "completion.json"
+        },
+        "handoff_dir": {
+          "type": "string"
+        },
+        "result": {
+          "const": "result.json"
+        },
+        "result_contract": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "run_dir": {
+          "const": "."
+        },
+        "runtime": {
+          "const": "evaluation-runtime.json"
+        },
+        "source_baseline": {
+          "const": "source-baseline.json"
+        },
+        "workdir": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_dir",
+        "workdir",
+        "handoff_dir",
+        "completion",
+        "result",
+        "result_contract",
+        "runtime",
+        "source_baseline"
+      ],
+      "type": "object"
+    },
+    "prompt": {
+      "additionalProperties": false,
+      "properties": {
+        "launch_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "launch_stored": {
+          "const": "launch-prompt.md"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "stored": {
+          "const": "prompt.md"
+        }
+      },
+      "required": [
+        "source",
+        "stored",
+        "sha256",
+        "launch_stored",
+        "launch_sha256"
+      ],
+      "type": "object"
+    },
+    "runtime_policy": {
+      "type": "object"
+    },
+    "schema": {
+      "const": "agent-workflow/agent-run-contract/v1"
+    },
+    "schemas": {
+      "additionalProperties": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "sha256"
+        ],
+        "type": [
+          "object",
+          "null"
+        ]
+      },
+      "required": [
+        "launch",
+        "command_catalog",
+        "completion",
+        "provenance",
+        "status",
+        "source_baseline",
+        "completion_collection",
+        "task_result"
+      ],
+      "type": "object"
+    },
+    "source_baseline": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "const": "source-baseline.json"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "type": "object"
+    },
+    "ticket": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "ticket_identity": {
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "enum": [
+            "explicit",
+            "omitted"
+          ]
+        },
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "mode",
+        "value"
+      ],
+      "type": "object"
+    },
+    "version": {
+      "const": 1
+    },
+    "worker_plan": {
+      "additionalProperties": false,
+      "properties": {
+        "argv": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "command_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "environment_allowlist": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "executor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "interactive_stdio": {
+          "type": "boolean"
+        },
+        "mode": {
+          "enum": [
+            "headless",
+            "external"
+          ]
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stream_format": {
+          "enum": [
+            "text",
+            "codex-jsonl",
+            "claude-stream-json"
+          ]
+        }
+      },
+      "required": [
+        "argv",
+        "command_sha256",
+        "stream_format",
+        "environment_allowlist",
+        "mode",
+        "interactive_stdio"
+      ],
+      "type": "object"
+    },
+    "worktree": {
+      "additionalProperties": false,
+      "properties": {
+        "branch": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dirty_at_launch": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "source_revision": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "path",
+        "source_revision",
+        "branch",
+        "dirty_at_launch"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema",
+    "version",
+    "agent_run",
+    "ticket",
+    "ticket_identity",
+    "pack",
+    "worktree",
+    "prompt",
+    "worker_plan",
+    "paths",
+    "schemas",
+    "runtime_policy",
+    "evaluation_policy",
+    "source_baseline",
+    "expected_outputs",
+    "command_catalog"
+  ],
+  "type": "object"
+}

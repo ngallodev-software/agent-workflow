@@ -3,7 +3,7 @@ schema: agent-workflow/ticket-completion/v1
 pack_id: ""
 phase: ""
 ticket: ""
-session: ""
+agent_run: ""
 result: "completed|partial|failed|blocked"
 base_revision: ""
 head_revision: ""
@@ -20,7 +20,7 @@ substitute. Its command and criterion records must use the authoritative shape:
 ```json
 {
   "schema": "agent-workflow/completion/v1",
-  "session_id": "<session>",
+  "agent_run_id": "<agent-run>",
   "ticket_id": "<ticket-or-null>",
   "pack_id": "<pack-or-null>",
   "result": "completed",
@@ -75,7 +75,7 @@ only by the host orchestrator, never from a sandboxed reviewer.
 For a non-review `completed` result, `unresolved` must be empty. A completed
 review with `review_disposition: changes_requested` may list substantive review
 findings there. Do not list normal host-owned merge, review, acceptance,
-release, or pane-closure work as unresolved; report those as next steps instead.
+release, host-presentation, or unrelated follow-on work as unresolved; report those as next steps instead.
 
 ## Source baseline
 

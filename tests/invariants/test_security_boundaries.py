@@ -15,8 +15,8 @@ def test_sealed_receipt_rejects_tampering_and_path_redirection_matrix(tmp_path: 
     cases = ("artifact", "receipt", "intermediate-symlink")
     for case in cases:
         root = tmp_path / case
-        write_minimal_run(root, session_id=case)
-        seal_run(root, session_id=case)
+        write_minimal_run(root, agent_run_id=case)
+        seal_run(root, agent_run_id=case)
         expected = sha256_file(root / "final-receipt.json")
         if case == "artifact":
             os.chmod(root / "output.log", 0o644)
@@ -39,13 +39,13 @@ def test_sealing_rejects_unsafe_roots_and_incomplete_contracts(tmp_path: Path) -
     target.touch()
     os.symlink(target, unsafe / "seal.lock")
     with pytest.raises(WorkflowError):
-        seal_run(unsafe, session_id="unsafe")
+        seal_run(unsafe, agent_run_id="unsafe")
 
     incomplete = tmp_path / "incomplete"
     incomplete.mkdir()
     (incomplete / "prompt.md").write_text("task\n", encoding="utf-8")
     with pytest.raises(WorkflowError, match="missing artifacts"):
-        seal_run(incomplete, session_id="incomplete")
+        seal_run(incomplete, agent_run_id="incomplete")
 
 
 def test_read_only_transition_covers_optional_evidence_without_following_symlinks(tmp_path: Path) -> None:

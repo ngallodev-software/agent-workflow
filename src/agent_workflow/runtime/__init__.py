@@ -1,7 +1,7 @@
 """Stable runtime policy helpers used by the process execution facade.
 
-The :mod:`agent_workflow.process` module remains the public compatibility
-surface.  This package keeps independently testable policy concerns out of the
+The :mod:`agent_workflow.process` module remains the public execution
+facade.  This package keeps independently testable policy concerns out of the
 subprocess lifecycle implementation.
 """
 

@@ -27,9 +27,9 @@ def handle_orchestrator_command(settings: Settings, args: argparse.Namespace) ->
         if args.registry_command == "inspect":
             return read_child_registry(settings, args.orchestrator_id)
         if args.registry_command == "register":
-            return register_child(settings, args.orchestrator_id, args.session_id)
+            return register_child(settings, args.orchestrator_id, args.agent_run_id)
         return unregister_child(
-            settings, args.orchestrator_id, args.session_id, state=args.state
+            settings, args.orchestrator_id, args.agent_run_id, state=args.state
         )
 
     if args.orchestrator_command == "watch":
@@ -46,7 +46,7 @@ def handle_orchestrator_command(settings: Settings, args: argparse.Namespace) ->
         return import_registered(
             settings,
             args.orchestrator_id,
-            session_id=args.session_id,
+            agent_run_id=args.agent_run_id,
             max_per_child=args.max_per_child,
         )
     return read_inbox(

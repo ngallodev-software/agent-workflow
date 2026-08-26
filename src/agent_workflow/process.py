@@ -503,6 +503,61 @@ def spawn(request: ProcessRequest) -> ManagedProcess:
     return ManagedProcess(request, command)
 
 
+
+@dataclass(frozen=True)
+class DetachedProcess:
+    """Identity for a headless process started without captured stdio."""
+
+    pid: int
+    process_group_id: int
+    argv: tuple[str, ...]
+    resolved_executable: str | None
+    environment_policy: str
+
+
+def spawn_detached(request: ProcessRequest) -> DetachedProcess:
+    """Start an AW-owned headless worker and return without waiting.
+
+    Detached workers deliberately inherit no terminal and own a new process
+    group so lifecycle controls can address execution semantically rather than
+    through a terminal host.
+    """
+    if request.interactive:
+        raise WorkflowError("detached workers cannot be interactive")
+    if not request.create_process_group:
+        raise WorkflowError("detached workers require an isolated process group")
+    if request.stdin_data is not None:
+        raise WorkflowError("detached workers do not accept stdin_data")
+    command = _command(request)
+    identity = resolve_executable(command, digest=request.digest_executable)
+    redacted = redact_argv(
+        command,
+        secret_values=request.secret_values,
+        secret_positions=request.secret_argv_positions,
+    )
+    environment, policy_name, _env_secrets = build_environment(command, request.environment)
+    try:
+        child = subprocess.Popen(
+            list(command),
+            cwd=request.cwd,
+            env=environment,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            shell=False,
+            start_new_session=True,
+            close_fds=True,
+        )
+    except OSError as exc:
+        raise _process_error(redacted, exc) from exc
+    return DetachedProcess(
+        pid=child.pid,
+        process_group_id=child.pid,
+        argv=redacted,
+        resolved_executable=identity.resolved_path,
+        environment_policy=policy_name,
+    )
+
 def _process_error(argv: Sequence[str], exc: OSError) -> WorkflowError:
     if isinstance(exc, FileNotFoundError):
         category = "not-found"

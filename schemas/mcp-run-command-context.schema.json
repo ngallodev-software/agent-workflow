@@ -3,6 +3,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
+    "agent_run_id": {
+      "minLength": 1,
+      "type": "string"
+    },
     "card_sha256": {
       "pattern": "^[0-9a-f]{64}$",
       "type": [
@@ -32,8 +36,7 @@
     },
     "launch_contract_schema": {
       "enum": [
-        "agent-workflow/launch-contract/v1",
-        "agent-workflow/launch-contract/v2"
+        "agent-workflow/agent-run-contract/v1"
       ]
     },
     "role": {
@@ -47,20 +50,15 @@
     "schema": {
       "const": "agent-workflow/mcp-run-command-context/v1"
     },
-    "session_id": {
-      "minLength": 1,
-      "type": "string"
-    },
     "verification": {
       "enum": [
-        "verified",
-        "legacy-no-command-binding"
+        "verified"
       ]
     }
   },
   "required": [
     "schema",
-    "session_id",
+    "agent_run_id",
     "launch_contract_schema",
     "verification",
     "role",

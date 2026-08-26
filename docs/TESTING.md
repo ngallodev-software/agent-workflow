@@ -1,170 +1,60 @@
-# Testing strategy
+# Testing Strategy
 
-The test suite is organized around behavior that an operator can observe. Test count is not a quality target; each retained test must protect a user journey, a security/state invariant, a release property, or an approved future capability.
+The suite is intentionally layered and acceptance-first.
 
-## Test layers
+## Invariants
 
-### Acceptance journeys
-
-`tests/acceptance/` builds a wheel from a clean source copy, installs it into an isolated virtual environment, and invokes the installed `agent-workflow` or `agent-workflow-mcp` executable as an external process.
-
-Acceptance journeys are assertion-dense. One installed lifecycle should normally prove the related public contract, durable evidence, state transitions, read-only follow-up commands, and cleanup behavior together. Do not split a journey merely because it crosses several commands or modules. Reuse the same installed run, repository, or projection when isolation is not part of the behavior being tested.
-
-The acceptance layer covers:
-
-- installed CLI discovery, configuration, doctor, and actionable failures;
-- schema-versioned configuration, unknown-key rejection, trusted-path warnings/failures, and executor compatibility identity through the installed doctor journey;
-- prompt-pack scaffold, validation, and deterministic archive output;
-- real Git worktree creation, listing, and removal;
-- external executor launch, completion, failure, restart, review, acceptance, and interactive-agent reuse;
-- bounded executor lifecycle and sealed evidence through the installed product; the compact process invariant matrix covers timeout/process-group cancellation, output caps, environment policy, and synthetic secret redaction;
-- durable steer/watch/ack replay across process boundaries;
-- structured provider-event collection into sealed normalized evidence;
-- workflow validation, scheduling, restart/resume, approval, idempotency, sealing, and verification;
-- authorized template expansion through the installed CLI;
-- deterministic evaluation/benchmark template rendering, plan and manifest validation, sealed scoring/collection, benchmark reports, evidence-ledger rows, archive plans, and matched baseline/candidate comparison.
-- the comparative benchmark source-level journey: frozen fixture identity, subscription/API authentication boundaries, operating-policy validation, isolated coordinator/arm and retry worktrees, synchronized paired phases, usage/cost/timing evidence, visual runtime attestation, deterministic scoring/statistics, treatment-blinded review, composite reporting, digest verification, and cleanup;
-
-The deterministic fake executor and tmux shim are external executables, not mocked Python functions. They make process boundaries reproducible without requiring paid provider calls in the default suite.
-
-### Invariant matrices
-
-`tests/invariants/` is deliberately small. It directly exercises logic that needs exhaustive or adversarial coverage and would be expensive or nondeterministic to reproduce solely through end-to-end journeys:
-
-- seal substitution, symlink, traversal, and read-only boundaries;
-- append-only message ordering and fail-closed replay;
-- scheduler dependency and parallelism rules;
-- deterministic advisory routing that cannot override enforced policy;
-- provider delta/cumulative/terminal accounting and duplicate identity rules;
-- evaluation template/schema semantics, unavailable-data handling, cohort identity drift, deterministic archive inputs, and low-sample claims;
-- the bounded JSON Pointer subset used for result binding;
-- health collection, semantic-progress calculation, terminal-capture redaction/change detection, permission transitions, incident deduplication, projection repair, and remediation ceilings.
-
-Prefer one parameterized matrix to many nearly identical tests.
-
-### Supervisor and recovery journeys
-
-Supervisor coverage must prove behavior through the installed CLI where host facilities are available. Required journeys include a progressing run, a live process with no semantic progress, an interactive permission wait, output-capture exhaustion, process/pane loss, corrupt mutable projection, missed wake/replay, one-probe idempotence, explicit interrupt/restart opt-in, and supervisor restart. Every journey must assert durable incident/remediation evidence and retry lineage rather than merely inspect console text.
-
-Low-level tests may inject deterministic health samples or fake tmux/process observations, but they may not make mutable status or pane text authoritative. Live host/executor matrices remain gated under `SUP-006`.
-
-### SQLite projection journeys
-
-`tests/invariants/test_sqlite_index.py` exercises deterministic rebuild, unchanged-run incremental sync, curated run/performance queries, query-freshness envelopes, workflow node/edge materialization, same-size/same-mtime source-change detection, source tamper detection, corrupt-run quarantine, mixed-currency nulling, and the invariant that terminal bodies never enter the database. Installed-product validation must additionally build a wheel, invoke the public `agent-workflow index` commands, delete the database, rebuild it, and compare query results and source provenance.
-
-Migration tests start from every supported prior schema version. Corruption tests must distinguish a damaged SQLite projection—which is disposable—from damaged authoritative evidence, which must fail closed and remain untouched. Performance work must use generated multi-run fixtures and publish source-count, event-count, database-size, sync-time, rebuild-time, and query-latency evidence rather than relying on unit-level timing assertions.
-
-### Release checks
-
-`tests/release/` validates distribution properties: repository release assets, JSON Schemas, shell syntax, agreement between documented primary commands and installed help, deterministic backlog/prompt-pack ownership, release-policy/lock synchronization, and the durable release-evidence path. Static documentation and metadata checks belong here, not in behavioral unit tests.
-
-### Future acceptance specifications
-
-`tests/future/` contains approved backlog behavior expressed as black-box journeys. These tests are `xfail(strict=True)`: they execute and expose the current gap, while an unexpected pass fails the suite until the test is reviewed and promoted into `tests/acceptance/`.
-
-A future test must name an approved backlog item and specify an operator-visible result. Parser shape, private helper calls, or speculative interfaces are not acceptable future tests.
-
-### Plugin boundary
-
-The plugin host has compact invariants for import-free discovery, strict API compatibility, duplicate-registration rollback, core-command collision rejection, and `--no-plugins`. Its acceptance journey builds a separate fixture-plugin wheel, installs it beside the built product wheel, proves that disabled metadata discovery does not import the module, executes an explicitly enabled top-level command, verifies command-catalog provenance, and proves core-only recovery.
-
-## Live compatibility
-
-`tests/live/` is opt-in because it requires host resources or paid services. It is intended for real tmux, Codex, Claude, and MCP compatibility checks before release. Set the documented environment switches and run:
+Fast deterministic tests protect serialization, contracts, path security, message replay, evaluation math, receipts, workflow transitions, and other security/durability/accounting boundaries that are more reliable as deterministic matrices than repeated full product journeys.
 
 ```bash
-pytest -m live
+python -m pytest -q tests/invariants
 ```
 
-## Rules for new tests
+## Acceptance journeys
 
-A proposed test should answer at least one of these questions:
-
-1. What complete user action would break without this test?
-2. What security, replay, accounting, or durability invariant requires exhaustive isolated coverage?
-3. What approved backlog capability does this executable future specification define?
-4. What distributable release property does this check protect?
-
-Do not add a test merely because a function, branch, parser field, dictionary shape, or prose fragment exists. Avoid private imports and mocks unless the test is an invariant that cannot be exercised deterministically through a public boundary.
-
-When a defect is discovered, first extend the nearest end-to-end journey. Add a narrow invariant only when the defect belongs to a general security/state matrix. A new public assertion should usually be added to an existing installed lifecycle rather than placed in a new test function or file.
-
-Do not force every negative permutation into an end-to-end journey. Destructive, tamper, race, and invalid-schema cases remain compact invariants when exercising them inside one live lifecycle would make the journey order-dependent, hide the failing authority, or couple process cleanup to later read-only assertions.
-
-## Test authority and drift budgets
-
-`tests/test-authority.json` is the executable inventory for the suite. It records the authority and rationale for every invariant file, any narrowly approved mock or private-import exception, per-file function ceilings, layer file/function/collection ceilings, subprocess and wheel-build site ceilings, and the default-suite runtime ceiling.
-
-Run the audit before and after test changes:
+Installed-product journeys exercise the public CLI, real filesystem behavior, Git worktrees, worker processes, durable messages, workflow resume, evaluation, review, benchmarks, MCP/plugins, preflight, and indexing.
 
 ```bash
-python3 scripts/audit-test-suite.py
+python -m pytest -q tests/acceptance
 ```
 
-The policy is a drift ceiling, not a coverage target. Deleting redundant coverage does not require restoring the old count. Raising any ceiling requires a reviewable explanation of the complete user journey or isolated invariant that cannot be protected by existing authority. New invariant files fail until they are explicitly inventoried. Direct imports from `agent_workflow.cli_handlers`, `agent_workflow.cli_parser`, or `agent_workflow.cli_runtime` are forbidden in invariants; those behaviors belong at the installed executable boundary.
+## Consolidation policy
 
-The first 2026-08-02 consolidation removed private CLI dispatch/decomposition tests and moved manifest-native pack validation, repository closeout, evidence repair, and parser/runtime routing to installed-product journeys. The invariant layer decreased from 52 files and 320 collected cases to 35 files and 247 collected cases; the complete default collection decreased from 411 to 340 cases.
+Keep a narrow test only when it protects a distinct security, durability, schema, replay, or accounting boundary that is difficult to prove economically end to end. Otherwise prefer one assertion-dense installed-product journey over multiple feature-specific journeys.
 
-The second consolidation pass made the remaining journeys denser instead of creating replacement tests. Three hierarchy acceptance files became one installed contract/journal/receipt lifecycle; the installed fast-benchmark journey now verifies packaged-source identity, parallel synthetic execution, the wall-time contract, and exact 100-point scoring; and one installed SQLite lifecycle now verifies rebuild, query, integrity authority, database-loss recovery, retired-artifact classification, review-scoped validity in the presence of global blockers, and representative sealed-evidence tamper rejection. Positive-path hierarchy, benchmark, completion, Git, status-projection, and SQLite invariants duplicated by those journeys were removed, along with repetitive SQLite artifact-removal permutations that did not establish a distinct authority boundary. The invariant layer is now 35 files and 228 collected cases, the acceptance layer is 18 files and 58 collected cases, and the complete default collection is 316 cases. The negative evaluation matrix was deliberately retained after consolidation showed that combining destructive evaluation permutations with live fixture processes made the journey order-dependent.
+Do not add compatibility tests for removed terminal-era APIs and do not preserve test counts for their own sake.
 
-The third consolidation pass moved additional positive-path authority out of isolated invariants and into assertion-dense installed or release journeys. Plugin resource binding, MCP catalog/error behavior, pane identity, orchestrator inbox lifecycle, Luna execution policy, ledger projection, and release-evidence behavior now share their nearest public lifecycle. Three invariant files were removed entirely, the tmux pane lifecycle collapsed from three acceptance cases to one, and eight release-evidence invariant cases became one release-layer contract gate. The invariant layer is now 32 files, 186 test functions, and 201 collected cases; acceptance is 18 files, 55 functions, and 56 cases; release is 3 files, 16 functions, and 16 cases. The complete collection is 288 cases, including two opt-in live cases that remain skipped by default, a net reduction of 28 cases from the second-pass shape while retaining destructive, tamper, race, replay, path-security, and invalid-schema matrices as isolated invariants.
+## Release tests
 
-The pass also hardened installed-product capture and fixture cleanup so broad journeys can safely make many CLI assertions without relying on inherited stdout/stderr pipes. A residual order-dependent process stall remains reproducible only when several process-heavy acceptance scenarios share one pytest interpreter; each affected installed journey passes independently. Until that harness boundary is eliminated, release evidence must report bounded partition results rather than claim an unobserved monolithic pass.
-
-The retained ceilings are intentionally below both prior shapes and are enforced mechanically.
-
-`release-check.sh` runs the authority audit before pytest, then re-runs it against JUnit evidence. The post-run audit records total test count and duration in `build/release-evidence/test-suite-audit.json`; the current default-suite runtime ceiling is 420 seconds, based on a measured 332.98-second successful full gate plus bounded scheduling headroom. Static budgets also prevent silent multiplication of subprocess call sites or wheel builds.
-
-
-The JUnit collection budget is derived from the sum of the reviewed per-layer collection ceilings. Jenkins therefore has no separate aggregate test-count value that can drift behind optional-dependency or environment-specific collection.
-
-## Commands
+Distribution tests validate wheel contents, installation, parser-derived command catalogs, release evidence, documentation synchronization, and repository/distribution boundaries.
 
 ```bash
-# Default release-development environment and gate
-./scripts/bootstrap-dev.sh
-python3 scripts/audit-test-suite.py
-.venv/bin/python -m pytest -q
-./scripts/release-check.sh
-# Public-release enforcement: exits 3 while governance/compatibility blockers remain
-AGENT_WORKFLOW_ENFORCE_RELEASE_BLOCKERS=1 ./scripts/release-check.sh
-
-# Behavioral acceptance only
-.venv/bin/python -m pytest tests/acceptance
-
-# Security/state/accounting matrices
-.venv/bin/python -m pytest tests/invariants
-
-# Static distribution checks
-.venv/bin/python -m pytest tests/release
-
-# Approved future specifications
-.venv/bin/python -m pytest tests/future
-
-# Real host/provider compatibility
-AGENT_WORKFLOW_LIVE_TMUX=1 .venv/bin/python -m pytest -m live
-AGENT_WORKFLOW_LIVE_EXECUTOR=codex .venv/bin/python -m pytest -m live
-AGENT_WORKFLOW_LIVE_EXECUTOR=claude .venv/bin/python -m pytest -m live
+python -m pytest -q tests/release
 ```
 
-`./scripts/release-check.sh` runs the default suite plus compile, shell, schema, release-asset, prompt-pack ownership, and documentation-drift checks. It writes `pytest-junit.xml`, `sbom.cdx.json`, `build-provenance.json`, and `release-evidence.json` under `build/release-evidence` unless `AGENT_WORKFLOW_RELEASE_EVIDENCE_DIR` overrides the destination. Open release-policy blockers are recorded by default and enforced when `AGENT_WORKFLOW_ENFORCE_RELEASE_BLOCKERS=1`. Apply the `release-drift-auditor` skill after parallel integration because deterministic checks cannot judge every semantic security overclaim.
+## Headless-core acceptance contract
 
-The default suite uses synthetic custom executors in local mode. Live compatibility
-checks should run `doctor` and a read-only launch on the supported provider
-executors; no paid provider task is part of the default suite.
+The 0.8 release gate permanently protects these architectural outcomes:
 
-## Current implementation boundaries
+- external preparation with no runtime host installed;
+- Agent-Workflow-owned headless process-group lifecycle and terminal sealing;
+- persist-first steer/progress/ack journeys;
+- process/evidence-based supervision;
+- workflow resume through durable Agent Run bindings and sealed predecessor inputs;
+- headless benchmark execution;
+- no interactive-runtime dependency in core configuration/source; and
+- no Herdr dependency in core.
 
-Focused invariant and installed-wheel journeys cover:
+These requirements are enforced by the current invariant, acceptance, release, and repository-audit layers rather than by an implementation-phase checklist.
 
-- trusted-plugin import suppression, atomic registration, collision handling, digest-bound package resources, traversal/tamper rejection, and a separately installed fixture plugin;
-- one installed hierarchy lifecycle covering contract identity and read-only installation, append-only journal import/replay, and team/root receipt sealing, with compact adversarial matrices for narrowing, tamper, identity, budget, and filesystem attacks;
-- installed CLI routing and stable public behavior without private handler/parser tests;
-- SQLite source/query, session-control, and evidence boundaries only where adversarial state matrices are cheaper than installed journeys;
-- distribution exclusion of Jenkins/GitHub CI assets and fail-safe optional MCP installation.
+## Test-authority budget
 
-A passing hierarchy authority test does not claim team runtime, tmux topology, scheduling, or recovery. Those remain future/gated journeys.
+`tests/test-authority.json` is the explicit suite-size and authority budget. Run:
 
-## Current shape
+```bash
+python scripts/audit-test-suite.py
+```
 
-The suite is organized by product journeys and invariant matrices rather than test-count targets. Deleted implementation-coupled tests are preserved in Git history and should not be restored merely to recover coverage numbers. Restore a behavior only by expressing it through the test layers above. The authority policy is reviewed whenever a legitimate new test changes a ceiling; it must never be increased merely because a new helper or branch exists. Implemented future specifications, such as HARD-004, must graduate into acceptance/invariant coverage instead of remaining strict expected failures.
+The audit prevents silent test proliferation, stale mock rationales, and duplicated low-value coverage. It is the current authority for suite-size limits; prose documentation intentionally does not duplicate exact counts that drift whenever tests are consolidated.
+
+For a current inventory, count the test tree or use pytest collection in the working revision rather than relying on historical handoff numbers.

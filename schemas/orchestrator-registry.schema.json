@@ -19,10 +19,10 @@
   "$defs": {
     "child": {
       "type": "object", "additionalProperties": false,
-      "required": ["schema", "session_id", "assignment_id", "launch_contract_path", "launch_contract_digest", "source_journal_path", "source_journal_id", "worktree", "agent_name", "registered_at", "state", "unregistered_at", "identity_digest"],
+      "required": ["schema", "agent_run_id", "assignment_id", "launch_contract_path", "launch_contract_digest", "source_journal_path", "source_journal_id", "worktree", "agent_name", "registered_at", "state", "unregistered_at", "identity_digest"],
       "properties": {
         "schema": {"const": "agent-workflow/orchestrator-child/v1"},
-        "session_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"},
+        "agent_run_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"},
         "assignment_id": {"type": "string", "format": "uuid"},
         "launch_contract_path": {"type": "string", "minLength": 1},
         "launch_contract_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},

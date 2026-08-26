@@ -122,10 +122,7 @@ def read_contract(path: Path, expected_schema: str | None = None) -> dict[str, A
     return value
 
 
-LAUNCH_CONTRACT_SCHEMAS = {
-    "agent-workflow/launch-contract/v1",
-    "agent-workflow/launch-contract/v2",
-}
+AGENT_RUN_CONTRACT_SCHEMA = "agent-workflow/agent-run-contract/v1"
 
 
 def validate_ticket_identity(value: dict[str, Any]) -> None:
@@ -142,20 +139,20 @@ def validate_ticket_identity(value: dict[str, Any]) -> None:
         raise WorkflowError("launch contract ticket identity does not match ticket")
 
 
-def validate_launch_contract_value(value: dict[str, Any], *, artifact: str) -> str:
+def validate_agent_run_contract_value(value: dict[str, Any], *, artifact: str) -> str:
     schema_id = value.get("schema")
-    if schema_id not in LAUNCH_CONTRACT_SCHEMAS:
-        raise WorkflowError(f"unexpected launch contract schema in {artifact}: {schema_id}")
+    if schema_id != AGENT_RUN_CONTRACT_SCHEMA:
+        raise WorkflowError(f"unexpected agent run contract schema in {artifact}: {schema_id}")
     assert isinstance(schema_id, str)
     validate_instance(value, schema_id, artifact=artifact)
     validate_ticket_identity(value)
     return schema_id
 
 
-def read_launch_contract(path: Path) -> dict[str, Any]:
-    """Read launch authority while preserving v1 sealed-run compatibility."""
+def read_agent_run_contract(path: Path) -> dict[str, Any]:
+    """Read and validate immutable Agent Run execution authority."""
     value = read_contract(path)
-    launch_schema_id = validate_launch_contract_value(value, artifact=str(path))
+    contract_schema_id = validate_agent_run_contract_value(value, artifact=str(path))
     for name, descriptor in value["schemas"].items():
         if descriptor is None:
             continue
@@ -179,7 +176,7 @@ def read_launch_contract(path: Path) -> dict[str, Any]:
     require_directory(handoff, label="launch handoff")
     if value["paths"]["workdir"] != value["worktree"]["path"]:
         raise WorkflowError("launch contract has conflicting worktree paths")
-    if launch_schema_id == "agent-workflow/launch-contract/v2":
+    if contract_schema_id == AGENT_RUN_CONTRACT_SCHEMA:
         command_contract = value.get("command_catalog")
         if not isinstance(command_contract, dict):
             raise WorkflowError("launch contract has no command catalog binding")

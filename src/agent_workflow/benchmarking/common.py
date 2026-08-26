@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import shutil
@@ -8,18 +7,17 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Mapping
 
 from ..errors import WorkflowError
-from ..util import atomic_write_bytes, atomic_write_json, sha256_file
+from ..util import (
+    atomic_write_bytes,
+    atomic_write_json,
+    canonical_json_sha256 as _canonical_json_sha256,
+    sha256_file,
+    sha256_text as text_sha256,
+)
 
 
 def canonical_json_sha256(value: Any) -> str:
-    encoded = json.dumps(
-        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
-
-
-def text_sha256(value: str) -> str:
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+    return _canonical_json_sha256(value, ensure_ascii=False)
 
 
 def safe_relative(value: str, label: str = "path") -> str:

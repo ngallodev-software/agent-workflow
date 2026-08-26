@@ -71,19 +71,19 @@ def discover_runs(
     settings: Settings,
     *,
     include_archived: bool,
-    session_id: str | None,
+    agent_run_id: str | None,
 ) -> list[tuple[str, str, Path]]:
     """Discover valid run directories with active state winning duplicates."""
-    if session_id is not None:
-        validate_id(session_id, "session ID")
+    if agent_run_id is not None:
+        validate_id(agent_run_id, "agent run ID")
     discovered: dict[str, tuple[str, str, Path]] = {}
     for storage_class, root in run_roots(settings, include_archived=include_archived):
         for path in sorted(root.iterdir() if root.is_dir() else []):
-            if session_id is not None and path.name != session_id:
+            if agent_run_id is not None and path.name != agent_run_id:
                 continue
             if path.is_symlink() or not path.is_dir():
                 continue
-            validate_id(path.name, "session ID")
+            validate_id(path.name, "agent run ID")
             candidate = (path.name, storage_class, path)
             if path.name not in discovered or storage_class == "active":
                 discovered[path.name] = candidate

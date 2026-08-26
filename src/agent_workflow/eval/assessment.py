@@ -327,18 +327,18 @@ def assess_exported_run(run_dir: Path) -> dict[str, Any]:
         and isinstance(completion_item.get("sha256"), str)
     ):
         completion_digest_matches = completion_sha256 == completion_item["sha256"]
-    session_matches = bool(
+    agent_run_matches = bool(
         completion
         and receipt
-        and completion.get("session_id") == receipt.get("session_id") == run_dir.name
+        and completion.get("agent_run_id") == receipt.get("agent_run_id") == run_dir.name
     )
-    if completion and receipt and not session_matches:
-        contradictions.append("completion/final-receipt session identity mismatch")
+    if completion and receipt and not agent_run_matches:
+        contradictions.append("completion/final-receipt Agent Run identity mismatch")
     completion_valid = bool(
         completion_schema_valid
         and receipt_structurally_valid
         and completion_digest_matches is True
-        and session_matches
+        and agent_run_matches
     )
     portable_state, missing_sealed_artifacts = _portable_seal(
         run_dir,

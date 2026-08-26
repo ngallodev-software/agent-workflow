@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Any
 
 from ..errors import WorkflowError
-from ..evidence_repair import supplemental_repairs_for_run
 from ..receipts import read_sealed_contract, read_sealed_json, verify_seal_details
 from .scoring import validate_score_set
 
@@ -31,7 +30,7 @@ def build_report(
             expected_final_receipt_sha256=verified_digest,
         )
     status, _ = read_sealed_contract(
-        run_dir, final, "final-status.json", "agent-workflow/session-status/v2"
+        run_dir, final, "final-status.json", "agent-workflow/agent-run-status/v1"
     )
     provenance, _ = read_sealed_contract(
         run_dir, final, "run-provenance.json", "agent-workflow/run-provenance/v1"
@@ -45,7 +44,7 @@ def build_report(
         metrics, _ = read_sealed_json(run_dir, final, "execution-metrics.json")
     return {
         "schema": "agent-workflow/evaluation-report/v1",
-        "session_id": final.get("session_id"),
+        "agent_run_id": final.get("agent_run_id"),
         "status": status.get("status"),
         "executor_result": status.get("executor_result"),
         "completion_result": status.get("completion_result"),
@@ -53,7 +52,6 @@ def build_report(
         "policy_failures": status.get("policy_failures", []),
         "acceptance_eligible": bool(status.get("acceptance_eligible", False)),
         "failure_category": status.get("failure_category"),
-        "supplemental_repairs": supplemental_repairs_for_run(run_dir, verified_digest),
         "executor": provenance.get("executor"),
         "executor_version": provenance.get("executor_version"),
         "source_revision": provenance.get("source_revision"),
@@ -67,7 +65,7 @@ def build_report(
 
 def render_markdown(value: dict[str, Any]) -> str:
     lines = [
-        f"# Evaluation report: {value.get('session_id')}",
+        f"# Evaluation report: {value.get('agent_run_id')}",
         "",
         f"- Status: `{value.get('status')}`",
         f"- Executor result: `{value.get('executor_result') or 'unavailable'}`",
@@ -78,7 +76,6 @@ def render_markdown(value: dict[str, Any]) -> str:
         f"- Source revision: `{value.get('source_revision') or 'unavailable'}`",
         f"- Overall deterministic verdict: `{value.get('score_verdict') or 'not-scored'}`",
         f"- Sealed artifacts: {value.get('sealed_artifact_count', 0)}",
-        f"- Supplemental evidence repairs: {len(value.get('supplemental_repairs', []))}",
         "- Deterministic scoring summarizes evidence and does not grant acceptance.",
         f"- Normalized metrics: `{'present' if value.get('metrics') else 'unavailable'}`",
         "",

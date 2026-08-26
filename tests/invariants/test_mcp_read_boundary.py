@@ -30,14 +30,14 @@ def _service(tmp_path: Path) -> tuple[WorkflowReadService, Path]:
     return WorkflowReadService(settings, repository_root=repo), state
 
 
-def _status(state: Path, session_id: str = "run-1") -> Path:
-    run = state / "runs" / session_id
+def _status(state: Path, agent_run_id: str = "run-1") -> Path:
+    run = state / "runs" / agent_run_id
     run.mkdir(parents=True)
     atomic_write_json(
         run / "status.json",
         {
-            "schema": "agent-workflow/session-status/v2",
-            "session_id": session_id,
+            "schema": "agent-workflow/agent-run-status/v1",
+            "agent_run_id": agent_run_id,
             "status": "running",
             "disposition": None,
             "created_at": "2026-01-01T00:00:00Z",

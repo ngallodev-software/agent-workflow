@@ -4,27 +4,13 @@ schema_version = 1
 worktree_root = "~/.local/share/agent-workflow/worktrees"
 state_root = "~/.local/state/agent-workflow"
 
-[terminal]
-backend = "tmux"
-stall_minutes = 10
-capture_lines = 50
-mouse = true
-orchestrator_side = "left"
-max_interactive_agent_width = 2
-max_interactive_agent_vertical = 3
-
 [supervisor]
-# The supervisor is foregroundable; no background daemon is installed.
+# The supervisor is foreground-only; no background daemon is installed.
 interval_seconds = 10
-capture_interactive = true
-capture_lines = 200
-# A progress probe is a safe message-only remediation and is enabled by default.
 probe_stalled = true
-# Authority-changing actions remain explicit opt-ins.
 interrupt_stalled = false
 restart_orphaned = false
 max_remediation_attempts = 1
-# Keep the host-local SQLite projection current after every supervisor cycle.
 sync_index = true
 
 [git]
@@ -33,7 +19,6 @@ require_clean_source = true
 repository_allowlist = []
 
 [security]
-# local warns in `doctor`; governed/release fail closed on untrusted policy inputs.
 mode = "local"
 executable_digest = true
 policy_files = []
@@ -44,16 +29,13 @@ write_sha256 = true
 validate_before_archive = true
 
 [plugins]
-# Trusted plugins are imported only when explicitly enabled by entry-point name.
 enabled = []
 
 [agents]
 preferred_names = ["larry", "moe", "curly"]
 generated_prefix = "agent"
 default_executor = "codex"
-non_interactive_tmux = "dedicated_session"
 default_class = "implementation"
-reuse_stale_minutes = 120
 
 [agents.profiles.moe]
 class = "implementation"
@@ -66,9 +48,6 @@ executor = "claude"
 model = "haiku"
 
 [agent_classes.exploratory]
-# Claude launches are interactive by default; --no-interactive is an explicit
-# per-launch opt-out. This class flag remains the default for non-Claude
-# executors and custom executor policies.
 interactive = false
 default_executor = "claude"
 default_model = "haiku"
@@ -78,9 +57,6 @@ claude = ["haiku"]
 codex = ["gpt-5.6-luna"]
 
 [agent_classes.review]
-# Claude launches are interactive by default; --no-interactive is an explicit
-# per-launch opt-out. This class flag remains the default for non-Claude
-# executors and custom executor policies.
 interactive = false
 default_executor = "codex"
 default_model = "gpt-5.6-luna"
@@ -90,7 +66,7 @@ claude = ["haiku", "sonnet"]
 codex = ["gpt-5.6-luna"]
 
 [agent_classes.implementation]
-interactive = true
+interactive = false
 default_executor = "codex"
 default_model = "gpt-5.6-luna"
 

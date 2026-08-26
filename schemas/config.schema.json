@@ -10,9 +10,6 @@
     "paths": {
       "$ref": "#/$defs/paths"
     },
-    "terminal": {
-      "$ref": "#/$defs/terminal"
-    },
     "git": {
       "$ref": "#/$defs/git"
     },
@@ -39,6 +36,9 @@
     },
     "supervisor": {
       "$ref": "#/$defs/supervisor"
+    },
+    "plugins": {
+      "$ref": "#/$defs/plugins"
     }
   },
   "additionalProperties": false,
@@ -57,37 +57,6 @@
         },
         "state_root": {
           "type": "string"
-        }
-      },
-      "additionalProperties": false
-    },
-    "terminal": {
-      "type": "object",
-      "properties": {
-        "backend": {
-          "type": "string"
-        },
-        "stall_minutes": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "capture_lines": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "mouse": {
-          "type": "boolean"
-        },
-        "orchestrator_side": {
-          "type": "string"
-        },
-        "max_interactive_agent_width": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "max_interactive_agent_vertical": {
-          "type": "integer",
-          "minimum": 1
         }
       },
       "additionalProperties": false
@@ -210,15 +179,8 @@
             "$ref": "#/$defs/profile"
           }
         },
-        "non_interactive_tmux": {
-          "type": "string"
-        },
         "default_class": {
           "type": "string"
-        },
-        "reuse_stale_minutes": {
-          "type": "integer",
-          "minimum": 1
         }
       },
       "additionalProperties": false
@@ -245,9 +207,6 @@
           "$ref": "#/$defs/strings"
         },
         "model_arg": {
-          "$ref": "#/$defs/strings"
-        },
-        "permission_args": {
           "$ref": "#/$defs/strings"
         },
         "interactive_permission_args": {
@@ -304,6 +263,15 @@
         },
         "sync_index": {
           "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "plugins": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "$ref": "#/$defs/strings"
         }
       },
       "additionalProperties": false

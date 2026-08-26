@@ -4,18 +4,18 @@
   },
   "invariants": [
     {
+      "authority": "replay",
+      "max_test_functions": 6,
+      "mock_rationale": "Durable message delivery and worker-control adapters are controlled while persist-first ordering remains real.",
+      "path": "tests/invariants/test_agent_run_control_boundary.py",
+      "rationale": "Persist-first steering, progress, acknowledgement, polling, and worker lifecycle boundaries require deterministic state injection."
+    },
+    {
       "authority": "durability",
-      "max_test_functions": 4,
+      "max_test_functions": 6,
       "mock_rationale": "Synthetic clock and lifecycle boundaries isolate deterministic retry and timeout transitions.",
       "path": "tests/invariants/test_benchmark_lifecycle_hardening.py",
       "rationale": "Exhaustive benchmark lifecycle, retry, and receipt transitions are cheaper and more deterministic than full paired-run reproduction."
-    },
-    {
-      "authority": "process",
-      "max_test_functions": 8,
-      "mock_rationale": "Fake runner, tmux, and timing boundaries avoid host and paid-provider dependence.",
-      "path": "tests/invariants/test_benchmark_operator_experience.py",
-      "rationale": "Bounded runner, pane, and synthetic fast-suite edge behavior requires deterministic process fixtures rather than paid or host-dependent runs."
     },
     {
       "authority": "path-security",
@@ -47,7 +47,6 @@
     {
       "authority": "durability",
       "max_test_functions": 13,
-      "mock_rationale": "Delivery adapters and Git observations are replaced to exercise durable binding failures deterministically.",
       "path": "tests/invariants/test_completion_git_and_steering.py",
       "rationale": "Completion binding, repository identity, and steering delivery are cross-cutting durable-state invariants."
     },
@@ -68,12 +67,6 @@
       "max_test_functions": 10,
       "path": "tests/invariants/test_evaluation_templating.py",
       "rationale": "Template and schema semantics require exhaustive invalid and unavailable-data matrices."
-    },
-    {
-      "authority": "durability",
-      "max_test_functions": 2,
-      "path": "tests/invariants/test_evidence_repair.py",
-      "rationale": "Supplemental evidence must fail closed for unsafe bindings, symlinks, tampering, and invented evidence."
     },
     {
       "authority": "accounting",
@@ -136,10 +129,10 @@
       "rationale": "Source discovery, stable reads, symlink rejection, and fingerprints require adversarial filesystem cases."
     },
     {
-      "authority": "scheduler",
-      "max_test_functions": 1,
-      "path": "tests/invariants/test_manifest_native_pack.py",
-      "rationale": "Manifest-native packs must reject unknown schemas and dependency cycles independently of happy-path CLI journeys."
+      "authority": "replay",
+      "max_test_functions": 5,
+      "path": "tests/invariants/test_journal.py",
+      "rationale": "The shared append-only journal primitive owns concurrency, sequencing, truncation, and malformed-record behavior for multiple durable subsystems."
     },
     {
       "authority": "path-security",
@@ -155,7 +148,6 @@
     {
       "authority": "replay",
       "max_test_functions": 6,
-      "mock_rationale": "Signal, cursor, and batch boundaries are controlled to prove replay and shutdown behavior.",
       "path": "tests/invariants/test_orchestrator_inbox.py",
       "rationale": "Inbox import, deduplication, fairness, signaling, and cursor recovery require deterministic replay matrices."
     },
@@ -174,6 +166,12 @@
       "rationale": "Timeout, process-group cancellation, output caps, environment policy, and redaction require adversarial process matrices."
     },
     {
+      "authority": "scheduler",
+      "max_test_functions": 1,
+      "path": "tests/invariants/test_prompt_pack_manifest.py",
+      "rationale": "The single versioned prompt-pack manifest must reject unsupported schemas and dependency cycles independently of happy-path scaffold/archive journeys."
+    },
+    {
       "authority": "accounting",
       "max_test_functions": 3,
       "path": "tests/invariants/test_provider_and_evaluation.py",
@@ -184,6 +182,13 @@
       "max_test_functions": 4,
       "path": "tests/invariants/test_repository_closeout.py",
       "rationale": "Remote state, push verification, dirty classification, and receipt tamper handling require real Git edge matrices."
+    },
+    {
+      "authority": "durability",
+      "max_test_functions": 4,
+      "mock_rationale": "Sealed-terminal tests patch the immutable receipt-derived status reader to isolate projection behavior without constructing a full signed final receipt.",
+      "path": "tests/invariants/test_run_lifecycle_authority.py",
+      "rationale": "Agent Run lifecycle authority must remain separate from mutable status projections and sealed terminal evidence."
     },
     {
       "authority": "evaluation",
@@ -202,24 +207,10 @@
       "rationale": "Seal, traversal, symlink, and read-only boundaries require adversarial filesystem matrices."
     },
     {
-      "authority": "replay",
-      "max_test_functions": 5,
-      "mock_rationale": "Message, bridge, and tmux adapters are controlled while durable ordering remains real.",
-      "path": "tests/invariants/test_session_control_boundary.py",
-      "rationale": "Durable message ordering, wakeup replay, and bridge routing require deterministic state injection."
-    },
-    {
       "authority": "durability",
       "max_test_functions": 14,
       "path": "tests/invariants/test_sqlite_index.py",
       "rationale": "Projection rebuild, migration, tamper, freshness, and typed query behavior require generated multi-run matrices."
-    },
-    {
-      "authority": "durability",
-      "max_test_functions": 9,
-      "mock_rationale": "Synthetic pane listings reproduce topology races without requiring a live tmux server.",
-      "path": "tests/invariants/test_tmux_pane_identity.py",
-      "rationale": "Pane identity, role selection, and lifecycle reconciliation require synthetic tmux topology matrices."
     },
     {
       "authority": "path-security",
@@ -234,16 +225,10 @@
   ],
   "layers": {
     "acceptance": {
-      "max_collected_cases": 56,
-      "max_files": 18,
-      "max_test_functions": 55,
+      "max_collected_cases": 30,
+      "max_files": 9,
+      "max_test_functions": 20,
       "path": "tests/acceptance"
-    },
-    "future": {
-      "max_collected_cases": 11,
-      "max_files": 4,
-      "max_test_functions": 11,
-      "path": "tests/future"
     },
     "invariants": {
       "max_collected_cases": 201,
@@ -251,23 +236,11 @@
       "max_test_functions": 186,
       "path": "tests/invariants"
     },
-    "live": {
-      "max_collected_cases": 2,
-      "max_files": 1,
-      "max_test_functions": 2,
-      "path": "tests/live"
-    },
     "release": {
       "max_collected_cases": 16,
       "max_files": 3,
       "max_test_functions": 16,
       "path": "tests/release"
-    },
-    "root": {
-      "max_collected_cases": 2,
-      "max_files": 1,
-      "max_test_functions": 2,
-      "path": "tests/test_preflight_journey.py"
     }
   },
   "schema": "agent-workflow/test-authority/v1",

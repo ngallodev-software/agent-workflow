@@ -19,7 +19,7 @@
 
 ## Context
 
-The evidence plane now includes launch contracts, lifecycle events, workflow journals, terminal observations, health samples, permission findings, incidents, remediation outcomes, process results, evaluation metrics, and hierarchy designs. File-local authority is ideal for sealing, portability, replay, and failure isolation, but repeated cross-run analysis through recursive filesystem scans is increasingly costly and difficult to secure consistently.
+The evidence plane now includes Agent Run contracts, lifecycle events, workflow journals, execution observations, health samples, permission findings, incidents, remediation outcomes, process results, evaluation metrics, and hierarchy designs. File-local authority is ideal for sealing, portability, replay, and failure isolation, but repeated cross-run analysis through recursive filesystem scans is increasingly costly and difficult to secure consistently.
 
 Typical operational questions are relational:
 
@@ -77,7 +77,7 @@ The first implementation performs safe per-run incremental reconciliation:
 4. For a changed run, read structured artifacts through no-follow descriptors; hold shared locks while reading append-only JSONL journals.
 5. Validate known `agent-workflow/*` schemas.
 6. Replace that run’s projection in one transaction.
-7. Quarantine corrupt runs as `index_state=error` without losing healthy projections.
+7. Record corrupt current runs as `index_state=error` without losing healthy projections.
 8. Prune rows whose source run no longer exists in the selected discovery scope.
 
 `agent-workflow index verify --full` rehashes every indexed structured source artifact. A later measured-scale task may add byte-offset journal checkpoints, but offset state must remain reconstructable and may never become event authority.
@@ -103,10 +103,10 @@ The database is disposable:
 ```bash
 rm ~/.local/state/agent-workflow/index/agent-workflow.sqlite3*
 agent-workflow index rebuild
-agent-workflow index verify --full [--review SESSION]
+agent-workflow index verify --full [--review AGENT_RUN]
 ```
 
-A corrupt source run is represented as an index error and is not silently repaired. The authoritative run remains available for explicit evidence repair or investigation. SQLite migration errors affect only the projection and must never rewrite historical source artifacts.
+A corrupt source run is represented as an index error and is not silently repaired or translated. The authoritative run remains available for investigation. A non-current Agent-Workflow SQLite projection is rejected and rebuilt rather than migrated in place; source Agent Run evidence is never rewritten.
 
 ## Alternatives considered
 
@@ -140,7 +140,7 @@ Rejected. It would make database corruption, migration, or accidental mutation c
 ### Costs and risks
 
 - Duplicate derived data consumes disk space.
-- Schema migrations and query compatibility require maintenance.
+- Projection schema evolution requires coordinated rebuild and query updates.
 - Projection freshness must be visible to users.
 - Privacy policy must cover normalized fields and summaries.
 - Indexing active journals requires careful locking and corruption handling.
@@ -152,10 +152,10 @@ Closeout requires:
 - rebuild equivalence after database deletion;
 - safe incremental update and stale-row pruning;
 - archive discovery;
-- schema migration and downgrade refusal;
+- non-current projection refusal and clean rebuild;
 - SQLite integrity and foreign-key checks;
 - full source-digest verification;
-- corrupt-run quarantine without damaging healthy projections;
+- corrupt-run isolation without damaging healthy projections;
 - proof that raw terminal and message content is absent;
 - installed-wheel CLI and supervisor synchronization journeys;
 - scale evidence before claiming a specific run/event capacity.

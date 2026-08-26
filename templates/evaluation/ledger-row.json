@@ -13,7 +13,6 @@
   "policy_result": "not_evaluated",
   "acceptance_eligible": false,
   "attempt_classification": "integrity-unverified",
-  "supplemental_repairs": [],
   "evaluation_state": "not_verified",
   "evaluation_result": null,
   "disposition": null,

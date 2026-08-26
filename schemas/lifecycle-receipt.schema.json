@@ -2,10 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "agent-workflow/lifecycle-receipt/v1",
   "type": "object",
-  "required": ["schema", "session_id", "action", "actor", "reason", "created_at", "final_receipt_sha256"],
+  "required": ["schema", "agent_run_id", "action", "actor", "reason", "created_at", "final_receipt_sha256"],
   "properties": {
     "schema": {"const": "agent-workflow/lifecycle-receipt/v1"},
-    "session_id": {"type": "string"},
+    "agent_run_id": {"type": "string"},
     "action": {"enum": ["reviewed", "accepted", "rejected"]},
     "actor": {"type": "string", "minLength": 1},
     "reason": {"type": "string", "minLength": 1},

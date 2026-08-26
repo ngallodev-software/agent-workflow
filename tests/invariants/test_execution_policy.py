@@ -12,7 +12,6 @@ def test_budget_policy_matrix_keeps_policy_failures_separate_from_executor_outco
             {
                 "policy_result": "failed",
                 "policy_failure_category": "budget_exhausted",
-                "budget_exceeded": ["input_tokens:289732>80000"],
                 "metrics": ["input_tokens"],
             },
         ),
@@ -23,7 +22,6 @@ def test_budget_policy_matrix_keeps_policy_failures_separate_from_executor_outco
             {
                 "policy_result": "not_evaluated",
                 "policy_failure_category": None,
-                "budget_exceeded": [],
                 "metrics": [],
             },
         ),
@@ -34,7 +32,6 @@ def test_budget_policy_matrix_keeps_policy_failures_separate_from_executor_outco
             {
                 "policy_result": "failed",
                 "policy_failure_category": "budget_exhausted",
-                "budget_exceeded": ["cost:4.0>3.0", "currency:EUR!=USD", "wall_seconds:2.5>2"],
                 "metrics": ["cost", "currency", "wall_seconds"],
             },
         ),
@@ -44,5 +41,4 @@ def test_budget_policy_matrix_keeps_policy_failures_separate_from_executor_outco
         result = evaluate_budgets(usage, budget, wall_seconds=wall_seconds)
         assert result["policy_result"] == expected["policy_result"]
         assert result["policy_failure_category"] == expected["policy_failure_category"]
-        assert result["budget_exceeded"] == expected["budget_exceeded"]
         assert [item["metric"] for item in result["policy_failures"]] == expected["metrics"]

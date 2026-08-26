@@ -13,6 +13,7 @@ from mcp.client.stdio import stdio_client
 
 from agent_workflow.messages import append_message
 from tests.conftest import (
+    prepare_and_start_agent_run,
     InstalledProduct,
     fake_agent_path,
     git_repo,
@@ -32,8 +33,8 @@ def test_installed_stdio_mcp_reads_bounded_metadata_only(
     git_repo(repo)
     prompt = tmp_path / "prompt.md"
     prompt.write_text("Complete the bounded MCP launch journey.\n", encoding="utf-8")
-    installed_product.json(
-        "launch",
+    prepare_and_start_agent_run(
+        installed_product,
         "mcp-run",
         repo,
         prompt,
@@ -51,7 +52,7 @@ def test_installed_stdio_mcp_reads_bounded_metadata_only(
     secret = "synthetic-secret@example.test"
     append_message(
         run,
-        session_id="mcp-run",
+        agent_run_id="mcp-run",
         direction="child_to_parent",
         kind="progress",
         actor="child",
@@ -111,7 +112,7 @@ def test_installed_stdio_mcp_reads_bounded_metadata_only(
     assert item["redaction_state"] == "body_omitted"
     assert item["content_length"] == len(secret.encode())
     assert "content" not in item
-    assert runs["items"][0]["session_id"] == "mcp-run"
+    assert runs["items"][0]["agent_run_id"] == "mcp-run"
 
     card_path = run / "command-card.md"
     card_path.chmod(0o644)

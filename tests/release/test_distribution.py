@@ -63,11 +63,10 @@ def test_test_authority_audit_blocks_silent_suite_growth(tmp_path: Path) -> None
         assert expected_text in result.stdout + result.stderr
 
     testing = (REPO_ROOT / "docs" / "TESTING.md").read_text(encoding="utf-8")
-    protocol = (REPO_ROOT / "docs" / "references" / "EXECUTION_PROTOCOL.md").read_text(encoding="utf-8")
     preflight = (REPO_ROOT / "docs" / "references" / "WORKTREE_PREFLIGHT.md").read_text(encoding="utf-8")
     assert "tests/test-authority.json" in testing
     assert "scripts/audit-test-suite.py" in testing
-    assert "test-authority" in protocol
+    assert "assertion-dense" in testing
     assert "persistence=false" in preflight
     assert "$XDG_CACHE_HOME/agent-workflow/codebase-memory/<worktree-id>/" in preflight
     assert "git status --porcelain=v2 -z" in preflight
@@ -95,14 +94,13 @@ def test_documented_commands_match_the_installed_public_surface(
     command_group = re.search(r"\{([a-z][a-z0-9,-]+)\}", help_text)
     assert command_group is not None, help_text
     public_commands = set(command_group.group(1).split(","))
-    assert {"launch", "status", "workflow", "pack", "eval"} <= public_commands
+    assert {"agent-run", "workflow", "pack", "eval", "worktree", "supervisor"} <= public_commands
 
     canonical_docs = [REPO_ROOT / "README.md", *sorted((REPO_ROOT / "docs").glob("*.md"))]
     documented: set[str] = set()
     for path in canonical_docs:
         text = path.read_text(encoding="utf-8")
-        fence_languages = "bash|sh|shell|text" if path.name == "COMMAND_REFERENCE.md" else "bash|sh|shell"
-        blocks = re.findall(rf"```(?:{fence_languages})\n(.*?)```", text, flags=re.DOTALL)
+        blocks = re.findall(r"```(?:bash|sh|shell)\n(.*?)```", text, flags=re.DOTALL)
         for block in blocks:
             for match in re.finditer(
                 r"^\s*agent-workflow\s+([a-z][a-z0-9-]+)(?:\s|$)",
@@ -112,8 +110,8 @@ def test_documented_commands_match_the_installed_public_surface(
                 documented.add(match.group(1))
     assert documented <= public_commands, f"unknown documented commands: {sorted(documented - public_commands)}"
 
-    command_reference = (REPO_ROOT / "docs" / "COMMAND_REFERENCE.md").read_text(encoding="utf-8")
-    assert "agent-workflow eval compare BASELINE.json CANDIDATE.json --output PATH" in command_reference
+    catalog = installed_product.run("commands", "--format", "markdown", env=product_env, check=True).stdout
+    assert "agent-workflow eval compare --output OUTPUT baseline candidate" in catalog
 
 
 def test_built_wheel_excludes_repository_only_ci_assets(tmp_path: Path) -> None:

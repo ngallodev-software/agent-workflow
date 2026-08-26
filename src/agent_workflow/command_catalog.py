@@ -23,10 +23,10 @@ COMMAND_ROLES = ("orchestrator", "implementation", "review")
 _ROLE_COMMANDS: dict[str, frozenset[str]] = {
     "implementation": frozenset(
         {
-            "status",
-            "progress",
-            "ack",
-            "watch",
+            "agent-run status",
+            "agent-run progress",
+            "agent-run ack",
+            "agent-run watch",
             "agent context",
             "agent completion-validate",
             "agent task-complete",
@@ -34,10 +34,10 @@ _ROLE_COMMANDS: dict[str, frozenset[str]] = {
     ),
     "review": frozenset(
         {
-            "status",
-            "progress",
-            "ack",
-            "watch",
+            "agent-run status",
+            "agent-run progress",
+            "agent-run ack",
+            "agent-run watch",
             "agent context",
             "agent completion-validate",
             "agent task-complete",
@@ -63,11 +63,27 @@ _ROLE_COMMANDS: dict[str, frozenset[str]] = {
             "worktree create",
             "worktree list",
             "worktree remove",
-            "launch",
-            "list",
-            "archive",
-            "status",
-            "repair",
+            "worktree closeout",
+            "worktree closeout-verify",
+            "agent-run prepare",
+            "agent-run start",
+            "agent-run list",
+            "agent-run archive",
+            "agent-run status",
+            "agent-run repair",
+            "agent-run finalize",
+            "agent-run tail",
+            "agent-run steer",
+            "agent-run progress",
+            "agent-run ack",
+            "agent-run watch",
+            "agent-run interrupt",
+            "agent-run terminate",
+            "agent-run restart",
+            "agent-run review",
+            "agent-run accept",
+            "agent-run reject",
+            "agent-run force-accept",
             "supervisor once",
             "supervisor run",
             "index status",
@@ -75,29 +91,13 @@ _ROLE_COMMANDS: dict[str, frozenset[str]] = {
             "index rebuild",
             "index verify",
             "index query",
-            "attach",
-            "tail",
-            "steer",
-            "progress",
-            "ack",
-            "watch",
-            "interrupt",
-            "terminate",
-            "kill",
-            "restart",
             "agent context",
-            "agent candidates",
-            "agent reuse",
-            "agent auto-reuse",
             "workflow validate",
             "workflow start",
             "workflow status",
             "workflow resume",
             "workflow seal",
             "workflow verify",
-            "review",
-            "accept",
-            "reject",
             "assess-sealed-runs",
             "ledger",
             "eval validate",
@@ -110,6 +110,7 @@ _ROLE_COMMANDS: dict[str, frozenset[str]] = {
         }
     ),
 }
+
 
 
 def role_for_agent_class(agent_class: str | None) -> str:
@@ -339,8 +340,8 @@ def runtime_command_catalog(
     *,
     no_plugins: bool = False,
 ) -> dict[str, Any]:
-    # Imported lazily to avoid a module-import cycle: cli imports sessions and
-    # sessions writes the catalog only after the CLI module is fully initialized.
+    # Imported lazily to avoid a module-import cycle while Agent Run preparation
+    # writes the catalog only after the CLI module is fully initialized.
     from .cli import build_parser
     from .plugins import EMPTY_PLUGIN_REGISTRY, load_plugin_registry
 

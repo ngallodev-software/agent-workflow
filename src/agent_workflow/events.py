@@ -1,13 +1,39 @@
 from __future__ import annotations
 
-import json
-import os
-import fcntl
 from pathlib import Path
 from typing import Any, Sequence
 
 from .errors import WorkflowError
+from .journal import JournalTransactionResult, read_jsonl, transact_jsonl
 from .util import utc_now
+
+LIFECYCLE_SCHEMA = "agent-workflow/lifecycle-event/v1"
+
+
+def _validate_lifecycle_event(value: object, expected_sequence: int) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise WorkflowError("lifecycle event must be a JSON object")
+    required = {
+        "schema",
+        "sequence",
+        "timestamp",
+        "dimension",
+        "prior",
+        "new",
+        "actor",
+        "reason",
+        "receipt_refs",
+    }
+    if set(value) != required or value.get("schema") != LIFECYCLE_SCHEMA:
+        raise WorkflowError("invalid lifecycle event")
+    if value.get("sequence") != expected_sequence:
+        raise WorkflowError(
+            f"lifecycle event sequence mismatch: expected {expected_sequence}"
+        )
+    refs = value.get("receipt_refs")
+    if not isinstance(refs, list) or not all(isinstance(item, str) for item in refs):
+        raise WorkflowError("invalid lifecycle event receipt references")
+    return value
 
 
 def append_lifecycle_event(
@@ -22,12 +48,11 @@ def append_lifecycle_event(
 ) -> dict[str, Any]:
     run_dir.mkdir(parents=True, exist_ok=True)
     path = run_dir / "events.jsonl"
-    with path.open("a+b") as stream:
-        fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
-        stream.seek(0)
-        sequence = 1 + sum(1 for line in stream if line.strip())
+
+    def decide(existing: list[dict[str, Any]]) -> JournalTransactionResult[dict[str, Any]]:
+        sequence = len(existing) + 1
         event = {
-            "schema": "agent-workflow/lifecycle-event/v1",
+            "schema": LIFECYCLE_SCHEMA,
             "sequence": sequence,
             "timestamp": utc_now(),
             "dimension": dimension,
@@ -37,35 +62,15 @@ def append_lifecycle_event(
             "reason": reason,
             "receipt_refs": list(receipt_refs),
         }
-        stream.seek(0, os.SEEK_END)
-        stream.write(
-            json.dumps(event, sort_keys=True, separators=(",", ":")).encode()
-            + b"\n"
-        )
-        stream.flush()
-        os.fsync(stream.fileno())
-        fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
-    return event
+        event = _validate_lifecycle_event(event, sequence)
+        return JournalTransactionResult(value=event, record=event)
+
+    return transact_jsonl(path, validator=_validate_lifecycle_event, transaction=decide, sequence_field="sequence")
 
 
 def reconstruct_lifecycle(path: Path) -> dict[str, Any]:
     state: dict[str, Any] = {}
-    expected = 1
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except OSError as exc:
-        raise WorkflowError(f"cannot read lifecycle events {path}: {exc}") from exc
-    for line in lines:
-        if not line.strip():
-            continue
-        try:
-            event = json.loads(line)
-        except json.JSONDecodeError as exc:
-            raise WorkflowError(f"invalid lifecycle event JSON: {exc}") from exc
-        if not isinstance(event, dict) or event.get("sequence") != expected:
-            raise WorkflowError(
-                f"lifecycle event sequence mismatch: expected {expected}"
-            )
+    events = read_jsonl(path, validator=_validate_lifecycle_event, sequence_field="sequence")
+    for event in events:
         state[str(event.get("dimension"))] = event.get("new")
-        expected += 1
-    return {"event_count": expected - 1, "state": state}
+    return {"event_count": len(events), "state": state}

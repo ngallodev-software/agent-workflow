@@ -1,1 +1,0 @@
-"""Priority Picker benchmark fixture."""

@@ -31,7 +31,7 @@ def _records(tmp_path: Path) -> list[dict]:
     return [
         append_message(
             tmp_path,
-            session_id="source-run",
+            agent_run_id="source-run",
             direction="child_to_parent",
             kind="progress",
             actor="child",
@@ -39,7 +39,7 @@ def _records(tmp_path: Path) -> list[dict]:
         ),
         append_message(
             tmp_path,
-            session_id="source-run",
+            agent_run_id="source-run",
             direction="child_to_parent",
             kind="progress",
             actor="child",

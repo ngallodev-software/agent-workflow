@@ -1,9 +1,0 @@
-phase: "0"
-name: "enforced-codex-model-policy"
-mandatory_order: ["POL-001"]
-tasks:
-  - id: "POL-001"
-    tier: B
-    session: "codex-luna-effort-policy-pol-001"
-    prompt: "tickets/POL-001-luna-effort-policy.md"
-    backlog_id: "POL-001"

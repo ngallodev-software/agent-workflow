@@ -17,7 +17,7 @@ def _export(root: Path, *, plan: bool = False, score: bool = False) -> Path:
     run.mkdir()
     completion = {
         "schema": "agent-workflow/completion/v1",
-        "session_id": "run-1",
+        "agent_run_id": "run-1",
         "ticket_id": "T-1",
         "pack_id": "pack-1",
         "result": "completed",
@@ -35,7 +35,7 @@ def _export(root: Path, *, plan: bool = False, score: bool = False) -> Path:
         artifacts.append({"path": "evaluation-runtime.json", "sha256": "1" * 64, "size": 1})
     if score:
         artifacts.append({"path": "scores/score-set.json", "sha256": "2" * 64, "size": 1})
-    receipt = {"schema": "agent-workflow/final-receipt/v1", "session_id": "run-1", "sealed_at": "2026-07-26T00:00:00+00:00", "artifacts": artifacts}
+    receipt = {"schema": "agent-workflow/final-receipt/v1", "agent_run_id": "run-1", "sealed_at": "2026-07-26T00:00:00+00:00", "artifacts": artifacts}
     (run / "final-receipt.json").write_text(json.dumps(receipt), encoding="utf-8")
     return run
 
@@ -119,7 +119,7 @@ def test_scope_drift_and_malformed_provider_stream_are_not_verified(tmp_path: Pa
     }
     provider = {
         "schema": "agent-workflow/provider-evidence/v1",
-        "session_id": "run-1",
+        "agent_run_id": "run-1",
         "executor": "fixture",
         "stream_format": "jsonl",
         "created_at": "2026-07-27T00:00:00+00:00",
@@ -130,7 +130,7 @@ def test_scope_drift_and_malformed_provider_stream_are_not_verified(tmp_path: Pa
         "capture_complete": True,
         "malformed_event_count": 1,
         "classified_usage_count": 1,
-        "retry_of_run_id": None,
+        "retry_of_agent_run_id": None,
         "usage_complete": True,
         "incomplete_reasons": [],
         "usage_events": [],

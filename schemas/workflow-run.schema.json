@@ -78,9 +78,9 @@
             "required": [
               "node_id",
               "state",
-              "run_id",
+              "agent_run_id",
               "attempt",
-              "retry_of_run_id",
+              "retry_of_agent_run_id",
               "bound_at",
               "terminal_reason"
             ],
@@ -99,7 +99,7 @@
                   "recoverable"
                 ]
               },
-              "run_id": {
+              "agent_run_id": {
                 "type": [
                   "string",
                   "null"
@@ -113,7 +113,7 @@
                 ],
                 "minimum": 1
               },
-              "retry_of_run_id": {
+              "retry_of_agent_run_id": {
                 "type": [
                   "string",
                   "null"

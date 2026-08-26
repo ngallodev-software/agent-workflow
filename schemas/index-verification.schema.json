@@ -2,22 +2,88 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "agent-workflow/index-verification/v1",
   "type": "object",
-  "required": ["schema", "database", "valid", "schema_version", "expected_schema_version", "integrity_check", "foreign_key_errors", "source_verification", "source_mismatches", "historical_artifacts", "review_scope", "review_valid", "review_errors", "review_evidence"],
+  "required": [
+    "schema",
+    "database",
+    "valid",
+    "schema_version",
+    "expected_schema_version",
+    "integrity_check",
+    "foreign_key_errors",
+    "source_verification",
+    "source_mismatches",
+    "review_scope",
+    "review_valid",
+    "review_errors",
+    "review_evidence"
+  ],
   "properties": {
-    "schema": {"const": "agent-workflow/index-verification/v1"},
-    "database": {"type": "string", "minLength": 1},
-    "valid": {"type": "boolean"},
-    "schema_version": {"type": "integer", "minimum": 1},
-    "expected_schema_version": {"type": "integer", "minimum": 1},
-    "integrity_check": {"type": "array", "items": {"type": "string"}},
-    "foreign_key_errors": {"type": "array", "items": {"type": "object"}},
-    "source_verification": {"enum": ["full", "not-requested"]},
-    "source_mismatches": {"type": "array", "items": {"type": "object"}}
-    ,"historical_artifacts": {"type": "array", "items": {"type": "object"}},
-    "review_scope": {"type": ["string", "null"]},
-    "review_valid": {"type": ["boolean", "null"]},
-    "review_errors": {"type": "array", "items": {"type": "string"}},
-    "review_evidence": {"type": ["object", "null"]}
+    "schema": {
+      "const": "agent-workflow/index-verification/v1"
+    },
+    "database": {
+      "type": "string",
+      "minLength": 1
+    },
+    "valid": {
+      "type": "boolean"
+    },
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "expected_schema_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "integrity_check": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "foreign_key_errors": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "source_verification": {
+      "enum": [
+        "full",
+        "not-requested"
+      ]
+    },
+    "source_mismatches": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "review_scope": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "review_valid": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "review_errors": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "review_evidence": {
+      "type": [
+        "object",
+        "null"
+      ]
+    }
   },
   "additionalProperties": false
 }

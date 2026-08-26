@@ -2,10 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "agent-workflow/completion-collection/v1",
   "type": "object",
-  "required": ["schema", "session_id", "adapter", "adapter_version", "source_path", "source_sha256", "canonical_mapping", "canonical_sha256", "validation_status", "validation_errors", "collected_at", "stored_path"],
+  "required": ["schema", "agent_run_id", "adapter", "adapter_version", "source_path", "source_sha256", "canonical_mapping", "canonical_sha256", "validation_status", "validation_errors", "collected_at", "stored_path"],
   "properties": {
     "schema": {"const": "agent-workflow/completion-collection/v1"},
-    "session_id": {"type": "string"},
+    "agent_run_id": {"type": "string"},
     "adapter": {"const": "native"},
     "adapter_version": {"const": "1"},
     "source_path": {"type": ["string", "null"]},

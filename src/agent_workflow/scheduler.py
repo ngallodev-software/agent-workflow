@@ -17,7 +17,8 @@ from .receipts import (
     verify_seal_details,
 )
 from .routing import advise_routing
-from .sessions import launch as launch_session
+from .agent_runs import prepare as prepare_agent_run
+from .agent_runs import start as start_agent_run
 from .util import validate_id
 from .workflow import (
     ensure_workflow_events_file,
@@ -28,7 +29,7 @@ from .workflow import (
     workflow_events_path,
     workflow_lock,
 )
-from .state import run_dir as session_run_dir
+from .state import run_dir as agent_run_dir
 
 
 LaunchFunction = Callable[[Mapping[str, Any], str], Any]
@@ -39,9 +40,9 @@ class LaunchPlan:
     """A durable node binding selected for one scheduler attempt."""
 
     node_id: str
-    run_id: str
+    agent_run_id: str
     attempt: int
-    retry_of_run_id: str | None = None
+    retry_of_agent_run_id: str | None = None
 
 
 def calculate_eligibility(
@@ -110,7 +111,7 @@ class SchedulerService:
         self.launch_fn = launch_fn or self._launch
         self.actor = actor
 
-    def _launch(self, node: Mapping[str, Any], run_id: str) -> Any:
+    def _launch(self, node: Mapping[str, Any], agent_run_id: str) -> Any:
         prompt = Path(str(node["prompt_path"]))
         if not prompt.is_absolute():
             prompt = self.workdir / prompt
@@ -126,19 +127,20 @@ class SchedulerService:
         )
         validate_instance(advice, advice["schema"], artifact="workflow routing advice")
         selected = advice["enforced_selection"]
-        result = launch_session(
+        prepared = prepare_agent_run(
             self.settings,
-            session_id=run_id,
+            agent_run_id=agent_run_id,
             workdir=self.workdir,
             prompt_path=prompt,
             ticket_id=str(node["ticket_id"]) if node.get("ticket_id") else None,
             pack_id=str(node["pack_id"]) if node.get("pack_id") else None,
-            retry_of=str(node["retry_of_run_id"]) if node.get("retry_of_run_id") else None,
+            retry_of=str(node["retry_of_agent_run_id"]) if node.get("retry_of_agent_run_id") else None,
             tier=str(node["tier"]) if node.get("tier") else None,
             executor=str(selected["executor"]),
             agent_class=str(selected["agent_class"]),
             model=str(selected["model"]),
-            interactive=bool(selected["interactive"]),
+            interactive=False,
+            worker_mode="headless",
             allow_no_go_model=bool(node.get("allow_no_go_model", False)),
             workflow_context=(
                 node["workflow_inputs"]["artifact"]
@@ -146,13 +148,14 @@ class SchedulerService:
                 else None
             ),
         )
-        child_dir = session_run_dir(self.settings, run_id)
+        result = start_agent_run(self.settings, agent_run_id)
+        child_dir = agent_run_dir(self.settings, agent_run_id)
         command = read_contract(child_dir / "command.json", "agent-workflow/command/v1")
         actual = {
             "agent_class": command.get("agent_class"),
             "executor": command.get("executor"),
             "model": command.get("model"),
-            "interactive": command.get("interactive"),
+            "interactive": False,
         }
         routing_record = dict(advice)
         routing_record["actual_selection"] = actual
@@ -184,15 +187,15 @@ class SchedulerService:
 
     @staticmethod
     def _run_id(workflow_id: str, node: Mapping[str, Any], attempt: int) -> str:
-        base = str(node["session_id"])
-        run_id = base if attempt == 1 else f"{base}-retry-{attempt}"
-        return validate_id(run_id, "workflow run ID")
+        base = str(node["agent_run_id"])
+        agent_run_id = base if attempt == 1 else f"{base}-retry-{attempt}"
+        return validate_id(agent_run_id, "Agent Run ID")
 
     def status(self, snapshot: Mapping[str, Any]) -> dict[str, Any]:
         events_path = ensure_workflow_events_file(self.run_dir)
         return reconstruct_workflow_status(snapshot, events_path)
 
-    def _child_run_exists(self, run_id: str) -> bool:
+    def _child_run_exists(self, agent_run_id: str) -> bool:
         """Return whether a child has a real run footprint outside workflow events.
 
         The workflow journal may record that a launch once existed, but it cannot
@@ -200,7 +203,7 @@ class SchedulerService:
         also only a projection. A matching provenance contract is the minimum
         durable launch footprint; a valid final receipt is stronger evidence.
         """
-        child = session_run_dir(self.settings, run_id)
+        child = agent_run_dir(self.settings, agent_run_id)
         try:
             info = child.lstat()
         except OSError:
@@ -218,7 +221,7 @@ class SchedulerService:
                 # sealed receipt.
                 pass
             else:
-                return receipt.get("session_id") == run_id
+                return receipt.get("agent_run_id") == agent_run_id
         provenance_path = child / "run-provenance.json"
         if provenance_path.is_symlink() or not provenance_path.is_file():
             return False
@@ -228,22 +231,22 @@ class SchedulerService:
             )
         except WorkflowError:
             return False
-        return provenance.get("session_id") == run_id
+        return provenance.get("agent_run_id") == agent_run_id
 
-    def _terminal_child_outcome(self, run_id: str) -> tuple[str, str, dict[str, Any]] | None:
+    def _terminal_child_outcome(self, agent_run_id: str) -> tuple[str, str, dict[str, Any]] | None:
         """Return a verified terminal workflow transition for a sealed child."""
-        child = session_run_dir(self.settings, run_id)
+        child = agent_run_dir(self.settings, agent_run_id)
         receipt_path = child / "final-receipt.json"
         if not receipt_path.exists() and not receipt_path.is_symlink():
             return None
         receipt, receipt_digest = verify_seal_details(child)
-        if receipt.get("session_id") != run_id:
-            raise WorkflowError(f"child final receipt belongs to another run: {run_id}")
+        if receipt.get("agent_run_id") != agent_run_id:
+            raise WorkflowError(f"child final receipt belongs to another run: {agent_run_id}")
         final_status, _ = read_sealed_contract(
             child,
             receipt,
             "final-status.json",
-            "agent-workflow/session-status/v2",
+            "agent-workflow/agent-run-status/v1",
         )
         completion, completion_digest = read_sealed_contract(
             child,
@@ -257,15 +260,15 @@ class SchedulerService:
             "collections/completion.json",
             "agent-workflow/completion-collection/v1",
         )
-        if final_status.get("session_id") != run_id or completion.get("session_id") != run_id:
-            raise WorkflowError(f"child terminal evidence belongs to another run: {run_id}")
+        if final_status.get("agent_run_id") != agent_run_id or completion.get("agent_run_id") != agent_run_id:
+            raise WorkflowError(f"child terminal evidence belongs to another run: {agent_run_id}")
         completed = (
             final_status.get("status") == "completed"
             and completion.get("result") == "completed"
             and collection.get("validation_status") == "valid"
         )
         details = {
-            "child_run_id": run_id,
+            "child_agent_run_id": agent_run_id,
             "child_final_receipt_sha256": receipt_digest,
             "child_completion_sha256": completion_digest,
             "child_status": final_status.get("status"),
@@ -273,8 +276,8 @@ class SchedulerService:
             "child_completion_validation_status": collection.get("validation_status"),
         }
         if completed:
-            return "completed", "sealed child run completed successfully", details
-        return "failed", "sealed child run did not satisfy completion evidence", details
+            return "completed", "sealed child Agent Run completed successfully", details
+        return "failed", "sealed child Agent Run did not satisfy completion evidence", details
 
     def _reconcile_running(self, snapshot: Mapping[str, Any], status: Mapping[str, Any]) -> None:
         digest = snapshot_sha256(snapshot)
@@ -285,21 +288,21 @@ class SchedulerService:
             node_id = str(current["node_id"])
             if node_map[node_id].get("kind", "task") != "task":
                 raise WorkflowError(f"approval node cannot be running: {node_id}")
-            run_id = current.get("run_id")
-            if not isinstance(run_id, str) or not run_id:
+            agent_run_id = current.get("agent_run_id")
+            if not isinstance(agent_run_id, str) or not agent_run_id:
                 record_workflow_transition(
                     self.run_dir,
                     workflow_id=str(snapshot["workflow_id"]),
                     node_id=node_id,
                     actor=self.actor,
-                    reason="running node has no authoritative child run binding",
+                    reason="running node has no authoritative child Agent Run binding",
                     snapshot_sha256=digest,
                     previous_state="running",
                     next_state="recoverable",
                 )
                 continue
             try:
-                outcome = self._terminal_child_outcome(run_id)
+                outcome = self._terminal_child_outcome(agent_run_id)
             except WorkflowError as exc:
                 record_workflow_transition(
                     self.run_dir,
@@ -310,7 +313,7 @@ class SchedulerService:
                     snapshot_sha256=digest,
                     previous_state="running",
                     next_state="failed",
-                    details={"child_run_id": run_id},
+                    details={"child_agent_run_id": agent_run_id},
                 )
                 continue
             if outcome is not None:
@@ -326,17 +329,17 @@ class SchedulerService:
                     next_state=next_state,
                     details=details,
                 )
-            elif not self._child_run_exists(run_id):
+            elif not self._child_run_exists(agent_run_id):
                 record_workflow_transition(
                     self.run_dir,
                     workflow_id=str(snapshot["workflow_id"]),
                     node_id=node_id,
                     actor=self.actor,
-                    reason="running state has no authoritative child run; recovery required",
+                    reason="running state has no authoritative child Agent Run; recovery required",
                     snapshot_sha256=digest,
                     previous_state="running",
                     next_state="recoverable",
-                    details={"child_run_id": run_id},
+                    details={"child_agent_run_id": agent_run_id},
                 )
 
     def _reconcile_blocked(self, snapshot: Mapping[str, Any], status: Mapping[str, Any]) -> None:
@@ -410,14 +413,14 @@ class SchedulerService:
                 continue
             subject_id = str(node["approval_for"])
             subject = status_map[subject_id]
-            run_id = subject.get("run_id")
-            if not isinstance(run_id, str) or not run_id:
+            agent_run_id = subject.get("agent_run_id")
+            if not isinstance(agent_run_id, str) or not agent_run_id:
                 record_workflow_transition(
                     self.run_dir,
                     workflow_id=str(snapshot["workflow_id"]),
                     node_id=node_id,
                     actor=self.actor,
-                    reason="approval subject has no authoritative child run binding",
+                    reason="approval subject has no authoritative child Agent Run binding",
                     snapshot_sha256=digest,
                     previous_state="eligible",
                     next_state="failed",
@@ -426,7 +429,7 @@ class SchedulerService:
                 continue
             try:
                 disposition = lifecycle_disposition(
-                    session_run_dir(self.settings, run_id)
+                    agent_run_dir(self.settings, agent_run_id)
                 )
             except WorkflowError as exc:
                 record_workflow_transition(
@@ -438,7 +441,7 @@ class SchedulerService:
                     snapshot_sha256=digest,
                     previous_state="eligible",
                     next_state="failed",
-                    details={"approval_for": subject_id, "subject_run_id": run_id},
+                    details={"approval_for": subject_id, "subject_agent_run_id": agent_run_id},
                 )
                 continue
             if disposition is None or disposition["action"] == "reviewed":
@@ -446,7 +449,7 @@ class SchedulerService:
             action = str(disposition["action"])
             details = {
                 "approval_for": subject_id,
-                "subject_run_id": run_id,
+                "subject_agent_run_id": agent_run_id,
                 "approval_action": action,
                 "approval_receipt_sha256": disposition["receipt_sha256"],
                 "final_receipt_sha256": disposition["final_receipt_sha256"],
@@ -479,32 +482,32 @@ class SchedulerService:
         if (
             not retry
             and current["state"] == "eligible"
-            and current["run_id"] is not None
+            and current["agent_run_id"] is not None
         ):
             return LaunchPlan(
                 str(node["node_id"]),
-                str(current["run_id"]),
+                str(current["agent_run_id"]),
                 int(current["attempt"]),
-                current["retry_of_run_id"],
+                current["retry_of_agent_run_id"],
             )
         if retry:
             if current["state"] not in {"failed", "recoverable"}:
                 raise WorkflowError(f"node {node['node_id']} is not retryable")
             attempt = int(current["attempt"] or 0) + 1
-            retry_of = str(current["run_id"])
+            retry_of = str(current["agent_run_id"])
         else:
             if current["state"] != "eligible":
                 raise WorkflowError(f"node {node['node_id']} is not eligible")
             attempt = 1
             retry_of = None
-        run_id = self._run_id(str(snapshot["workflow_id"]), node, attempt)
+        agent_run_id = self._run_id(str(snapshot["workflow_id"]), node, attempt)
         record_workflow_binding(
             self.run_dir,
             workflow_id=str(snapshot["workflow_id"]),
             node_id=str(node["node_id"]),
-            run_id=run_id,
+            agent_run_id=agent_run_id,
             attempt=attempt,
-            retry_of_run_id=retry_of,
+            retry_of_agent_run_id=retry_of,
             actor=self.actor,
             reason="scheduler launch binding",
             snapshot_sha256=digest,
@@ -520,14 +523,14 @@ class SchedulerService:
                 previous_state=str(current["state"]),
                 next_state="eligible",
             )
-        return LaunchPlan(str(node["node_id"]), run_id, attempt, retry_of)
+        return LaunchPlan(str(node["node_id"]), agent_run_id, attempt, retry_of)
 
     def _execute(self, snapshot: Mapping[str, Any], node: Mapping[str, Any], plan: LaunchPlan) -> Any:
         node_with_lineage = dict(node)
         node_with_lineage["pack_id"] = str(node.get("pack_id") or snapshot["pack_id"])
         node_with_lineage["workflow_id"] = str(snapshot["workflow_id"])
         node_with_lineage["workflow_attempt"] = plan.attempt
-        node_with_lineage["retry_of_run_id"] = plan.retry_of_run_id
+        node_with_lineage["retry_of_agent_run_id"] = plan.retry_of_agent_run_id
         status = self.status(snapshot)
         try:
             resolved_inputs = resolve_node_inputs(
@@ -552,12 +555,12 @@ class SchedulerService:
             raise
         if resolved_inputs is not None:
             node_with_lineage["workflow_inputs"] = resolved_inputs
-        if self._child_run_exists(plan.run_id):
-            return {"recovered": True, "run_id": plan.run_id}
+        if self._child_run_exists(plan.agent_run_id):
+            return {"recovered": True, "agent_run_id": plan.agent_run_id}
         try:
-            result = self.launch_fn(node_with_lineage, plan.run_id)
+            result = self.launch_fn(node_with_lineage, plan.agent_run_id)
         except Exception as exc:
-            next_state = "recoverable" if self._child_run_exists(plan.run_id) else "failed"
+            next_state = "recoverable" if self._child_run_exists(plan.agent_run_id) else "failed"
             record_workflow_transition(
                 self.run_dir,
                 workflow_id=str(snapshot["workflow_id"]),
@@ -569,7 +572,7 @@ class SchedulerService:
                 next_state=next_state,
             )
             raise
-        if not self._child_run_exists(plan.run_id):
+        if not self._child_run_exists(plan.agent_run_id):
             record_workflow_transition(
                 self.run_dir,
                 workflow_id=str(snapshot["workflow_id"]),
@@ -580,18 +583,18 @@ class SchedulerService:
                 previous_state="eligible",
                 next_state="recoverable",
             )
-            raise WorkflowError(f"launch {plan.run_id} has no authoritative child run")
+            raise WorkflowError(f"launch {plan.agent_run_id} has no authoritative child Agent Run")
         record_workflow_transition(
             self.run_dir,
             workflow_id=str(snapshot["workflow_id"]),
             node_id=plan.node_id,
             actor=self.actor,
-            reason="authoritative child run exists",
+            reason="authoritative child Agent Run exists",
             snapshot_sha256=snapshot_sha256(snapshot),
             previous_state="eligible",
             next_state="running",
             details={
-                "child_run_id": plan.run_id,
+                "child_agent_run_id": plan.agent_run_id,
                 "input_binding_sha256": (
                     resolved_inputs["sha256"] if resolved_inputs is not None else None
                 ),

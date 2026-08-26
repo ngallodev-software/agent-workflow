@@ -1,158 +1,30 @@
-# Prompt packs
+# Prompt Packs
 
-A prompt pack is a portable, reviewable execution plan for bounded delegated work. It may use the legacy phased layout or a versioned manifest-native ticket inventory. Both formats contain bounded ticket prompts, evidence contracts, and deterministic transfer metadata.
+Prompt packs package reproducible task instructions, result contracts, evaluation definitions, and handoff material. Historical implementation packs from the pre-0.8 architecture were removed during the breaking rewrite rather than carried forward as stale operational instructions.
 
-Pack roots are validated component-by-component without following links. Only
-regular files and directories are accepted; symlinks, hard-linked files, FIFOs,
-sockets, devices, and type changes are rejected and reported by relative entry
-name. Archive staging consumes the exact validated inventory. Legacy phased
-archives receive a typed canonical `MANIFEST.json`; manifest-native archives
-preserve their source `MANIFEST.json` and receive `ARCHIVE_MANIFEST.json` for
-normalized archive paths, sizes, mode policy, and file digests.
+## Authority
 
-## Supported formats
+There is one scaffold source:
 
-`agent-workflow pack validate` reports `pack_format`, `manifest_version`, and
-`manifest_path` in JSON output.
+- packaged assets under `src/agent_workflow/assets/prompt-pack-root/` and `src/agent_workflow/assets/phase/`;
+- `agent-workflow pack scaffold` materializes those assets into a self-contained source pack;
+- `agent-workflow pack validate` validates the current format;
+- `agent-workflow pack archive` creates deterministic archive-integrity evidence;
+- `examples/three-phase-pack/` is a maintained example, not a second template authority.
 
-- `legacy-phased` requires the existing root execution files, templates, and
-  one or more complete `phase-*` directories.
-- `manifest-native` uses a root `MANIFEST.json` with schema
-  `agent-workflow/manifest-native-pack/v1` (the alias
-  `agent-workflow/prompt-pack-manifest/v1` is also accepted), a non-empty
-  `tickets` array, stable unique IDs, optional prompt paths, dependencies, and
-  result contracts. Unknown schema versions fail closed.
+The repository intentionally does **not** keep byte-identical prompt-pack mirrors under root `templates/` or compatibility helper copies under root `scripts/`. Generated packs still contain their portable helper scripts and report/source-baseline templates because those are part of the packaged scaffold.
 
-A schema-less manifest-native inventory remains readable as `legacy-v0` with a
-migration warning so registered historical packs can be validated before they
-are upgraded. New packs must declare the v1 schema.
+Prompt packs must describe Agent Runs and workers without assuming an interactive host. A host-specific integration may be documented separately from the pack's durable workflow contract.
 
-## Canonical structure
+## Current format
 
-```text
-pack/
-├── README.md
-├── EXECUTION_PROTOCOL.md
-├── DELEGATION_RUNBOOK.md
-├── pack.yaml
-├── phase-0/
-│   ├── README.md
-│   ├── MASTER_IMPLEMENTATION_PROMPT.md
-│   ├── task-manifest.yaml
-│   └── tickets/
-├── references/
-├── scripts/
-└── templates/
-```
+Prompt packs have one workflow format: `agent-workflow/prompt-pack/v1`. The root `pack.yaml` is the only authoritative task/phase manifest and contains the phase graph, task IDs, Agent Run IDs, dependencies, prompt paths, optional backlog ownership, and result-contract references. Phase directories are human-readable material only and do not contain `task-manifest.yaml`.
 
-Create and validate a pack through the public CLI:
+`MANIFEST.json` is reserved for the deterministic archive-integrity inventory created by `agent-workflow pack archive`; it is not valid in an unpackaged source prompt pack. `MANIFEST.sha256` remains the optional source-pack checksum sidecar.
+
+Create a new pack with:
 
 ```bash
-agent-workflow pack scaffold ./pack --phases 3
-agent-workflow pack validate ./pack
-agent-workflow pack archive ./pack ./pack.tar.zst
+agent-workflow pack scaffold /path/to/new-pack --phases 3 --name example-pack
+agent-workflow pack validate /path/to/new-pack
 ```
-
-Repository-owned packs additionally pass `python3 scripts/audit-release-assets.py`, which validates backlog ownership, task-ID uniqueness, active-pack documentation, skill integration, links, and mirrors. A `MANIFEST.sha256` is an optional ignored transfer artifact; it is not required while a pack is being edited.
-
-## Task manifests and ownership
-
-Every task declares a stable ticket ID, tier, session ID, and prompt path. Dependencies may cross phases but must form one valid DAG. Unknown, duplicate, self, and cyclic dependencies are rejected.
-
-A repository-owned implementation ticket also declares one canonical backlog owner:
-
-```yaml
-- id: "HARD-001"
-  backlog_id: "HARD-001"
-  tier: A
-  session: "hardening-process-substrate"
-  prompt: "tickets/HARD-001-bounded-process-substrate.md"
-```
-
-Review-only tasks declare `task_type: gate` and do not claim `backlog_id`. One backlog item may have several sub-tickets only inside one active pack; two active packs may never own the same item.
-
-A ticket may declare a structured result contract:
-
-```yaml
-result_contract:
-  schema: contracts/task-result.schema.json
-  required: true
-```
-
-The agent writes `result.json` to its handoff directory. The runner validates it against the pack-owned JSON Schema, records a collection receipt, and seals the validated copy with the run. Workflow bindings may read only bounded JSON Pointer values from sealed predecessor results.
-
-## Parallel execution
-
-Missing dependency edges permit concurrent delegation, not shared writes. Every parallel ticket uses its own worktree and session. Integration is a separate reviewed step, and the phase gate reruns shared installed-product journeys after merge.
-
-Prompt prose cannot override manifest dependencies. A blocked pack remains a planning artifact and must name its exact external prerequisites; presence in the repository does not make its backlog item ready.
-
-## Prompt requirements
-
-A ticket prompt states:
-
-- canonical `backlog_id`, priority, dependencies, and parallel lane;
-- writable scope and explicit non-targets;
-- required behavior and deterministic authority boundary;
-- installed-product acceptance journeys or strict future outcome;
-- compact invariant matrices that cannot be covered efficiently end to end;
-- security acceptance and adversarial cases;
-- expected evidence and completion handoff;
-- stop conditions and unresolved prerequisites.
-
-Do not embed host-specific absolute paths, credentials, private project names, mutable external documents, or assumptions not represented in the manifest/backlog.
-
-## Active packs
-
-| Pack | Backlog ownership | State |
-|---|---|---|
-| [`deterministic-enforcement-foundations`](../prompt-packs/deterministic-enforcement-foundations/) | HARD-001, HARD-002, HARD-004, HARD-005 | Foundation implementations and `FOUND-GATE-01` accepted for the current tree. |
-| [`execution-isolation-and-secrets`](../prompt-packs/execution-isolation-and-secrets/) | HARD-008, HARD-003, HARD-006 | HARD-008 is accepted; HARD-003 and HARD-006 are unblocked and ready. |
-| [`public-beta-trust-and-release`](../prompt-packs/public-beta-trust-and-release/) | HARD-007, HARD-009, HARD-010, REL-003, REL-004 | HARD-007 and REL-003 are ready; later release/drift/supply-chain work remains dependency-gated. |
-| [`mcp-server-next`](../prompt-packs/mcp-server-next/) | MCP-003 | HARD-004 and HARD-005 are accepted; blocked on HARD-007; future mutations must preserve the current parser-derived capability/catalog resources and launch-contract v2 command-context parity. |
-| [`orchestrator-two-way-messaging`](../prompt-packs/orchestrator-two-way-messaging/) | BKL-001, BKL-002, MSG-003 through MSG-007 | MSG-001 is force-accepted and MSG-002 is accepted; later phases remain dependency-gated. |
-| [`delegation-communication-reliability`](../prompt-packs/delegation-communication-reliability/) | PROC-001 through PROC-005 | PROC-001 through PROC-004 are implemented and in review; PROC-005 is ready, followed by the independent gate. |
-| [`tmux-pane-identity-reliability`](../prompt-packs/tmux-pane-identity-reliability/) | PROC-006 | Implemented and in review; live-host and sealed acceptance evidence remain open. |
-| [`tmux-operator-experience`](../prompt-packs/tmux-operator-experience/) | TMUXUI-001 through TMUXUI-009 | Planned; core snapshot, popup, status, dashboard, and traffic-light presentation work waits for accepted PROC-006 evidence. The embedded sidebar remains an optional separately authorized phase. |
-| [`source-preflight-snapshot-reliability`](../prompt-packs/source-preflight-snapshot-reliability/) | PROC-007 | Implemented and in review; focused installed/invariant evidence exists and broader host acceptance remains open. |
-| [`chatgpt-sealed-run-assessment`](../prompt-packs/chatgpt-sealed-run-assessment/) | CHATGPT-EVAL-001, CHATGPT-TDD-001 | Completed; implemented future specifications graduate into acceptance coverage. |
-| [`force-accept-override`](../prompt-packs/force-accept-override/) | LIFE-001 | Implemented and in review; authenticated human-only authorization remains HARD-007 work. |
-| [`codex-luna-effort-policy`](../prompt-packs/codex-luna-effort-policy/) | POL-001 | Integrated Luna-only automatic Codex selection with bounded reasoning effort; final review remains open. |
-| [`hierarchical-multi-team-orchestration`](../prompt-packs/hierarchical-multi-team-orchestration/) | HIER-001 through HIER-008 | DEC-005 is decided; HIER-001 and HIER-002 authority are implemented/in-review with contracts, journals, replay, and digest-sealed team/root receipts. HIER-GATE-0 is next. Hierarchy is an explicitly enabled built-in feature; later runtime phases remain dependency-gated, and the external-terminal adapter is a separately reviewed optional branch. |
-| [`bounded-self-healing-supervisor`](../prompt-packs/bounded-self-healing-supervisor/) | SUP-001 through SUP-008 | SUP-001 and SUP-002 are implemented and in review; security/resource/principal, compatibility, hierarchy, and performance phases remain gated. |
-| [`sqlite-evidence-index`](../prompt-packs/sqlite-evidence-index/) | IDX-001 through IDX-007 | IDX-001 through IDX-005 are implemented and in review; governed analytical export and measured-scale optimization remain gated. |
-| [`release-installers`](../prompt-packs/release-installers/) | REL-008 | Implemented and in review: bootstrap, checksummed bundles, tag-only release workflow, and installer tests exist; tagged-release/clean-host proof remains open. Jenkins CI/job assets remain source-only. |
-| [`feature-modularization`](../prompt-packs/feature-modularization/) | MAINT-001, PLUG-001, ARC-004 | Active decomposition and extension-boundary pack. Behavior-preserving module splits precede the trusted entry-point host; extraction of a separately distributed feature remains evidence-gated. |
-| [`herdr-boundary-migration`](../prompt-packs/herdr-boundary-migration/) | HERDR-001 through HERDR-004 | Planned boundary migration: Herdr owns terminal/tmux/pane topology; agent-workflow retains durable workflow authority and supplies the first-party Herdr plugin. |
-| [`comparative-benchmark-scoring-corrections`](../prompt-packs/comparative-benchmark-scoring-corrections/) | BENCH-CORR-001 through BENCH-CORR-010; BENCH-OPS-001 through BENCH-OPS-003 | Rebased to 0.7.9. Preserves v1 evidence, freezes corrected scoring, expands deterministic evaluation, enforces source/package parity, runs paired arms visibly in two stable panes, preserves live applications for blinded human review, and adds a one-phase compact suite with a model timeout below three minutes. |
-| [`benchmark-real-host-release-candidate-gate`](../prompt-packs/benchmark-real-host-release-candidate-gate/) | Review-only; no backlog ownership | Codex handoff pack for authenticated real-tmux Codex/Claude runs, pane/process/browser evidence, blinded human review, safe teardown, and an exhaustive mandatory 100-point independent acceptance evaluation. |
-
-The dependency/collision rationale is in [Determinism and security hardening plan](DETERMINISM_SECURITY_HARDENING_PLAN.md). The local two-way messaging architecture and its collision-free implementation sequence are in [Durable two-way messaging](ORCHESTRATOR_TWO_WAY_MESSAGING_DESIGN.md). The source findings are in [Feature determinism and security assessment](FEATURE_DETERMINISM_SECURITY_ASSESSMENT.md).
-
-
-## Execution authority
-
-The pack describes work; it does not override runtime policy. Agent class, executor, model, authenticated principal, permissions, no-go authorization, worktree safety, sandbox policy, lifecycle controls, and backlog state remain enforced by application services and human decisions.
-
-`docs/references/EXECUTION_PROTOCOL.md` and `docs/references/DELEGATION_RUNBOOK.md` are the canonical portable files mirrored into scaffold assets. Update those conditional steering references first and run the release audit to detect drift.
-
-Use `agent-workflow pack checksum` only when preparing a pack for transfer or unarchiving verification.
-
-## Planned specification compiler
-
-Prompt packs remain the execution bundle, but the planned `agent-workflow-spec` sibling plugin will treat them as deterministic compiled artifacts of an approved machine-readable implementation specification. Existing hand-authored packs and the current validation/archive format remain supported. Generated packs will pair nuanced Markdown ticket prompts with machine task contracts, acceptance links, result schemas, and requirement traceability rather than replacing all prompts with JSON. See [Collaborative specification compiler and plugin-first decomposition](SPEC_AUTHORING_PLUGIN_ARCHITECTURE.md).
-
-## Migration and maintenance
-
-For an existing set of prompts:
-
-1. confirm the canonical backlog item and that no active pack already owns it;
-2. scaffold a new pack;
-3. assign stable ticket/session IDs and `backlog_id` ownership;
-4. express dependencies in manifests rather than prose order;
-5. separate parallel tickets by writable surface and worktree;
-6. move shared background into bounded references;
-7. add structured result contracts only where downstream automation needs them;
-8. validate, run the drift audit, review warnings, and archive deterministically.
-
-Completed one-off prompt packs do not remain in the public source tree as permanent documentation. Git history and the changelog preserve implementation history.

@@ -9,12 +9,12 @@ import pytest
 from tests.conftest import InstalledProduct, fake_agent_path, git_repo, wait_for_status, write_config
 
 
-def _node(node_id: str, session_id: str, prompt: Path, dependencies: list[str]) -> dict:
+def _node(node_id: str, agent_run_id: str, prompt: Path, dependencies: list[str]) -> dict:
     return {
         "node_id": node_id,
         "kind": "task",
         "ticket_id": node_id.upper(),
-        "session_id": session_id,
+        "agent_run_id": agent_run_id,
         "tier": "low",
         "pack_id": "acceptance-pack",
         "prompt_path": str(prompt),
@@ -62,24 +62,28 @@ def test_pipeline_runs_through_installed_cli_binds_results_and_seals_terminal_wo
     first_prompt.write_text("Produce the first structured result.\n", encoding="utf-8")
     second_prompt.write_text("Consume the sealed predecessor input.\n", encoding="utf-8")
     (pack / "pack.yaml").write_text(
-        'schema: agent-workflow/pack/v1\npack_id: "acceptance-pack"\n', encoding="utf-8"
-    )
-    (pack / "phase-0" / "task-manifest.yaml").write_text(
-        """phase: "0"
-name: "acceptance"
-tasks:
-  - id: "FIRST"
-    tier: C
-    session: "pipeline-first"
-    prompt: "tickets/first.md"
-    result_contract:
-      schema: "contracts/result.schema.json"
-      required: true
-  - id: "SECOND"
-    tier: C
-    session: "pipeline-second"
-    prompt: "tickets/second.md"
-    dependencies: ["FIRST"]
+        """schema: agent-workflow/prompt-pack/v1
+pack_id: acceptance-pack
+workflow:
+  name: agent-workflow
+  minimum_version: 0.8.0
+phases:
+  - id: "0"
+    name: acceptance
+    directory: phase-0
+    tasks:
+      - id: FIRST
+        tier: C
+        agent_run_id: pipeline-first
+        prompt: phase-0/tickets/first.md
+        result_contract:
+          schema: contracts/result.schema.json
+          required: true
+      - id: SECOND
+        tier: C
+        agent_run_id: pipeline-second
+        prompt: phase-0/tickets/second.md
+        dependencies: [FIRST]
 """,
         encoding="utf-8",
     )
@@ -185,10 +189,10 @@ def test_approval_gate_requires_canonical_child_acceptance(
     assert approval_state == "eligible"
 
     installed_product.json(
-        "review", "approval-child", "--actor", "independent-reviewer", "--reason", "verified", env=product_env
+        "agent-run", "review", "approval-child", "--actor", "independent-reviewer", "--reason", "verified", env=product_env
     )
     installed_product.json(
-        "accept", "approval-child", "--actor", "independent-reviewer", "--reason", "accepted", "--revision", revision,
+        "agent-run", "accept", "approval-child", "--actor", "independent-reviewer", "--reason", "accepted", "--revision", revision,
         env=product_env,
     )
     installed_product.json("workflow", "resume", run_dir, snapshot, "--config", config, env=product_env)
@@ -232,26 +236,26 @@ def test_resume_is_idempotent_and_does_not_duplicate_child_launches(
     [
         (
             "pipeline",
-            {"steps": [{"node_id": "a", "session_id": "a", "prompt_path": "/tmp/a"}, {"node_id": "b", "session_id": "b", "prompt_path": "/tmp/b"}]},
+            {"steps": [{"node_id": "a", "agent_run_id": "a", "prompt_path": "/tmp/a"}, {"node_id": "b", "agent_run_id": "b", "prompt_path": "/tmp/b"}]},
             2,
         ),
         (
             "parallel-review-fan-in",
             {
-                "subject": {"node_id": "subject", "session_id": "subject", "prompt_path": "/tmp/subject"},
+                "subject": {"node_id": "subject", "agent_run_id": "subject", "prompt_path": "/tmp/subject"},
                 "reviews": [
-                    {"node_id": "r1", "session_id": "r1", "prompt_path": "/tmp/r1"},
-                    {"node_id": "r2", "session_id": "r2", "prompt_path": "/tmp/r2"},
+                    {"node_id": "r1", "agent_run_id": "r1", "prompt_path": "/tmp/r1"},
+                    {"node_id": "r2", "agent_run_id": "r2", "prompt_path": "/tmp/r2"},
                 ],
-                "fan_in": {"node_id": "merge", "session_id": "merge", "prompt_path": "/tmp/merge"},
+                "fan_in": {"node_id": "merge", "agent_run_id": "merge", "prompt_path": "/tmp/merge"},
             },
             4,
         ),
         (
             "implementation-independent-review",
             {
-                "implementation": {"node_id": "implementation", "session_id": "implementation", "prompt_path": "/tmp/implementation"},
-                "review": {"node_id": "review", "session_id": "review", "prompt_path": "/tmp/review"},
+                "implementation": {"node_id": "implementation", "agent_run_id": "implementation", "prompt_path": "/tmp/implementation"},
+                "review": {"node_id": "review", "agent_run_id": "review", "prompt_path": "/tmp/review"},
             },
             2,
         ),

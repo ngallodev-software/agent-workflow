@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 
-from tests.conftest import InstalledProduct, git_repo, wait_for_status
+from tests.conftest import InstalledProduct, git_repo, wait_for_status, prepare_and_start_agent_run
 
 
 def _write_json(path: Path, value: dict) -> None:
@@ -22,9 +22,10 @@ def test_installed_index_lifecycle_rebuilds_recovers_classifies_and_verifies_rev
     _write_json(
         run / "status.json",
         {
-            "schema": "agent-workflow/session-status/v2",
-            "session_id": "index-product",
+            "schema": "agent-workflow/agent-run-status/v1",
+            "agent_run_id": "index-product",
             "status": "running",
+            "worker_mode": "headless",
             "created_at": "2026-07-30T00:00:00+00:00",
             "updated_at": "2026-07-30T00:01:00+00:00",
             "workdir": "/tmp/index-product",
@@ -41,7 +42,7 @@ def test_installed_index_lifecycle_rebuilds_recovers_classifies_and_verifies_rev
             {
                 "schema": "agent-workflow/incident-event/v1",
                 "incident_id": "a" * 24,
-                "session_id": "index-product",
+                "agent_run_id": "index-product",
                 "recorded_at": "2026-07-30T00:02:00+00:00",
                 "category": "process_alive_no_progress",
                 "severity": "medium",
@@ -55,33 +56,14 @@ def test_installed_index_lifecycle_rebuilds_recovers_classifies_and_verifies_rev
         + "\n",
         encoding="utf-8",
     )
-    for storage_root in ("runs", "archive"):
-        legacy = state / storage_root / f"legacy-installed-{storage_root}"
-        _write_json(
-            legacy / "status.json",
-            {
-                "schema": "agent-workflow/session-status/v2",
-                "session_id": f"legacy-installed-{storage_root}",
-                "status": "completed",
-                "created_at": "2025-01-01T00:00:00+00:00",
-                "workdir": f"/tmp/legacy-installed-{storage_root}",
-                "prompt_path": str(legacy / "prompt.md"),
-                "log_path": str(legacy / "output.log"),
-            },
-        )
-        _write_json(
-            legacy / "execution-metrics.json",
-            {"schema": "agent-workflow/execution-metrics/retired-v1"},
-        )
 
     first = installed_product.json("index", "rebuild", env=product_env)
     assert first["indexed_count"] >= 1
-    assert first["quarantined_count"] == 2
     status = installed_product.json("index", "status", env=product_env)
     assert status["freshness"] == "current"
     assert status["journal_mode"] == "wal"
     runs_query_before = installed_product.json(
-        "index", "query", "runs", "--session", "index-product", env=product_env
+        "index", "query", "runs", "--agent-run", "index-product", env=product_env
     )
     incidents_query_before = installed_product.json(
         "index", "query", "incidents", "--category", "process_alive_no_progress", env=product_env
@@ -94,25 +76,15 @@ def test_installed_index_lifecycle_rebuilds_recovers_classifies_and_verifies_rev
     assert incidents_before[0]["relative_path"] == "incident-events.jsonl"
     verification = installed_product.json("index", "verify", "--full", env=product_env)
     assert verification["valid"] is True
-    classifications = {
-        item["session_id"]: item["classification"]
-        for item in verification["historical_artifacts"]
-    }
-    assert classifications == {
-        "legacy-installed-archive": "quarantined",
-        "legacy-installed-runs": "quarantined",
-    }
 
     authority = Path(first["database"]).parent / "integrity-authority-v2.jsonl"
     assert not authority.exists()
-    migration = installed_product.json("index", "integrity", "migrate", env=product_env)
-    assert migration["legacy_trust"] == "none"
     record = installed_product.json(
         "index", "integrity", "record", "index-product", "status.json", "1",
         "run_index_failed", "installed test error", env=product_env,
     )
     assert record["authority"] == "v2-append-only"
-    assert len(authority.read_text(encoding="utf-8").splitlines()) == 2
+    assert len(authority.read_text(encoding="utf-8").splitlines()) == 1
 
     database = Path(status["database"])
     for candidate in (database, Path(f"{database}-wal"), Path(f"{database}-shm")):
@@ -122,7 +94,7 @@ def test_installed_index_lifecycle_rebuilds_recovers_classifies_and_verifies_rev
     second = installed_product.json("index", "rebuild", env=product_env)
     assert second["indexed_count"] >= 1
     runs_query_after = installed_product.json(
-        "index", "query", "runs", "--session", "index-product", env=product_env
+        "index", "query", "runs", "--agent-run", "index-product", env=product_env
     )
     incidents_query_after = installed_product.json(
         "index", "query", "incidents", "--category", "process_alive_no_progress", env=product_env
@@ -144,20 +116,18 @@ def test_installed_index_lifecycle_rebuilds_recovers_classifies_and_verifies_rev
     git_repo(repo)
     prompt = tmp_path / "review.md"
     prompt.write_text("Review the sealed evidence.\n", encoding="utf-8")
-    installed_product.json(
-        "launch", "review-index-target", repo, prompt, "--agent-class", "review",
+    prepare_and_start_agent_run(
+        installed_product, "review-index-target", repo, prompt, "--agent-class", "review",
         "--tier", "low", "--no-interactive", "--", fake_agent_path, env=product_env,
     )
     assert wait_for_status(product_env, "review-index-target")["status"] == "completed"
     installed_product.json(
-        "review", "review-index-target", "--actor", "reviewer", "--reason", "gate checked",
+        "agent-run", "review", "review-index-target", "--actor", "reviewer", "--reason", "gate checked",
         env=product_env,
     )
     run = Path(product_env["XDG_STATE_HOME"]) / "agent-workflow" / "runs" / "review-index-target"
     state = Path(product_env["XDG_STATE_HOME"]) / "agent-workflow"
     installed_product.json("index", "rebuild", env=product_env)
-    legacy_ledger = state / "index" / "integrity-incidents.jsonl"
-    legacy_ledger.write_text('{"legacy":"sentinel"}\n', encoding="utf-8")
     unrelated = state / "runs" / "unrelated-integrity-incident"
     unrelated.mkdir(parents=True)
     (unrelated / "status.json").write_text("{not-json\n", encoding="utf-8")
@@ -170,7 +140,6 @@ def test_installed_index_lifecycle_rebuilds_recovers_classifies_and_verifies_rev
     assert verified["review_scope"] == "review-index-target"
     assert verified["review_valid"] is True
     assert verified["review_evidence"]["review_receipt_sha256"]
-    assert legacy_ledger.read_text(encoding="utf-8") == '{"legacy":"sentinel"}\n'
 
     completion = run / "completion.json"
     completion_bytes = completion.read_bytes()

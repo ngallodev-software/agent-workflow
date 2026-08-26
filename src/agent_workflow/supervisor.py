@@ -8,9 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
-from . import tmux
 from .config import Settings
-from .contracts import read_launch_contract
+from .contracts import read_agent_run_contract
 from .diagnostics import diagnose_observation
 from .errors import WorkflowError
 from .finalization import finalize_run
@@ -21,11 +20,11 @@ from .health import (
     record_incident,
     record_permission_event,
     record_remediation,
-    record_terminal_capture,
     remediation_count,
 )
 from .process import secret_values_from_argv
-from .sessions import interrupt, observe, restart, steer
+from .agent_runs import interrupt, observe, restart, steer
+from .run_lifecycle import authoritative_execution_status
 from .state import (
     TERMINAL_STATUSES,
     list_statuses,
@@ -41,8 +40,6 @@ SUPERVISOR_REPORT_SCHEMA = "agent-workflow/supervisor-report/v1"
 
 @dataclass(frozen=True)
 class SupervisorOptions:
-    capture_interactive: bool
-    capture_lines: int
     probe_stalled: bool
     interrupt_stalled: bool
     restart_orphaned: bool
@@ -54,8 +51,6 @@ class SupervisorOptions:
         cls,
         settings: Settings,
         *,
-        capture_interactive: bool | None = None,
-        capture_lines: int | None = None,
         probe_stalled: bool | None = None,
         interrupt_stalled: bool | None = None,
         restart_orphaned: bool | None = None,
@@ -63,12 +58,6 @@ class SupervisorOptions:
         sync_index_enabled: bool | None = None,
     ) -> "SupervisorOptions":
         return cls(
-            capture_interactive=(
-                settings.supervisor_capture_interactive
-                if capture_interactive is None
-                else capture_interactive
-            ),
-            capture_lines=capture_lines or settings.supervisor_capture_lines,
             probe_stalled=(
                 settings.supervisor_probe_stalled
                 if probe_stalled is None
@@ -120,39 +109,16 @@ def _heartbeat_pids(run: Path) -> tuple[int | None, int | None]:
 
 def _secret_values(run: Path) -> tuple[str, ...]:
     try:
-        contract = read_launch_contract(run / "launch-contract.json")
+        contract = read_agent_run_contract(run / "agent-run-contract.json")
     except WorkflowError:
         return ()
-    argv = contract.get("command_plan", {}).get("argv", [])
+    argv = contract.get("worker_plan", {}).get("argv", [])
     if not isinstance(argv, list) or not all(isinstance(item, str) for item in argv):
         return ()
     return secret_values_from_argv(argv)
 
 
-def _capture_interactive(
-    settings: Settings,
-    session_id: str,
-    status: dict[str, Any],
-    options: SupervisorOptions,
-) -> dict[str, Any] | None:
-    if not options.capture_interactive or not bool(
-        status.get("executor_interactive", status.get("interactive", False))
-    ):
-        return None
-    pane = tmux.resolve_status_pane(status)
-    if pane is None or pane.dead or not pane.pane_id:
-        return None
-    content = tmux.capture(pane.pane_id, options.capture_lines)
-    return record_terminal_capture(
-        run_dir(settings, session_id),
-        session_id=session_id,
-        pane_id=pane.pane_id,
-        content=content,
-        secret_values=_secret_values(run_dir(settings, session_id)),
-    )
-
-
-def _inspect_noninteractive_permission(run: Path, session_id: str) -> None:
+def _inspect_noninteractive_permission(run: Path, agent_run_id: str) -> None:
     for source_name, path in (
         ("executor_stderr", run / "executor-stderr.log"),
         ("executor_output", run / "output.log"),
@@ -171,7 +137,7 @@ def _inspect_noninteractive_permission(run: Path, session_id: str) -> None:
         digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
         record_permission_event(
             run,
-            session_id=session_id,
+            agent_run_id=agent_run_id,
             state=signal,
             source=source_name,
             evidence_sha256=digest,
@@ -183,25 +149,25 @@ def _safe_repair_projections(settings: Settings) -> list[dict[str, Any]]:
     repaired: list[dict[str, Any]] = []
     root = runs_root(settings)
     for candidate in sorted(path for path in root.iterdir() if path.is_dir()):
-        session_id = candidate.name
+        agent_run_id = candidate.name
         status_path = candidate / "status.json"
-        has_authority = (candidate / "launch-contract.json").is_file()
+        has_authority = (candidate / "agent-run-contract.json").is_file()
         corrupt = False
         if status_path.is_file():
             try:
                 # Validate the full status contract, not only JSON syntax. A
                 # projection with valid JSON but an invalid schema is still
                 # rebuildable from immutable launch/lifecycle authority.
-                read_status(settings, session_id)
+                read_status(settings, agent_run_id)
             except (OSError, json.JSONDecodeError, WorkflowError):
                 corrupt = True
         if has_authority and (not status_path.is_file() or corrupt):
             try:
-                repaired_status = repair_status(settings, session_id)
+                repaired_status = repair_status(settings, agent_run_id)
             except WorkflowError as exc:
                 record_remediation(
                     candidate,
-                    session_id=session_id,
+                    agent_run_id=agent_run_id,
                     incident_id=None,
                     rule_id="SAFE-REPAIR-STATUS-v1",
                     action="repair_status_projection",
@@ -211,7 +177,7 @@ def _safe_repair_projections(settings: Settings) -> list[dict[str, Any]]:
                 continue
             event = record_remediation(
                 candidate,
-                session_id=session_id,
+                agent_run_id=agent_run_id,
                 incident_id=None,
                 rule_id="SAFE-REPAIR-STATUS-v1",
                 action="repair_status_projection",
@@ -224,13 +190,13 @@ def _safe_repair_projections(settings: Settings) -> list[dict[str, Any]]:
 
 def _apply_remediation(
     settings: Settings,
-    session_id: str,
+    agent_run_id: str,
     observation: dict[str, Any],
     incident: dict[str, Any] | None,
     category: str | None,
     options: SupervisorOptions,
 ) -> list[dict[str, Any]]:
-    run = run_dir(settings, session_id)
+    run = run_dir(settings, agent_run_id)
     incident_id = str(incident.get("incident_id")) if incident else None
     applied: list[dict[str, Any]] = []
 
@@ -241,7 +207,7 @@ def _apply_remediation(
             try:
                 message = steer(
                     settings,
-                    session_id,
+                    agent_run_id,
                     actor="agent-workflow-supervisor",
                     content=(
                         "Automated health probe: report the current step, any blocker or "
@@ -251,7 +217,7 @@ def _apply_remediation(
             except WorkflowError as exc:
                 outcome = record_remediation(
                     run,
-                    session_id=session_id,
+                    agent_run_id=agent_run_id,
                     incident_id=incident_id,
                     rule_id=probe_rule,
                     action="request_progress_probe",
@@ -260,11 +226,11 @@ def _apply_remediation(
                 )
             else:
                 try:
-                    post_action = observe(settings, session_id)
+                    post_action = observe(settings, agent_run_id)
                 except WorkflowError as exc:
                     outcome = record_remediation(
                         run,
-                        session_id=session_id,
+                        agent_run_id=agent_run_id,
                         incident_id=incident_id,
                         rule_id=probe_rule,
                         action="request_progress_probe",
@@ -279,7 +245,7 @@ def _apply_remediation(
                 else:
                     outcome = record_remediation(
                         run,
-                        session_id=session_id,
+                        agent_run_id=agent_run_id,
                         incident_id=incident_id,
                         rule_id=probe_rule,
                         action="request_progress_probe",
@@ -292,7 +258,6 @@ def _apply_remediation(
                             "post_action_observation": {
                                 "observed_state": post_action.get("observed_state"),
                                 "status": post_action.get("status"),
-                                "tmux_alive": post_action.get("tmux_alive"),
                                 "failure_category": post_action.get("failure_category"),
                                 "seconds_since_semantic_progress": post_action.get(
                                     "seconds_since_semantic_progress"
@@ -306,11 +271,11 @@ def _apply_remediation(
             interrupt_rule = "OPT-IN-INTERRUPT-STALL-v1"
             if remediation_count(run, interrupt_rule) < options.max_remediation_attempts:
                 try:
-                    result = interrupt(settings, session_id)
+                    result = interrupt(settings, agent_run_id)
                 except WorkflowError as exc:
                     outcome = record_remediation(
                         run,
-                        session_id=session_id,
+                        agent_run_id=agent_run_id,
                         incident_id=incident_id,
                         rule_id=interrupt_rule,
                         action="interrupt_stalled_executor",
@@ -320,7 +285,7 @@ def _apply_remediation(
                 else:
                     outcome = record_remediation(
                         run,
-                        session_id=session_id,
+                        agent_run_id=agent_run_id,
                         incident_id=incident_id,
                         rule_id=interrupt_rule,
                         action="interrupt_stalled_executor",
@@ -334,11 +299,11 @@ def _apply_remediation(
         rule = "OPT-IN-RESTART-ORPHAN-v1"
         if remediation_count(run, rule) < options.max_remediation_attempts:
             try:
-                result = restart(settings, session_id)
+                result = restart(settings, agent_run_id)
             except WorkflowError as exc:
                 outcome = record_remediation(
                     run,
-                    session_id=session_id,
+                    agent_run_id=agent_run_id,
                     incident_id=incident_id,
                     rule_id=rule,
                     action="restart_orphaned_executor",
@@ -348,13 +313,13 @@ def _apply_remediation(
             else:
                 outcome = record_remediation(
                     run,
-                    session_id=session_id,
+                    agent_run_id=agent_run_id,
                     incident_id=incident_id,
                     rule_id=rule,
                     action="restart_orphaned_executor",
                     outcome="applied",
                     reason="operator policy explicitly authorized a lineage-preserving retry",
-                    details={"new_session_id": result.get("session_id")},
+                    details={"new_agent_run_id": result.get("agent_run_id")},
                 )
             applied.append(outcome)
     return applied
@@ -363,38 +328,36 @@ def _apply_remediation(
 def supervise_once(
     settings: Settings,
     *,
-    session_ids: Iterable[str] | None = None,
+    agent_run_ids: Iterable[str] | None = None,
     options: SupervisorOptions | None = None,
 ) -> dict[str, Any]:
     options = options or SupervisorOptions.from_settings(settings)
-    selected = set(session_ids or ())
+    selected = set(agent_run_ids or ())
     repaired = _safe_repair_projections(settings)
     results: list[dict[str, Any]] = []
 
     for status in list_statuses(settings):
-        session_id = str(status.get("session_id", ""))
-        if not session_id or (selected and session_id not in selected):
+        agent_run_id = str(status.get("agent_run_id", ""))
+        if not agent_run_id or (selected and agent_run_id not in selected):
             continue
-        if str(status.get("status")) in TERMINAL_STATUSES:
-            continue
-        run = run_dir(settings, session_id)
-        capture_error: str | None = None
+        run = run_dir(settings, agent_run_id)
         try:
-            _capture_interactive(settings, session_id, status, options)
-        except WorkflowError as exc:
-            capture_error = str(exc)
-        _inspect_noninteractive_permission(run, session_id)
+            if authoritative_execution_status(run) in TERMINAL_STATUSES:
+                continue
+        except WorkflowError:
+            # Preserve fail-closed observation behavior below; corrupt lifecycle
+            # authority must not be hidden by a stale mutable status projection.
+            pass
+        _inspect_noninteractive_permission(run, agent_run_id)
         runner_pid, executor_pid = _heartbeat_pids(run)
-        pane_id = status.get("tmux_pane_id")
         record_health_sample(
             run,
-            session_id=session_id,
+            agent_run_id=agent_run_id,
             runner_pid=runner_pid,
             executor_pid=executor_pid,
-            tmux_pane_id=str(pane_id) if pane_id else None,
         )
         try:
-            observation = observe(settings, session_id)
+            observation = observe(settings, agent_run_id)
         except WorkflowError as exc:
             observation = {
                 **status,
@@ -404,12 +367,6 @@ def supervise_once(
                 "latest_health": {},
             }
         category, severity, summary = diagnose_observation(observation)
-        if capture_error and category is None:
-            category, severity, summary = (
-                "terminal_capture_unavailable",
-                "medium",
-                "interactive terminal evidence could not be captured",
-            )
         evidence = {
             "observed_state": observation.get("observed_state"),
             "failure_category": observation.get("failure_category"),
@@ -417,16 +374,14 @@ def supervise_once(
             "seconds_since_semantic_progress": observation.get(
                 "seconds_since_semantic_progress"
             ),
-            "tmux_alive": observation.get("tmux_alive"),
             "executor_alive": observation.get("latest_health", {})
             .get("executor", {})
             .get("alive"),
-            "capture_error": capture_error,
         }
         incident = (
             record_incident(
                 run,
-                session_id=session_id,
+                agent_run_id=agent_run_id,
                 category=category,
                 severity=severity,
                 summary=summary,
@@ -441,10 +396,10 @@ def supervise_once(
             try:
                 finalization = finalize_run(
                     settings,
-                    session_id,
+                    agent_run_id,
                     observation=observation,
                     actor="agent-workflow-supervisor",
-                    reason="supervisor confirmed terminal executor loss",
+                    reason="supervisor confirmed worker process loss",
                 )
             except WorkflowError as exc:
                 finalization_error = str(exc)
@@ -452,12 +407,12 @@ def supervise_once(
             []
             if category == "process_missing"
             else _apply_remediation(
-                settings, session_id, observation, incident, category, options
+                settings, agent_run_id, observation, incident, category, options
             )
         )
         results.append(
             {
-                "session_id": session_id,
+                "agent_run_id": agent_run_id,
                 "observed_state": observation.get("observed_state"),
                 "incident": incident,
                 "finalization": finalization,
@@ -474,7 +429,7 @@ def supervise_once(
         try:
             index_report = sync_index(settings)
         except WorkflowError as exc:
-            from .index_store import database_path
+            from .index_db import database_path
 
             index_report = {
                 "schema": "agent-workflow/index-sync-report/v1",
@@ -486,15 +441,13 @@ def supervise_once(
                 "skipped_count": 0,
                 "pruned": [],
                 "error_count": 1,
-                "errors": [{"session_id": None, "error": str(exc)}],
+                "errors": [{"agent_run_id": None, "error": str(exc)}],
             }
 
     return {
         "schema": SUPERVISOR_REPORT_SCHEMA,
         "recorded_at": utc_now(),
         "options": {
-            "capture_interactive": options.capture_interactive,
-            "capture_lines": options.capture_lines,
             "probe_stalled": options.probe_stalled,
             "interrupt_stalled": options.interrupt_stalled,
             "restart_orphaned": options.restart_orphaned,
@@ -514,7 +467,7 @@ def supervise_loop(
     *,
     interval_seconds: int | None = None,
     max_cycles: int | None = None,
-    session_ids: Iterable[str] | None = None,
+    agent_run_ids: Iterable[str] | None = None,
     options: SupervisorOptions | None = None,
 ) -> list[dict[str, Any]]:
     interval = interval_seconds or settings.supervisor_interval_seconds
@@ -528,7 +481,7 @@ def supervise_loop(
         reports.append(
             supervise_once(
                 settings,
-                session_ids=session_ids,
+                agent_run_ids=agent_run_ids,
                 options=options,
             )
         )

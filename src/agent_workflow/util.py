@@ -37,6 +37,42 @@ def expand_path(value: str | Path) -> Path:
     return Path(os.path.expandvars(os.path.expanduser(str(value)))).resolve()
 
 
+def sha256_bytes(data: bytes) -> str:
+    """Return the lowercase SHA-256 hex digest for *data*."""
+    return hashlib.sha256(data).hexdigest()
+
+
+def sha256_text(value: str, *, encoding: str = "utf-8") -> str:
+    """Return the SHA-256 digest for text encoded deterministically."""
+    return sha256_bytes(value.encode(encoding))
+
+
+def canonical_json_bytes(
+    value: Any,
+    *,
+    ensure_ascii: bool = True,
+    trailing_newline: bool = False,
+) -> bytes:
+    """Encode a value as compact, key-sorted JSON for hashing/evidence.
+
+    ``ensure_ascii`` is explicit because existing evidence contracts use both
+    ASCII-escaped and native UTF-8 canonical forms.  Callers must select the
+    form required by their contract rather than reimplementing serialization.
+    """
+    encoded = json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=ensure_ascii,
+    ).encode("utf-8")
+    return encoded + (b"\n" if trailing_newline else b"")
+
+
+def canonical_json_sha256(value: Any, *, ensure_ascii: bool = True) -> str:
+    """Return SHA-256 over canonical JSON bytes."""
+    return sha256_bytes(canonical_json_bytes(value, ensure_ascii=ensure_ascii))
+
+
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -81,6 +117,26 @@ def atomic_write_json(
 ) -> None:
     encoded = (json.dumps(data, indent=2, sort_keys=True) + "\n").encode("utf-8")
     atomic_write_bytes(path, encoded, mode=mode)
+
+
+def atomic_write_canonical_json(
+    path: Path,
+    data: Any,
+    *,
+    mode: int | None = None,
+    ensure_ascii: bool = True,
+    trailing_newline: bool = True,
+) -> None:
+    """Atomically persist compact canonical JSON using the shared encoder."""
+    atomic_write_bytes(
+        path,
+        canonical_json_bytes(
+            data,
+            ensure_ascii=ensure_ascii,
+            trailing_newline=trailing_newline,
+        ),
+        mode=mode,
+    )
 
 
 def read_json(path: Path) -> dict[str, Any]:

@@ -1,24 +1,21 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "agent-workflow/run-health-sample/v1",
+  "$id": "agent-workflow/run-health-sample/v2",
   "type": "object",
-  "required": ["schema", "session_id", "recorded_at", "runner", "executor", "host", "tmux_pane_id", "pane_dead", "output_bytes", "stderr_bytes", "executor_event_bytes", "terminal_event_bytes", "last_semantic_progress_at", "seconds_since_semantic_progress", "last_semantic_progress_source"],
+  "required": ["schema", "agent_run_id", "recorded_at", "runner", "executor", "host", "output_bytes", "stderr_bytes", "executor_event_bytes", "last_semantic_progress_at", "seconds_since_semantic_progress", "last_semantic_progress_source"],
   "properties": {
-    "schema": {"const": "agent-workflow/run-health-sample/v1"},
-    "session_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "schema": {"const": "agent-workflow/run-health-sample/v2"},
+    "agent_run_id": {"type": "string", "minLength": 1, "maxLength": 128},
     "recorded_at": {"type": "string", "minLength": 1, "maxLength": 64},
     "runner": {"$ref": "#/$defs/process"},
     "executor": {"$ref": "#/$defs/process"},
     "host": {"$ref": "#/$defs/host"},
-    "tmux_pane_id": {"type": ["string", "null"], "maxLength": 128},
-    "pane_dead": {"type": ["boolean", "null"]},
     "output_bytes": {"type": ["integer", "null"], "minimum": 0},
     "stderr_bytes": {"type": ["integer", "null"], "minimum": 0},
     "executor_event_bytes": {"type": ["integer", "null"], "minimum": 0},
-    "terminal_event_bytes": {"type": ["integer", "null"], "minimum": 0},
     "last_semantic_progress_at": {"type": ["string", "null"], "maxLength": 64},
     "seconds_since_semantic_progress": {"type": ["number", "null"], "minimum": 0},
-    "last_semantic_progress_source": {"enum": [null, "output", "stderr", "executor_event", "terminal_event", "message", "control_intent", "steering_delivery", "completion"]}
+    "last_semantic_progress_source": {"enum": [null, "output", "stderr", "executor_event", "message", "control_intent", "steering_delivery", "completion"]}
   },
   "$defs": {
     "process": {
@@ -40,8 +37,7 @@
         "open_fd_count": {"type": ["integer", "null"], "minimum": 0},
         "child_process_count": {"type": ["integer", "null"], "minimum": 0},
         "collector": {"type": ["string", "null"], "maxLength": 64}
-      },
-      "additionalProperties": false
+      }, "additionalProperties": false
     },
     "host": {
       "type": "object",
@@ -53,9 +49,7 @@
         "available_memory_bytes": {"type": ["integer", "null"], "minimum": 0},
         "disk_free_bytes": {"type": ["integer", "null"], "minimum": 0},
         "disk_total_bytes": {"type": ["integer", "null"], "minimum": 0}
-      },
-      "additionalProperties": false
+      }, "additionalProperties": false
     }
-  },
-  "additionalProperties": false
+  }, "additionalProperties": false
 }

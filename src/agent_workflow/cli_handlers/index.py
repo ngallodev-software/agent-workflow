@@ -7,11 +7,10 @@ from typing import Any
 
 from ..cli_output import print_json, print_table
 from ..config import Settings
+from ..index_integrity import record_integrity_authority
 from ..index_store import (
     index_status,
-    migrate_integrity_authority,
     query_index_report,
-    record_integrity_authority,
     rebuild_index,
     sync_index,
     verify_index,
@@ -29,7 +28,7 @@ def handle_index_command(
         return (
             sync_index(
                 settings,
-                session_id=args.session_id,
+                agent_run_id=args.agent_run_id,
                 include_archived=not args.active_only,
             ),
             False,
@@ -38,19 +37,17 @@ def handle_index_command(
         return (
             rebuild_index(
                 settings,
-                session_id=args.session_id,
+                agent_run_id=args.agent_run_id,
                 include_archived=not args.active_only,
             ),
             False,
         )
     if args.index_command == "verify":
-        return verify_index(settings, full=args.full, review_session_id=args.review_session_id), False
+        return verify_index(settings, full=args.full, review_agent_run_id=args.review_agent_run_id), False
     if args.index_command == "integrity":
-        if args.integrity_command == "migrate":
-            return migrate_integrity_authority(settings), False
         return record_integrity_authority(
             settings,
-            session_id=args.session_id,
+            agent_run_id=args.agent_run_id,
             artifact_path=args.artifact_path,
             error_id=args.error_id,
             error_category=args.error_category,
@@ -60,7 +57,7 @@ def handle_index_command(
     report = query_index_report(
         settings,
         args.kind,
-        session_id=args.session_id,
+        agent_run_id=args.agent_run_id,
         state=args.state,
         category=args.category,
         executor=args.executor,

@@ -7,34 +7,28 @@ from typing import Any
 
 from .approval import is_approved
 from .errors import WorkflowError
+from .manifests import load_pack_manifest
 from .repository_closeout import (
     repository_closeout_summary,
     validate_repository_closeout_payload,
 )
-import yaml
-
-
-def _manifest(path: Path) -> dict[str, Any]:
-    text = path.read_text(encoding="utf-8")
-    value = yaml.safe_load(text)
-    return value if isinstance(value, dict) else {}
 
 
 def _next_action(row: dict[str, Any]) -> str:
-    session = row["session"]
+    agent_run_id = row["agent_run_id"]
     state = row["status"]
     if row.get("error"):
-        return f"agent-workflow status {session} --json"
+        return f"agent-workflow agent-run status {agent_run_id} --json"
     if state == "missing":
-        return f"agent-workflow launch {session} ..."
-    if state in {"prepared", "launched", "running", "interruption_requested"}:
-        return f"agent-workflow status {session}"
-    if state in {"failed", "interrupted", "killed"}:
-        return f"agent-workflow restart {session}"
+        return f"agent-workflow agent-run prepare {agent_run_id} ..."
+    if state in {"prepared", "running", "interruption_requested"}:
+        return f"agent-workflow agent-run status {agent_run_id}"
+    if state in {"failed", "interrupted", "terminated"}:
+        return f"agent-workflow agent-run restart {agent_run_id}"
     if row.get("evaluation_required") and not row.get("score_verdict"):
-        return f"agent-workflow eval score {session}"
+        return f"agent-workflow eval score {agent_run_id}"
     if row.get("disposition") not in {"accepted", "force-accepted"}:
-        return f"agent-workflow review {session} --actor ID --reason TEXT"
+        return f"agent-workflow agent-run review {agent_run_id} --actor ID --reason TEXT"
     return "next dependency-unblocked ticket"
 
 
@@ -55,14 +49,17 @@ def _closeout_summary(run_dir: Path) -> tuple[dict[str, Any] | None, str | None]
 def build_ledger(pack_root: Path, runs_root: Path) -> dict[str, Any]:
     pack_root = pack_root.resolve()
     runs_root = runs_root.resolve()
+    manifest = load_pack_manifest(pack_root)
     rows: list[dict[str, Any]] = []
-    for phase_path in sorted(pack_root.glob("phase-*/task-manifest.yaml")):
-        manifest = _manifest(phase_path)
-        for task in manifest.get("tasks", []):
+    for phase in manifest.get("phases", []):
+        if not isinstance(phase, dict):
+            continue
+        phase_name = str(phase.get("directory") or phase.get("id") or "")
+        for task in phase.get("tasks", []):
             if not isinstance(task, dict):
                 continue
-            session = str(task.get("session", ""))
-            status_path = runs_root / session / "status.json"
+            agent_run_id = str(task.get("agent_run_id", ""))
+            status_path = runs_root / agent_run_id / "status.json"
             status: dict[str, Any] = {}
             error = None
             if status_path.is_file():
@@ -74,7 +71,7 @@ def build_ledger(pack_root: Path, runs_root: Path) -> dict[str, Any]:
                         error = "status is not an object"
                 except (OSError, json.JSONDecodeError) as exc:
                     error = f"invalid status.json: {exc}"
-            score_set = runs_root / session / "scores" / "score-set.json"
+            score_set = runs_root / agent_run_id / "scores" / "score-set.json"
             score_verdict = None
             if score_set.is_file():
                 try:
@@ -91,7 +88,7 @@ def build_ledger(pack_root: Path, runs_root: Path) -> dict[str, Any]:
                     continue
                 if not isinstance(attempt, dict):
                     continue
-                if attempt.get("ticket_id") == task.get("id") or candidate.parent.name == session:
+                if attempt.get("ticket_id") == task.get("id") or candidate.parent.name == agent_run_id:
                     attempt_score = None
                     attempt_score_path = candidate.parent / "scores" / "score-set.json"
                     if attempt_score_path.is_file():
@@ -112,9 +109,9 @@ def build_ledger(pack_root: Path, runs_root: Path) -> dict[str, Any]:
                         error = error or attempt_closeout_error
                     attempts.append(
                         {
-                            "session": candidate.parent.name,
+                            "agent_run_id": candidate.parent.name,
                             "status": attempt.get("status"),
-                            "retry_of": attempt.get("retry_of"),
+                            "retry_of_agent_run_id": attempt.get("retry_of_agent_run_id"),
                             "executor_result": attempt_ledger.get("executor_result") or attempt.get("executor_result"),
                             "completion_result": attempt_ledger.get("completion_result") or attempt.get("completion_result"),
                             "policy_result": attempt_ledger.get("policy_result") or attempt.get("policy_result"),
@@ -134,17 +131,17 @@ def build_ledger(pack_root: Path, runs_root: Path) -> dict[str, Any]:
                     ).total_seconds()
                 except (TypeError, ValueError):
                     error = error or "invalid lifecycle timestamp"
-            repository_closeout, closeout_error = _closeout_summary(runs_root / session)
+            repository_closeout, closeout_error = _closeout_summary(runs_root / agent_run_id)
             if closeout_error:
                 error = error or closeout_error
             row = {
-                "phase": phase_path.parent.name,
+                "phase": phase_name,
                 "ticket": str(task.get("id", "")),
                 "dependencies": list(task.get("dependencies", [])),
-                "session": session,
+                "agent_run_id": agent_run_id,
                 "status": status.get("status", "missing"),
                 "disposition": status.get("disposition"),
-                "retry_of": status.get("retry_of"),
+                "retry_of_agent_run_id": status.get("retry_of_agent_run_id"),
                 "executor": status.get("executor"),
                 "executor_result": status.get("executor_result"),
                 "completion_result": status.get("completion_result"),
@@ -170,7 +167,7 @@ def build_ledger(pack_root: Path, runs_root: Path) -> dict[str, Any]:
             for dependency in row["dependencies"]
             if (
                 (dependency_row := by_ticket.get(dependency)) is None
-                or not is_approved(runs_root / dependency_row["session"])
+                or not is_approved(runs_root / dependency_row["agent_run_id"])
             )
         ]
         if blocked and row["status"] == "missing" and not row.get("error"):
@@ -187,7 +184,7 @@ def render_ledger(value: dict[str, Any]) -> str:
     headings = (
         "PHASE",
         "TICKET",
-        "SESSION",
+        "AGENT RUN",
         "STATUS",
         "REVIEW",
         "SCORE",
@@ -209,7 +206,7 @@ def render_ledger(value: dict[str, Any]) -> str:
                 (
                     str(row.get("phase") or "-"),
                     str(row.get("ticket") or "-"),
-                    str(row.get("session") or "-"),
+                    str(row.get("agent_run_id") or "-"),
                     str(row.get("status") or "-"),
                     str(row.get("disposition") or "-"),
                     str(row.get("score_verdict") or "-"),

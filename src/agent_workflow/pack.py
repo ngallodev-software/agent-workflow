@@ -5,11 +5,13 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from .assets import copy_asset_tree
 from .config import Settings
 from .contracts import validate_instance
 from .errors import WorkflowError
-from .manifests import validate_pack
+from .manifests import ARCHIVE_MANIFEST, PROMPT_PACK_SCHEMA, validate_pack
 from .path import absolute_path, read_inventory_file
 from .process import require_command, run
 from .util import expand_path, sha256_file, slug
@@ -42,12 +44,14 @@ def scaffold(
                 text = text.replace(before, after)
             path.write_text(text, encoding="utf-8")
 
+    phase_entries: list[dict[str, Any]] = []
     for number in range(phases):
-        phase = destination / f"phase-{number}"
+        phase_name = f"phase-{number}"
+        phase = destination / phase_name
         copy_asset_tree("phase", phase)
         replacements = {
             "{{PHASE_NUMBER}}": str(number),
-            "{{PHASE_NAME}}": f"phase-{number}",
+            "{{PHASE_NAME}}": phase_name,
             "{{PACK_SLUG}}": slug(pack_name),
         }
         for path in phase.rglob("*"):
@@ -61,11 +65,49 @@ def scaffold(
             / "tickets"
             / "P{{PHASE_NUMBER}}-00-baseline-and-preflight.md"
         )
-        actual_ticket = (
-            phase / "tickets" / f"P{number}-00-baseline-and-preflight.md"
-        )
+        actual_ticket = phase / "tickets" / f"P{number}-00-baseline-and-preflight.md"
         if template_ticket.exists():
             template_ticket.rename(actual_ticket)
+        task_id = f"P{number}-00"
+        phase_entries.append(
+            {
+                "id": str(number),
+                "name": phase_name,
+                "directory": phase_name,
+                "mandatory_order": [task_id],
+                "tasks": [
+                    {
+                        "id": task_id,
+                        "tier": "C",
+                        "agent_run_id": f"{slug(pack_name)}-p{number}-00-baseline",
+                        "prompt": f"{phase_name}/tickets/{actual_ticket.name}",
+                    }
+                ],
+            }
+        )
+
+    manifest = {
+        "schema": PROMPT_PACK_SCHEMA,
+        "pack_id": slug(pack_name),
+        "backlog_items": [],
+        "workflow": {
+            "name": "agent-workflow",
+            "minimum_version": "0.8.0",
+            "requires": [
+                "isolated_worktree",
+                "durable_agent_run",
+                "persistent_log",
+                "source_baseline",
+                "completion_report",
+                "independent_phase_gate",
+            ],
+        },
+        "phases": phase_entries,
+    }
+    (destination / "pack.yaml").write_text(
+        yaml.safe_dump(manifest, sort_keys=False),
+        encoding="utf-8",
+    )
 
     scripts_dir = destination / "scripts"
     if scripts_dir.is_dir():
@@ -105,11 +147,7 @@ def archive(
         # MANIFEST.sha256 is a mutable, ignored transfer sidecar. The archive's
         # canonical MANIFEST.json must describe the bytes actually archived.
         inventory = tuple(entry for entry in report.inventory if entry.path != "MANIFEST.sha256")
-        archive_manifest_name = (
-            "ARCHIVE_MANIFEST.json"
-            if report.pack_format == "manifest-native"
-            else "MANIFEST.json"
-        )
+        archive_manifest_name = ARCHIVE_MANIFEST
         if any(entry.path == archive_manifest_name for entry in inventory):
             raise WorkflowError(
                 f"pack entry {archive_manifest_name} is reserved for archive integrity"

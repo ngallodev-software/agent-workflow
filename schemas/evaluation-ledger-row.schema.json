@@ -17,7 +17,6 @@
     "policy_result",
     "acceptance_eligible",
     "attempt_classification",
-    "supplemental_repairs",
     "repository_closeout",
     "evaluation_state",
     "evaluation_result",
@@ -253,69 +252,6 @@
         "completed-not-accepted",
         "terminal-unclassified"
       ]
-    },
-    "supplemental_repairs": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "repair_id",
-          "source_artifact_path",
-          "source_artifact_sha256",
-          "adapter",
-          "canonical_sha256",
-          "validation_result",
-          "acceptance_authority",
-          "repair_path"
-        ],
-        "properties": {
-          "repair_id": {
-            "type": "string"
-          },
-          "source_artifact_path": {
-            "type": "string"
-          },
-          "source_artifact_sha256": {
-            "type": "string",
-            "pattern": "^[0-9a-f]{64}$"
-          },
-          "adapter": {
-            "type": "object",
-            "required": [
-              "id",
-              "version",
-              "sha256"
-            ],
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "version": {
-                "type": "string"
-              },
-              "sha256": {
-                "type": "string",
-                "pattern": "^[0-9a-f]{64}$"
-              }
-            },
-            "additionalProperties": false
-          },
-          "canonical_sha256": {
-            "type": "string",
-            "pattern": "^[0-9a-f]{64}$"
-          },
-          "validation_result": {
-            "const": "valid"
-          },
-          "acceptance_authority": {
-            "const": false
-          },
-          "repair_path": {
-            "type": "string"
-          }
-        },
-        "additionalProperties": false
-      }
     },
     "repository_closeout": {
       "type": [

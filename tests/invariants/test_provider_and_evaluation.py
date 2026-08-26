@@ -18,7 +18,7 @@ def _evidence(tmp_path: Path, events: list[dict], stream_format: str = "codex-js
         events_path=path,
         stream_format=stream_format,
         executor="codex" if stream_format == "codex-jsonl" else "claude",
-        session_id="provider-matrix",
+        agent_run_id="provider-matrix",
     )
 
 

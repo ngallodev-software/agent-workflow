@@ -110,26 +110,26 @@ def build_server(settings: Settings, *, repo_root: Path | None = None) -> Any:
         return _json(result)
 
     @server.resource(MCP_STATUS_URI)
-    def status_resource(session_id: str) -> str:
-        return _json(_service_result(lambda: service.get_status(session_id)))
+    def status_resource(agent_run_id: str) -> str:
+        return _json(_service_result(lambda: service.get_status(agent_run_id)))
 
     @server.resource(MCP_MESSAGES_URI)
-    def messages_resource(session_id: str) -> str:
-        result = _service_result(lambda: service.list_messages(session_id, PageRequest()).as_dict())
+    def messages_resource(agent_run_id: str) -> str:
+        result = _service_result(lambda: service.list_messages(agent_run_id, PageRequest()).as_dict())
         return _json(result)
 
     @server.resource(MCP_RECEIPTS_URI)
-    def receipts_resource(session_id: str) -> str:
-        result = _service_result(lambda: service.list_receipts(session_id, PageRequest()).as_dict())
+    def receipts_resource(agent_run_id: str) -> str:
+        result = _service_result(lambda: service.list_receipts(agent_run_id, PageRequest()).as_dict())
         return _json(result)
 
     @server.resource(MCP_COMMAND_CONTEXT_URI)
-    def command_context_resource(session_id: str) -> str:
-        return _json(_service_result(lambda: service.get_run_command_context(session_id)))
+    def command_context_resource(agent_run_id: str) -> str:
+        return _json(_service_result(lambda: service.get_run_command_context(agent_run_id)))
 
     @server.resource(MCP_COMMAND_CARD_URI)
-    def command_card_resource(session_id: str) -> str:
-        return _json(_service_result(lambda: service.get_run_command_card(session_id)))
+    def command_card_resource(agent_run_id: str) -> str:
+        return _json(_service_result(lambda: service.get_run_command_card(agent_run_id)))
 
     @server.tool()
     def pack_validate(pack_root: str) -> dict[str, Any]:

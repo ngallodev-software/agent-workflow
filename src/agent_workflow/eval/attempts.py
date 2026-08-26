@@ -41,7 +41,7 @@ def emit_attempt_artifacts(run_dir: Path) -> dict[str, Any]:
     run_dir = run_dir.resolve()
     final, digest = verify_seal_details(run_dir)
     status, _ = read_sealed_contract(
-        run_dir, final, "final-status.json", "agent-workflow/session-status/v2"
+        run_dir, final, "final-status.json", "agent-workflow/agent-run-status/v1"
     )
     completion_result, _collection = _completion_result(run_dir, final)
     policy = evaluation_policy_for_run(run_dir, final)

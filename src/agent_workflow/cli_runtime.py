@@ -15,13 +15,11 @@ def parse_args(
     parser: argparse.ArgumentParser,
     argv: list[str] | None,
 ) -> argparse.Namespace:
-    """Parse CLI arguments while preserving global-option and launch-command rules."""
+    """Parse CLI arguments while preserving global-option and Agent Run prepare rules."""
     raw = list(sys.argv[1:] if argv is None else argv)
     explicit_command: list[str] | None = None
     if "--" in raw:
         separator = raw.index("--")
-        if "launch" not in raw[:separator]:
-            parser.error("-- COMMAND is only supported by launch")
         explicit_command = raw[separator + 1 :]
         raw = raw[:separator]
         if not explicit_command:
@@ -48,6 +46,9 @@ def parse_args(
             continue
         normalized_rest.append(token)
         index += 1
+
+    if explicit_command is not None and normalized_rest[:2] != ["agent-run", "prepare"]:
+        parser.error("-- COMMAND is only supported by agent-run prepare")
 
     args = parser.parse_args(normalized_globals + normalized_rest)
     setattr(args, "explicit_command", explicit_command)

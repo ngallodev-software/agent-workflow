@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+cat <<'TXT'
+Agent-workflow operating policy:
+1. Use Agent Runs for durable delegated engineering work that needs evidence, restartability, evaluation, or review.
+2. Use `agent-workflow agent-run prepare` to establish durable authority before execution.
+3. Use `agent-workflow agent-run start` only for AW-owned headless workers; external runtimes consume prepared runs separately.
+4. Persist steering before delivery and require explicit acknowledgement.
+5. Treat worker exit, completion, evaluation, review, and acceptance as separate gates.
+6. Keep worktree/source provenance and evidence inside agent-workflow authority.
+TXT

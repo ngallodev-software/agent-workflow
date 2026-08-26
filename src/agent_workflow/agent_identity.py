@@ -1,0 +1,171 @@
+"""Agent naming, profile resolution, and active-name leasing.
+
+This module owns the identity policy that maps a requested Agent Run onto one
+configured agent name/class/executor/model combination.  Agent Run preparation
+uses it, but lifecycle/execution code does not need to know how names are
+selected or leased.
+"""
+
+from __future__ import annotations
+
+import fcntl
+import json
+import os
+from typing import Any
+
+from .config import Settings
+from .errors import WorkflowError
+from .run_lifecycle import authoritative_execution_status
+from .state import TERMINAL_STATUSES, list_statuses, read_status, run_dir
+from .util import atomic_write_json, utc_now, validate_id
+
+
+def status_agent_active(settings: Settings, item: dict[str, Any]) -> bool:
+    """Return whether an Agent Run still owns or awaits a worker."""
+    agent_run_id = item.get("agent_run_id")
+    if not isinstance(agent_run_id, str) or not agent_run_id:
+        return True
+    try:
+        status = authoritative_execution_status(run_dir(settings, agent_run_id))
+    except WorkflowError:
+        return True
+    if status in TERMINAL_STATUSES:
+        return False
+    if status == "prepared":
+        return True
+    worker_alive = item.get("worker_alive")
+    return worker_alive is not False
+
+
+def resolve_agent_identity(
+    settings: Settings,
+    *,
+    requested_name: str | None,
+    requested_class: str | None,
+    executor: str | None,
+    model: str | None,
+    allow_no_go_model: bool,
+    explicit_command: list[str] | None,
+    interactive: bool | None,
+    allow_active_name: bool = False,
+) -> tuple[str, str, str | None, str | None, bool, bool]:
+    """Resolve the configured identity and execution profile for one Agent Run."""
+    interactive_explicit = interactive is not None
+    active_names = {
+        str(item["agent_name"])
+        for item in list_statuses(settings)
+        if item.get("agent_name") and status_agent_active(settings, item)
+    }
+    if requested_name is not None:
+        validate_id(requested_name, "agent name")
+        generated_name = requested_name.startswith(f"{settings.generated_agent_prefix}-")
+        if requested_name not in settings.preferred_agent_names and not generated_name:
+            raise WorkflowError(
+                f"agent name {requested_name!r} is not listed in [agents].preferred_names"
+            )
+        if requested_name in active_names and not allow_active_name:
+            raise WorkflowError(f"agent name is already active: {requested_name}")
+        agent_name = requested_name
+    else:
+        agent_name = next(
+            (name for name in settings.preferred_agent_names if name not in active_names),
+            "",
+        )
+        if not agent_name:
+            index = 1
+            while f"{settings.generated_agent_prefix}-{index:02d}" in active_names:
+                index += 1
+            agent_name = f"{settings.generated_agent_prefix}-{index:02d}"
+    profile = settings.agent_profiles.get(agent_name)
+    agent_class = requested_class or settings.default_agent_class
+    if profile is not None:
+        if explicit_command is not None and not allow_active_name:
+            raise WorkflowError(f"agent profile {agent_name!r} cannot use an explicit command")
+        if profile.agent_class is not None:
+            if requested_class is not None and requested_class != profile.agent_class:
+                raise WorkflowError(f"agent {agent_name!r} requires class {profile.agent_class!r}")
+            agent_class = profile.agent_class
+        if executor is not None and executor != profile.executor:
+            raise WorkflowError(f"agent {agent_name!r} requires executor {profile.executor!r}")
+        if model is not None and model != profile.model:
+            raise WorkflowError(f"agent {agent_name!r} requires model {profile.model!r}")
+        executor = profile.executor or executor
+        model = profile.model or model
+        allow_no_go_model = profile.allow_no_go_model
+        if interactive is None and profile.interactive is not None:
+            interactive = profile.interactive
+    if agent_class not in settings.agent_classes:
+        raise WorkflowError(f"agent class is not configured: {agent_class}")
+    class_policy = settings.agent_classes[agent_class]
+    if executor is None and explicit_command is None:
+        executor = class_policy.default_executor or settings.default_agent_executor
+    if model is None and executor is not None:
+        if executor == class_policy.default_executor:
+            model = class_policy.default_model
+        else:
+            allowed_for_executor = class_policy.allowed_models.get(executor, ())
+            model = allowed_for_executor[0] if allowed_for_executor else None
+    if executor is not None and model is not None:
+        allowed_models = class_policy.allowed_models.get(executor, ())
+        if model not in allowed_models:
+            raise WorkflowError(
+                f"agent class {agent_class!r} does not allow {executor}/{model}"
+            )
+    if interactive is None:
+        interactive = class_policy.interactive
+    if executor == "claude" and not interactive_explicit:
+        interactive = True
+    return agent_name, agent_class, executor, model, allow_no_go_model, interactive
+
+
+def claim_agent_name(
+    settings: Settings,
+    *,
+    agent_name: str,
+    agent_run_id: str,
+    interactive: bool,
+) -> None:
+    """Atomically reserve one name across interactive and detached runs."""
+    lease_root = settings.state_root / "agent-name-leases"
+    lease_root.mkdir(parents=True, exist_ok=True)
+    lock_path = lease_root / ".lock"
+    with lock_path.open("a+b") as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        active_names = {
+            str(item["agent_name"])
+            for item in list_statuses(settings)
+            if item.get("agent_name")
+            and item.get("agent_run_id") != agent_run_id
+            and status_agent_active(settings, item)
+        }
+        lease_path = lease_root / f"{agent_name}.json"
+        if lease_path.is_file():
+            try:
+                lease = json.loads(lease_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                lease = {}
+            leased_agent_run_id = lease.get("agent_run_id")
+            if leased_agent_run_id and leased_agent_run_id != agent_run_id:
+                try:
+                    leased_status = read_status(settings, str(leased_agent_run_id))
+                except WorkflowError:
+                    leased_status = None
+                if leased_status is not None:
+                    if status_agent_active(settings, leased_status):
+                        active_names.add(agent_name)
+                elif lease.get("pid") == os.getpid():
+                    active_names.add(agent_name)
+        if agent_name in active_names:
+            raise WorkflowError(f"agent name is already active: {agent_name}")
+        atomic_write_json(
+            lease_path,
+            {
+                "schema": "agent-workflow/agent-name-lease/v1",
+                "agent_name": agent_name,
+                "agent_run_id": agent_run_id,
+                "interactive": interactive,
+                "pid": os.getpid(),
+                "claimed_at": utc_now(),
+            },
+        )
+        fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
