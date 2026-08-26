@@ -2,7 +2,25 @@
 
 This is the **only unfinished-work register** for Agent-Workflow. Completed implementation plans, phase reports, and handoff documents belong in source-control/release history rather than the active documentation tree.
 
-Priorities are ordered within each section. An identifier retained here may also be referenced by a machine release policy or ADR.
+Priorities are ordered within each section. An identifier retained here may also be referenced by a machine release policy or ADR. The accepted architecture and execution sequence for the 0.9 product-surface work is [`SKILL_FIRST_SIMPLIFICATION_PLAN.md`](SKILL_FIRST_SIMPLIFICATION_PLAN.md); this backlog remains the sole status register.
+
+## P0 — 0.9 skill-first simplification
+
+### SURFACE-001 — Minimize the normal agent-visible command surface
+
+Make launch-scoped command catalogs role/profile scoped rather than exposing the complete parser catalog to every Agent Run. Keep implementation at <= 8 commands, review at <= 12, and introduce a normal skill/orchestrator profile at <= 20 commands / <= 5 KB while retaining the complete parser-derived catalog for explicit maintainer discovery.
+
+### FLOW-001 — Deterministic delegation fast path
+
+Add a thin `agent-workflow delegate` facade over the existing worktree, Agent Run prepare, and headless/external execution services. It must emit the same durable artifacts, support structured JSON, identify failed stages precisely, and never create a parallel lifecycle or implicitly review/accept work.
+
+### PERF-001 — Agent-efficiency baseline and regression budgets
+
+Measure launch-context/card size, Agent-Workflow setup/finalization wall time, CLI invocation count, and representative agent decision overhead. Add regression budgets and an eval comparing the skill-first path with the prior multi-command flow while preserving the same correctness/evidence assertions.
+
+### TEST-001 — Monolithic acceptance-suite teardown reliability
+
+Fix the process/fixture teardown behavior that can leave the full acceptance invocation running after individually passing journeys. The complete acceptance layer must pass and terminate cleanly as one suite for 0.9 closeout.
 
 ## P0 — Release closeout blockers
 
@@ -36,7 +54,7 @@ Produce the content-addressed browser image/runtime digest and verified font evi
 
 ### SKILL-001 — Harden the primary Agent-Workflow skill
 
-Make `skills/agent-workflow/SKILL.md` sufficient to operate the 0.8 lifecycle without repository-specific tribal knowledge. Cover when to use/not use AW, headless versus external workers, Workflow/Task/Agent Run/Worker identity, worktree authority, steer/progress/ack, completion/evaluation/review/acceptance separation, restart lineage, evidence inspection, prompt packs, benchmarks, and recovery.
+Make `skills/agent-workflow/SKILL.md` sufficient to operate the current lifecycle without repository-specific tribal knowledge, following the concise skill-first boundary in `SKILL_FIRST_SIMPLIFICATION_PLAN.md`. Cover when to use/not use AW, headless versus external workers, Workflow/Task/Agent Run/Worker identity, worktree authority, steer/progress/ack, completion/evaluation/review/acceptance separation, restart lineage, evidence inspection, prompt packs, benchmarks, and recovery.
 
 Specialized skills should reference the primary lifecycle authority rather than duplicate it. Add deterministic skill evals proving that an agent does not invoke a terminal manager, conflate delivery with acknowledgement, accept work on worker exit alone, or lose provenance when selecting external mode.
 
@@ -51,6 +69,10 @@ The contract must be implementable by more than one hypothetical host without sc
 ### API-001 — Stable structured public JSON contracts
 
 Review public structured output for Agent Run prepare/status, pending messages, review/evaluation summary, workflow status, benchmark status, worktree/provenance, and external bindings. Add stable documented JSON contracts where current CLI output is insufficient so integrations do not need private Python imports.
+
+### CAP-001 — Progressive advanced-capability isolation
+
+Keep benchmark publication machinery, index administration, MCP/plugin maintenance, release-evidence internals, hierarchy details, and telemetry integrations out of the normal skill/command profile unless requested. Measure import/startup/package cost before extracting code into separate packages; extraction is justified only by a clean one-way boundary and measurable benefit, not file-count aesthetics.
 
 ### MCP-003 / HARD-007 — Authenticated, idempotent MCP mutation phase
 

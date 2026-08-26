@@ -101,6 +101,7 @@ See [docs/TESTING.md](docs/TESTING.md).
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md)
+- [0.9 skill-first simplification plan](docs/SKILL_FIRST_SIMPLIFICATION_PLAN.md)
 - [Installation](docs/INSTALLATION.md)
 - [Operations and recovery](docs/OPERATIONS.md)
 - [Testing strategy](docs/TESTING.md)
@@ -124,7 +125,7 @@ The core is deliberately host-independent. A future plugin may project Agent Run
 
 ## Version
 
-This source tree is the breaking `0.8.0` headless-core rewrite. Older terminal-host-era runtime and schema compatibility is intentionally not carried forward.
+Version `0.9.0` builds on the breaking 0.8 headless-core rewrite and begins the skill-first product-surface simplification. Older terminal-host-era runtime and schema compatibility is intentionally not carried forward. See the [0.9 skill-first simplification plan](docs/SKILL_FIRST_SIMPLIFICATION_PLAN.md).
 
 ## Repository-only CI assets
 

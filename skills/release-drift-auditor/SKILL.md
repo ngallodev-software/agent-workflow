@@ -9,4 +9,4 @@ Audit the release artifact against the current headless Agent Run architecture.
 
 Verify version consistency, wheel contents, schemas, command catalog, docs, skills, examples, release policy, dependency lock, and test evidence. Flag any stale command or configuration surface that reintroduces a removed interactive-runtime dependency or the obsolete broad `session` execution noun.
 
-Treat current architecture, schemas, parser-derived commands, release policy/evidence, installed acceptance journeys, and `docs/BACKLOG.md` as the active authorities. Phase 0–2 planning/acceptance records are temporary closeout evidence only and must not become permanent product authority.
+Treat current architecture, schemas, parser-derived commands, release policy/evidence, installed acceptance journeys, `docs/SKILL_FIRST_SIMPLIFICATION_PLAN.md`, and `docs/BACKLOG.md` as the active authorities. Completed implementation-phase records belong in source-control/release history rather than the active product tree.

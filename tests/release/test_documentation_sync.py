@@ -35,7 +35,15 @@ def test_active_version_authorities_and_release_examples_are_synchronized() -> N
     assert result.stdout.strip() == f"agent-workflow {version}"
     assert '"version": __version__' in _read("src/agent_workflow/doctor.py")
     doctor = subprocess.run(
-        [sys.executable, "-m", "agent_workflow", "--json", "doctor"],
+        [
+            sys.executable,
+            "-m",
+            "agent_workflow",
+            "--config",
+            str(REPO_ROOT / "config" / "agent-workflow.example.toml"),
+            "--json",
+            "doctor",
+        ],
         cwd=REPO_ROOT,
         env={**os.environ, "PYTHONPATH": str(REPO_ROOT / "src")},
         text=True,
