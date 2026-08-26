@@ -14,6 +14,8 @@ Use `AGENT_WORKFLOW_ENFORCE_RELEASE_BLOCKERS=1` only for a release authorization
 
 Use `python3 scripts/bump-version.py --bump patch|minor|major` for active version authorities, then run `python3 scripts/bump-version.py --check` and the release tests. The version helper does not replace documentation auditing: installation examples, optional MCP statements, repository-only Jenkins packaging claims, skills, and generated command behavior must remain synchronized.
 
+`audit-release-assets.py` also validates executable `agent-workflow` examples in shell-fenced skill blocks against the live core parser with plugins disabled. This keeps the parser authoritative for skill syntax without treating inline prose references or plugin commands as normal agent-facing contracts.
+
 ## Test-authority drift audit
 
 `audit-test-suite.py` enforces `tests/test-authority.json`: layer and per-invariant function budgets, collected-case ceilings, explicit invariant rationales, mock/private-import exceptions, subprocess and wheel-build site budgets, and an optional JUnit runtime ceiling. `release-check.sh` runs the audit before tests and records `test-suite-audit.json` from the completed JUnit run.

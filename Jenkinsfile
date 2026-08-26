@@ -97,7 +97,8 @@ pipeline {
                         sudo -n -u "$target_user" -H "$@"
                     }
                     run_as_target env AGENT_WORKFLOW_INSTALL_PYTHON="$host_python" \
-                        "$install_root/install.sh" --wheel "$wheel" --extras mcp
+                        "$install_root/install.sh" --wheel "$wheel" --extras mcp \
+                        --no-mcp-register --no-hooks --no-skills
                     expected_version="$(tr -d '\n' < VERSION)"
                     installed_version="$(run_as_target "$host_python" -c \
                         'from importlib.metadata import version; print(version("agent-workflow"))')"

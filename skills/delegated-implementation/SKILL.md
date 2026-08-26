@@ -5,14 +5,13 @@ description: Execute an implementation task as a durable Agent Run with scoped c
 
 # Delegated Implementation Skill
 
-Use this skill for an implementation task executed as a durable Agent Run.
+Use this specialization for worker-side implementation inside an Agent Run. Follow `skills/agent-workflow/SKILL.md` for lifecycle identity, provenance, messaging, recovery, and completion/review/acceptance boundaries.
 
-1. Work only in the assigned source/worktree scope.
-2. Read the immutable launch context and task requirements.
-3. Emit durable progress at meaningful checkpoints.
-4. Apply steering only after recording a correlated acknowledgement.
-5. Run the required tests/evaluations.
-6. Write the structured completion handoff atomically.
-7. Report unresolved items explicitly.
-8. Do not self-accept the result; review and acceptance are host/orchestrator responsibilities.
-9. Do not create or manipulate an interactive runtime layout as part of task completion.
+Implementation-specific responsibilities:
+
+1. Work only in the assigned source/worktree scope and immutable launch contract.
+2. Implement the requested change without replacing durable Agent-Workflow authority with host/UI state.
+3. Emit durable progress at meaningful checkpoints and acknowledge applied steering by correlation ID.
+4. Run the required tests/evaluations for the assignment.
+5. Publish the structured completion handoff atomically, including changed files and unresolved items.
+6. Do not self-review or self-accept unless the governing contract explicitly assigns an independent role that permits it.

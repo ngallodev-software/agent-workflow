@@ -2,7 +2,7 @@
 set -euo pipefail
 usage() {
   cat <<'USAGE'
-Usage: ./install.sh [--no-skills] [--no-hooks] [--no-deps] [--python PATH]
+Usage: ./install.sh [--no-skills] [--no-hooks] [--no-mcp-register] [--no-deps] [--python PATH]
                     [--wheel PATH] [--extras NAME[,NAME...]]
 
 Installs this checkout, or a supplied wheel, into the current user's Python
@@ -14,6 +14,8 @@ dependencies may require network access.
 Options:
   --no-skills            Skip installation of agent skill symlinks.
   --no-hooks             Skip Codex and Claude Code hook reminders.
+  --no-mcp-register      Install MCP support without changing Codex or Claude
+                         Code MCP configuration.
   --no-deps              Skip Python package/dependency installation.
   --python PATH          Python interpreter used for the host installation.
   --wheel PATH           Install this built wheel instead of an editable checkout.
@@ -24,6 +26,7 @@ USAGE
 }
 INSTALL_SKILLS=1
 INSTALL_HOOKS=1
+REGISTER_MCP=1
 INSTALL_DEPS=1
 EXTRAS=""
 WHEEL_PATH="${AGENT_WORKFLOW_INSTALL_WHEEL:-}"
@@ -32,6 +35,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --no-skills) INSTALL_SKILLS=0 ;;
     --no-hooks) INSTALL_HOOKS=0 ;;
+    --no-mcp-register) REGISTER_MCP=0 ;;
     --no-deps) INSTALL_DEPS=0 ;;
     --python)
       shift
@@ -152,36 +156,79 @@ safe_link() {
 }
 
 configure_codex_mcp() {
-  mkdir -p "$CODEX_HOME_DIR"
-  if [[ -e "$CODEX_CONFIG_FILE" && ! -f "$CODEX_CONFIG_FILE" ]]; then
-    echo "refusing to configure Codex: not a regular file: $CODEX_CONFIG_FILE" >&2
-    return 1
-  fi
-  if [[ -f "$CODEX_CONFIG_FILE" ]] && grep -Eq '^[[:space:]]*\[mcp_servers\.("agent-workflow"|agent-workflow)\][[:space:]]*$' "$CODEX_CONFIG_FILE"; then
-    echo "kept existing Codex MCP server: $CODEX_CONFIG_FILE"
-    return 0
-  fi
-  if [[ -s "$CODEX_CONFIG_FILE" ]]; then
-    printf '\n' >> "$CODEX_CONFIG_FILE"
-  fi
-  "$PYTHON_PATH" - "$PYTHON_PATH" "$CONFIG_FILE" "$ROOT" >> "$CODEX_CONFIG_FILE" <<'PY'
+  "$PYTHON_PATH" - "$CODEX_CONFIG_FILE" "$PYTHON_PATH" "$CONFIG_FILE" "$ROOT" <<'PY'
 import json
+import os
+import re
+import stat
 import sys
+import tempfile
+from pathlib import Path
 
-python_path, config_path, repo_root = sys.argv[1:]
+config_file = Path(sys.argv[1])
+python_path, config_path, repo_root = sys.argv[2:]
+if config_file.is_symlink():
+    raise SystemExit(f"refusing to configure Codex: symlink path: {config_file}")
+if config_file.exists() and not config_file.is_file():
+    raise SystemExit(f"refusing to configure Codex: not a regular file: {config_file}")
+
+text = config_file.read_text(encoding="utf-8") if config_file.exists() else ""
+begin = "# BEGIN AGENT-WORKFLOW MANAGED MCP"
+end = "# END AGENT-WORKFLOW MANAGED MCP"
+while begin in text:
+    start = text.index(begin)
+    finish = text.find(end, start)
+    if finish < 0:
+        raise SystemExit(f"refusing to replace unterminated managed MCP block: {config_file}")
+    finish += len(end)
+    text = text[:start].rstrip() + "\n" + text[finish:].lstrip()
+
+table = re.compile(r"^\s*\[([^\]]+)\]\s*(?:#.*)?$")
+ours = re.compile(r'^mcp_servers\s*\.\s*(?:agent-workflow|"agent-workflow")(?:\s*\.|\s*$)')
+kept = []
+dropping = False
+for line in text.splitlines(keepends=True):
+    header = table.match(line)
+    if header:
+        dropping = bool(ours.match(header.group(1).strip()))
+    if not dropping:
+        kept.append(line)
+text = "".join(kept).strip()
+
 quote = json.dumps
-print("[mcp_servers.agent-workflow]")
-print(f"command = {quote(python_path)}")
-print(
+block = "\n".join((
+    begin,
+    "[mcp_servers.agent-workflow]",
+    f"command = {quote(python_path)}",
     "args = "
     + "[\"-m\", \"agent_workflow.mcp.server\", \"--config\", "
     + quote(config_path)
     + ", \"--repo-root\", "
     + quote(repo_root)
-    + "]"
-)
+    + "]",
+    end,
+))
+updated = (text + "\n\n" if text else "") + block + "\n"
+config_file.parent.mkdir(parents=True, exist_ok=True)
+mode = stat.S_IMODE(config_file.stat().st_mode) if config_file.exists() else 0o600
+fd, temporary = tempfile.mkstemp(prefix=f".{config_file.name}.", dir=config_file.parent)
+try:
+    os.fchmod(fd, mode or 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as stream:
+        stream.write(updated)
+    os.replace(temporary, config_file)
+except BaseException:
+    try:
+        os.close(fd)
+    except OSError:
+        pass
+    try:
+        os.unlink(temporary)
+    except FileNotFoundError:
+        pass
+    raise
+print(f"configured Codex MCP server: {config_file}")
 PY
-  echo "configured Codex MCP server: $CODEX_CONFIG_FILE"
 }
 
 configure_claude_mcp() {
@@ -261,7 +308,7 @@ if [[ ! -e "$CONFIG_FILE" ]]; then
 else
   echo "kept existing config: $CONFIG_FILE"
 fi
-if [[ $MCP_CONFIG_REQUESTED -eq 1 ]]; then
+if [[ $MCP_CONFIG_REQUESTED -eq 1 && $REGISTER_MCP -eq 1 ]]; then
   configure_codex_mcp
   configure_claude_mcp
 fi
@@ -317,8 +364,10 @@ fi
 mkdir -p "$APP_DATA_DIR"
 printf '%s\n' "$ROOT" > "$APP_DATA_DIR/source-root"
 MCP_CLIENTS=""
-if [[ $MCP_CONFIG_REQUESTED -eq 1 ]]; then
+if [[ $MCP_CONFIG_REQUESTED -eq 1 && $REGISTER_MCP -eq 1 ]]; then
   MCP_CLIENTS="MCP clients: Codex ($CODEX_CONFIG_FILE), Claude Code ($HOME/.claude.json)"
+elif [[ $MCP_CONFIG_REQUESTED -eq 1 ]]; then
+  MCP_CLIENTS="MCP support installed; client registration skipped"
 fi
 HOOK_CLIENTS=""
 if [[ $INSTALL_HOOKS -eq 1 ]]; then

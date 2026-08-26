@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 import tarfile
+import tomllib
 from pathlib import Path
 
 from tests.conftest import REPO_ROOT
@@ -104,6 +105,61 @@ def test_bootstrap_rejects_unsupported_host_before_download(tmp_path: Path) -> N
     )
     assert result.returncode != 0
     assert "unsupported operating system" in result.stderr
+
+
+def test_source_installer_migrates_codex_mcp_duplicates(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    codex = home / ".codex"
+    codex.mkdir(parents=True)
+    config = codex / "config.toml"
+    config.write_text(
+        '[mcp_servers.other]\ncommand = "other"\n\n'
+        '[mcp_servers.agent-workflow]\ncommand = "old"\n\n'
+        '[mcp_servers.agent-workflow.env]\nOLD = "1"\n\n'
+        '[mcp_servers."agent-workflow"]\ncommand = "older"\n',
+        encoding="utf-8",
+    )
+    dist_info = tmp_path / "mcp-1.28.1.dist-info"
+    dist_info.mkdir()
+    (dist_info / "METADATA").write_text("Metadata-Version: 2.1\nName: mcp\nVersion: 1.28.1\n", encoding="utf-8")
+    (tmp_path / "jsonschema.py").write_text("", encoding="utf-8")
+    (tmp_path / "yaml.py").write_text("", encoding="utf-8")
+    env = os.environ.copy()
+    env.update(
+        {
+            "HOME": str(home),
+            "CODEX_HOME": str(codex),
+            "XDG_CONFIG_HOME": str(home / ".config"),
+            "XDG_DATA_HOME": str(home / ".local/share"),
+            "PYTHONPATH": str(tmp_path),
+        }
+    )
+    command = [
+        "bash",
+        "scripts/install-source.sh",
+        "--no-deps",
+        "--no-skills",
+        "--no-hooks",
+        "--extras",
+        "mcp",
+        "--python",
+        sys.executable,
+    ]
+    for _ in range(2):
+        result = subprocess.run(command, cwd=REPO_ROOT, env=env, text=True, capture_output=True, timeout=30)
+        assert result.returncode == 0, result.stdout + result.stderr
+    text = config.read_text(encoding="utf-8")
+    assert "[mcp_servers.other]" in text
+    assert text.count("[mcp_servers.agent-workflow]") == 1
+    assert '[mcp_servers."agent-workflow"]' not in text
+    assert text.count("BEGIN AGENT-WORKFLOW MANAGED MCP") == 1
+    assert set(tomllib.loads(text)["mcp_servers"]) == {"other", "agent-workflow"}
+
+
+def test_deployment_jenkins_install_skips_harness_mutations() -> None:
+    jenkinsfile = (REPO_ROOT / "Jenkinsfile").read_text(encoding="utf-8")
+    deployment = jenkinsfile.split('stage(\'Host install\')', 1)[1]
+    assert "--no-mcp-register --no-hooks --no-skills" in deployment
 
 
 def test_release_workflow_is_tag_only_and_bundle_builder_is_reproducible(tmp_path: Path) -> None:

@@ -17,12 +17,19 @@ def test_installed_fast_benchmark_package_executes_scores_and_matches_authority(
     tmp_path: Path,
 ) -> None:
     suite = tmp_path / "priority-picker-fast-v1"
+    product_env = {
+        **os.environ,
+        "XDG_CONFIG_HOME": str(tmp_path / "xdg-config"),
+        "XDG_DATA_HOME": str(tmp_path / "xdg-data"),
+        "XDG_STATE_HOME": str(tmp_path / "xdg-state"),
+    }
     exported = installed_product.json(
         "benchmark",
         "suite-export",
         suite,
         "--benchmark-id",
         "priority-picker-fast-v1",
+        env=product_env,
         timeout=30,
     )
     assert Path(exported["destination"]) == suite

@@ -18,7 +18,7 @@ from tests.conftest import InstalledProduct, REPO_ROOT
 
 def test_release_asset_audit_is_the_single_static_repository_gate() -> None:
     result = subprocess.run(
-        ["python3", "scripts/audit-release-assets.py"],
+        [sys.executable, "scripts/audit-release-assets.py"],
         cwd=REPO_ROOT,
         text=True,
         capture_output=True,

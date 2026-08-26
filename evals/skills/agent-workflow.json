@@ -1,0 +1,76 @@
+{
+  "schema": "agent-workflow/skill-behavior-evals/v1",
+  "cases": [
+    {
+      "id": "SKILL-EVAL-NON-USE",
+      "scenario": "The caller only wants a read-only explanation or one deterministic local command; delegation durability and review add no value.",
+      "requirement": "choose no Agent-Workflow when the correctness kernel adds no value",
+      "skill_patterns": [
+        "Do not invoke it merely because it is available",
+        "Normally skip it for read-only explanation/review"
+      ]
+    },
+    {
+      "id": "SKILL-EVAL-WORKER-MODE",
+      "scenario": "Delegated work may either be launched and owned locally or launched by an external host after Agent-Workflow prepares the durable contract.",
+      "requirement": "select headless versus external mode by worker ownership without changing lifecycle authority",
+      "skill_patterns": [
+        "headless.*Agent-Workflow launches and owns the local worker process group",
+        "external.*another runtime launches the worker"
+      ]
+    },
+    {
+      "id": "SKILL-EVAL-NO-TERMINAL-MANAGER",
+      "scenario": "An external host offers panes/sessions as a presentation convenience.",
+      "requirement": "never make terminal-manager behavior part of the Agent-Workflow lifecycle",
+      "skill_patterns": [
+        "Never make terminal-manager behavior part of the lifecycle"
+      ]
+    },
+    {
+      "id": "SKILL-EVAL-PERSIST-BEFORE-DELIVER",
+      "scenario": "The parent needs to steer a running worker and also has a live delivery channel available.",
+      "requirement": "persist steering before attempting live delivery",
+      "skill_patterns": [
+        "Persist steering before live delivery"
+      ]
+    },
+    {
+      "id": "SKILL-EVAL-DELIVERY-NOT-ACK",
+      "scenario": "A durable steering message was successfully delivered to the worker process.",
+      "requirement": "do not treat delivery as acknowledgement",
+      "skill_patterns": [
+        "delivery is not acknowledgement",
+        "Acknowledge against the durable message/correlation ID"
+      ]
+    },
+    {
+      "id": "SKILL-EVAL-EXIT-NOT-ACCEPTANCE",
+      "scenario": "A worker exits successfully after reporting that implementation and tests completed.",
+      "requirement": "keep worker exit, completion, evaluation, review, and acceptance as separate gates",
+      "skill_patterns": [
+        "Worker exit != completion != evaluation != review != acceptance",
+        "Do not infer success from worker exit or self-accept"
+      ]
+    },
+    {
+      "id": "SKILL-EVAL-EXTERNAL-PROVENANCE",
+      "scenario": "An external host launches the worker from a worktree after Agent-Workflow prepared the run.",
+      "requirement": "preserve Agent-Workflow source/worktree provenance and durable Agent Run identity in external mode",
+      "skill_patterns": [
+        "External hosts are execution/presentation adapters only",
+        "do not replace Agent-Workflow identity, messaging, source/worktree provenance",
+        "Preserve the Agent-Workflow-recorded source/worktree provenance"
+      ]
+    },
+    {
+      "id": "SKILL-EVAL-SEALED-EVIDENCE-RECOVERY",
+      "scenario": "A resumed or damaged run has inconsistent projections but already contains sealed evidence.",
+      "requirement": "recover from authoritative durable artifacts instead of altering or improvising around sealed evidence",
+      "skill_patterns": [
+        "Recover from source, the immutable Agent Run contract, append-only journals, sealed evidence",
+        "Never improvise around or mutate sealed evidence"
+      ]
+    }
+  ]
+}

@@ -237,9 +237,9 @@
       "path": "tests/invariants"
     },
     "release": {
-      "max_collected_cases": 16,
+      "max_collected_cases": 18,
       "max_files": 3,
-      "max_test_functions": 16,
+      "max_test_functions": 18,
       "path": "tests/release"
     }
   },

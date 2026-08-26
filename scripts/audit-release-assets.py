@@ -19,6 +19,8 @@ from agent_workflow.manifests import load_pack_manifest, validate_pack
 from agent_workflow.pack import scaffold as scaffold_pack
 from agent_workflow.benchmarking.contracts import validate_executor_config, validate_spec
 from agent_workflow.benchmarking.service import materialize_builtin_suite
+from agent_workflow.skill_examples import validate_skill_command_examples
+from agent_workflow.skill_evals import validate_primary_skill_behavior
 
 EXPECTED_VERSION = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
 PLACEHOLDER_RE = re.compile(r"\{\{[A-Z0-9_]+\}\}")
@@ -373,6 +375,16 @@ def main(argv: list[str] | None = None) -> int:
         if name in skill_names:
             fail(f"{path.relative_to(ROOT)}: duplicate skill name {name!r}")
         skill_names.add(name)
+
+    # Executable skill examples must stay synchronized with the live core parser.
+    # Inline command references are prose; shell-fenced examples are the checked contract.
+    for skill_error in validate_skill_command_examples(ROOT / "skills"):
+        fail(skill_error)
+    for skill_error in validate_primary_skill_behavior(
+        ROOT / "skills" / "agent-workflow" / "SKILL.md",
+        ROOT / "evals" / "skills" / "agent-workflow.json",
+    ):
+        fail(skill_error)
 
     # JSON and JSON Schema syntax.
     for path in (path for path in release_files_list if path.suffix == ".json"):
