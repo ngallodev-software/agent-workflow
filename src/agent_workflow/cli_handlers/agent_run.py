@@ -20,6 +20,7 @@ from ..agent_runs import interrupt as interrupt_agent_run
 from ..agent_runs import prepare as prepare_agent_run
 from ..agent_runs import start as start_agent_run
 from ..agent_runs import observe
+from ..agent_runs import public_agent_run_view
 from ..agent_runs import progress as record_progress
 from ..agent_runs import restart as restart_agent_run
 from ..agent_runs import steer as steer_agent_run
@@ -31,13 +32,14 @@ from ..state import list_statuses, read_status, repair_status
 
 
 def _prepare(settings: Settings, args: argparse.Namespace) -> Any:
-    return prepare_agent_run(
+    return public_agent_run_view(prepare_agent_run(
         settings,
         agent_run_id=args.agent_run_id,
         workdir=args.workdir,
         prompt_path=args.prompt,
         executor=args.executor,
         agent_name=args.agent_name,
+        role=args.role,
         agent_class=args.agent_class,
         model=args.model,
         reasoning_effort=args.reasoning_effort,
@@ -53,7 +55,7 @@ def _prepare(settings: Settings, args: argparse.Namespace) -> Any:
         prerequisite_ids=args.prerequisites,
         evaluation_path=args.evaluation,
         worker_mode=args.worker_mode,
-    )
+    ))
 
 
 def _list_agent_runs(settings: Settings, args: argparse.Namespace) -> None:
@@ -61,7 +63,7 @@ def _list_agent_runs(settings: Settings, args: argparse.Namespace) -> None:
     for item in list_statuses(settings):
         agent_run_id = str(item.get("agent_run_id", ""))
         try:
-            rows.append(observe(settings, agent_run_id))
+            rows.append(public_agent_run_view(observe(settings, agent_run_id)))
         except WorkflowError:
             rows.append(item)
     if args.json:
@@ -90,7 +92,7 @@ def handle_agent_run_command(
     if command == "prepare":
         return _prepare(settings, args), False
     if command == "start":
-        return start_agent_run(settings, args.agent_run_id), False
+        return public_agent_run_view(start_agent_run(settings, args.agent_run_id)), False
     if command == "list":
         _list_agent_runs(settings, args)
         return None, True
@@ -107,7 +109,7 @@ def handle_agent_run_command(
             False,
         )
     if command == "status":
-        return observe(settings, args.agent_run_id), False
+        return public_agent_run_view(observe(settings, args.agent_run_id)), False
     if command == "repair":
         return repair_status(settings, args.agent_run_id), False
     if command == "finalize":

@@ -163,6 +163,63 @@ Agent-Workflow core -X-> Herdr internals
 
 Herdr may own presentation, interactive worker launch, best-effort live delivery, navigation, and rebuildable binding state. It may not own Agent Run identity, durable messages, completion/evaluation/review/acceptance authority, or source provenance.
 
+### 3.5 Supported provider/authentication boundary for 0.9
+
+The supported production executor/authentication matrix is deliberately narrow:
+
+- **Codex CLI** using an existing ChatGPT/Codex subscription session;
+- **Claude Code CLI** using an existing Claude subscription session.
+
+0.9 does **not** support API-key, access-token, metered-API, or direct provider-SDK authentication. Agent-Workflow must never silently fall back from a subscription session to API billing. Ambient provider API credentials are treated as a configuration/authentication error for subscription-backed benchmark runs.
+
+The synthetic executor remains available only as deterministic repository test/benchmark-development machinery. It is not a third production provider and must never appear in normal role selection, runtime aliases, installation guidance, or supported-provider claims.
+
+Do not add provider SDKs, API credential management, or a general LLM gateway to satisfy the role abstraction described below. If API-backed execution becomes desirable later, it requires a separate explicit design/release decision.
+
+### 3.6 Opaque agent roles and private runtime aliases
+
+Agent-facing orchestration must describe **responsibility and capability**, not provider/model identity. The 0.9 target is:
+
+```text
+caller/orchestrator
+    |
+    | role = implementation
+    v
+public AgentRole contract
+    |
+    | private binding
+    v
+runtime alias = code-primary
+    |
+    | operator-only resolution
+    v
+Codex subscription OR Claude subscription + concrete model
+```
+
+The abstraction has three layers:
+
+1. **AgentRole (public/agent-visible):** ID, purpose, use cases, do-not-use cases, capabilities, constraints, authority boundaries, and optional Markdown behavioral instructions. It contains no provider, executor, model, model alias, billing, or credential information.
+2. **RoleBinding (private policy):** maps a role ID to a runtime alias. Callers do not need this mapping.
+3. **RuntimeAlias (operator/private):** resolves an opaque name such as `code-primary` to either the Codex CLI or Claude Code CLI plus concrete model/runtime settings.
+
+Authoring should support YAML or JSON for the structured role definition and an optional referenced Markdown instruction file. YAML is the preferred human-authoring format; internally the loader must normalize to canonical JSON for validation/digest binding.
+
+Initial built-in roles should stay small and responsibility-based. Start with `implementation`, `review`, and `exploration`; add another role only when it has a materially different responsibility, authority boundary, or capability contract. Never create provider/model-shaped roles such as `implementation-codex` or `review-sonnet`.
+
+Provider/model opacity is a **visibility boundary**, not data destruction. The real resolved executor/model remains available to operator-only provenance, benchmark evidence, diagnostics, accounting, and reproducibility. It must not be injected into child launch prompts, peer messages, normal workflow definitions, role catalogs, normal `delegate` responses, or other agent-visible context.
+
+A future workflow node should normally request:
+
+```yaml
+role: implementation
+```
+
+Raw `executor`/`model` selection remains an operator/diagnostic escape hatch during migration and should disappear from the normal skill-facing command card. Runtime alias resolution is deterministic in 0.9: one alias resolves to exactly one configured subscription-backed runtime. Automatic provider failover/load balancing is out of scope.
+
+The implementation must include an explicit public/private run-context boundary so hiding a model in role YAML cannot be defeated merely by reading another launch-scoped artifact. Real executor/model identity remains sealed in restricted provenance; the child/orchestrator-facing contract exposes only logical role identity and capabilities.
+
+The 0.9 guarantee is **supported-contract opacity**, not adversarial operating-system secrecy. A same-account process with arbitrary filesystem/process inspection may still be able to infer the provider from installed executables, process state, or restricted provenance unless a stronger host/container privilege boundary is supplied. Agent-Workflow must prevent routine disclosure through its supported role, workflow, messaging, context, status, and delegation contracts; stronger hostile-process secrecy is a separate host-security problem.
+
 ## 4. What must remain in the core
 
 The following features earn their complexity because they directly increase correctness, auditability, recoverability, or controlled execution quality.
@@ -334,15 +391,69 @@ Examples where AW is justified:
 Tasks:
 
 1. Record parser leaf-command count and role-card size.
-2. Measure launch-context bytes/tokens for implementation, review, and orchestrator roles.
-3. Measure number of Agent-Workflow CLI invocations needed for representative simple delegation, review, workflow, and recovery journeys.
-4. Record wall time attributable to Agent-Workflow setup/finalization separately from executor work.
-5. Add an agent-efficiency fixture/eval that can compare 0.8-style operation with the 0.9 skill-first path.
-6. Preserve correctness assertions for worktree provenance, durable messaging, completion validation, evidence sealing, review, and acceptance.
+2. Measure launch-context bytes/provider-neutral approximate tokens for implementation, review, and orchestrator roles.
+3. Measure the number of Agent-Workflow CLI/model decisions needed for representative simple delegation, review, workflow, and recovery journeys.
+4. Record wall time attributable to Agent-Workflow setup/finalization separately from executor work, using existing installed-product journeys rather than creating a parallel benchmark harness.
+5. Commit a machine-readable baseline generated by `scripts/measure-agent-efficiency.py`; later phases compare against this baseline instead of relying on prose numbers.
+6. Inventory where executor/model identity currently leaks into agent-visible CLI, workflow, launch-context, status, or artifact surfaces so Phase 1 can close the boundary deliberately.
+7. Enforce the 0.9 authentication boundary: supported production execution is Codex subscription or Claude subscription only; remove selectable API-key/access-token benchmark profiles and keep synthetic execution test/development-only.
+8. Preserve correctness assertions for worktree provenance, durable messaging, completion validation, evidence sealing, review, and acceptance.
+
+**Test-surface rule:** Phase 0 must not add unit/invariant tests merely to measure implementation details. New coverage is allowed only when it protects a real integration/E2E or public-contract boundary. Prefer extending/consolidating an existing installed-product journey and deleting superseded narrow coverage. Static efficiency budgets belong in release/audit tooling, not a new forest of tests.
 
 **Do not optimize** by deleting correctness gates simply because they consume time.
 
-### Phase 1 — Minimize the agent-visible command surface
+#### Phase 0 recorded baseline and implications
+
+`release/agent-efficiency-baseline.json` is the machine-readable authority for these measurements. The initial 0.9 baseline establishes:
+
+- 93 parser-derived leaf commands;
+- a 15,859-byte full Markdown catalog and a **93,997-byte full JSON machine catalog**;
+- implementation/review/orchestrator role cards of 1,456 / 2,101 / 10,037 bytes respectively;
+- if the machine catalog were filtered using the existing role definitions, its implementation/review/orchestrator sizes would be 7,548 / 11,677 / 62,838 bytes respectively;
+- launch preparation currently writes the complete 93,997-byte machine catalog for every role even when the role card exposes only a small subset;
+- in the existing installed-product headless journey, the deterministic fake executor ran for approximately 0.086 s while measured Agent-Workflow non-executor lifecycle work consumed approximately 1.994 s;
+- repeated installed-product CLI medians were approximately 1.025 s for `agent-run status`, 1.147 s for the implementation command-card query, and 0.144 s for `--version`;
+- import profiling of the status path attributes roughly 0.73 s to JSON Schema import/format machinery, dominated by RFC format support. This is diagnostic evidence, not permission to skip contract validation; and
+- executor/model identity is currently exposed on normal prepare/status/context/MCP/workflow surfaces and in same-account-readable execution artifacts, so ROLE-001 must establish an explicit supported-contract visibility boundary.
+
+These measurements lock in the following implementation bias for later phases:
+
+1. **Filter launch artifacts before writing them.** Phase 2 should write only the role-scoped machine catalog, not a full catalog plus a small card.
+2. **Compose common-path services in one process.** The `delegate` facade should avoid paying multiple ~1 s CLI startup/import costs for one model decision while still producing the same durable contracts.
+3. **Keep schema validation.** Optimize import/loading boundaries and process composition before considering any reduction in validation.
+4. **Prefer lazy capability loading over a daemon.** A persistent service adds operational complexity; consider it only if role-scoped artifacts, lazy imports, and in-process delegation leave material measured overhead.
+5. **Do not optimize repository counts cosmetically.** Focus on bytes, process starts, decisions, imports, and context actually paid by agents.
+
+### Phase 1 — Introduce opaque roles and private runtime aliases
+
+**Goal:** make logical agent responsibility the public orchestration contract while provider/model resolution stays private and auditable.
+
+Complete `ROLE-001` before depending on roles for further surface reduction.
+
+Tasks:
+
+1. Define `agent-workflow/agent-role/v1` as a small YAML/JSON-authored, canonical-JSON-validated contract.
+2. Support an optional referenced Markdown role instruction file without embedding provider/model details.
+3. Add a public role catalog for `implementation`, `review`, and `exploration` with purpose, use/do-not-use guidance, capabilities, constraints, and authority boundaries.
+4. Add private `runtime_alias` configuration and role -> runtime-alias binding. Initial aliases may resolve only to `codex` or `claude` subscription-backed executors.
+5. Split logical role resolution from private runtime resolution; do not retain `AgentProfile(executor, model, ...)` as the public conceptual model.
+6. Keep actual executor/model in restricted/operator provenance and benchmark evidence, while removing it from agent-visible launch context and normal orchestration responses.
+7. Add role selection to workflow/delegation surfaces; keep raw executor/model flags only as explicit operator/diagnostic compatibility escape hatches during migration.
+8. Make role definitions digest-bound into Agent Run evidence so the logical behavioral contract is reproducible independently of the private runtime mapping.
+9. Define a migration path from existing `agent_class`/named profile configuration without creating a permanent second routing system.
+10. Prove opacity through an existing installed-product/E2E journey or a consolidated contract journey: use unmistakable sentinel provider/model identities and verify they are absent from every child/orchestrator-facing artifact while present in restricted provenance. Do not create a broad new matrix of role unit tests.
+
+**Acceptance targets:**
+
+- normal callers select a logical role, not a provider/model;
+- built-in role files contain no provider/model/runtime alias identity;
+- supported runtime aliases resolve only to Codex or Claude subscription sessions;
+- real runtime identity remains auditable in restricted provenance;
+- no agent-visible artifact leaks the sentinel provider/model identity in the opacity E2E journey;
+- role loading introduces no new long-lived duplicate routing authority.
+
+### Phase 2 — Minimize the agent-visible command surface
 
 **Goal:** make role-scoped command contracts the normal interface.
 
@@ -364,14 +475,14 @@ Tasks:
 - normal orchestrator card: <= 5 KB;
 - no correctness-relevant command needed by a role is available only through undocumented discovery.
 
-### Phase 2 — Make the primary skill the default product interface
+### Phase 3 — Make the primary skill the default product interface
 
 **Goal:** an agent can make the right decision without repository-specific tribal knowledge.
 
 Tasks:
 
 1. Complete `SKILL-001` with a concise use/do-not-use decision section.
-2. Make the normal flow start with the high-level delegation facade once Phase 3 lands.
+2. Make the normal flow start with the high-level delegation facade once Phase 4 lands.
 3. Keep specialized skills thin and explicitly compositional.
 4. Remove duplicated lifecycle prose from specialized skills where the primary skill is authoritative.
 5. Generate/check command examples against the live parser during release validation.
@@ -387,7 +498,7 @@ Tasks:
 
 **Constraint:** skill hardening must not materially increase normal prompt/context load. Prefer generated runtime context to prose duplication.
 
-### Phase 3 — Add the deterministic fast path
+### Phase 4 — Add the deterministic fast path
 
 **Goal:** reduce common delegation from several model decisions to one deterministic composition.
 
@@ -419,7 +530,7 @@ agent-workflow delegate --worker-mode external ...
 -> returns prepared launch contract; launches nothing
 ```
 
-### Phase 4 — Stabilize public JSON and external Worker contracts
+### Phase 5 — Stabilize public JSON and external Worker contracts
 
 **Goal:** skills/plugins should not import private Python modules or scrape prose.
 
@@ -452,7 +563,7 @@ last_observed_at
 
 Host observations never become completion, review, or acceptance authority.
 
-### Phase 5 — Progressive capability isolation
+### Phase 6 — Progressive capability isolation
 
 **Goal:** advanced capabilities should impose near-zero cognitive cost when unused.
 
@@ -477,7 +588,7 @@ Candidate extraction review order:
 
 Do **not** extract durable lifecycle, messaging, workflow, evidence, evaluation, review, or worktree authority merely to make the core directory smaller.
 
-### Phase 6 — Test and execution-efficiency consolidation
+### Phase 7 — Test and execution-efficiency consolidation
 
 **Goal:** preserve authority coverage while reducing redundant execution cost.
 
@@ -492,26 +603,28 @@ Tasks:
 
 Current test-count reduction is not itself a goal. **Unique authority coverage per unit of test/runtime cost** is the goal.
 
-### Phase 7 — 0.9 closeout
+### Phase 8 — 0.9 closeout
 
 0.9 is ready for release when:
 
-1. the normal skill path does not require full-command discovery;
-2. a representative simple delegation can be initiated through one high-level deterministic facade;
-3. implementation/review role cards remain small;
-4. the normal orchestrator role is <= 20 commands / <= 5 KB;
-5. skill evals prove correct use and correct non-use;
-6. external Worker binding is host-neutral and public;
-7. public JSON surfaces eliminate private-import requirements for supported integrations;
-8. no tmux or generic terminal-host architecture reappears;
-9. Herdr remains optional and downstream;
-10. invariant, acceptance, release, test-authority, release-asset, version, and documentation audits pass;
-11. full acceptance execution terminates cleanly as a suite;
-12. measured Agent-Workflow setup/context overhead improves versus the Phase 0 baseline without weakening the protected correctness journey.
+1. normal callers can select opaque logical roles without knowing provider/model identity;
+2. only Codex subscription and Claude subscription are supported production runtime/authentication paths;
+3. the normal skill path does not require full-command discovery;
+4. a representative simple delegation can be initiated through one high-level deterministic facade;
+5. implementation/review role cards remain small;
+6. the normal orchestrator role is <= 20 commands / <= 5 KB;
+7. skill evals prove correct use and correct non-use;
+8. external Worker binding is host-neutral and public;
+9. public JSON surfaces eliminate private-import requirements for supported integrations;
+10. no tmux or generic terminal-host architecture reappears;
+11. Herdr remains optional and downstream;
+12. invariant, acceptance, release, test-authority, release-asset, version, and documentation audits pass;
+13. full acceptance execution terminates cleanly as a suite;
+14. measured Agent-Workflow setup/context overhead improves versus the Phase 0 baseline without weakening the protected correctness journey.
 
 ## 7. Herdr direction after the 0.9 core surface stabilizes
 
-Herdr integration should be a separate package/plugin built only after the 0.9 binding/API contracts are stable.
+Herdr integration should be a separate package/plugin built only after the 0.9 role/binding/API contracts are stable.
 
 The plugin may provide:
 
@@ -580,6 +693,8 @@ Recommended initial budgets:
 | default skill dependence on repo docs | none during a healthy run |
 | terminal-host dependencies in core | 0 |
 | Herdr dependencies in core | 0 |
+| production provider/auth paths | Codex subscription + Claude subscription only |
+| provider/model identity in normal agent-visible role/context | 0 |
 
 Add runtime/wall-time targets after Phase 0 captures a stable local baseline. Avoid arbitrary timing limits before measurement.
 
@@ -591,6 +706,8 @@ Every simplification must answer two questions:
 2. **Which correctness authority remains responsible for the behavior?**
 
 A change is not simplification if it only moves complexity into hidden prose, a plugin, or another duplicate service.
+
+Test growth is not an implementation milestone. Prefer integration/E2E coverage that proves several authorities together. Add or retain a narrow invariant only when a security, durability, replay, schema, path, state-machine, or accounting property cannot be proven economically and deterministically through an installed-product journey. When a new E2E journey subsumes narrow tests, consolidate/delete the redundant tests rather than increasing the permanent suite surface.
 
 Required protected journeys include:
 
@@ -605,7 +722,9 @@ Required protected journeys include:
 - sealed-evidence tamper detection;
 - role-scoped command contract correctness;
 - skill decision evals;
-- fast-path equivalence to the underlying lower-level services.
+- fast-path equivalence to the underlying lower-level services;
+- opaque-role/provider-identity boundary with restricted provenance still auditable;
+- subscription-only production authentication with ambient API credentials rejected.
 
 ## 12. Explicit non-goals
 
@@ -620,6 +739,8 @@ Required protected journeys include:
 - replace Agent-Workflow durable messaging with host delivery;
 - implement a generic terminal host;
 - add Herdr as a core dependency;
+- build a general provider/model router or API-key credential manager;
+- add API-key, access-token, or direct provider-SDK execution in 0.9;
 - build the separate spec-generation system inside Agent-Workflow;
 - preserve pre-0.8 compatibility.
 
@@ -628,21 +749,22 @@ Required protected journeys include:
 The implementation order is locked as:
 
 ```text
-0. baseline + efficiency evals
-1. role-scoped surface reduction
-2. primary skill + skill evals
-3. deterministic delegate fast path
-4. public JSON + external binding contract
-5. progressive advanced-capability isolation
-6. test/runtime efficiency consolidation
-7. 0.9 closeout
+0. baseline + efficiency/authentication guardrails
+1. opaque AgentRole + private runtime aliases
+2. role-scoped surface reduction
+3. primary skill + skill evals
+4. deterministic delegate fast path
+5. public JSON + external binding contract
+6. progressive advanced-capability isolation
+7. test/runtime efficiency consolidation
+8. 0.9 closeout
 ```
 
-Herdr plugin work begins only after Phase 4 contracts are stable enough that the plugin can be implemented without importing private Agent-Workflow modules.
+Herdr plugin work begins only after Phase 5 contracts are stable enough that the plugin can be implemented without importing private Agent-Workflow modules.
 
 ## 14. Definition of success
 
-The project has reached the intended direction when a capable coding agent can use Agent-Workflow correctly from the primary skill without learning the repository, scanning 93 commands, reading dozens of schemas, or understanding optional subsystems—and when the resulting run still has the durable provenance, replay, evidence, evaluation, review, and acceptance guarantees that justify using Agent-Workflow in the first place.
+The project has reached the intended direction when a capable coding agent can use Agent-Workflow correctly from the primary skill without learning the repository, scanning 93 commands, reading dozens of schemas, understanding optional subsystems, or knowing which provider/model powers another agent—and when the resulting run still has the durable provenance, replay, evidence, evaluation, review, and acceptance guarantees that justify using Agent-Workflow in the first place.
 
 That is the 0.9 product boundary:
 

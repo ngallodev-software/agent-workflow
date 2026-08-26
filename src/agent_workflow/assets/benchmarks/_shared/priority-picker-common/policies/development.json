@@ -19,8 +19,6 @@
   "authentication_default": "subscription-session",
   "allowed_authentication_modes": [
     "subscription-session",
-    "api-key",
-    "access-token",
     "synthetic-none"
   ],
   "winner_policy": {

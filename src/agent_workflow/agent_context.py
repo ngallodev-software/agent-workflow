@@ -74,7 +74,6 @@ def initialize(
     *,
     agent_run_id: str,
     status: dict[str, Any],
-    command: dict[str, Any],
 ) -> dict[str, Any]:
     assignment_id = str(uuid.uuid4())
     now = utc_now()
@@ -92,9 +91,9 @@ def initialize(
         "agent_run_id": agent_run_id,
         "agent_name": status.get("agent_name"),
         "agent_class": status.get("agent_class"),
-        "executor": status.get("executor"),
-        "model": command.get("model"),
-        "interactive": bool(command.get("interactive")),
+        "role": status.get("role"),
+        "role_digest": status.get("role_digest"),
+        "interactive": bool(status.get("worker_mode") == "external"),
         "worker_mode": status.get("worker_mode"),
         "provider_agent_run_id": None,
         "repository_root": status.get("repository_root"),

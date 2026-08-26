@@ -172,10 +172,16 @@ def _validate_node(node: Mapping[str, Any], *, location: str) -> dict[str, Any]:
         if not prompt_path:
             raise WorkflowError(f"{location}: prompt_path is required")
         result.update(agent_run_id=agent_run_id, prompt_path=prompt_path)
-        for name in ("ticket_id", "tier", "pack_id", "agent_class", "executor", "model"):
+        for name in ("ticket_id", "tier", "pack_id", "role", "agent_class", "executor", "model"):
             value = node.get(name)
             if value is not None:
                 result[name] = str(value)
+        if result.get("role") is not None and any(
+            result.get(name) is not None for name in ("agent_class", "executor", "model")
+        ):
+            raise WorkflowError(
+                f"{location}: role cannot be combined with agent_class, executor, or model"
+            )
         for name in ("interactive", "allow_no_go_model"):
             value = node.get(name)
             if value is not None:

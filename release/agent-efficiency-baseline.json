@@ -1,0 +1,184 @@
+{
+  "application_version": "0.9.0",
+  "catalog": {
+    "full_json_approx_tokens": 23500,
+    "full_json_bytes": 93997,
+    "full_markdown_approx_tokens": 3965,
+    "full_markdown_bytes": 15859,
+    "launch_artifact_currently_writes_full_json_for_every_role": true,
+    "leaf_commands": 93
+  },
+  "documented_cli_decision_surface": {
+    "recovery_inspection": {
+      "commands": [
+        "agent-run status",
+        "agent-run repair",
+        "agent-run finalize"
+      ],
+      "invocations": 3
+    },
+    "review_and_accept": {
+      "commands": [
+        "agent-run review",
+        "agent-run accept"
+      ],
+      "invocations": 2
+    },
+    "simple_headless_delegation": {
+      "commands": [
+        "worktree create",
+        "agent-run prepare",
+        "agent-run start",
+        "agent-run status"
+      ],
+      "invocations": 4
+    },
+    "workflow_resume": {
+      "commands": [
+        "workflow start",
+        "workflow status",
+        "workflow resume"
+      ],
+      "invocations": 3
+    }
+  },
+  "dynamic_reference": {
+    "acceptance_journey": "tests/acceptance/test_delegation_journeys.py::test_headless_completion_is_sealed_and_lifecycle_is_separate",
+    "agent_workflow_non_executor_lifecycle_seconds": 1.993936,
+    "cli_process_median_seconds": {
+      "agent_run_status": 1.025069,
+      "commands_implementation": 1.147055,
+      "version": 0.14357
+    },
+    "components_seconds": {
+      "prepare_to_prepared_event": 0.765216,
+      "prepared_to_running_event": 0.316505,
+      "process_recorded_to_terminal_seal": 0.093152,
+      "runner_startup_before_executor": 0.819063
+    },
+    "environment": "existing installed-product acceptance journey with fake executor; Linux container; local reference, not a release timing SLA",
+    "executor_process_seconds": 0.086128,
+    "import_profile_seconds": {
+      "jsonschema_cumulative": 0.728,
+      "note": "agent-run status installed-product import profile; diagnostic only, not a release SLA",
+      "rfc3987_syntax_cumulative": 0.674
+    },
+    "pytest_call_seconds": 5.31,
+    "samples_per_cli_median": 5,
+    "status": "recorded"
+  },
+  "identity_exposure": {
+    "normal_contract_surfaces": [
+      {
+        "fields": [
+          "agent_class",
+          "executor",
+          "model"
+        ],
+        "surface": "agent-run prepare"
+      },
+      {
+        "fields": [
+          "agent_class",
+          "executor",
+          "model"
+        ],
+        "surface": "agent-run status/status.json"
+      },
+      {
+        "fields": [
+          "agent_class",
+          "executor",
+          "model"
+        ],
+        "surface": "agent context/agent-context.json"
+      },
+      {
+        "fields": [
+          "agent_class",
+          "executor",
+          "model"
+        ],
+        "surface": "MCP public run status"
+      },
+      {
+        "fields": [
+          "agent_class",
+          "executor",
+          "model"
+        ],
+        "surface": "workflow snapshot node command"
+      }
+    ],
+    "opaque_role_interface_present": false,
+    "prepare_accepts_agent_class": true,
+    "prepare_accepts_executor": true,
+    "prepare_accepts_model": true,
+    "runtime_alias_interface_present": false,
+    "state_artifacts_readable_by_same_account": [
+      {
+        "fields": [
+          "executor",
+          "model"
+        ],
+        "surface": "agent-run-contract.json worker_plan"
+      },
+      {
+        "fields": [
+          "executor",
+          "model"
+        ],
+        "surface": "command.json"
+      }
+    ]
+  },
+  "measurement_scope": "static-agent-facing-cost",
+  "primary_skill": {
+    "approx_tokens": 542,
+    "bytes": 2168
+  },
+  "provider_neutral_token_estimate": "ceil(utf8_bytes/4)",
+  "roles": {
+    "implementation": {
+      "command_card_approx_tokens": 364,
+      "command_card_bytes": 1456,
+      "command_count": 7,
+      "launch_context_overhead_approx_tokens": 750,
+      "launch_context_overhead_bytes": 3000,
+      "machine_catalog_approx_tokens": 1887,
+      "machine_catalog_bytes": 7548
+    },
+    "orchestrator": {
+      "command_card_approx_tokens": 2510,
+      "command_card_bytes": 10037,
+      "command_count": 58,
+      "launch_context_overhead_approx_tokens": 677,
+      "launch_context_overhead_bytes": 2706,
+      "machine_catalog_approx_tokens": 15710,
+      "machine_catalog_bytes": 62838
+    },
+    "review": {
+      "command_card_approx_tokens": 526,
+      "command_card_bytes": 2101,
+      "command_count": 11,
+      "launch_context_overhead_approx_tokens": 672,
+      "launch_context_overhead_bytes": 2688,
+      "machine_catalog_approx_tokens": 2920,
+      "machine_catalog_bytes": 11677
+    }
+  },
+  "schema": "agent-workflow/agent-efficiency-baseline/v1",
+  "targets": {
+    "implementation_role_card_bytes_max": 2048,
+    "implementation_role_commands_max": 8,
+    "normal_agent_visible_provider_model_fields": 0,
+    "orchestrator_role_card_bytes_max": 5120,
+    "orchestrator_role_commands_max": 20,
+    "production_authentication": [
+      "codex-subscription",
+      "claude-subscription"
+    ],
+    "review_role_card_bytes_max": 3072,
+    "review_role_commands_max": 12
+  }
+}

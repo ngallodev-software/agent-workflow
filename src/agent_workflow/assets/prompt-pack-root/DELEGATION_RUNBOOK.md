@@ -22,7 +22,7 @@ For an Agent-Workflow-owned headless worker:
 
 ```bash
 agent-workflow agent-run prepare project-ticket-a /path/to/worktree-a /path/to/pack/phase-0/tickets/TICKET-A.md \
-  --ticket TICKET-A --pack /path/to/pack --executor codex --worker-mode headless
+  --ticket TICKET-A --pack /path/to/pack --role implementation --worker-mode headless
 agent-workflow agent-run start project-ticket-a
 ```
 
@@ -30,7 +30,7 @@ For a future external interactive host, prepare only:
 
 ```bash
 agent-workflow agent-run prepare project-ticket-b /path/to/worktree-b /path/to/pack/phase-0/tickets/TICKET-B.md \
-  --ticket TICKET-B --pack /path/to/pack --executor claude --worker-mode external
+  --ticket TICKET-B --pack /path/to/pack --role implementation --worker-mode external
 ```
 
 The external host owns presentation and live interaction. Agent-Workflow remains authoritative for the Agent Run, durable messages, evidence, completion, evaluation, and review.

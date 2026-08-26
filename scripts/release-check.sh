@@ -23,6 +23,7 @@ export PIP_IGNORE_INSTALLED=1
 
 EVIDENCE_DIR="${AGENT_WORKFLOW_RELEASE_EVIDENCE_DIR:-$ROOT/build/release-evidence}"
 JUNIT_PATH="$EVIDENCE_DIR/pytest-junit.xml"
+TEST_PATHS=(tests/acceptance tests/invariants tests/release)
 mkdir -p "$EVIDENCE_DIR"
 rm -f "$JUNIT_PATH"
 
@@ -77,7 +78,7 @@ done < <(find templates src/agent_workflow/assets -type f -name '*.sh' -print0)
 for path in scripts/hooks/agent-workflow-run-reminder scripts/hooks/codebase-memory-session-reminder scripts/hooks/rtk-session-reminder; do
   bash -n "$path"
 done
-"$PYTHON_BIN" -m pytest -q --junitxml "$JUNIT_PATH"
+"$PYTHON_BIN" -m pytest -q --junitxml "$JUNIT_PATH" "${TEST_PATHS[@]}"
 "$PYTHON_BIN" scripts/audit-test-suite.py \
   --skip-collection \
   --junit "$JUNIT_PATH" \

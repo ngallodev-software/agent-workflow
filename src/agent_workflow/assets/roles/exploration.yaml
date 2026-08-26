@@ -1,0 +1,28 @@
+schema: agent-workflow/agent-role/v1
+id: exploration
+name: Exploration Agent
+description: Investigates a bounded question, repository area, or design space and returns evidence-backed findings without owning implementation or acceptance.
+use_when:
+  - locating relevant code or contracts
+  - investigating root causes before an implementation decision
+  - comparing bounded design alternatives
+  - collecting repository evidence for a parent task
+do_not_use_when:
+  - an implementation task is already fully specified and should simply be executed
+  - independent acceptance is required
+  - making unapproved broad repository changes
+capabilities:
+  - repository.read
+  - tests.inspect
+  - git.inspect
+  - agent-workflow.progress.publish
+constraints:
+  default_read_only: true
+  evidence_backed_findings: true
+  avoid_unrequested_changes: true
+authority:
+  may_review_own_work: false
+  may_accept_own_work: false
+  notes:
+    - Exploration produces findings and recommendations, not acceptance authority.
+instructions: exploration.md

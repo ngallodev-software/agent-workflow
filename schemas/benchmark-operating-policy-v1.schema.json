@@ -51,7 +51,7 @@
       "type": "array",
       "minItems": 1,
       "uniqueItems": true,
-      "items": {"enum": ["subscription-session", "api-key", "access-token", "synthetic-none"]}
+      "items": {"enum": ["subscription-session", "synthetic-none"]}
     },
     "winner_policy": {
       "type": "object",

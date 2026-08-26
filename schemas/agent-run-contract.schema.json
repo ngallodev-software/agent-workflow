@@ -406,6 +406,28 @@
         "dirty_at_launch"
       ],
       "type": "object"
+    },
+    "role": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "id",
+        "digest"
+      ],
+      "properties": {
+        "schema": {
+          "const": "agent-workflow/agent-role/v1"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
     }
   },
   "required": [

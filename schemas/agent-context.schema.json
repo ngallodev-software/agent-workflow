@@ -15,23 +15,91 @@
     "updated_at"
   ],
   "properties": {
-    "schema": {"const": "agent-workflow/agent-context/v1"},
-    "agent_run_id": {"type": "string"},
-    "agent_name": {"type": ["string", "null"]},
-    "agent_class": {"type": ["string", "null"]},
-    "executor": {"type": ["string", "null"]},
-    "model": {"type": ["string", "null"]},
-    "interactive": {"type": "boolean"},
-    "worker_mode": {"enum": ["headless", "external"]},
-    "provider_agent_run_id": {"type": ["string", "null"]},
-    "repository_root": {"type": ["string", "null"]},
-    "worktree": {"type": "string"},
-    "source_revision": {"type": ["string", "null"]},
-    "state": {"enum": ["busy", "closed"]},
-    "current_assignment": {"type": ["object", "null"]},
-    "completed_assignment": {"type": ["object", "null"]},
-    "created_at": {"type": "string"},
-    "updated_at": {"type": "string"}
+    "schema": {
+      "const": "agent-workflow/agent-context/v1"
+    },
+    "agent_run_id": {
+      "type": "string"
+    },
+    "agent_name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "agent_class": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "interactive": {
+      "type": "boolean"
+    },
+    "worker_mode": {
+      "enum": [
+        "headless",
+        "external"
+      ]
+    },
+    "provider_agent_run_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "repository_root": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "worktree": {
+      "type": "string"
+    },
+    "source_revision": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "state": {
+      "enum": [
+        "busy",
+        "closed"
+      ]
+    },
+    "current_assignment": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "completed_assignment": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "created_at": {
+      "type": "string"
+    },
+    "updated_at": {
+      "type": "string"
+    },
+    "role": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "role_digest": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{64}$"
+    }
   },
   "additionalProperties": false
 }

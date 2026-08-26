@@ -147,9 +147,9 @@ def test_cleanup_retains_arm_worktrees_by_default(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("benchmark_id", "expected_files", "expected_tree_sha256"),
     [
-        ("priority-picker-v1", 50, "a4e4be0214650c283327fe903a241dca1cdebed85eb914f4097c84fa9a3e85c3"),
-        ("priority-picker-v2", 51, "28d9274d1d7bd3b3744bcf0c596b2cbd19a09b3ae02358ff3864bf3e26f78ab5"),
-        ("priority-picker-fast-v1", 51, "219b41fdde09d995773da92ce6f584021347e12721a477d328da96bb7745bc90"),
+        ("priority-picker-v1", 48, "799bbf6dfacf43b4d668b52d867d7417e6e67009554887b315795a89fe951b99"),
+        ("priority-picker-v2", 49, "4cadd1aff75edc9173d56328ca354afb5d8062a4c12bffc58767905faa19eeae"),
+        ("priority-picker-fast-v1", 49, "93a4c70a99c0d09905b21e4604eb1beb0ad29fff5b825b296dd3009b0acbc350"),
     ],
 )
 def test_packaged_suite_exports_a_self_contained_frozen_suite(

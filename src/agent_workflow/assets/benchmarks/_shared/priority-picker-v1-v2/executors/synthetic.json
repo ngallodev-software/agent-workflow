@@ -41,8 +41,7 @@
     "mode": "synthetic-none",
     "status_argv": [],
     "status_timeout_seconds": 5,
-    "credential_environment": [],
-    "allow_api_key_fallback": false
+    "credential_environment": []
   },
   "prompt_delivery": {
     "source": "argv",

@@ -172,10 +172,11 @@ def build_parser(plugin_registry: PluginRegistry | None = None) -> argparse.Argu
     launch.add_argument("--pack")
     launch.add_argument("--job", type=Path, help="validated native JSON job in the prompt pack")
     launch.add_argument("--prerequisite", action="append", dest="prerequisites", help="required prerequisite agent run ID; repeatable")
-    launch.add_argument("--executor")
+    launch.add_argument("--role", help="logical agent role; runtime/provider resolution remains private")
+    launch.add_argument("--executor", help="operator compatibility override; prefer --role")
     launch.add_argument("--agent-name", help="preferred configured agent name")
-    launch.add_argument("--agent-class", help="configured agent work classification")
-    launch.add_argument("--model", help="configured executor model")
+    launch.add_argument("--agent-class", help="operator compatibility classification; prefer --role")
+    launch.add_argument("--model", help="operator compatibility model override; prefer --role")
     launch.add_argument(
         "--reasoning-effort",
         choices=("low", "medium", "high"),
@@ -418,6 +419,8 @@ def build_parser(plugin_registry: PluginRegistry | None = None) -> argparse.Argu
     agent_commands = agent.add_subparsers(dest="agent_command", required=True)
     agent_context = agent_commands.add_parser("context", help="show durable agent context")
     agent_context.add_argument("agent_run_id")
+    agent_roles = agent_commands.add_parser("roles", help="show public logical agent roles")
+    agent_roles.add_argument("role_id", nargs="?", help="optional logical role ID")
     agent_complete = agent_commands.add_parser(
         "task-complete", help="publish structured completion for the current Agent Run"
     )

@@ -80,6 +80,25 @@
     },
     "interactive_stdio": {
       "type": "boolean"
+    },
+    "role": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "role_digest": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "runtime_alias": {
+      "type": [
+        "string",
+        "null"
+      ]
     }
   },
   "additionalProperties": false

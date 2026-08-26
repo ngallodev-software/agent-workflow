@@ -28,7 +28,7 @@ Subscription-backed provider CLI sessions are the default authentication mechani
 - refuse to run when a provider API-key or access-token environment variable is present;
 - prohibit silent fallback from subscription authentication to API billing.
 
-API-key and access-token profiles are optional, explicit adapters. Selecting one changes the sealed executor configuration and cohort identity. Credentials are never stored in benchmark evidence; only bounded authentication status, mode, command identity, and output digests are recorded.
+API-key and access-token execution is not supported in the 0.9 line. Subscription profiles list provider credential environment-variable names only so the preflight can fail closed when ambient API billing credentials are present. Credentials are never stored in benchmark evidence; only bounded authentication status, mode, command identity, and output digests are recorded.
 
 ### Models and executors
 
@@ -77,13 +77,13 @@ Development claims may use the pinned host-detected runtime lock. Publication cl
 
 ## Rationale
 
-The benchmark is intended to measure the effect of `agent-workflow`, not differences in credentials, provider access, retry opportunity, cache behavior, or visual runtime. Subscription-first authentication matches normal interactive use while preserving API authentication for controlled metered experiments. Explicit profiles make every material policy choice inspectable and prevent an operator from changing repetitions, retry rules, or winner thresholds after observing results.
+The benchmark is intended to measure the effect of `agent-workflow`, not differences in credentials, provider access, retry opportunity, cache behavior, or visual runtime. Subscription-only authentication matches normal interactive use and deliberately excludes API-key/access-token billing paths in the 0.9 line. Explicit profiles make every material policy choice inspectable and prevent an operator from changing repetitions, retry rules, or winner thresholds after observing results.
 
 ## Consequences
 
 - `DEC-002` is closed by executable policy profiles and validation.
 - Real provider execution no longer requires API keys.
-- API-key and access-token runs remain supported but are opt-in and form distinct cohorts.
+- Production benchmark execution supports only Codex and Claude subscription sessions; synthetic execution remains development/test-only.
 - `BKL-004` retains the external execution/acceptance evidence gate; the runner, adapters, readiness checks, statistics, and reporting mechanics are implemented.
 - `BKL-010` retains only the operator-produced content-addressed image/digest evidence needed for publication; sealing and attestation mechanics are implemented.
 - No publication claim may be made from the synthetic executor or a development visual runtime.

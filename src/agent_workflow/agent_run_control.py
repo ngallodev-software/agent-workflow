@@ -290,6 +290,15 @@ def terminate(
     if alive():
         _signal_owned_process(prior, signal.SIGKILL)
 
+    # The detached runner may observe the signal and seal terminal evidence
+    # before this control process projects ``terminated``. Never attempt to
+    # rewrite an already sealed terminal state; return its authoritative
+    # projection instead.
+    if authoritative_execution_status(run_dir(settings, agent_run_id)) in TERMINAL_STATUSES:
+        return synchronize_projection(
+            run_dir(settings, agent_run_id) / "status.json", source="control"
+        )
+
     return transition_execution(
         settings,
         agent_run_id,

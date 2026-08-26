@@ -1,228 +1,214 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "agent-workflow/config/v1",
-  "title": "agent-workflow user policy",
-  "type": "object",
-  "properties": {
-    "schema_version": {
-      "const": 1
-    },
-    "paths": {
-      "$ref": "#/$defs/paths"
-    },
-    "git": {
-      "$ref": "#/$defs/git"
-    },
-    "pack": {
-      "$ref": "#/$defs/pack"
-    },
-    "agents": {
-      "$ref": "#/$defs/agents"
-    },
-    "agent_classes": {
-      "type": "object",
-      "additionalProperties": {
-        "$ref": "#/$defs/agent_class"
-      }
-    },
-    "executors": {
-      "type": "object",
-      "additionalProperties": {
-        "$ref": "#/$defs/executor"
-      }
-    },
-    "security": {
-      "$ref": "#/$defs/security"
-    },
-    "supervisor": {
-      "$ref": "#/$defs/supervisor"
-    },
-    "plugins": {
-      "$ref": "#/$defs/plugins"
-    }
-  },
-  "additionalProperties": false,
   "$defs": {
-    "strings": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "paths": {
-      "type": "object",
-      "properties": {
-        "worktree_root": {
-          "type": "string"
-        },
-        "state_root": {
-          "type": "string"
-        }
-      },
-      "additionalProperties": false
-    },
-    "git": {
-      "type": "object",
-      "properties": {
-        "branch_prefix": {
-          "type": "string"
-        },
-        "require_clean_source": {
-          "type": "boolean"
-        },
-        "repository_allowlist": {
-          "$ref": "#/$defs/strings"
-        }
-      },
-      "additionalProperties": false
-    },
-    "pack": {
-      "type": "object",
-      "properties": {
-        "archive_level": {
-          "type": "integer"
-        },
-        "write_sha256": {
-          "type": "boolean"
-        },
-        "validate_before_archive": {
-          "type": "boolean"
-        }
-      },
-      "additionalProperties": false
-    },
-    "security": {
-      "type": "object",
-      "properties": {
-        "mode": {
-          "enum": [
-            "local",
-            "governed",
-            "release"
-          ]
-        },
-        "executable_digest": {
-          "type": "boolean"
-        },
-        "policy_files": {
-          "$ref": "#/$defs/strings"
-        }
-      },
-      "additionalProperties": false
-    },
     "agent_class": {
-      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "default_executor": {
+          "type": "string"
+        },
+        "default_model": {
+          "type": "string"
+        },
+        "interactive": {
+          "type": "boolean"
+        },
+        "models": {
+          "additionalProperties": {
+            "$ref": "#/$defs/strings"
+          },
+          "type": "object"
+        }
+      },
       "required": [
         "interactive",
         "default_executor",
         "default_model"
       ],
+      "type": "object"
+    },
+    "agents": {
+      "additionalProperties": false,
       "properties": {
-        "interactive": {
-          "type": "boolean"
+        "default_class": {
+          "type": "string"
         },
         "default_executor": {
           "type": "string"
-        },
-        "default_model": {
-          "type": "string"
-        },
-        "models": {
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/$defs/strings"
-          }
-        }
-      },
-      "additionalProperties": false
-    },
-    "profile": {
-      "type": "object",
-      "required": [
-        "executor",
-        "model"
-      ],
-      "properties": {
-        "executor": {
-          "type": "string"
-        },
-        "model": {
-          "type": "string"
-        },
-        "allow_no_go_model": {
-          "type": "boolean"
-        },
-        "interactive": {
-          "type": "boolean"
-        },
-        "class": {
-          "type": "string"
-        }
-      },
-      "additionalProperties": false
-    },
-    "agents": {
-      "type": "object",
-      "properties": {
-        "preferred_names": {
-          "$ref": "#/$defs/strings"
         },
         "generated_prefix": {
           "type": "string"
         },
-        "default_executor": {
-          "type": "string"
+        "preferred_names": {
+          "$ref": "#/$defs/strings"
         },
         "profiles": {
-          "type": "object",
           "additionalProperties": {
             "$ref": "#/$defs/profile"
-          }
-        },
-        "default_class": {
-          "type": "string"
+          },
+          "type": "object",
+          "description": "Legacy operator compatibility only; normal role-first launches ignore named profiles unless a low-level compatibility override is explicit."
         }
       },
-      "additionalProperties": false
+      "type": "object"
     },
     "executor": {
-      "type": "object",
-      "required": [
-        "command"
-      ],
+      "additionalProperties": false,
       "properties": {
         "command": {
+          "$ref": "#/$defs/strings"
+        },
+        "default_model": {
+          "type": "string"
+        },
+        "environment_allowlist": {
           "$ref": "#/$defs/strings"
         },
         "interactive_command": {
           "$ref": "#/$defs/strings"
         },
-        "models": {
-          "$ref": "#/$defs/strings"
-        },
-        "default_model": {
-          "type": "string"
-        },
-        "no_go_models": {
+        "interactive_permission_args": {
           "$ref": "#/$defs/strings"
         },
         "model_arg": {
           "$ref": "#/$defs/strings"
         },
-        "interactive_permission_args": {
+        "models": {
+          "$ref": "#/$defs/strings"
+        },
+        "no_go_models": {
           "$ref": "#/$defs/strings"
         },
         "non_interactive_permission_args": {
           "$ref": "#/$defs/strings"
         },
-        "environment_allowlist": {
-          "$ref": "#/$defs/strings"
+        "reasoning_effort": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
         },
         "steering_adapter": {
           "enum": [
             "unsupported",
             "control-file-v1"
           ]
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "type": "object"
+    },
+    "git": {
+      "additionalProperties": false,
+      "properties": {
+        "branch_prefix": {
+          "type": "string"
+        },
+        "repository_allowlist": {
+          "$ref": "#/$defs/strings"
+        },
+        "require_clean_source": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "pack": {
+      "additionalProperties": false,
+      "properties": {
+        "archive_level": {
+          "type": "integer"
+        },
+        "validate_before_archive": {
+          "type": "boolean"
+        },
+        "write_sha256": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "paths": {
+      "additionalProperties": false,
+      "properties": {
+        "state_root": {
+          "type": "string"
+        },
+        "worktree_root": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "plugins": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "$ref": "#/$defs/strings"
+        }
+      },
+      "type": "object"
+    },
+    "profile": {
+      "additionalProperties": false,
+      "properties": {
+        "allow_no_go_model": {
+          "type": "boolean"
+        },
+        "class": {
+          "type": "string"
+        },
+        "executor": {
+          "type": "string"
+        },
+        "interactive": {
+          "type": "boolean"
+        },
+        "model": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "executor",
+        "model"
+      ],
+      "type": "object",
+      "description": "Legacy operator compatibility profile. Normal orchestration uses logical roles and private runtime aliases; profiles do not implicitly select a runtime."
+    },
+    "roles": {
+      "additionalProperties": false,
+      "properties": {
+        "bindings": {
+          "additionalProperties": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "default": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "paths": {
+          "$ref": "#/$defs/strings"
+        }
+      },
+      "type": "object"
+    },
+    "runtime_alias": {
+      "additionalProperties": false,
+      "properties": {
+        "executor": {
+          "enum": [
+            "codex",
+            "claude"
+          ]
+        },
+        "model": {
+          "minLength": 1,
+          "type": "string"
         },
         "reasoning_effort": {
           "enum": [
@@ -232,49 +218,121 @@
           ]
         }
       },
-      "additionalProperties": false
+      "required": [
+        "executor",
+        "model"
+      ],
+      "type": "object"
     },
-    "supervisor": {
-      "type": "object",
+    "security": {
+      "additionalProperties": false,
       "properties": {
-        "interval_seconds": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "probe_stalled": {
+        "executable_digest": {
           "type": "boolean"
         },
+        "mode": {
+          "enum": [
+            "local",
+            "governed",
+            "release"
+          ]
+        },
+        "policy_files": {
+          "$ref": "#/$defs/strings"
+        }
+      },
+      "type": "object"
+    },
+    "strings": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "supervisor": {
+      "additionalProperties": false,
+      "properties": {
+        "capture_interactive": {
+          "type": "boolean"
+        },
+        "capture_lines": {
+          "minimum": 1,
+          "type": "integer"
+        },
         "interrupt_stalled": {
+          "type": "boolean"
+        },
+        "interval_seconds": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_remediation_attempts": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "probe_stalled": {
           "type": "boolean"
         },
         "restart_orphaned": {
           "type": "boolean"
         },
-        "max_remediation_attempts": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "capture_interactive": {
-          "type": "boolean"
-        },
-        "capture_lines": {
-          "type": "integer",
-          "minimum": 1
-        },
         "sync_index": {
           "type": "boolean"
         }
       },
-      "additionalProperties": false
+      "type": "object"
+    }
+  },
+  "$id": "agent-workflow/config/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "agent_classes": {
+      "additionalProperties": {
+        "$ref": "#/$defs/agent_class"
+      },
+      "type": "object"
+    },
+    "agents": {
+      "$ref": "#/$defs/agents"
+    },
+    "executors": {
+      "additionalProperties": {
+        "$ref": "#/$defs/executor"
+      },
+      "type": "object"
+    },
+    "git": {
+      "$ref": "#/$defs/git"
+    },
+    "pack": {
+      "$ref": "#/$defs/pack"
+    },
+    "paths": {
+      "$ref": "#/$defs/paths"
     },
     "plugins": {
-      "type": "object",
-      "properties": {
-        "enabled": {
-          "$ref": "#/$defs/strings"
-        }
+      "$ref": "#/$defs/plugins"
+    },
+    "roles": {
+      "$ref": "#/$defs/roles"
+    },
+    "runtime_aliases": {
+      "additionalProperties": {
+        "$ref": "#/$defs/runtime_alias"
       },
-      "additionalProperties": false
+      "type": "object"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "security": {
+      "$ref": "#/$defs/security"
+    },
+    "supervisor": {
+      "$ref": "#/$defs/supervisor"
     }
-  }
+  },
+  "title": "agent-workflow user policy",
+  "type": "object"
 }

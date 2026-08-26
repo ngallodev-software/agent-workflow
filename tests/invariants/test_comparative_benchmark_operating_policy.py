@@ -9,7 +9,7 @@ import pytest
 
 from agent_workflow.benchmarking import auth
 from agent_workflow.benchmarking.auth import (
-    API_KEY_MODE,
+    FORBIDDEN_API_MODE,
     SUBSCRIPTION_MODE,
     preflight_authentication,
     validate_authentication_config,
@@ -36,13 +36,13 @@ def _executor(*, provider: str = "openai", mode: str = SUBSCRIPTION_MODE) -> dic
     credential = "OPENAI_API_KEY" if provider == "openai" else "ANTHROPIC_API_KEY"
     return {
         "provider": provider,
+        "executor": "codex-cli" if provider == "openai" else "claude-code-cli",
         "environment_allowlist": ["HOME"],
         "authentication": {
             "mode": mode,
             "status_argv": ["provider", "auth", "status"],
             "status_timeout_seconds": 5,
             "credential_environment": [credential],
-            "allow_api_key_fallback": False,
         },
     }
 
@@ -80,27 +80,9 @@ def test_subscription_session_refuses_ambient_api_key(monkeypatch: pytest.Monkey
     monkeypatch.setenv("OPENAI_API_KEY", "must-not-be-used")
     evidence = preflight_authentication(_executor())
     assert evidence["authenticated"] is False
-    assert evidence["observed_mode"] == API_KEY_MODE
+    assert evidence["observed_mode"] == FORBIDDEN_API_MODE
     assert "refused" in evidence["detail"]
     assert "must-not-be-used" not in json.dumps(evidence)
-
-
-def test_api_key_is_an_explicit_optional_profile(monkeypatch: pytest.MonkeyPatch) -> None:
-    executor = _executor(mode=API_KEY_MODE)
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    assert preflight_authentication(executor)["authenticated"] is False
-    monkeypatch.setenv("OPENAI_API_KEY", "optional-secret")
-    evidence = preflight_authentication(executor)
-    assert evidence["authenticated"] is True
-    assert evidence["observed_mode"] == API_KEY_MODE
-    assert "optional-secret" not in json.dumps(evidence)
-
-
-def test_subscription_profiles_cannot_enable_api_key_fallback() -> None:
-    executor = _executor()
-    executor["authentication"]["allow_api_key_fallback"] = True  # type: ignore[index]
-    with pytest.raises(WorkflowError, match="silently fall back"):
-        validate_authentication_config(executor)
 
 
 
@@ -242,8 +224,7 @@ def test_publication_policy_requires_twenty_eligible_pairs(tmp_path: Path) -> No
     assert policy["winner_policy"]["minimum_eligible_pairs"] == 20
     assert policy["winner_policy"]["confidence_level"] == 0.95
     assert policy["authentication_default"] == "subscription-session"
-    assert "api-key" in policy["allowed_authentication_modes"]
-    assert "synthetic-none" not in policy["allowed_authentication_modes"]
+    assert policy["allowed_authentication_modes"] == ["subscription-session"]
 
 
 def test_internal_policy_rejects_command_line_overrides(tmp_path: Path) -> None:

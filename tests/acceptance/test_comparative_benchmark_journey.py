@@ -28,7 +28,7 @@ def test_installed_fast_benchmark_package_executes_scores_and_matches_authority(
     assert Path(exported["destination"]) == suite
     assert suite.is_dir()
     assert not (suite / "suite-layout.json").exists()
-    assert len(file_inventory(suite)) == 51
+    assert len(file_inventory(suite)) == 49
 
     spec = json.loads((suite / "benchmark-spec.json").read_text(encoding="utf-8"))
     contract = json.loads((suite / "scoring-contract.json").read_text(encoding="utf-8"))

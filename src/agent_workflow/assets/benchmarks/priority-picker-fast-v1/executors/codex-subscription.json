@@ -11,7 +11,6 @@
     "-"
   ],
   "authentication": {
-    "allow_api_key_fallback": false,
     "credential_environment": [
       "OPENAI_API_KEY"
     ],

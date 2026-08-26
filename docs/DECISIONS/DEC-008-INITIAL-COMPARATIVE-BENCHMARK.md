@@ -40,7 +40,7 @@ The paired design measures the actual product question: whether the complete `ag
 
 ## Operating policy
 
-The previously open executor, authentication, billing, cache, repetition, retry, interruption, assistance, statistical, and publication-review choices are decided by [DEC-002](DEC-002-COMPARATIVE-BENCHMARK-OPERATING-POLICY.md). Subscription-backed CLI sessions are the default; API keys and access tokens are optional explicit cohort profiles.
+The previously open executor, authentication, billing, cache, repetition, retry, interruption, assistance, statistical, and publication-review choices are decided by [DEC-002](DEC-002-COMPARATIVE-BENCHMARK-OPERATING-POLICY.md). Subscription-backed Codex/Claude CLI sessions are the only supported production authentication profiles; synthetic execution is development/test-only.
 
 ## Implemented evidence
 

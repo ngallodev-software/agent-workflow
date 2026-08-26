@@ -65,6 +65,18 @@ Execution lifecycle has one transition authority. `prepared`, `running`, interru
 
 A projection may be deleted and reconstructed without changing workflow identity. Code that needs to decide whether an Agent Run is active or terminal must consult lifecycle/receipt authority rather than trusting the cached `status` field.
 
+## Logical agent roles and private runtime resolution
+
+Normal orchestration selects a **logical role**, not an executor or model. Built-in roles are provider-neutral YAML/JSON contracts with optional Markdown instructions. Their canonical digest is bound into the Agent Run contract so the behavioral contract is reproducible independently of deployment.
+
+```text
+caller/workflow -> AgentRole -> private role binding -> runtime alias -> Codex or Claude subscription runtime
+```
+
+The role catalog, launch prompt, handoff artifacts, normal lifecycle/status output, workflow views, and MCP read surfaces expose the logical role but not the runtime alias, executor, or model. The resolved runtime identity remains in restricted execution/provenance evidence for auditing, reproducibility, benchmarks, and operator diagnostics. This is supported-contract opacity, not a hostile-process sandbox: an operating-system peer with unrestricted filesystem/process access is outside this visibility guarantee.
+
+Legacy `agent_class`/named-profile/executor/model configuration is an operator compatibility surface only. It must not implicitly override normal role-first selection.
+
 ## Agent Run and Worker
 
 An **Agent Run** is one durable execution of a task under a fixed execution/delegation contract. Public identity is `agent_run_id`. A retry or re-execution creates a new Agent Run with lineage to the prior run rather than mutating the old execution identity.

@@ -92,6 +92,7 @@ _ROLE_COMMANDS: dict[str, frozenset[str]] = {
             "index verify",
             "index query",
             "agent context",
+            "agent roles",
             "workflow validate",
             "workflow start",
             "workflow status",
@@ -368,13 +369,26 @@ def write_launch_command_artifacts(
     *,
     role: str,
     settings: Any | None = None,
+    agent_visible_dir: Path | None = None,
 ) -> dict[str, Any]:
-    catalog = runtime_command_catalog(settings)
+    catalog = filter_catalog(runtime_command_catalog(settings), role)
     catalog_path = state_dir / COMMAND_CATALOG_FILENAME
     card_path = state_dir / COMMAND_CARD_FILENAME
     atomic_write_bytes(catalog_path, encode_command_catalog(catalog), mode=0o444)
     card = render_command_markdown(catalog, role=role).encode("utf-8")
     atomic_write_bytes(card_path, card, mode=0o444)
+    if agent_visible_dir is not None:
+        agent_visible_dir.mkdir(parents=True, exist_ok=True)
+        atomic_write_bytes(
+            agent_visible_dir / COMMAND_CATALOG_FILENAME,
+            encode_command_catalog(catalog),
+            mode=0o444,
+        )
+        atomic_write_bytes(
+            agent_visible_dir / COMMAND_CARD_FILENAME,
+            card,
+            mode=0o444,
+        )
     # Re-read through the safe regular-file boundary before binding digests.
     catalog_read = read_regular_file(catalog_path)
     card_read = read_regular_file(card_path)

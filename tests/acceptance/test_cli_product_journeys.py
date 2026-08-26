@@ -52,16 +52,28 @@ def test_headless_agent_run_prepare_start_and_provenance_journey(
     prompt = tmp_path / "prompt.md"
     prompt.write_text("Complete the fixture task.\n", encoding="utf-8")
     config = write_config(product_env, fake_agent=fake_agent_path)
+    private_alias = "private-review-runtime-sentinel"
+    private_model = "gpt-5.6-luna"
+    with config.open("a", encoding="utf-8") as stream:
+        stream.write(
+            "\n[runtime_aliases.private-review-runtime-sentinel]\n"
+            'executor = "codex"\n'
+            f'model = "{private_model}"\n'
+            'reasoning_effort = "medium"\n'
+            "\n[roles.bindings]\n"
+            f'review = "{private_alias}"\n'
+        )
     env = dict(product_env)
     env["FAKE_AGENT_MODE"] = "structured"
 
     prepared = installed_product.json(
         "agent-run", "prepare", "headless-basic", repo, prompt,
-        "--config", config, "--executor", "codex", "--agent-class", "review",
+        "--config", config, "--role", "review",
         "--tier", "medium", "--structured", env=env,
     )
     assert prepared["status"] == "prepared"
     assert prepared["worker_mode"] == "headless"
+    assert prepared["role"] == "review"
 
     run = _run_dir(env, "headless-basic")
     contract = json.loads((run / "agent-run-contract.json").read_text(encoding="utf-8"))
@@ -80,7 +92,29 @@ def test_headless_agent_run_prepare_start_and_provenance_journey(
     assert status.get("worker_id")
     assert status.get("worker_pid") != status.get("worker_id")
 
+    public_status = installed_product.json("agent-run", "status", "headless-basic", env=env)
+    public_context = installed_product.json("agent", "context", "headless-basic", env=env)
+    handoff = repo / ".agent-workflow-handoff" / "headless-basic"
+    public_handoff = "\n".join(
+        path.read_text(encoding="utf-8", errors="replace")
+        for path in sorted(handoff.rglob("*"))
+        if path.is_file()
+    )
+    public_encoded = json.dumps(
+        [prepared, started, public_status, public_context, public_handoff],
+        sort_keys=True,
+    ).lower()
+    for private_identity in (private_alias, "codex", private_model):
+        assert private_identity.lower() not in public_encoded
+    assert not (repo / ".delegations" / "headless-basic").exists()
+
+    command = json.loads((run / "command.json").read_text(encoding="utf-8"))
     provenance = json.loads((run / "run-provenance.json").read_text(encoding="utf-8"))
+    assert command["runtime_alias"] == private_alias
+    assert command["executor"] == "codex"
+    assert command["model"] == private_model
+    assert provenance["executor"] == "codex"
+    assert provenance["model"] == private_model
     assert provenance["executable"]["resolved_path"] == str(fake_agent_path.resolve())
     assert len(provenance["executable"]["sha256"]) == 64
     assert (run / "final-receipt.json").is_file()

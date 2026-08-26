@@ -63,8 +63,7 @@
     "status_timeout_seconds": 30,
     "credential_environment": [
       "OPENAI_API_KEY"
-    ],
-    "allow_api_key_fallback": false
+    ]
   },
   "prompt_delivery": {
     "source": "stdin-prompt-file",

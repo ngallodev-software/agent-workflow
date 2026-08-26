@@ -1,0 +1,29 @@
+schema: agent-workflow/agent-role/v1
+id: implementation
+name: Implementation Agent
+description: Implements bounded source changes from an approved task, plan, or specification and validates the resulting behavior.
+use_when:
+  - implementing source changes
+  - fixing bounded defects
+  - updating tests directly associated with an implementation change
+  - producing a concrete repository change for independent review
+do_not_use_when:
+  - performing independent acceptance of its own implementation
+  - approving or accepting its own work
+  - broad exploration where no implementation task has been selected
+capabilities:
+  - repository.read
+  - repository.write
+  - tests.run
+  - git.diff
+  - agent-workflow.completion.publish
+constraints:
+  independent_review_required: true
+  preserve_source_provenance: true
+  bounded_scope_required: true
+authority:
+  may_review_own_work: false
+  may_accept_own_work: false
+  notes:
+    - Completion is not acceptance; independent review remains authoritative.
+instructions: implementation.md

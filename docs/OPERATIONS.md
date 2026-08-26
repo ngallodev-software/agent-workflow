@@ -3,7 +3,7 @@
 ## Normal delegation
 
 1. Create or validate an isolated worktree.
-2. Prepare an Agent Run.
+2. Prepare an Agent Run by logical role (normally `--role implementation`, `review`, or `exploration`).
 3. For headless mode, start the worker.
 4. Observe lifecycle state and durable progress.
 5. Persist steering requests when needed.
@@ -11,6 +11,19 @@
 7. Collect completion and evaluation evidence.
 8. Review and accept/reject separately.
 9. Seal/archive when appropriate.
+
+## Role and runtime operations
+
+Normal callers use `--role`; they do not select a provider/model. Inspect the public catalog with:
+
+```bash
+agent-workflow agent roles
+agent-workflow agent roles implementation
+```
+
+Role-to-runtime bindings and runtime aliases are operator configuration. In 0.9 production aliases may resolve only to Codex or Claude subscription-backed executors. Raw `--executor`, `--model`, and `--agent-class` controls remain temporary operator/diagnostic compatibility escapes and should not appear in normal workflow or skill instructions.
+
+Changing a private role binding must not require changing a workflow, prompt, role file, or peer-agent message. The actual resolved runtime remains available in restricted run provenance for diagnosis and reproducibility.
 
 ## External workers
 

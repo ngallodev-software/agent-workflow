@@ -167,7 +167,7 @@ def normalize_usage(
     )
     if billing_mode == "subscription" and semantics == "not-attributable":
         result["cost_evidence_complete"] = result["local_estimated_cost"] is not None
-    elif billing_mode in {"metered-api", "synthetic"}:
+    elif billing_mode == "synthetic":
         result["cost_evidence_complete"] = result["provider_billed_cost"] is not None
     else:
         result["cost_evidence_complete"] = (

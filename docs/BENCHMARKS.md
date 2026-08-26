@@ -149,7 +149,7 @@ If those conditions are not met, the correct result is no winner, descriptive on
 
 ## Authentication and cohort identity
 
-Subscription-backed provider CLI sessions are the default. Codex CLI and Claude Code CLI adapters verify an existing authenticated session and must not silently fall back to API billing. API-key/access-token adapters are optional explicit profiles.
+Production benchmark execution is subscription-only. Codex CLI and Claude Code CLI adapters verify an existing authenticated subscription session and must fail closed when ambient API credentials are present; API-key/access-token profiles are not supported in 0.9. The synthetic executor is development/test-only.
 
 A cohort pins material execution identity, including provider, model, executor configuration/version, authentication mode, benchmark version, operating policy, and pricing catalog. Different identities are separate cohorts and must not be pooled as though they were interchangeable.
 

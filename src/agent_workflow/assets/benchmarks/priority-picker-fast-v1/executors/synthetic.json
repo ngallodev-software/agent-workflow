@@ -12,7 +12,6 @@
     "{usage_file}"
   ],
   "authentication": {
-    "allow_api_key_fallback": false,
     "credential_environment": [],
     "mode": "synthetic-none",
     "status_argv": [],

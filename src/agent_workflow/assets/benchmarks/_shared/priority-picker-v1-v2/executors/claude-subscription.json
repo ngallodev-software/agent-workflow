@@ -65,8 +65,7 @@
     "credential_environment": [
       "ANTHROPIC_API_KEY",
       "ANTHROPIC_AUTH_TOKEN"
-    ],
-    "allow_api_key_fallback": false
+    ]
   },
   "prompt_delivery": {
     "source": "stdin-prompt-file",

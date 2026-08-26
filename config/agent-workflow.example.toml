@@ -34,18 +34,34 @@ enabled = []
 [agents]
 preferred_names = ["larry", "moe", "curly"]
 generated_prefix = "agent"
+# Legacy/operator defaults. Normal orchestration selects a logical role below.
 default_executor = "codex"
 default_class = "implementation"
 
-[agents.profiles.moe]
-class = "implementation"
+[roles]
+default = "implementation"
+
+[roles.bindings]
+implementation = "code-primary"
+review = "review-primary"
+exploration = "exploration-primary"
+
+[runtime_aliases.code-primary]
 executor = "codex"
 model = "gpt-5.6-luna"
+reasoning_effort = "medium"
 
-[agents.profiles.curly]
-class = "implementation"
+[runtime_aliases.review-primary]
+executor = "codex"
+model = "gpt-5.6-luna"
+reasoning_effort = "medium"
+
+[runtime_aliases.exploration-primary]
 executor = "claude"
 model = "haiku"
+
+# Legacy named profiles are intentionally omitted. They remain readable only
+# as an operator migration surface and no longer select a runtime implicitly.
 
 [agent_classes.exploratory]
 interactive = false

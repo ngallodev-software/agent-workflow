@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/agent-role/v1",
+  "title": "Agent-Workflow logical agent role",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "id",
+    "name",
+    "description",
+    "use_when",
+    "do_not_use_when",
+    "capabilities",
+    "constraints",
+    "authority"
+  ],
+  "properties": {
+    "schema": {"const": "agent-workflow/agent-role/v1"},
+    "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$", "minLength": 1},
+    "name": {"type": "string", "minLength": 1},
+    "description": {"type": "string", "minLength": 1},
+    "use_when": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    },
+    "do_not_use_when": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    },
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    },
+    "constraints": {
+      "type": "object",
+      "additionalProperties": {
+        "type": ["boolean", "string", "integer", "number", "array"],
+        "items": {"type": "string"}
+      }
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["may_review_own_work", "may_accept_own_work"],
+      "properties": {
+        "may_review_own_work": {"type": "boolean"},
+        "may_accept_own_work": {"type": "boolean"},
+        "notes": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "instructions": {"type": "string", "minLength": 1}
+  }
+}

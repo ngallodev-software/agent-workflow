@@ -16,7 +16,7 @@ Add a thin `agent-workflow delegate` facade over the existing worktree, Agent Ru
 
 ### PERF-001 — Agent-efficiency baseline and regression budgets
 
-Measure launch-context/card size, Agent-Workflow setup/finalization wall time, CLI invocation count, and representative agent decision overhead. Add regression budgets and an eval comparing the skill-first path with the prior multi-command flow while preserving the same correctness/evidence assertions.
+Use the committed Phase 0 baseline to drive measurable reductions without weakening correctness/evidence assertions. Highest-value targets are the 93,997-byte full machine catalog currently written into every launch, approximately 1 s repeated CLI startup for status/catalog operations, and approximately 1.994 s Agent-Workflow lifecycle overhead around a 0.086 s deterministic executor in the reference installed-product journey. Prefer role-scoped launch artifacts, lazy capability/import loading, and in-process composition of the common delegation path before adding persistent services. Do not grow the unit/invariant surface merely to measure efficiency; prefer existing installed-product journeys for dynamic timing and behavior.
 
 ### TEST-001 — Monolithic acceptance-suite teardown reliability
 
@@ -84,7 +84,7 @@ When authorized, bounded mutation tools may wrap existing application services f
 
 ### HERDR-001 — Separate Herdr plugin
 
-Only after `BIND-001` and `API-001` stabilize, write and approve a separate Herdr plugin specification, then implement it as a one-way consumer of public Agent-Workflow contracts.
+Only after `ROLE-001`, `BIND-001`, and `API-001` stabilize, write and approve a separate Herdr plugin specification, then implement it as a one-way consumer of public Agent-Workflow contracts.
 
 The plugin may own workspace/presentation, launching a prepared external worker, best-effort live delivery after persistence, focus/navigation, review presentation, and binding recovery. It must not become a core dependency, durable-message authority, review/acceptance authority, worktree-provenance authority, or source of Agent Run identity.
 

@@ -153,7 +153,8 @@ def export_builtin_suite(
         "synthetic_executor": str(synthetic),
         "executors": executors,
         "default_authentication": "subscription-session",
-        "optional_authentication": ["api-key", "access-token"],
+        "supported_authentication": ["subscription-session"],
+        "test_only_authentication": ["synthetic-none"],
         "operating_policies": sorted(str(path) for path in (destination / "policies").glob("*.json")),
         "default_subscription_executors": [
             str(destination / "executors" / "codex-subscription.json"),

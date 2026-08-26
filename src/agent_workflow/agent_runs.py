@@ -51,7 +51,6 @@ from .agent_run_control import (
 from .agent_run_artifacts import (
     _create_handoff_dir,
     _discover_prompt_pack_root,
-    _link_worktree_state,
     _pack_id,
     _write_runner,
 )
@@ -181,6 +180,9 @@ def _write_launch_prompt(
     agent_run_id: str,
     agent_name: str | None,
     agent_class: str | None,
+    role_id: str,
+    role_digest: str,
+    role_instructions: str | None,
     tier: str | None,
     retry_of: str | None,
     created_at: str,
@@ -199,6 +201,8 @@ def _write_launch_prompt(
         "The complete ticket is included below. Do not reread prompt_source unless the ticket explicitly requests it.",
         "Use these durable paths only when the ticket references pack files or its completion report.",
         f"- agent_run_id: `{agent_run_id}`",
+        f"- logical_role: `{role_id}`",
+        f"- role_digest_sha256: `{role_digest}`",
         f"- prompt_source: `{prompt_source}`",
         f"- command_catalog_role: `{command_artifacts['role']}`",
         "- The exact installed CLI contract is available at `AGENT_WORKFLOW_COMMAND_CATALOG`.",
@@ -207,6 +211,15 @@ def _write_launch_prompt(
         "- Do not run `--help` for commands represented in the catalog. Use help only after a catalog/version mismatch, an argument error, or when a required command is absent.",
         "- Lifecycle disposition commands (`review`, `accept`, `reject`, `force-accept`) are host-orchestrator-only and intentionally absent from child command cards. Report a recommendation and evidence; never attempt those commands from this run.",
     ]
+    if role_instructions is not None:
+        context.extend(
+            [
+                "",
+                "## Logical role instructions",
+                role_instructions.strip(),
+                "",
+            ]
+        )
     if prompt_pack_root is not None:
         context.append(f"- prompt_pack_root: `{prompt_pack_root}`")
     if result_contract is not None:
@@ -279,6 +292,8 @@ def _write_agent_run_contract(
     agent_run_id: str,
     agent_name: str | None,
     agent_class: str | None,
+    role_id: str,
+    role_digest: str,
     tier: str | None,
     retry_of: str | None,
     created_at: str,
@@ -340,6 +355,11 @@ def _write_agent_run_contract(
             "tier": tier,
             "retry_of_agent_run_id": retry_of,
             "created_at": created_at,
+        },
+        "role": {
+            "schema": "agent-workflow/agent-role/v1",
+            "id": role_id,
+            "digest": role_digest,
         },
         "ticket": ticket_id,
         # Completion identity is explicit in the immutable contract.  Review
@@ -438,6 +458,8 @@ class PreparedAgentRun:
     ticket_id: str | None
     agent_name: str | None
     agent_class: str | None
+    role_id: str
+    role_digest: str
     tier: str | None
     pack_id: str | None
     retry_of: str | None
@@ -465,6 +487,8 @@ class PreparedAgentRun:
             "ticket_id": self.ticket_id,
             "agent_name": self.agent_name,
             "agent_class": self.agent_class,
+            "role": self.role_id,
+            "role_digest": self.role_digest,
             "tier": self.tier,
             "pack_id": self.pack_id,
             "retry_of_agent_run_id": self.retry_of,
@@ -475,8 +499,6 @@ class PreparedAgentRun:
             "workdir": str(self.workdir),
             "prompt_path": str(self.paths.prompt),
             "prompt_source": str(self.prompt_source),
-            "executor": self.worker.plan.name,
-            "model": self.worker.plan.model,
             "worker_mode": self.worker_mode,
             "worker_id": None,
             "worker_pid": None,
@@ -776,6 +798,7 @@ def prepare(
     prompt_path: Path,
     executor: str | None = None,
     agent_name: str | None = None,
+    role: str | None = None,
     agent_class: str | None = None,
     model: str | None = None,
     reasoning_effort: str | None = None,
@@ -855,17 +878,30 @@ def prepare(
         interactive = False
     elif interactive is None:
         interactive = True
-    agent_name, agent_class, executor, model, allow_no_go_model, interactive = resolve_agent_identity(
+    identity = resolve_agent_identity(
         settings,
         requested_name=agent_name,
+        requested_role=role,
         requested_class=agent_class,
         executor=executor,
         model=model,
         allow_no_go_model=allow_no_go_model,
         explicit_command=explicit_command,
         interactive=interactive,
+        reasoning_effort=reasoning_effort,
         allow_active_name=allow_active_agent_name,
     )
+    agent_name = identity.agent_name
+    agent_class = identity.agent_class
+    role_id = identity.role_id
+    role_digest = identity.role_digest
+    role_instructions = identity.role_instructions
+    runtime_alias = identity.runtime_alias
+    executor = identity.executor
+    model = identity.model
+    reasoning_effort = identity.reasoning_effort
+    allow_no_go_model = identity.allow_no_go_model
+    interactive = identity.interactive
     # Review runs may be sent through the host acceptance gate.  Bind their
     # risk tier before any mutable child-controlled state exists; accepting a
     # review with a missing tier would otherwise fail only after inspection.
@@ -970,6 +1006,9 @@ def prepare(
             "no_go_authorized": executor_plan.no_go_authorized,
             "agent_name": agent_name,
             "agent_class": agent_class,
+            "role": role_id,
+            "role_digest": role_digest,
+            "runtime_alias": runtime_alias,
             "environment_allowlist": environment_allowlist,
         },
         mode=0o444,
@@ -987,12 +1026,16 @@ def prepare(
         state_dir,
         role=role_for_agent_class(agent_class),
         settings=settings,
+        agent_visible_dir=handoff_dir,
     )
     launch_prompt = _write_launch_prompt(
         state_dir,
         agent_run_id=agent_run_id,
         agent_name=agent_name,
         agent_class=agent_class,
+        role_id=role_id,
+        role_digest=role_digest,
+        role_instructions=role_instructions,
         tier=tier,
         retry_of=retry_of,
         created_at=created_at,
@@ -1138,6 +1181,8 @@ def prepare(
         agent_run_id=agent_run_id,
         agent_name=agent_name,
         agent_class=agent_class,
+        role_id=role_id,
+        role_digest=role_digest,
         tier=tier,
         retry_of=retry_of,
         created_at=created_at,
@@ -1180,6 +1225,8 @@ def prepare(
         ticket_id=ticket_id,
         agent_name=agent_name,
         agent_class=agent_class,
+        role_id=role_id,
+        role_digest=role_digest,
         tier=tier,
         pack_id=pack_id,
         retry_of=retry_of,
@@ -1210,9 +1257,7 @@ def prepare(
         state_dir,
         agent_run_id=agent_run_id,
         status=status,
-        command=json.loads((paths.command).read_text(encoding="utf-8")),
     )
-    _link_worktree_state(workdir, agent_run_id, state_dir)
     runner = _write_runner(
         state_dir,
         workdir,
@@ -1452,6 +1497,59 @@ def observe(
         "safe_actions": safe_actions,
         "next_action": safe_actions[-1],
     }
+
+
+PUBLIC_AGENT_RUN_FIELDS = (
+    "schema",
+    "agent_run_id",
+    "ticket_id",
+    "agent_name",
+    "role",
+    "role_digest",
+    "tier",
+    "pack_id",
+    "retry_of_agent_run_id",
+    "status",
+    "disposition",
+    "created_at",
+    "updated_at",
+    "started_at",
+    "finished_at",
+    "worker_mode",
+    "worker_alive",
+    "observed_state",
+    "failure_category",
+    "durable_failure_category",
+    "observed_failure_category",
+    "completion_validation_status",
+    "steering_supported",
+    "steering_reason",
+    "job_id",
+    "branch",
+    "source_revision",
+    "dirty_at_launch",
+    "final_receipt_sha256",
+    "seconds_since_log_growth",
+    "seconds_since_heartbeat",
+    "seconds_since_executor_event_growth",
+    "seconds_since_semantic_progress",
+    "permission_state",
+    "output_capture_exhausted",
+    "signals",
+    "safe_actions",
+    "next_action",
+)
+
+
+def public_agent_run_view(value: dict[str, Any]) -> dict[str, Any]:
+    """Return the supported agent/orchestrator view of one Agent Run.
+
+    Private execution identity and state-root paths intentionally stay out of
+    this view. Operators can inspect provenance/config through explicit
+    administrative surfaces; agents reason only about logical roles and
+    lifecycle state.
+    """
+    return {key: value[key] for key in PUBLIC_AGENT_RUN_FIELDS if key in value}
 
 
 def next_retry_id(settings: Settings, original: str) -> str:

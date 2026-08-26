@@ -38,7 +38,7 @@ Prepare a headless run:
 
 ```bash
 agent-workflow agent-run prepare RUN-001 /path/to/worktree prompt.md \
-  --executor codex --agent-class implementation --tier medium
+  --role implementation --tier medium
 ```
 
 Start it:
@@ -69,7 +69,7 @@ An external runtime can consume a prepared Agent Run without being a dependency 
 
 ```bash
 agent-workflow agent-run prepare RUN-EXT /path/to/worktree prompt.md \
-  --worker-mode external --interactive --executor codex
+  --worker-mode external --interactive --role implementation
 ```
 
 Preparation records the durable authority and launch plan but does not launch a process.

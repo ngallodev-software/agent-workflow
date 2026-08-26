@@ -17,3 +17,7 @@ Use `python3 scripts/bump-version.py --bump patch|minor|major` for active versio
 ## Test-authority drift audit
 
 `audit-test-suite.py` enforces `tests/test-authority.json`: layer and per-invariant function budgets, collected-case ceilings, explicit invariant rationales, mock/private-import exceptions, subprocess and wheel-build site budgets, and an optional JUnit runtime ceiling. `release-check.sh` runs the audit before tests and records `test-suite-audit.json` from the completed JUnit run.
+
+## Agent-efficiency baseline
+
+`measure-agent-efficiency.py` records the Phase 0 agent-facing baseline from the live parser, role cards, launch-context generator, primary skill, and documented multi-command journeys. It is deliberately provider-neutral and does not launch Codex or Claude. The committed `release/agent-efficiency-baseline.json` is the comparison point for the 0.9 skill-first simplification; dynamic setup/finalization timing should be taken from existing installed-product journeys rather than by adding measurement-only test files.

@@ -464,6 +464,32 @@ def main(argv: list[str] | None = None) -> int:
         if needle not in path.read_text(encoding="utf-8"):
             fail(f"{path.relative_to(ROOT)}: missing expected version marker {needle!r}")
 
+    # Phase 0 agent-efficiency baseline is generated from the live parser/launch
+    # context and guards against unmeasured agent-facing drift without adding a
+    # separate unit-test surface.
+    efficiency_baseline = ROOT / "release" / "agent-efficiency-baseline.json"
+    if not efficiency_baseline.is_file():
+        fail("release/agent-efficiency-baseline.json: Phase 0 efficiency baseline is missing")
+    else:
+        try:
+            baseline = json.loads(efficiency_baseline.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            fail(f"release/agent-efficiency-baseline.json: invalid baseline: {exc}")
+        else:
+            if baseline.get("schema") != "agent-workflow/agent-efficiency-baseline/v1":
+                fail("release/agent-efficiency-baseline.json: unexpected schema")
+            if baseline.get("application_version") != "0.9.0":
+                fail("release/agent-efficiency-baseline.json: must retain the 0.9.0 Phase 0 comparison version")
+            roles = baseline.get("roles")
+            if not isinstance(roles, dict) or set(roles) != {"implementation", "review", "orchestrator"}:
+                fail("release/agent-efficiency-baseline.json: missing Phase 0 role measurements")
+        result = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "measure-agent-efficiency.py")],
+            cwd=ROOT, text=True, capture_output=True, check=False,
+        )
+        if result.returncode != 0:
+            fail("scripts/measure-agent-efficiency.py: current measurement failed")
+
     # Packaged scaffold assets are the single prompt-pack source. Repository mirror
     # trees and compatibility helper copies must not reappear.
     stale_prompt_pack_mirrors = [

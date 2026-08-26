@@ -38,6 +38,13 @@ class AgentProfile:
 
 
 @dataclass(frozen=True)
+class RuntimeAlias:
+    executor: str
+    model: str
+    reasoning_effort: str | None = None
+
+
+@dataclass(frozen=True)
 class AgentClassPolicy:
     interactive: bool
     default_executor: str
@@ -77,6 +84,10 @@ class Settings:
     agent_profiles: dict[str, AgentProfile] = field(default_factory=dict)
     default_agent_class: str = "implementation"
     agent_classes: dict[str, AgentClassPolicy] = field(default_factory=dict)
+    role_paths: tuple[Path, ...] = ()
+    default_agent_role: str = "implementation"
+    runtime_aliases: dict[str, RuntimeAlias] = field(default_factory=dict)
+    role_bindings: dict[str, str] = field(default_factory=dict)
     config_schema_version: int = CONFIG_SCHEMA_VERSION
     security: SecurityPolicy = field(default_factory=SecurityPolicy)
     plugins_enabled: tuple[str, ...] = ()
@@ -156,6 +167,16 @@ def defaults(path: Path | None = None) -> Settings:
                 },
             ),
         },
+        runtime_aliases={
+            "code-primary": RuntimeAlias("codex", LUNA_MODEL, "medium"),
+            "review-primary": RuntimeAlias("codex", LUNA_MODEL, "medium"),
+            "exploration-primary": RuntimeAlias("claude", "haiku", None),
+        },
+        role_bindings={
+            "implementation": "code-primary",
+            "review": "review-primary",
+            "exploration": "exploration-primary",
+        },
     )
 
 
@@ -173,7 +194,7 @@ def _reject_unknown(table: object, allowed: set[str], label: str) -> None:
 def _validate_shape(data: dict[str, Any]) -> None:
     _reject_unknown(
         data,
-        {"schema_version", "paths", "git", "pack", "agents", "agent_classes", "executors", "security", "supervisor", "plugins"},
+        {"schema_version", "paths", "git", "pack", "agents", "agent_classes", "executors", "roles", "runtime_aliases", "security", "supervisor", "plugins"},
         "root",
     )
     sections = {
@@ -181,6 +202,7 @@ def _validate_shape(data: dict[str, Any]) -> None:
         "git": {"branch_prefix", "require_clean_source", "repository_allowlist"},
         "pack": {"archive_level", "write_sha256", "validate_before_archive"},
         "agents": {"preferred_names", "generated_prefix", "default_executor", "profiles", "default_class"},
+        "roles": {"paths", "default", "bindings"},
         "security": {"mode", "executable_digest", "policy_files"},
         "plugins": {"enabled"},
         "supervisor": {
@@ -202,6 +224,11 @@ def _validate_shape(data: dict[str, Any]) -> None:
     executor_keys = {"command", "interactive_command", "models", "default_model", "no_go_models", "model_arg", "interactive_permission_args", "non_interactive_permission_args", "environment_allowlist", "steering_adapter", "reasoning_effort"}
     for name, entry in executors.items():
         _reject_unknown(entry, executor_keys, f"executors.{name}")
+    runtime_aliases = data.get("runtime_aliases", {})
+    if not isinstance(runtime_aliases, dict):
+        raise WorkflowError("[runtime_aliases] must contain alias tables")
+    for name, entry in runtime_aliases.items():
+        _reject_unknown(entry, {"executor", "model", "reasoning_effort"}, f"runtime_aliases.{name}")
     classes = data.get("agent_classes", {})
     if not isinstance(classes, dict):
         raise WorkflowError("[agent_classes] must contain class tables")
@@ -422,6 +449,73 @@ def load_settings(path: Path | None = None) -> Settings:
         raise WorkflowError(
             "agent profiles must be listed in preferred_names: " + ", ".join(sorted(unknown_profiles))
         )
+    role_config = data.get("roles", {})
+    if not isinstance(role_config, dict):
+        raise WorkflowError("[roles] must be a table")
+    raw_role_paths = role_config.get("paths", list(base.role_paths))
+    if not isinstance(raw_role_paths, list) or not all(
+        isinstance(value, str) and value for value in raw_role_paths
+    ):
+        raise WorkflowError("[roles].paths must be a string list")
+    role_paths: list[Path] = []
+    for value in raw_role_paths:
+        role_path = Path(os.path.expandvars(os.path.expanduser(value)))
+        if not role_path.is_absolute():
+            role_path = path.parent / role_path
+        role_paths.append(absolute_path(role_path))
+    default_agent_role = role_config.get("default", base.default_agent_role)
+    if not isinstance(default_agent_role, str) or not default_agent_role:
+        raise WorkflowError("[roles].default must be a non-empty role ID")
+
+    runtime_aliases = dict(base.runtime_aliases)
+    raw_runtime_aliases = data.get("runtime_aliases", {})
+    if not isinstance(raw_runtime_aliases, dict):
+        raise WorkflowError("[runtime_aliases] must contain alias tables")
+    for alias_name, alias_data in raw_runtime_aliases.items():
+        if not isinstance(alias_name, str) or not alias_name:
+            raise WorkflowError("runtime alias names must be non-empty strings")
+        if not isinstance(alias_data, dict):
+            raise WorkflowError(f"runtime alias {alias_name!r} must be a table")
+        alias_executor = alias_data.get("executor")
+        alias_model = alias_data.get("model")
+        alias_effort = alias_data.get("reasoning_effort")
+        if alias_executor not in {"codex", "claude"}:
+            raise WorkflowError(
+                f"runtime alias {alias_name!r} executor must be codex or claude in 0.9"
+            )
+        if alias_executor not in executors:
+            raise WorkflowError(f"runtime alias {alias_name!r} executor is not configured")
+        if not isinstance(alias_model, str) or not alias_model:
+            raise WorkflowError(f"runtime alias {alias_name!r} model must be a string")
+        policy = policies.get(alias_executor, ExecutorPolicy())
+        if policy.models and alias_model not in policy.models:
+            raise WorkflowError(
+                f"runtime alias {alias_name!r} model is not configured for {alias_executor}"
+            )
+        if alias_effort is not None and alias_effort not in LUNA_REASONING_EFFORTS:
+            raise WorkflowError(
+                f"runtime alias {alias_name!r} reasoning_effort must be low, medium, or high"
+            )
+        if alias_executor != "codex" and alias_effort is not None:
+            raise WorkflowError(
+                f"runtime alias {alias_name!r} reasoning_effort is supported only for codex"
+            )
+        runtime_aliases[alias_name] = RuntimeAlias(alias_executor, alias_model, alias_effort)
+
+    role_bindings = dict(base.role_bindings)
+    raw_bindings = role_config.get("bindings", {})
+    if not isinstance(raw_bindings, dict):
+        raise WorkflowError("[roles].bindings must be a table")
+    for role_id, alias_name in raw_bindings.items():
+        if not isinstance(role_id, str) or not role_id or not isinstance(alias_name, str) or not alias_name:
+            raise WorkflowError("[roles].bindings must map role IDs to runtime alias names")
+        if alias_name not in runtime_aliases:
+            raise WorkflowError(
+                f"role binding {role_id!r} references unknown runtime alias {alias_name!r}"
+            )
+        role_bindings[role_id] = alias_name
+    if default_agent_role not in role_bindings:
+        raise WorkflowError("[roles].default must have a configured private runtime binding")
     if (
         stall < 1
         or supervisor_interval < 1
@@ -483,6 +577,10 @@ def load_settings(path: Path | None = None) -> Settings:
         agent_profiles=profiles,
         default_agent_class=default_agent_class,
         agent_classes=classes,
+        role_paths=tuple(role_paths),
+        default_agent_role=default_agent_role,
+        runtime_aliases=runtime_aliases,
+        role_bindings=role_bindings,
         config_schema_version=schema_version,
         security=SecurityPolicy(
             mode=security_mode,
@@ -610,6 +708,19 @@ def as_dict(s: Settings) -> dict[str, Any]:
             },
             "default_class": s.default_agent_class,
         },
+        "roles": {
+            "paths": [str(path) for path in s.role_paths],
+            "default": s.default_agent_role,
+            "bindings": dict(sorted(s.role_bindings.items())),
+        },
+        "runtime_aliases": {
+            name: {
+                "executor": alias.executor,
+                "model": alias.model,
+                "reasoning_effort": alias.reasoning_effort,
+            }
+            for name, alias in sorted(s.runtime_aliases.items())
+        },
         "agent_classes": {
             name: {
                 "interactive": policy.interactive,
@@ -633,6 +744,10 @@ def trust_report(s: Settings) -> dict[str, Any]:
     reports.extend(
         inspect_path(path, label="policy file", allow_missing=False)
         for path in s.security.policy_files
+    )
+    reports.extend(
+        inspect_path(path, label="agent role path", allow_missing=False)
+        for path in s.role_paths
     )
     values = [item.as_dict() for item in reports]
     failures = [

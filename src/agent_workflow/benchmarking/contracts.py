@@ -157,10 +157,14 @@ def validate_executor_config(path: Path) -> dict[str, Any]:
     if delivery == "argv" and "{prompt_file}" not in placeholders:
         raise WorkflowError("argv prompt delivery requires {prompt_file}")
     billing = value["billing"]
-    if billing["mode"] == "subscription" and billing["provider_billed_cost_semantics"] != "not-attributable":
-        raise WorkflowError("subscription billing must use not-attributable provider cost semantics")
-    if billing["mode"] == "metered-api" and value["authentication"]["mode"] == "subscription-session":
-        raise WorkflowError("subscription authentication cannot be labeled as metered API billing")
+    auth_mode = value["authentication"]["mode"]
+    if auth_mode == "subscription-session":
+        if billing["mode"] != "subscription":
+            raise WorkflowError("subscription authentication requires subscription billing semantics")
+        if billing["provider_billed_cost_semantics"] != "not-attributable":
+            raise WorkflowError("subscription billing must use not-attributable provider cost semantics")
+    elif auth_mode == "synthetic-none" and billing["mode"] != "synthetic":
+        raise WorkflowError("synthetic authentication requires synthetic billing semantics")
     return value
 
 

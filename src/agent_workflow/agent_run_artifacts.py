@@ -116,8 +116,8 @@ def _write_runner(
         f"readonly AGENT_WORKFLOW_CONTROL_BRIDGE={shlex.quote(str((handoff_dir / 'control-intents') if handoff_dir else ''))}\n"
         f"readonly AGENT_WORKFLOW_COMPLETION_TEMPLATE={shlex.quote(str(completion_template_path or ''))}\n"
         f"readonly AGENT_WORKFLOW_PROMPT_PACK_ROOT={shlex.quote(str(prompt_pack_root or ''))}\n"
-        f"readonly AGENT_WORKFLOW_COMMAND_CATALOG={shlex.quote(str(state_dir / str((command_artifacts or {}).get('catalog_path', 'command-catalog.json'))))}\n"
-        f"readonly AGENT_WORKFLOW_COMMAND_CARD={shlex.quote(str(state_dir / str((command_artifacts or {}).get('card_path', 'command-card.md'))))}\n"
+        f"readonly AGENT_WORKFLOW_COMMAND_CATALOG={shlex.quote(str((handoff_dir or state_dir) / str((command_artifacts or {}).get('catalog_path', 'command-catalog.json'))))}\n"
+        f"readonly AGENT_WORKFLOW_COMMAND_CARD={shlex.quote(str((handoff_dir or state_dir) / str((command_artifacts or {}).get('card_path', 'command-card.md'))))}\n"
         f"readonly AGENT_WORKFLOW_CLI={shlex.quote(str(((command_artifacts or {}).get('cli_invocation') or ['agent-workflow'])[0]))}\n"
     )
     runner_text += (

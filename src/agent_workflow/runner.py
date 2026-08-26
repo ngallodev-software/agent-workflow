@@ -301,6 +301,8 @@ def _authoritative_projection(
             "ticket_id": launch.get("ticket"),
             "agent_name": agent_run.get("agent_name"),
             "agent_class": agent_run.get("agent_class"),
+            "role": (launch.get("role") or {}).get("id"),
+            "role_digest": (launch.get("role") or {}).get("digest"),
             "tier": agent_run.get("tier"),
             "retry_of": agent_run.get("retry_of_agent_run_id"),
             "created_at": agent_run["created_at"],
@@ -324,8 +326,6 @@ def _authoritative_projection(
             "stderr_path": str(paths_obj.executor_stderr),
             "source_baseline_path": str(run_dir / launch["source_baseline"]["path"]),
             "launch_contract_path": str(paths_obj.contract),
-            "executor": command.get("executor"),
-            "model": command.get("model"),
             "worker_mode": command["mode"],
             "interactive_stdio": command["interactive_stdio"],
             "evaluation_path": evaluation.get("path"),
@@ -867,7 +867,7 @@ def execute(
         "completed"
         if return_code == 0
         else "interrupted"
-        if return_code in {130, 143}
+        if return_code in {130, 143, -2, -15}
         else "failed"
     )
     wall_seconds = time.monotonic() - wall_started

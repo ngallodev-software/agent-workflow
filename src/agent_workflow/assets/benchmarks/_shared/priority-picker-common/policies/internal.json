@@ -18,9 +18,7 @@
   "interrupted_pair_policy": "discard-pair-and-retry-fresh",
   "authentication_default": "subscription-session",
   "allowed_authentication_modes": [
-    "subscription-session",
-    "api-key",
-    "access-token"
+    "subscription-session"
   ],
   "winner_policy": {
     "enabled": true,

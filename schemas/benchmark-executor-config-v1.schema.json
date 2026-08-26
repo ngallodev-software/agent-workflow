@@ -15,9 +15,6 @@
     "authentication": {
       "additionalProperties": false,
       "properties": {
-        "allow_api_key_fallback": {
-          "type": "boolean"
-        },
         "credential_environment": {
           "items": {
             "maxLength": 256,
@@ -30,8 +27,6 @@
         "mode": {
           "enum": [
             "subscription-session",
-            "api-key",
-            "access-token",
             "synthetic-none"
           ]
         },
@@ -52,8 +47,7 @@
         "mode",
         "status_argv",
         "status_timeout_seconds",
-        "credential_environment",
-        "allow_api_key_fallback"
+        "credential_environment"
       ],
       "type": "object"
     },
@@ -63,14 +57,12 @@
         "mode": {
           "enum": [
             "subscription",
-            "metered-api",
             "synthetic",
             "unknown"
           ]
         },
         "provider_billed_cost_semantics": {
           "enum": [
-            "reported",
             "not-attributable",
             "synthetic",
             "unknown"

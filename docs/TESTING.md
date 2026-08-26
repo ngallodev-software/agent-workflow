@@ -20,7 +20,9 @@ python -m pytest -q tests/acceptance
 
 ## Consolidation policy
 
-Keep a narrow test only when it protects a distinct security, durability, schema, replay, or accounting boundary that is difficult to prove economically end to end. Otherwise prefer one assertion-dense installed-product journey over multiple feature-specific journeys.
+Keep a narrow test only when it protects a distinct security, durability, schema, replay, path, state-machine, or accounting boundary that is difficult to prove economically end to end. Otherwise prefer one assertion-dense installed-product journey over multiple feature-specific journeys.
+
+For the 0.9 simplification work, **test-surface growth is not a deliverable**. New coverage should normally be an integration/E2E or public-contract journey that protects a real user/agent boundary. Do not add unit/invariant tests merely to measure implementation details, role-file parsing permutations, or efficiency counters. When a stronger installed-product journey subsumes narrow coverage, consolidate or delete the redundant tests rather than keeping both. Static size/context budgets belong in repository audit tooling.
 
 Do not add compatibility tests for removed terminal-era APIs and do not preserve test counts for their own sake.
 

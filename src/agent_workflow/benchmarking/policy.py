@@ -35,12 +35,11 @@ def implicit_operating_policy(spec: Mapping[str, Any]) -> dict[str, Any]:
         },
         "interrupted_pair_policy": "discard-pair-and-retry-fresh",
         "authentication_default": "subscription-session",
-        "allowed_authentication_modes": [
-            "subscription-session",
-            "api-key",
-            "access-token",
-            "synthetic-none",
-        ],
+        "allowed_authentication_modes": (
+            ["subscription-session", "synthetic-none"]
+            if str(spec["claim_level"]) == "development"
+            else ["subscription-session"]
+        ),
         "winner_policy": deepcopy(spec["winner_policy"]),
     }
 

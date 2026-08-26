@@ -37,7 +37,7 @@ Worker modes:
 
 ```bash
 agent-workflow worktree create REPO TICKET BASE_REF
-agent-workflow agent-run prepare RUN WORKTREE PROMPT --executor EXECUTOR --agent-class implementation --tier medium
+agent-workflow agent-run prepare RUN WORKTREE PROMPT --role implementation --tier medium
 agent-workflow agent-run start RUN
 agent-workflow agent-run status RUN
 ```

@@ -19,6 +19,7 @@ from .receipts import (
 from .routing import advise_routing
 from .agent_runs import prepare as prepare_agent_run
 from .agent_runs import start as start_agent_run
+from .agent_runs import public_agent_run_view
 from .util import validate_id
 from .workflow import (
     ensure_workflow_events_file,
@@ -115,48 +116,80 @@ class SchedulerService:
         prompt = Path(str(node["prompt_path"]))
         if not prompt.is_absolute():
             prompt = self.workdir / prompt
-        explicit = {
-            key: node.get(key)
-            for key in ("agent_class", "executor", "model", "interactive")
-            if node.get(key) is not None
-        }
-        advice = advise_routing(
-            node.get("routing") if isinstance(node.get("routing"), Mapping) else {},
-            self.settings,
-            enforced_selection=explicit,
-        )
-        validate_instance(advice, advice["schema"], artifact="workflow routing advice")
-        selected = advice["enforced_selection"]
-        prepared = prepare_agent_run(
-            self.settings,
-            agent_run_id=agent_run_id,
-            workdir=self.workdir,
-            prompt_path=prompt,
-            ticket_id=str(node["ticket_id"]) if node.get("ticket_id") else None,
-            pack_id=str(node["pack_id"]) if node.get("pack_id") else None,
-            retry_of=str(node["retry_of_agent_run_id"]) if node.get("retry_of_agent_run_id") else None,
-            tier=str(node["tier"]) if node.get("tier") else None,
-            executor=str(selected["executor"]),
-            agent_class=str(selected["agent_class"]),
-            model=str(selected["model"]),
-            interactive=False,
-            worker_mode="headless",
-            allow_no_go_model=bool(node.get("allow_no_go_model", False)),
-            workflow_context=(
-                node["workflow_inputs"]["artifact"]
-                if isinstance(node.get("workflow_inputs"), Mapping)
-                else None
-            ),
-        )
+        role_id = str(node["role"]) if node.get("role") else None
+        if role_id is not None:
+            advice = {
+                "schema": "agent-workflow/role-routing/v1",
+                "recommendation": {"role": role_id},
+                "enforced_selection": {"role": role_id},
+                "explanation_codes": ["ROLE_EXPLICIT"],
+                "policy_disagreements": [],
+            }
+            prepared = prepare_agent_run(
+                self.settings,
+                agent_run_id=agent_run_id,
+                workdir=self.workdir,
+                prompt_path=prompt,
+                ticket_id=str(node["ticket_id"]) if node.get("ticket_id") else None,
+                pack_id=str(node["pack_id"]) if node.get("pack_id") else None,
+                retry_of=str(node["retry_of_agent_run_id"]) if node.get("retry_of_agent_run_id") else None,
+                tier=str(node["tier"]) if node.get("tier") else None,
+                role=role_id,
+                interactive=False,
+                worker_mode="headless",
+                workflow_context=(
+                    node["workflow_inputs"]["artifact"]
+                    if isinstance(node.get("workflow_inputs"), Mapping)
+                    else None
+                ),
+            )
+        else:
+            explicit = {
+                key: node.get(key)
+                for key in ("agent_class", "executor", "model", "interactive")
+                if node.get(key) is not None
+            }
+            advice = advise_routing(
+                node.get("routing") if isinstance(node.get("routing"), Mapping) else {},
+                self.settings,
+                enforced_selection=explicit,
+            )
+            validate_instance(advice, advice["schema"], artifact="workflow routing advice")
+            selected = advice["enforced_selection"]
+            prepared = prepare_agent_run(
+                self.settings,
+                agent_run_id=agent_run_id,
+                workdir=self.workdir,
+                prompt_path=prompt,
+                ticket_id=str(node["ticket_id"]) if node.get("ticket_id") else None,
+                pack_id=str(node["pack_id"]) if node.get("pack_id") else None,
+                retry_of=str(node["retry_of_agent_run_id"]) if node.get("retry_of_agent_run_id") else None,
+                tier=str(node["tier"]) if node.get("tier") else None,
+                executor=str(selected["executor"]),
+                agent_class=str(selected["agent_class"]),
+                model=str(selected["model"]),
+                interactive=False,
+                worker_mode="headless",
+                allow_no_go_model=bool(node.get("allow_no_go_model", False)),
+                workflow_context=(
+                    node["workflow_inputs"]["artifact"]
+                    if isinstance(node.get("workflow_inputs"), Mapping)
+                    else None
+                ),
+            )
         result = start_agent_run(self.settings, agent_run_id)
         child_dir = agent_run_dir(self.settings, agent_run_id)
         command = read_contract(child_dir / "command.json", "agent-workflow/command/v1")
-        actual = {
-            "agent_class": command.get("agent_class"),
-            "executor": command.get("executor"),
-            "model": command.get("model"),
-            "interactive": False,
-        }
+        actual = (
+            {"role": command.get("role")}
+            if role_id is not None
+            else {
+                "agent_class": command.get("agent_class"),
+                "executor": command.get("executor"),
+                "model": command.get("model"),
+                "interactive": False,
+            }
+        )
         routing_record = dict(advice)
         routing_record["actual_selection"] = actual
         routing_record["policy_disagreements"] = sorted(
@@ -183,7 +216,7 @@ class SchedulerService:
             # seal lock. Its immutable receipt is authoritative already.
             if "cannot update sealed provenance" not in str(exc):
                 raise
-        return result
+        return public_agent_run_view(result)
 
     @staticmethod
     def _run_id(workflow_id: str, node: Mapping[str, Any], attempt: int) -> str:
