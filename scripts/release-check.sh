@@ -19,6 +19,9 @@ fi
 export PYTHONDONTWRITEBYTECODE=1
 export PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
 export PYTHONNOUSERSITE=1
+# Release authority must not vary with globally installed pytest plugins.
+# Repository tests use only pytest core and explicitly declared fixtures.
+export PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
 export PIP_IGNORE_INSTALLED=1
 
 EVIDENCE_DIR="${AGENT_WORKFLOW_RELEASE_EVIDENCE_DIR:-$ROOT/build/release-evidence}"

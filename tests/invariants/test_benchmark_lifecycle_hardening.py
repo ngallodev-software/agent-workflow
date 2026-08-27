@@ -74,7 +74,7 @@ def test_automated_pipeline_records_failed_stage_before_reraising(
 
     monkeypatch.setattr(service, "execute_run", lambda path: {"state": "executed"})
     monkeypatch.setattr(
-        service,
+        live_review,
         "start_live_review",
         lambda path: (_ for _ in ()).throw(RuntimeError("server failed")),
     )
@@ -144,7 +144,7 @@ def test_cleanup_preserves_worktrees_when_live_server_cannot_stop(
     plan_path.write_text(json.dumps(plan), encoding="utf-8")
     monkeypatch.setattr(service, "verify_consolidated_run", lambda path: {"valid": True})
     monkeypatch.setattr(
-        service,
+        live_review,
         "stop_live_review",
         lambda path: {"remaining": 1, "failed": 1, "stopped": 0},
     )

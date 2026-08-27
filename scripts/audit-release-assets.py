@@ -513,7 +513,8 @@ def main(argv: list[str] | None = None) -> int:
                     role_value = current_roles.get(role, {})
                     command_limit = targets.get(f"{role}_role_commands_max")
                     card_limit = targets.get(f"{role}_role_card_bytes_max")
-                    if not isinstance(command_limit, int) or not isinstance(card_limit, int):
+                    launch_limit = targets.get(f"{role}_launch_context_bytes_max")
+                    if not all(isinstance(value, int) for value in (command_limit, card_limit, launch_limit)):
                         fail(f"release/agent-efficiency-baseline.json: missing {role} surface targets")
                         continue
                     if role_value.get("command_count", command_limit + 1) > command_limit:
@@ -523,6 +524,10 @@ def main(argv: list[str] | None = None) -> int:
                     if role_value.get("command_card_bytes", card_limit + 1) > card_limit:
                         fail(
                             f"command profile {role}: exceeds {card_limit}-byte command-card budget"
+                        )
+                    if role_value.get("launch_context_overhead_bytes", launch_limit + 1) > launch_limit:
+                        fail(
+                            f"launch context {role}: exceeds {launch_limit}-byte overhead budget"
                         )
 
     # Packaged scaffold assets are the single prompt-pack source. Repository mirror

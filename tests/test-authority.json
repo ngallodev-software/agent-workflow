@@ -1,6 +1,6 @@
 {
   "default_suite": {
-    "max_runtime_seconds": 420
+    "max_runtime_seconds": 240
   },
   "invariants": [
     {
@@ -245,7 +245,7 @@
   },
   "schema": "agent-workflow/test-authority/v1",
   "static_budgets": {
-    "max_subprocess_calls": 64,
-    "max_wheel_build_sites": 2
+    "max_subprocess_calls": 56,
+    "max_wheel_build_sites": 1
   }
 }

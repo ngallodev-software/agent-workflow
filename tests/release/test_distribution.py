@@ -27,7 +27,8 @@ def test_release_asset_audit_is_the_single_static_repository_gate() -> None:
     )
     assert result.returncode == 0, result.stdout + result.stderr
 
-
+    release_check = (REPO_ROOT / "scripts" / "release-check.sh").read_text(encoding="utf-8")
+    assert "export PYTEST_DISABLE_PLUGIN_AUTOLOAD=1" in release_check
 
 
 def test_test_authority_audit_blocks_silent_suite_growth(tmp_path: Path) -> None:
@@ -114,21 +115,13 @@ def test_documented_commands_match_the_installed_public_surface(
     assert "agent-workflow eval compare --output OUTPUT baseline candidate" in catalog
 
 
-def test_built_wheel_excludes_repository_only_ci_assets(tmp_path: Path) -> None:
-    output = tmp_path / "dist"
-    output.mkdir()
-    result = subprocess.run(
-        [sys.executable, "-m", "pip", "wheel", ".", "--no-deps", "--no-build-isolation", "--wheel-dir", str(output)],
-        cwd=REPO_ROOT,
-        text=True,
-        capture_output=True,
-        check=False,
-        timeout=120,
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
-    wheels = sorted(output.glob("agent_workflow-*.whl"))
-    assert len(wheels) == 1
-    with zipfile.ZipFile(wheels[0]) as archive:
+def test_built_wheel_excludes_repository_only_ci_assets(
+    installed_product: InstalledProduct,
+) -> None:
+    # Inspect the exact wheel already built and installed by the session fixture.
+    # Rebuilding here duplicated packaging work without establishing a distinct
+    # release authority.
+    with zipfile.ZipFile(installed_product.wheel) as archive:
         names = archive.namelist()
     forbidden = ("Jenkinsfile", "jenkins-local-job", ".github/workflows")
     assert not any(any(token in name for token in forbidden) for name in names)

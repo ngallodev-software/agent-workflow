@@ -28,6 +28,7 @@ class InstalledProduct:
     python: Path
     cli: Path
     mcp: Path
+    wheel: Path
     mcp_sdk_available: bool
 
     def run(
@@ -157,6 +158,7 @@ def installed_product(tmp_path_factory: pytest.TempPathFactory) -> InstalledProd
         python=python,
         cli=environment / "bin" / "agent-workflow",
         mcp=environment / "bin" / "agent-workflow-mcp",
+        wheel=wheel,
         mcp_sdk_available=mcp_sdk_available,
     )
 

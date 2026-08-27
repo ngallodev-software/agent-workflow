@@ -6,7 +6,7 @@ Prompt-pack helper scripts are packaged only in `src/agent_workflow/assets/promp
 
 ## Release evidence
 
-`release-check.sh` is the consolidated technical validation entrypoint. It records pytest JUnit XML and invokes `release-evidence.py` on both success and failure. The evidence generator validates `release/release-policy.json` and `release/dependency-lock.json`, writes CycloneDX SBOM and build-provenance files, and summarizes technical and governance status in `release-evidence.json`.
+`release-check.sh` is the consolidated technical validation entrypoint. It disables third-party pytest plugin autoload so repository authority does not vary with globally installed developer tooling, records pytest JUnit XML, and invokes `release-evidence.py` on both success and failure. The evidence generator validates `release/release-policy.json` and `release/dependency-lock.json`, writes CycloneDX SBOM and build-provenance files, and summarizes technical and governance status in `release-evidence.json`.
 
 Use `AGENT_WORKFLOW_ENFORCE_RELEASE_BLOCKERS=1` only for a release authorization gate; development validation records open blockers without converting them into a failed technical check. See [`docs/RELEASE_EVIDENCE.md`](../docs/RELEASE_EVIDENCE.md).
 

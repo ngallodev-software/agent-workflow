@@ -169,15 +169,18 @@
   },
   "schema": "agent-workflow/agent-efficiency-baseline/v1",
   "targets": {
+    "implementation_launch_context_bytes_max": 3000,
     "implementation_role_card_bytes_max": 2048,
     "implementation_role_commands_max": 8,
     "normal_agent_visible_provider_model_fields": 0,
+    "orchestrator_launch_context_bytes_max": 2706,
     "orchestrator_role_card_bytes_max": 5120,
     "orchestrator_role_commands_max": 20,
     "production_authentication": [
       "codex-subscription",
       "claude-subscription"
     ],
+    "review_launch_context_bytes_max": 2688,
     "review_role_card_bytes_max": 3072,
     "review_role_commands_max": 12
   }
