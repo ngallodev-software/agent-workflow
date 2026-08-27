@@ -10,12 +10,18 @@ from __future__ import annotations
 import argparse
 from collections.abc import Iterable
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from . import __version__
-from .command_catalog import COMMAND_ROLES
-from .cli_contract import EVALUATION_TEMPLATE_KINDS, AUTHORIZED_WORKFLOW_TEMPLATES
+from .cli_contract import (
+    AUTHORIZED_WORKFLOW_TEMPLATES,
+    COMMAND_PROFILES,
+    EVALUATION_TEMPLATE_KINDS,
+)
 from .errors import WorkflowError
-from .plugins import EMPTY_PLUGIN_REGISTRY, PluginRegistry
+
+if TYPE_CHECKING:
+    from .plugins import PluginRegistry
 
 
 class _ParserSink:
@@ -64,7 +70,7 @@ class _ScopedSubparsers:
 
 
 def build_parser(
-    plugin_registry: PluginRegistry | None = None,
+    plugin_registry: "PluginRegistry | None" = None,
     *,
     command_scope: str | None = None,
     command_scopes: Iterable[str] | None = None,
@@ -97,7 +103,7 @@ def build_parser(
         "commands", help="print the parser-derived command contract"
     )
     catalog.add_argument("--format", choices=("json", "markdown"), default=None)
-    catalog.add_argument("--role", choices=("all", *COMMAND_ROLES), default="all")
+    catalog.add_argument("--role", choices=("all", *COMMAND_PROFILES), default="all")
     workflow = commands.add_parser("workflow", help="workflow scheduler commands")
     workflow_commands = workflow.add_subparsers(dest="workflow_command", required=True)
     wf_validate = workflow_commands.add_parser("validate", help="validate a workflow snapshot")
@@ -344,6 +350,61 @@ def build_parser(
 
     status = agent_run_commands.add_parser("status", help="inspect a delegation")
     status.add_argument("agent_run_id")
+
+    public_messages = agent_run_commands.add_parser(
+        "message-state", help="show bounded durable message and acknowledgement state"
+    )
+    public_messages.add_argument("agent_run_id")
+
+    public_summary = agent_run_commands.add_parser(
+        "summary", help="show completion, evaluation, review, and acceptance summary"
+    )
+    public_summary.add_argument("agent_run_id")
+
+    public_provenance = agent_run_commands.add_parser(
+        "provenance", help="show restricted operator worktree/source/runtime provenance"
+    )
+    public_provenance.add_argument("agent_run_id")
+
+    external_binding = agent_run_commands.add_parser(
+        "external-binding", help="show the rebuildable external Worker binding projection"
+    )
+    external_binding.add_argument("agent_run_id")
+
+    bind_external = agent_run_commands.add_parser(
+        "bind-external", help="idempotently bind or rebind an externally hosted Worker"
+    )
+    bind_external.add_argument("agent_run_id")
+    bind_external.add_argument("external_runtime_type")
+    bind_external.add_argument("external_worker_id")
+
+    observe_external = agent_run_commands.add_parser(
+        "observe-external", help="record an observation of the current external Worker binding"
+    )
+    observe_external.add_argument("agent_run_id")
+
+    unbind_external = agent_run_commands.add_parser(
+        "unbind-external", help="idempotently remove the current external Worker binding"
+    )
+    unbind_external.add_argument("agent_run_id")
+
+    pending_external = agent_run_commands.add_parser(
+        "pending-external-delivery",
+        help="fetch durable messages awaiting delivery by the active external Worker",
+    )
+    pending_external.add_argument("agent_run_id")
+    pending_external.add_argument("--generation", type=int, required=True)
+
+    report_external = agent_run_commands.add_parser(
+        "report-external-delivery",
+        help="record an external host delivery attempt without acknowledging the message",
+    )
+    report_external.add_argument("agent_run_id")
+    report_external.add_argument("correlation_id")
+    report_external.add_argument("--generation", type=int, required=True)
+    report_external.add_argument("--attempt", type=int, required=True)
+    report_external.add_argument("--outcome", choices=("delivered", "failed"), required=True)
+    report_external.add_argument("--reason", required=True)
 
     repair = agent_run_commands.add_parser(
         "repair", help="rebuild a mutable status projection from run authority"
@@ -718,8 +779,8 @@ def build_parser(
     archive.add_argument("source", type=Path)
     archive.add_argument("output", type=Path)
 
-    registry = plugin_registry or EMPTY_PLUGIN_REGISTRY
-    for loaded_plugin, plugin_command in registry.commands:
+    plugin_commands = () if plugin_registry is None else plugin_registry.commands
+    for loaded_plugin, plugin_command in plugin_commands:
         if plugin_command.name in commands.choices:
             raise WorkflowError(
                 f"plugin {loaded_plugin.descriptor.name!r} command {plugin_command.name!r} "

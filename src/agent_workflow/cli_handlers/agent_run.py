@@ -14,7 +14,14 @@ from ..cli_output import print_json, print_table
 from ..config import Settings
 from ..errors import WorkflowError
 from ..finalization import finalize_run
+from ..external_bindings import bind as bind_external_worker
+from ..external_bindings import observe as observe_external_worker
+from ..external_bindings import pending_delivery as pending_external_delivery
+from ..external_bindings import report_delivery as report_external_delivery
+from ..external_bindings import status as external_worker_binding_status
+from ..external_bindings import unbind as unbind_external_worker
 from ..lifecycle import record as record_lifecycle
+from ..public_api import message_state, operator_provenance, run_summary
 from ..agent_runs import acknowledge as acknowledge_message
 from ..agent_runs import interrupt as interrupt_agent_run
 from ..agent_runs import prepare as prepare_agent_run
@@ -110,6 +117,48 @@ def handle_agent_run_command(
         )
     if command == "status":
         return public_agent_run_view(observe(settings, args.agent_run_id)), False
+    if command == "message-state":
+        return message_state(settings, args.agent_run_id), False
+    if command == "summary":
+        return run_summary(settings, args.agent_run_id), False
+    if command == "provenance":
+        return operator_provenance(settings, args.agent_run_id), False
+    if command == "external-binding":
+        return external_worker_binding_status(settings, args.agent_run_id), False
+    if command == "bind-external":
+        return (
+            bind_external_worker(
+                settings,
+                args.agent_run_id,
+                external_runtime_type=args.external_runtime_type,
+                external_worker_id=args.external_worker_id,
+            ),
+            False,
+        )
+    if command == "observe-external":
+        return observe_external_worker(settings, args.agent_run_id), False
+    if command == "unbind-external":
+        return unbind_external_worker(settings, args.agent_run_id), False
+    if command == "pending-external-delivery":
+        return (
+            pending_external_delivery(
+                settings, args.agent_run_id, generation=args.generation
+            ),
+            False,
+        )
+    if command == "report-external-delivery":
+        return (
+            report_external_delivery(
+                settings,
+                args.agent_run_id,
+                generation=args.generation,
+                correlation_id=args.correlation_id,
+                outcome=args.outcome,
+                attempt=args.attempt,
+                reason=args.reason,
+            ),
+            False,
+        )
     if command == "repair":
         return repair_status(settings, args.agent_run_id), False
     if command == "finalize":

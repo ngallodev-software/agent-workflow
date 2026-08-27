@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..cli_output import print_json
 from ..cli_parser import build_parser
@@ -12,7 +12,9 @@ from ..command_catalog import build_command_catalog, filter_catalog, render_comm
 from ..config import Settings, as_dict
 from ..doctor import run_doctor
 from ..errors import WorkflowError
-from ..plugins import PluginRegistry
+
+if TYPE_CHECKING:
+    from ..plugins import PluginRegistry
 
 
 
@@ -21,7 +23,7 @@ def handle_core_command(
     args: argparse.Namespace,
     *,
     parser: argparse.ArgumentParser,
-    plugin_registry: PluginRegistry,
+    plugin_registry: "PluginRegistry | None",
 ) -> tuple[Any, bool]:
     """Execute a parsed core utility command.
 
@@ -31,7 +33,9 @@ def handle_core_command(
     if args.command == "commands":
         catalog = build_command_catalog(
             parser,
-            plugin_inventory=plugin_registry.catalog_inventory(),
+            plugin_inventory=(
+                plugin_registry.catalog_inventory() if plugin_registry is not None else ()
+            ),
         )
         output_format = args.format or ("json" if args.json else "markdown")
         if output_format == "json":
@@ -41,6 +45,8 @@ def handle_core_command(
         return None, True
 
     if args.command == "plugins":
+        if plugin_registry is None:
+            raise WorkflowError("plugin inventory requested without plugin bootstrap")
         return {
             "configured_enabled": list(settings.plugins_enabled),
             "suppressed": bool(args.no_plugins),

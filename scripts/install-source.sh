@@ -80,7 +80,7 @@ PYTHON_PATH="$(command -v "$PYTHON_BIN")"
 "$PYTHON_BIN" -c 'import sys; sys.exit("agent-workflow requires Python 3.11+") if sys.version_info < (3,11) else None'
 PYTHON_IN_VENV="$("$PYTHON_BIN" -c 'import sys; print("1" if sys.prefix != sys.base_prefix else "0")')"
 if [[ "$EXTRAS" == "all" ]]; then
-  EXTRAS="eval,stats,otel,mlflow,completion,mcp"
+  EXTRAS="eval,stats,completion,mcp"
 fi
 if [[ ",$EXTRAS," == *,mcp,* ]]; then
   MCP_CONFIG_REQUESTED=1

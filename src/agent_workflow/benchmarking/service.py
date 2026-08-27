@@ -19,12 +19,8 @@ from .runtime import attest_runtime, seal_runtime_lock, validate_runtime_lock
 from .consolidation import consolidate_run, verify_consolidated_run
 from .contracts import validate_executor_config, validate_spec
 from .planning import create_run_plan, materialize_fixture
-from .reporting import write_report
-from .review import prepare_assignment, submit_review
 from .runner import execute_run
 from .scoring import score_run
-from .visual import capture_run
-from .live_review import live_review_status, start_live_review, stop_live_review
 
 
 def _resolve_plan(settings: Settings, value: str | Path) -> Path:
@@ -199,6 +195,11 @@ def create_plan(
 
 
 def _finalize_automated(settings: Settings, plan: Path) -> dict[str, Any]:
+    # Publication/visual tooling is optional benchmark machinery. Keep it off
+    # validation/readiness/auth paths and load it only for the automated run.
+    from .live_review import start_live_review
+    from .reporting import write_report
+    from .visual import capture_run
     del settings  # The resolved run plan owns all execution paths and policies.
     plan_value = read_object(plan)
     run_dir = Path(plan_value["coordinator"]["run_dir"])
@@ -262,6 +263,7 @@ def _finalize_automated(settings: Settings, plan: Path) -> dict[str, Any]:
 
 
 def _existing_automated_result(plan_path: Path) -> dict[str, Any] | None:
+    from .live_review import live_review_status
     plan = read_object(plan_path)
     run_dir = Path(plan["coordinator"]["run_dir"])
     required = (
@@ -309,14 +311,17 @@ def resume_benchmark(settings: Settings, run: str | Path) -> dict[str, Any]:
 
 
 def start_live_benchmark(settings: Settings, run: str | Path) -> dict[str, Any]:
+    from .live_review import start_live_review
     return start_live_review(_resolve_plan(settings, run))
 
 
 def stop_live_benchmark(settings: Settings, run: str | Path) -> dict[str, Any]:
+    from .live_review import stop_live_review
     return stop_live_review(_resolve_plan(settings, run))
 
 
 def visual_capture_benchmark(settings: Settings, run: str | Path) -> dict[str, Any]:
+    from .visual import capture_run
     return capture_run(_resolve_plan(settings, run))
 
 
@@ -335,6 +340,9 @@ def prepare_or_submit_review(
     reviewer: str,
     input_path: Path | None,
 ) -> dict[str, Any]:
+    from .reporting import write_report
+    from .review import prepare_assignment, submit_review
+
     plan = _resolve_plan(settings, run)
     result = submit_review(plan, reviewer, input_path) if input_path else prepare_assignment(plan, reviewer)
     if input_path:
@@ -353,6 +361,7 @@ def prepare_or_submit_review(
 
 
 def render_benchmark_report(settings: Settings, run: str | Path) -> dict[str, Any]:
+    from .reporting import write_report
     return write_report(_resolve_plan(settings, run))
 
 
@@ -369,6 +378,8 @@ def cleanup_benchmark(
     remove_worktrees: bool = False,
     stop_live_apps: bool = False,
 ) -> dict[str, Any]:
+    from .live_review import live_review_status, stop_live_review
+
     plan_path = _resolve_plan(settings, run)
     plan = read_object(plan_path)
     run_dir = Path(plan["coordinator"]["run_dir"])
@@ -543,6 +554,7 @@ def seal_benchmark_runtime(base_lock: Path, output: Path, *, container_image: st
 
 
 def status_benchmark(settings: Settings, run: str | Path) -> dict[str, Any]:
+    from .live_review import live_review_status
     plan = read_object(_resolve_plan(settings, run))
     run_dir = Path(plan["coordinator"]["run_dir"])
     state = read_object(run_dir / "run.json")

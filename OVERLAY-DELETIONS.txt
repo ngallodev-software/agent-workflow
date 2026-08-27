@@ -1,0 +1,3 @@
+# Paths to remove from the authoritative Phase 3 source before/after applying this overlay.
+src/agent_workflow/integrations/mlflow.py
+src/agent_workflow/integrations/otel.py

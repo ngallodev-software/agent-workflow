@@ -34,12 +34,6 @@ eval = [
   "inspect-swe==0.2.66",
 ]
 stats = ["scipy>=1.11,<2"]
-otel = [
-  "opentelemetry-api>=1.30,<2",
-  "opentelemetry-sdk>=1.30,<2",
-  "opentelemetry-exporter-otlp-proto-http>=1.30,<2",
-]
-mlflow = ["mlflow>=3,<4"]
 completion = ["shtab>=1.7,<2"]
 benchmark-visual = ["playwright==1.57.0"]
 mcp = ["mcp==1.28.1"]
