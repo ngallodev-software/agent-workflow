@@ -577,7 +577,7 @@ Host observations never become completion, review, or acceptance authority.
 
 ### Phase 6 — Progressive capability isolation
 
-**Implementation status:** in progress. Exposure isolation was already substantially satisfied by the Phase 2–3 role/skill reductions. Phase 6 has removed unnecessary command-catalog/schema-validation and plugin-registry imports from scoped built-in parser startup, isolated publication/visual benchmark implementations behind on-demand service imports, and deleted dormant OpenTelemetry/MLflow adapters plus their dependency/install surface. Publication/visual tooling remains in-package because extraction showed no additional justified benefit. See `docs/PHASE6_CAPABILITY_ISOLATION.md`.
+**Implementation status:** complete. Exposure isolation was already substantially satisfied by the Phase 2–3 role/skill reductions. Phase 6 removed unnecessary common-path parser/plugin imports, isolated publication/visual benchmark implementations behind on-demand service imports, deleted dormant OpenTelemetry/MLflow adapters and dependency/install surface, confirmed read-only stdio MCP is already isolated behind its optional boundary, canonicalized historical hook installation state, and confined Inspect/SWE-bench/statistics adapters to explicit evaluation operations. No package extraction produced enough additional benefit to justify new packaging/interface complexity. See `docs/PHASE6_CAPABILITY_ISOLATION.md`.
 
 **Goal:** advanced capabilities should impose near-zero cognitive cost when unused.
 

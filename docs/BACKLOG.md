@@ -50,9 +50,9 @@ Implemented in Phase 5. The rebuildable binding projection, idempotent bind/rebi
 
 Implemented in Phase 5. Existing structured prepare/status/context, workflow status, benchmark status, and external-binding outputs were retained; bounded message/ack state, completion/evaluation/review summary, and an explicit restricted provenance view were added. `docs/PUBLIC_JSON_API.md` is the integration contract. Normal role-scoped command profiles remain unchanged.
 
-### CAP-001 — Progressive advanced-capability isolation — IN PROGRESS
+### CAP-001 — Progressive advanced-capability isolation — COMPLETE
 
-Exposure isolation is already substantially satisfied: benchmark/index/MCP/plugin/release administration stays outside normal role profiles and hierarchy guidance is specialized. Phase 6 removed avoidable common-path parser/plugin imports, isolated publication/visual benchmark tooling behind lazy service boundaries, and deleted dormant OpenTelemetry/MLflow adapters and dependency/install surface because no runtime or public path used them. Continue with the next applicable optional-capability candidate; extraction still requires a clean one-way boundary and measurable benefit. See `docs/PHASE6_CAPABILITY_ISOLATION.md`.
+Completed in Phase 6. Common-path parser/plugin imports were reduced; publication/visual benchmark implementation is lazy behind explicit benchmark operations; dormant OpenTelemetry/MLflow adapters and dependency surface were deleted; read-only stdio MCP was confirmed already optional and isolated; hook installation now canonicalizes historical duplicate/stale managed state; and Inspect/SWE-bench/SciPy paths are isolated to explicit evaluation operations. No package extraction was justified by measured runtime, cognitive, or maintenance benefit. See `docs/PHASE6_CAPABILITY_ISOLATION.md`.
 
 ### MCP-003 / HARD-007 — Authenticated, idempotent MCP mutation phase
 

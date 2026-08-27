@@ -115,3 +115,82 @@ Durable Agent Run/evaluation/benchmark evidence remains the source of truth. A f
 
 This reduces package/dependency and maintenance surface without changing lifecycle authority or common-path behavior. No replacement abstraction is introduced.
 
+## Slice 4 — MCP isolation review
+
+The MCP candidate does not justify extraction or further runtime restructuring in 0.9.
+
+The current MCP implementation already has the intended optional boundary:
+
+- `agent-workflow-mcp` is a separate explicit stdio entry point;
+- the MCP SDK is pinned in the optional `mcp` dependency group rather than core dependencies;
+- normal `agent_workflow.cli` import does not load `agent_workflow.mcp`, `agent_workflow.mcp.server`, or the MCP SDK;
+- scoped `delegate` parser construction likewise loads none of the MCP package/SDK;
+- `mcp.server` imports the third-party `FastMCP` implementation only while constructing the explicit MCP server;
+- MCP commands/resources are absent from normal logical-role command profiles;
+- the adapter remains read-only and calls existing durable read/application authorities rather than defining another lifecycle.
+
+A clean `/usr/bin/python3` measurement of scoped `delegate` parser construction at this slice was roughly **3–6 ms / 87 modules**, with no MCP package or SDK modules loaded. Normal `agent_workflow.cli` import was roughly **32–38 ms / 134 modules**, also with no MCP modules loaded.
+
+`MCP-003` mutation is explicitly blocked on authenticated principal/idempotency policy and therefore is not an implemented capability available for Phase 6 extraction. It should be reviewed for isolation only if/when that functionality lands.
+
+The read-only stdio adapter is therefore **reviewed and retained in-place behind its existing optional package/install boundary**. No wrapper or separate package is introduced.
+
+### Overlay delivery rule
+
+Beginning with this checkpoint, cumulative changes-only overlays are self-applying and deletion-aware. The archive contains:
+
+- `files/` — cumulative added/modified files relative to the authoritative verified Phase 3 source;
+- `OVERLAY-DELETIONS.txt` — cumulative explicit deletions;
+- `apply-overlay.sh` — validates the Agent-Workflow repository context, rejects unsafe manifest/source paths and symlink traversal, removes only declared deletion paths, then copies cumulative changed files.
+
+Plain tar extraction is no longer considered sufficient application semantics once deletions exist.
+
+## Slice 5 — hook installation canonicalization
+
+A migration audit found that repeated installation was idempotent only for clean current configurations. Historical duplicate Codex managed blocks, duplicate Claude hook groups, and retired Agent-Workflow-owned hook files could survive indefinitely.
+
+The installer/configurator now treats Agent-Workflow-owned hook state as a canonical projection:
+
+- every historical Codex managed block is collapsed to one current block;
+- Claude commands installed from the Agent-Workflow hook directory are removed across duplicate groups before one canonical set is added;
+- an externally located codebase-memory gate explicitly supplied by the installer is likewise canonicalized;
+- the installed Agent-Workflow hook directory removes retired files only from the bounded set of names owned by Agent-Workflow while preserving unrelated user files;
+- repeated installation therefore converges instead of accumulating historical hook state.
+
+One release-level regression journey covers duplicate migration, repeated installation, stale owned-file removal, and preservation of unrelated hooks/files. This is intentionally one broad journey rather than several narrow invariants.
+
+## Slice 6 — evaluation/analytics optional boundaries
+
+The remaining optional evaluation/analytics review covered Inspect/Inspect-SWE, SWE-bench export, and SciPy-backed comparison statistics.
+
+The third-party dependency boundaries were already mostly correct:
+
+- `inspect-ai` and `inspect-swe` are imported only by `inspect_adapter._load_inspect_api()` when the explicit `eval inspect` path executes;
+- SciPy is imported only inside comparison functions that require non-default statistical confidence/paired-bootstrap behavior;
+- the SWE-bench prediction writer has no third-party dependency;
+- normal `agent_workflow.cli` import loads none of the Inspect, SWE-bench, or SciPy surfaces.
+
+One small eager internal coupling remained: importing the general eval command handler also imported the lightweight Inspect adapter and SWE-bench writer even for unrelated eval commands. Those imports are now local to `eval inspect` and `eval swebench-prediction` respectively.
+
+Using a clean `/usr/bin/python3` process with only a minimal PyYAML stub needed to load the eval handler in the measurement environment, eval-handler import changed from **172 loaded modules** to **169 loaded modules** and no longer loads `agent_workflow.inspect_adapter` or `agent_workflow.integrations.swebench`. Wall time remained in the same roughly **40–47 ms** range, confirming this is boundary cleanup rather than a meaningful startup optimization.
+
+No package extraction is justified:
+
+- Inspect dependencies are already optional under the `eval` extra and loaded only on explicit use;
+- SciPy is already optional under `stats` and loaded only on explicit statistical paths;
+- SWE-bench export is a small deterministic formatter over durable run evidence;
+- none of these capabilities increase the normal role-scoped command surface or common lifecycle import path.
+
+## Phase 6 conclusion
+
+`CAP-001` is complete. The phase produced the following simplification outcomes without moving durable authorities into optional packages:
+
+1. common scoped parser/plugin discovery imports were removed from unused lifecycle paths;
+2. comparative-benchmark publication/visual/review implementations are lazy behind explicit benchmark operations;
+3. dormant OpenTelemetry/MLflow product/dependency surface was deleted rather than wrapped;
+4. read-only stdio MCP was confirmed already isolated behind its optional entry point/dependency boundary;
+5. hook installation now converges to canonical managed state instead of retaining duplicate/stale historical entries;
+6. Inspect/SWE-bench/statistics optional paths are isolated to explicit evaluation operations.
+
+No additional package split has a demonstrated runtime, cognitive, or maintenance benefit at this point. Future capabilities should continue to satisfy the same placement rule as they are introduced rather than keeping Phase 6 open indefinitely.
+
