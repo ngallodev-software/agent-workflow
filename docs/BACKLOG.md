@@ -8,10 +8,6 @@ Priorities are ordered within each section. An identifier retained here may also
 
 Phases 2–4 implementation are complete. `SURFACE-001`, `FLOW-001`, and `PERF-001` were removed after Phase 2 landed the role-scoped command surface, deterministic delegation facade, and common-path startup/context reductions; the facade satisfied the work originally sequenced as Phase 4. `SKILL-001` was removed after the verified Phase 3 primary-skill hardening and behavioral evals landed. Verification remains separate per project policy.
 
-### TEST-001 — Monolithic acceptance-suite teardown reliability
-
-Fix the process/fixture teardown behavior that can leave the full acceptance invocation running after individually passing journeys. The complete acceptance layer must pass and terminate cleanly as one suite for 0.9 closeout.
-
 ## P0 — Release closeout blockers
 
 ### REL-002 — Enable and drill private vulnerability reporting

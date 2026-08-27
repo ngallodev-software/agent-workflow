@@ -604,6 +604,8 @@ Do **not** extract durable lifecycle, messaging, workflow, evidence, evaluation,
 
 ### Phase 7 — Test and execution-efficiency consolidation
 
+**Implementation status:** complete. Comprehensive phase-closeout verification remains a separate pass.
+
 **Goal:** preserve authority coverage while reducing redundant execution cost.
 
 Tasks:
@@ -611,9 +613,13 @@ Tasks:
 1. Keep broad installed-product journeys for common lifecycle semantics.
 2. Keep narrow invariants only for security, durability, replay, schema, path, state-machine, and accounting properties that are cheaper/more deterministic in isolation.
 3. Continue deleting duplicate low-level tests when a stronger journey proves the same behavior.
-4. Fix the acceptance-suite process/fixture teardown issue so the full acceptance layer can run monolithically and exit cleanly, not merely pass when split by file/case.
-5. Track wall time as well as test count in `tests/test-authority.json` or an adjacent machine-readable budget.
-6. Add a regression budget for launch/context generation so agent-facing simplification cannot silently bloat again.
+4. **Completed before Phase 7 implementation:** `TEST-001` was resolved by distinguishing teardown correctness from wall-time budget. Fixture teardown already reaped detached workers quickly, but the monolithic layer took 120.77 seconds and could miss a 120-second outer timeout. Redundant process-heavy acceptance proof was consolidated; targeted verification now passes 17 tests with 1 expected optional-MCP skip in 90.81 seconds inside pytest / 94.16 seconds end-to-end, leaving meaningful timeout margin.
+5. **Completed in Phase 7:** track wall time as well as test count in `tests/test-authority.json`; the default release suite has a machine-enforced 240-second JUnit runtime ceiling in addition to collected-case/function/static-process budgets. This retains substantial margin over the measured authority layers while preventing regression toward the previous process-heavy runtime envelope.
+6. **Completed in Phase 7:** launch-context generation now has per-role byte ceilings in the Phase 0 machine-readable efficiency baseline, enforced by the release-asset audit alongside command-count and role-card budgets.
+7. **Completed in Phase 7:** release distribution verification reuses the exact wheel built by the installed-product session fixture instead of rebuilding the same package solely for archive inspection; the machine budget now permits only one wheel-build site across the permanent test surface.
+8. **Completed in Phase 7:** the remaining release/process boundary was re-measured before adding teardown machinery. The complete 22-case release layer terminates normally (38.27 seconds pytest / about 41.05 seconds wall in the Phase 7 environment), and a combined distribution+installer run terminates normally with 15 passing cases in 35.87 seconds. No persistent child-process or descriptor leak was demonstrated, so no speculative teardown wrapper was added.
+9. **Completed in Phase 7:** the permanent subprocess-call budget is tightened from 64 to 56 against the measured 51 call sites, leaving bounded maintenance headroom without allowing silent process-heavy test growth.
+10. **Completed in Phase 7 closeout:** the authoritative release harness disables third-party pytest plugin autoload. Controlled reruns showed the full acceptance layer passing 17 tests with 1 expected optional-MCP skip in 74.65 seconds (76.70 seconds wall), while ambient globally installed plugins could cause post-summary lingers unrelated to Agent-Workflow. With plugin isolation, the full 223-test repository authority passed with 1 expected skip in 112.59 seconds and the complete release gate finished in 132.58 seconds wall.
 
 Current test-count reduction is not itself a goal. **Unique authority coverage per unit of test/runtime cost** is the goal.
 
