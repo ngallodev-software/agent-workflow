@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -204,3 +206,119 @@ def test_release_workflow_is_tag_only_and_bundle_builder_is_reproducible(tmp_pat
     assert f"agent-workflow-{CURRENT_VERSION}-macos/agent_workflow-{CURRENT_VERSION}-py3-none-any.whl" in names
     forbidden = ("Jenkinsfile", "jenkins-local-job", "/.github/", ".github/workflows")
     assert not any(any(token in name for token in forbidden) for name in names)
+
+def test_source_installer_canonicalizes_owned_hooks_on_reinstall(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    codex = home / ".codex"
+    claude = home / ".claude"
+    codex.mkdir(parents=True)
+    claude.mkdir(parents=True)
+    hooks_dir = home / ".local" / "share" / "agent-workflow" / "hooks"
+    hooks_dir.mkdir(parents=True)
+
+    owned = str(hooks_dir / "agent-workflow-run-reminder")
+    unrelated = "/usr/local/bin/user-session-hook"
+    codex_config = codex / "config.toml"
+    duplicate_block = (
+        "# agent-workflow managed reminder hooks\n"
+        "[[hooks.SessionStart]]\n"
+        "[[hooks.SessionStart.hooks]]\n"
+        'type = "command"\n'
+        f'command = "{owned}"\n'
+        "# end agent-workflow managed reminder hooks\n"
+    )
+    codex_config.write_text(
+        'user_setting = "keep"\n\n'
+        + duplicate_block
+        + "\n"
+        + duplicate_block,
+        encoding="utf-8",
+    )
+
+    claude_settings = claude / "settings.json"
+    claude_settings.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "SessionStart": [
+                        {"hooks": [{"type": "command", "command": owned}]},
+                        {
+                            "hooks": [
+                                {"type": "command", "command": owned},
+                                {"type": "command", "command": unrelated},
+                            ]
+                        },
+                    ]
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    stale = hooks_dir / "obsolete-agent-workflow-hook"
+    stale.write_text("#!/bin/sh\n", encoding="utf-8")
+    # This name represents a formerly managed hook name; the source fixture
+    # deliberately removes it so sync must delete the installed copy.
+    stale_owned = hooks_dir / "codex-code-discovery-gate"
+    stale_owned.write_text("#!/bin/sh\n", encoding="utf-8")
+
+    fake_modules = tmp_path / "fake-modules"
+    fake_modules.mkdir()
+    (fake_modules / "jsonschema.py").write_text("", encoding="utf-8")
+    (fake_modules / "yaml.py").write_text("", encoding="utf-8")
+
+    # Use a copied source whose managed hook set no longer contains the gate,
+    # simulating migration after a hook asset is retired.
+    source = tmp_path / "source"
+    shutil.copytree(REPO_ROOT, source, symlinks=True)
+    (source / "scripts" / "hooks" / "codex-code-discovery-gate").unlink()
+
+    env = os.environ.copy()
+    env.update(
+        {
+            "HOME": str(home),
+            "CODEX_HOME": str(codex),
+            "CLAUDE_CONFIG_DIR": str(claude),
+            "XDG_CONFIG_HOME": str(home / ".config"),
+            "XDG_DATA_HOME": str(home / ".local/share"),
+            "PYTHONPATH": str(fake_modules),
+        }
+    )
+    command = [
+        "bash",
+        "scripts/install-source.sh",
+        "--no-deps",
+        "--no-skills",
+        "--no-mcp-register",
+        "--python",
+        sys.executable,
+    ]
+    for _ in range(2):
+        result = subprocess.run(
+            command,
+            cwd=source,
+            env=env,
+            text=True,
+            capture_output=True,
+            timeout=30,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+
+    codex_text = codex_config.read_text(encoding="utf-8")
+    assert codex_text.count("# agent-workflow managed reminder hooks") == 1
+    assert codex_text.count("# end agent-workflow managed reminder hooks") == 1
+    assert 'user_setting = "keep"' in codex_text
+
+    claude_data = json.loads(claude_settings.read_text(encoding="utf-8"))
+    commands = [
+        entry["command"]
+        for group in claude_data["hooks"]["SessionStart"]
+        for entry in group.get("hooks", [])
+        if isinstance(entry, dict) and "command" in entry
+    ]
+    assert commands.count(str(hooks_dir / "agent-workflow-run-reminder")) == 1
+    assert commands.count(str(hooks_dir / "rtk-session-reminder")) == 1
+    assert commands.count(str(hooks_dir / "codebase-memory-session-reminder")) == 1
+    assert commands.count(unrelated) == 1
+    assert not stale_owned.exists()
+    assert stale.exists()
+

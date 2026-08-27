@@ -483,12 +483,14 @@ Tasks:
 
 ### Phase 3 — Make the primary skill the default product interface
 
+**Implementation status:** complete and verified. The primary skill is the lifecycle authority, specialized skills compose with it, executable examples are parser-validated, and deterministic behavioral skill evals cover the required decision/correctness boundaries.
+
 **Goal:** an agent can make the right decision without repository-specific tribal knowledge.
 
 Tasks:
 
 1. Complete `SKILL-001` with a concise use/do-not-use decision section.
-2. Make the normal flow start with the high-level delegation facade once Phase 4 lands.
+2. Make the normal flow start with the high-level delegation facade already landed during Phase 2.
 3. Keep specialized skills thin and explicitly compositional.
 4. Remove duplicated lifecycle prose from specialized skills where the primary skill is authoritative.
 5. Generate/check command examples against the live parser during release validation.
@@ -505,6 +507,8 @@ Tasks:
 **Constraint:** skill hardening must not materially increase normal prompt/context load. Prefer generated runtime context to prose duplication.
 
 ### Phase 4 — Add the deterministic fast path
+
+**Implementation status:** satisfied early during Phase 2. Repository reconciliation in Phase 4 confirmed that the existing `agent-workflow delegate` facade already meets the required fast-path contract, so no second facade, lifecycle authority, or additional common-path mechanism should be added. The optional dry-run/plan capability remains intentionally absent because no demonstrated operator-control gap requires it.
 
 **Goal:** reduce common delegation from several model decisions to one deterministic composition.
 
@@ -538,6 +542,8 @@ agent-workflow delegate --worker-mode external ...
 
 ### Phase 5 — Stabilize public JSON and external Worker contracts
 
+**Implementation status:** complete. `BIND-001` and `API-001` are implemented as host-neutral public CLI contracts over existing durable authorities. External binding/delivery remains rebuildable operational state, while Agent Run prepare/status/context, bounded message/ack state, completion/evaluation/review summary, restricted provenance, workflow status, and optional benchmark status have documented structured JSON surfaces. Integration/operator commands are not added to normal role command profiles.
+
 **Goal:** skills/plugins should not import private Python modules or scrape prose.
 
 Complete `API-001` and `BIND-001` together.
@@ -570,6 +576,8 @@ last_observed_at
 Host observations never become completion, review, or acceptance authority.
 
 ### Phase 6 — Progressive capability isolation
+
+**Implementation status:** complete. Exposure isolation was already substantially satisfied by the Phase 2–3 role/skill reductions. Phase 6 removed unnecessary common-path parser/plugin imports, isolated publication/visual benchmark implementations behind on-demand service imports, deleted dormant OpenTelemetry/MLflow adapters and dependency/install surface, confirmed read-only stdio MCP is already isolated behind its optional boundary, canonicalized historical hook installation state, and confined Inspect/SWE-bench/statistics adapters to explicit evaluation operations. No package extraction produced enough additional benefit to justify new packaging/interface complexity. See `docs/PHASE6_CAPABILITY_ISOLATION.md`.
 
 **Goal:** advanced capabilities should impose near-zero cognitive cost when unused.
 

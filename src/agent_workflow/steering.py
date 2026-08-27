@@ -24,7 +24,7 @@ STEERING_INBOX_ENV = "AGENT_WORKFLOW_STEERING_INBOX"
 STEERING_JOURNAL_NAME = "steering-delivery.jsonl"
 STEERING_SCHEMA = "agent-workflow/steering-delivery/v1"
 STEERING_REQUEST_SCHEMA = "agent-workflow/steering-request/v1"
-SUPPORTED_ADAPTERS = frozenset({"unsupported", "control-file-v1"})
+SUPPORTED_ADAPTERS = frozenset({"unsupported", "control-file-v1", "external-host-v1"})
 ACK_TERMINAL_OUTCOMES = frozenset({"applied", "rejected", "expired"})
 DELIVERY_STOP_OUTCOMES = frozenset({
     *ACK_TERMINAL_OUTCOMES, "unsupported", "failed",
@@ -64,6 +64,10 @@ def _policy(launch: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(attempts, int) or isinstance(attempts, bool) or attempts < 1:
         attempts = DEFAULT_MAX_ATTEMPTS
     worker_plan = launch.get("worker_plan")
+    if isinstance(worker_plan, dict) and worker_plan.get("mode") == "external":
+        # External workers are delivered to by a host through the public
+        # binding/delivery contract, not by the core process adapter.
+        adapter = "external-host-v1"
     argv = worker_plan.get("argv") if isinstance(worker_plan, dict) else None
     executable = argv[0] if isinstance(argv, list) and argv and isinstance(argv[0], str) else None
     return {
@@ -340,6 +344,83 @@ def deliver_pending(run_dir: Path, *, active: bool) -> list[dict[str, Any]]:
             ))
     return results
 
+
+
+def pending_external_deliveries(run_dir: Path) -> list[dict[str, Any]]:
+    """Return durable parent-to-child requests awaiting an external host.
+
+    This is a read-only adapter view over the authoritative message log and
+    delivery journal. Fetching a request is not delivery and never
+    acknowledges or applies it.
+    """
+    launch = read_agent_run_contract(run_dir / "agent-run-contract.json")
+    policy = _policy(launch)
+    if policy["adapter"] != "external-host-v1":
+        raise WorkflowError("external delivery requires worker_mode=external")
+    events = replay_delivery_events(run_dir)
+    current_by_id: dict[str, dict[str, Any]] = {}
+    for event in events:
+        current_by_id[str(event["correlation_id"])] = event
+    pending: list[dict[str, Any]] = []
+    for message in replay_messages(run_dir):
+        if message.get("direction") != "parent_to_child":
+            continue
+        correlation_id = str(message["message_id"])
+        current = current_by_id.get(correlation_id)
+        if current is not None and current["outcome"] != "queued":
+            continue
+        pending.append({
+            "message": message,
+            "message_sha256": message_digest(message),
+            "delivery": current,
+        })
+    return pending
+
+
+def record_external_delivery(
+    run_dir: Path,
+    *,
+    correlation_id: str,
+    outcome: str,
+    attempt: int,
+    reason: str,
+) -> dict[str, Any]:
+    """Record one host delivery result without creating acknowledgement.
+
+    ``delivered`` means only that the external host reports successful
+    transport. ``failed`` records a terminal transport failure for this
+    request. Application/rejection remains the separate acknowledgement path.
+    """
+    if outcome not in {"delivered", "failed"}:
+        raise WorkflowError("external delivery outcome must be delivered or failed")
+    if not isinstance(attempt, int) or isinstance(attempt, bool) or attempt < 1:
+        raise WorkflowError("external delivery attempt must be >= 1")
+    if not isinstance(reason, str) or not reason.strip():
+        raise WorkflowError("external delivery reason must be non-empty")
+    launch = read_agent_run_contract(run_dir / "agent-run-contract.json")
+    policy = _policy(launch)
+    if policy["adapter"] != "external-host-v1":
+        raise WorkflowError("external delivery requires worker_mode=external")
+    message = next(
+        (item for item in replay_messages(run_dir) if item.get("message_id") == correlation_id),
+        None,
+    )
+    if message is None or message.get("direction") != "parent_to_child":
+        raise WorkflowError("external delivery must reference a durable parent-to-child message")
+    current = current_delivery(run_dir, correlation_id)
+    if current is not None and current["outcome"] in ACK_TERMINAL_OUTCOMES:
+        return current
+    return append_delivery_event(
+        run_dir,
+        agent_run_id=str(launch["agent_run"]["id"]),
+        correlation_id=correlation_id,
+        message_sha256=message_digest(message),
+        adapter="external-host-v1",
+        outcome=outcome,
+        attempt=attempt,
+        reason=reason.strip(),
+        executor=None,
+    )
 
 def record_acknowledgement(
     run_dir: Path,

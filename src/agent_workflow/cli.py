@@ -11,7 +11,6 @@ from .cli_runtime import bootstrap_plugins, parse_args, plugins_required_for_com
 from .cli_output import print_json as _print_json
 from .cli_output import print_mapping as _print_mapping
 from .errors import WorkflowError
-from .plugin_api import PluginExecutionContext
 
 
 
@@ -33,6 +32,8 @@ def main(argv: list[str] | None = None) -> int:
         data: Any
 
         if hasattr(args, "_plugin_execute"):
+            from .plugin_api import PluginExecutionContext
+
             data = args._plugin_execute(
                 args,
                 PluginExecutionContext(

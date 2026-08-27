@@ -80,7 +80,7 @@ PYTHON_PATH="$(command -v "$PYTHON_BIN")"
 "$PYTHON_BIN" -c 'import sys; sys.exit("agent-workflow requires Python 3.11+") if sys.version_info < (3,11) else None'
 PYTHON_IN_VENV="$("$PYTHON_BIN" -c 'import sys; print("1" if sys.prefix != sys.base_prefix else "0")')"
 if [[ "$EXTRAS" == "all" ]]; then
-  EXTRAS="eval,stats,otel,mlflow,completion,mcp"
+  EXTRAS="eval,stats,completion,mcp"
 fi
 if [[ ",$EXTRAS," == *,mcp,* ]]; then
   MCP_CONFIG_REQUESTED=1
@@ -344,8 +344,27 @@ sync_tree "$ROOT/schemas" "$APP_DATA_DIR/schemas"
 sync_tree "$ROOT/evals" "$APP_DATA_DIR/evals"
 sync_tree "$ROOT/prompt-packs" "$APP_DATA_DIR/prompt-packs"
 sync_tree "$ROOT/docs/man" "$MAN_DIR"
+sync_owned_hook_tree() {
+  local source="$1" destination="$2" path relative
+  mkdir -p "$destination"
+
+  # Remove only files previously owned by Agent-Workflow's hook bundle.
+  # Preserve unrelated user files that happen to live in the same directory.
+  while IFS= read -r -d '' path; do
+    relative="${path#"$destination"/}"
+    case "$relative" in
+      agent-workflow-run-reminder|rtk-session-reminder|codebase-memory-session-reminder|codex-code-discovery-gate|README.md)
+        if [[ ! -f "$source/$relative" ]]; then
+          rm -f "$path"
+        fi
+        ;;
+    esac
+  done < <(find "$destination" -maxdepth 1 -type f -print0)
+
+  sync_tree "$source" "$destination"
+}
 if [[ $INSTALL_HOOKS -eq 1 ]]; then
-  sync_tree "$ROOT/scripts/hooks" "$HOOKS_DATA_DIR"
+  sync_owned_hook_tree "$ROOT/scripts/hooks" "$HOOKS_DATA_DIR"
   CBM_GATE=""
   if [[ -x "$HOME/.codex/hooks/cbm-code-discovery-gate" ]]; then
     CBM_GATE="$HOME/.codex/hooks/cbm-code-discovery-gate"

@@ -6,7 +6,7 @@ Priorities are ordered within each section. An identifier retained here may also
 
 ## P0 — 0.9 skill-first simplification
 
-Phase 2 implementation is complete. `SURFACE-001`, `FLOW-001`, and `PERF-001` were removed from this unfinished-work register after landing the role-scoped command surface, deterministic delegation facade, and common-path startup/context reductions. Verification remains separate per project policy.
+Phases 2–4 implementation are complete. `SURFACE-001`, `FLOW-001`, and `PERF-001` were removed after Phase 2 landed the role-scoped command surface, deterministic delegation facade, and common-path startup/context reductions; the facade satisfied the work originally sequenced as Phase 4. `SKILL-001` was removed after the verified Phase 3 primary-skill hardening and behavioral evals landed. Verification remains separate per project policy.
 
 ### TEST-001 — Monolithic acceptance-suite teardown reliability
 
@@ -42,27 +42,17 @@ Produce the content-addressed browser image/runtime digest and verified font evi
 
 ## P1 — Public integration contracts
 
-### SKILL-001 — Harden the primary Agent-Workflow skill
+### BIND-001 — Host-neutral external Worker binding/reconciliation contract — COMPLETE
 
-Make `skills/agent-workflow/SKILL.md` sufficient to operate the current lifecycle without repository-specific tribal knowledge, following the concise skill-first boundary in `SKILL_FIRST_SIMPLIFICATION_PLAN.md`. Cover when to use/not use AW, headless versus external workers, Workflow/Task/Agent Run/Worker identity, worktree authority, steer/progress/ack, completion/evaluation/review/acceptance separation, restart lineage, evidence inspection, prompt packs, benchmarks, and recovery.
+Implemented in Phase 5. The rebuildable binding projection, idempotent bind/rebind/unbind semantics, generation-guarded pending-delivery retrieval, and transport-attempt reporting are host-neutral and preserve the delivery/acknowledgement boundary. The paired API review found no need for host-specific binding fields.
 
-Specialized skills should reference the primary lifecycle authority rather than duplicate it. Add deterministic skill evals proving that an agent does not invoke a terminal manager, conflate delivery with acknowledgement, accept work on worker exit alone, or lose provenance when selecting external mode.
+### API-001 — Stable structured public JSON contracts — COMPLETE
 
-### BIND-001 — Host-neutral external Worker binding/reconciliation contract
+Implemented in Phase 5. Existing structured prepare/status/context, workflow status, benchmark status, and external-binding outputs were retained; bounded message/ack state, completion/evaluation/review summary, and an explicit restricted provenance view were added. `docs/PUBLIC_JSON_API.md` is the integration contract. Normal role-scoped command profiles remain unchanged.
 
-Define a rebuildable external-worker binding projection and idempotent bind/rebind/unbind semantics. At minimum it needs Agent Run/Worker identity, opaque external runtime/worker identity, generation, binding time, and last observation time.
+### CAP-001 — Progressive advanced-capability isolation — COMPLETE
 
-External observations must remain operational projection data: host state cannot become completion or acceptance authority. Define a delivery-adapter boundary that can fetch pending durable messages and report delivery attempts without auto-acknowledging them.
-
-The contract must be implementable by more than one hypothetical host without schema changes.
-
-### API-001 — Stable structured public JSON contracts
-
-Review public structured output for Agent Run prepare/status, pending messages, review/evaluation summary, workflow status, benchmark status, worktree/provenance, and external bindings. Add stable documented JSON contracts where current CLI output is insufficient so integrations do not need private Python imports.
-
-### CAP-001 — Progressive advanced-capability isolation
-
-Keep benchmark publication machinery, index administration, MCP/plugin maintenance, release-evidence internals, hierarchy details, and telemetry integrations out of the normal skill/command profile unless requested. Measure import/startup/package cost before extracting code into separate packages; extraction is justified only by a clean one-way boundary and measurable benefit, not file-count aesthetics.
+Completed in Phase 6. Common-path parser/plugin imports were reduced; publication/visual benchmark implementation is lazy behind explicit benchmark operations; dormant OpenTelemetry/MLflow adapters and dependency surface were deleted; read-only stdio MCP was confirmed already optional and isolated; hook installation now canonicalizes historical duplicate/stale managed state; and Inspect/SWE-bench/SciPy paths are isolated to explicit evaluation operations. No package extraction was justified by measured runtime, cognitive, or maintenance benefit. See `docs/PHASE6_CAPABILITY_ISOLATION.md`.
 
 ### MCP-003 / HARD-007 — Authenticated, idempotent MCP mutation phase
 

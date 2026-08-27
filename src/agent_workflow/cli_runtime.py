@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any
 
 from .config import defaults, load_settings
-from .plugins import EMPTY_PLUGIN_REGISTRY, PluginRegistry, load_plugin_registry
 
 
 def parse_args(
@@ -106,7 +105,7 @@ def bootstrap_plugins(
     argv: list[str] | None,
     *,
     load_plugins: bool = True,
-) -> tuple[Any, PluginRegistry]:
+) -> tuple[Any, Any]:
     """Load settings and, when requested, the enabled plugin registry for one CLI run."""
     raw = list(sys.argv[1:] if argv is None else argv)
     if "--" in raw:
@@ -118,10 +117,12 @@ def bootstrap_plugins(
     # Version reporting must remain available even when local configuration or
     # a plugin is broken. All other commands honor configured strict loading.
     if "--version" in raw:
-        return defaults(known.config), EMPTY_PLUGIN_REGISTRY
+        return defaults(known.config), None
     settings = load_settings(known.config)
     if not load_plugins:
-        return settings, EMPTY_PLUGIN_REGISTRY
+        return settings, None
+    from .plugins import load_plugin_registry
+
     return settings, load_plugin_registry(
         settings.plugins_enabled,
         suppress=known.no_plugins,

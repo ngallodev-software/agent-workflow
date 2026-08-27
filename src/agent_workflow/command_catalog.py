@@ -12,13 +12,13 @@ from typing import Any, Iterable
 from . import __version__
 from .contracts import validate_instance
 from .errors import WorkflowError
+from .cli_contract import COMMAND_PROFILES
 from .path import read_regular_file
 from .util import atomic_write_bytes
 
 COMMAND_CATALOG_SCHEMA = "agent-workflow/command-catalog/v1"
 COMMAND_CATALOG_FILENAME = "command-catalog.json"
 COMMAND_CARD_FILENAME = "command-card.md"
-COMMAND_PROFILES = ("orchestrator", "implementation", "review")
 # Backward-compatible parser/export name. Command profiles are not logical AgentRole IDs.
 COMMAND_ROLES = COMMAND_PROFILES
 

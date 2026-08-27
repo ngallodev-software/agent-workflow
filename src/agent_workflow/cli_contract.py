@@ -34,6 +34,11 @@ BUILTIN_TOP_LEVEL_COMMANDS = frozenset(
 CORE_COMMANDS = frozenset({"commands", "plugins", "doctor", "completion", "config"})
 REPORTING_COMMANDS = frozenset({"assess-sealed-runs", "ledger"})
 
+# Role-scoped command-profile names are parser/catalog metadata, not capability code.
+# Keep them here so scoped parser construction does not import command_catalog and
+# its schema-validation dependencies on every built-in CLI invocation.
+COMMAND_PROFILES = ("orchestrator", "implementation", "review")
+
 EVALUATION_TEMPLATE_KINDS = (
     "evaluation-plan",
     "benchmark-manifest",

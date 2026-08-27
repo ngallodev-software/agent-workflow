@@ -25,7 +25,7 @@ python -m build
 python -m pip install dist/agent_workflow-*.whl
 ```
 
-Optional feature groups are declared in `pyproject.toml` for evaluation, statistics, OpenTelemetry, MLflow, completion generation, benchmark visuals, and MCP.
+Optional feature groups are declared in `pyproject.toml` for evaluation, statistics, completion generation, benchmark visuals, and MCP.
 
 ## Configuration
 

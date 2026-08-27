@@ -97,46 +97,6 @@
       ]
     },
     {
-      "name": "opentelemetry-api",
-      "version": "1.42.1",
-      "groups": [
-        "otel"
-      ],
-      "source_requirements": [
-        "opentelemetry-api>=1.30,<2"
-      ]
-    },
-    {
-      "name": "opentelemetry-sdk",
-      "version": "1.42.1",
-      "groups": [
-        "otel"
-      ],
-      "source_requirements": [
-        "opentelemetry-sdk>=1.30,<2"
-      ]
-    },
-    {
-      "name": "opentelemetry-exporter-otlp-proto-http",
-      "version": "1.42.1",
-      "groups": [
-        "otel"
-      ],
-      "source_requirements": [
-        "opentelemetry-exporter-otlp-proto-http>=1.30,<2"
-      ]
-    },
-    {
-      "name": "mlflow",
-      "version": "3.0.0",
-      "groups": [
-        "mlflow"
-      ],
-      "source_requirements": [
-        "mlflow>=3,<4"
-      ]
-    },
-    {
       "name": "shtab",
       "version": "1.7.2",
       "groups": [

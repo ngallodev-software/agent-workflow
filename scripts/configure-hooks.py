@@ -84,28 +84,85 @@ def render_codex_hooks(hooks_dir: Path, cbm_gate: str) -> str:
 
 def configure_codex(path: Path, hooks_dir: Path, cbm_gate: str) -> None:
     regular_file(path, "Codex hooks")
-    marker = "# agent-workflow managed reminder hooks"
+    begin = "# agent-workflow managed reminder hooks"
+    end = "# end agent-workflow managed reminder hooks"
     existing = path.read_text(encoding="utf-8") if path.exists() else ""
     managed = render_codex_hooks(hooks_dir, cbm_gate)
-    if marker in existing:
-        prefix = existing[: existing.index(marker)].rstrip()
-        end_marker = "# end agent-workflow managed reminder hooks"
-        if end_marker in existing:
-            suffix = existing[existing.index(end_marker) + len(end_marker) :].lstrip()
-            content = "\n\n".join(part for part in (prefix, managed, suffix) if part)
+
+    # Collapse every historical Agent-Workflow managed block to one canonical
+    # block. Older releases could leave a terminal block without an end marker.
+    kept: list[str] = []
+    remaining = existing
+    while begin in remaining:
+        prefix, remainder = remaining.split(begin, 1)
+        kept.append(prefix.rstrip())
+        if end in remainder:
+            _owned, remaining = remainder.split(end, 1)
+            remaining = remaining.lstrip()
         else:
-            # Older releases appended the managed block without an end marker;
-            # that block was always terminal, so replace it during migration.
-            content = "\n\n".join(part for part in (prefix, managed) if part)
-    else:
-        separator = "\n" if existing and not existing.endswith("\n\n") else ""
-        content = existing + separator + managed
+            # A legacy unterminated managed block was terminal by contract.
+            remaining = ""
+            break
+    kept.append(remaining.strip())
+    content = "\n\n".join(part for part in [*kept, managed] if part).strip()
+
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content + ("\n" if not content.endswith("\n") else ""), encoding="utf-8")
+    path.write_text(content + ("\n" if content else ""), encoding="utf-8")
     print(f"configured agent-workflow Codex hooks: {path}")
 
+def _owned_hook_command(command: object, hooks_dir: Path) -> bool:
+    if not isinstance(command, str) or not command:
+        return False
+    try:
+        first = shlex.split(command)[0]
+    except (ValueError, IndexError):
+        return False
+    try:
+        Path(first).resolve().relative_to(hooks_dir.resolve())
+    except (OSError, ValueError):
+        return False
+    return True
 
-def add_claude_hook(hooks: dict[str, object], event: str, command: str, matcher: str | None = None) -> None:
+
+def _strip_owned_claude_hooks(
+    hooks: dict[str, object], hooks_dir: Path, extra_owned: tuple[str, ...] = ()
+) -> None:
+    for event, groups in list(hooks.items()):
+        if not isinstance(groups, list):
+            continue
+        retained_groups: list[object] = []
+        for group in groups:
+            if not isinstance(group, dict):
+                retained_groups.append(group)
+                continue
+            entries = group.get("hooks")
+            if not isinstance(entries, list):
+                retained_groups.append(group)
+                continue
+            retained = [
+                entry
+                for entry in entries
+                if not (
+                    isinstance(entry, dict)
+                    and (
+                        _owned_hook_command(entry.get("command"), hooks_dir)
+                        or entry.get("command") in extra_owned
+                    )
+                )
+            ]
+            if retained:
+                updated = dict(group)
+                updated["hooks"] = retained
+                retained_groups.append(updated)
+        hooks[event] = retained_groups
+
+
+def add_claude_hook(
+    hooks: dict[str, object],
+    event: str,
+    command: str,
+    matcher: str | None = None,
+) -> None:
     groups = hooks.setdefault(event, [])
     if not isinstance(groups, list):
         raise SystemExit(f"Claude hooks.{event} is not an array")
@@ -121,8 +178,7 @@ def add_claude_hook(hooks: dict[str, object], event: str, command: str, matcher:
     entries = group.setdefault("hooks", [])
     if not isinstance(entries, list):
         raise SystemExit(f"Claude hooks.{event}.hooks is not an array")
-    if not any(isinstance(item, dict) and item.get("command") == command for item in entries):
-        entries.append({"type": "command", "command": command})
+    entries.append({"type": "command", "command": command})
 
 
 def configure_claude(path: Path, hooks_dir: Path, cbm_gate: str) -> None:
@@ -139,6 +195,15 @@ def configure_claude(path: Path, hooks_dir: Path, cbm_gate: str) -> None:
     hooks = data.setdefault("hooks", {})
     if not isinstance(hooks, dict):
         raise SystemExit(f"refusing to configure Claude hooks: hooks is not an object: {path}")
+
+    # Remove every hook command previously installed from our managed hook
+    # directory, regardless of duplicate event/matcher grouping, then add one
+    # canonical set. Unrelated user hooks are preserved.
+    _strip_owned_claude_hooks(
+        hooks,
+        hooks_dir,
+        (cbm_gate,) if cbm_gate else (),
+    )
     add_claude_hook(hooks, "SessionStart", str(hooks_dir / "agent-workflow-run-reminder"))
     add_claude_hook(hooks, "SessionStart", str(hooks_dir / "rtk-session-reminder"))
     add_claude_hook(hooks, "SessionStart", str(hooks_dir / "codebase-memory-session-reminder"))
@@ -146,7 +211,6 @@ def configure_claude(path: Path, hooks_dir: Path, cbm_gate: str) -> None:
         add_claude_hook(hooks, "PreToolUse", cbm_gate, "Read|Grep|Glob")
     atomic_json(path, data)
     print(f"configured agent-workflow Claude hooks: {path}")
-
 
 def main() -> int:
     parser = argparse.ArgumentParser()

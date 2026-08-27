@@ -25,9 +25,6 @@ from ..eval.templating import (
     write_template,
 )
 from ..eval.trials import collect_trials, load_trials
-from ..inspect_adapter import build_task as build_inspect_task
-from ..inspect_adapter import run_inspect
-from ..integrations.swebench import write_prediction
 from ..manifests import validate_pack
 from ..receipts import verify_seal_details
 from ..state import runs_root
@@ -202,6 +199,9 @@ def handle_eval_command(
         return None, True
 
     if args.eval_command == "inspect":
+        from ..inspect_adapter import build_task as build_inspect_task
+        from ..inspect_adapter import run_inspect
+
         prompt_path = expand_path(args.prompt)
         if not prompt_path.is_file():
             raise WorkflowError(f"prompt not found: {prompt_path}")
@@ -220,6 +220,8 @@ def handle_eval_command(
         }, False
 
     if args.eval_command == "swebench-prediction":
+        from ..integrations.swebench import write_prediction
+
         evaluation_run = _resolve_run(settings, args.run)
         _receipt, receipt_digest = verify_seal_details(evaluation_run)
         output = write_prediction(
