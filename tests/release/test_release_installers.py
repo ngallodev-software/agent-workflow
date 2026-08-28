@@ -160,8 +160,11 @@ def test_source_installer_migrates_codex_mcp_duplicates(tmp_path: Path) -> None:
 
 def test_deployment_jenkins_install_skips_harness_mutations() -> None:
     jenkinsfile = (REPO_ROOT / "Jenkinsfile").read_text(encoding="utf-8")
-    deployment = jenkinsfile.split('stage(\'Host install\')', 1)[1]
+    deployment = jenkinsfile.split('stage(\'Install built wheel\')', 1)[1]
     assert "--no-mcp-register --no-hooks --no-skills" in deployment
+    assert 'install_python="$VENV/bin/python"' in deployment
+    assert "sudo" not in deployment
+    assert '"$WORKSPACE/install.sh"' in deployment
 
 
 def test_release_workflow_is_tag_only_and_bundle_builder_is_reproducible(tmp_path: Path) -> None:
@@ -321,4 +324,3 @@ def test_source_installer_canonicalizes_owned_hooks_on_reinstall(tmp_path: Path)
     assert commands.count(unrelated) == 1
     assert not stale_owned.exists()
     assert stale.exists()
-

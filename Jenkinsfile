@@ -61,18 +61,13 @@ pipeline {
                 '''
             }
         }
-        stage('Host install') {
+        stage('Install built wheel') {
             steps {
                 sh '''
                     set -eu
-                    target_user="${AGENT_WORKFLOW_HOST_INSTALL_USER:-}"
-                    if [ -z "$target_user" ]; then
-                        echo 'AGENT_WORKFLOW_HOST_INSTALL_USER must name the host account to update' >&2
-                        exit 2
-                    fi
-                    host_python="${AGENT_WORKFLOW_HOST_PYTHON:-/usr/bin/python3}"
-                    test -x "$host_python" || {
-                        echo "host Python interpreter is not executable: $host_python" >&2
+                    install_python="$VENV/bin/python"
+                    test -x "$install_python" || {
+                        echo "Jenkins install interpreter is missing: $install_python" >&2
                         exit 2
                     }
                     wheel="$(find "$WORKSPACE/dist" -maxdepth 1 -type f -name 'agent_workflow-*.whl' -print -quit)"
@@ -80,27 +75,15 @@ pipeline {
                         echo 'built agent-workflow wheel is missing' >&2
                         exit 2
                     }
-                    install_root="${AGENT_WORKFLOW_HOST_INSTALL_ROOT:-/lump/apps/agent-workflow}"
-                    test -x "$install_root/install.sh" || {
-                        echo "host install root is invalid: $install_root" >&2
+                    test -x "$WORKSPACE/install.sh" || {
+                        echo "workspace install root is invalid: $WORKSPACE" >&2
                         exit 2
                     }
-                    run_as_target() {
-                        if [ "$(id -un)" = "$target_user" ]; then
-                            "$@"
-                            return
-                        fi
-                        command -v sudo >/dev/null || {
-                            echo 'sudo is required when Jenkins deploys to another host account' >&2
-                            exit 2
-                        }
-                        sudo -n -u "$target_user" -H "$@"
-                    }
-                    run_as_target env AGENT_WORKFLOW_INSTALL_PYTHON="$host_python" \
-                        "$install_root/install.sh" --wheel "$wheel" --extras mcp \
+                    AGENT_WORKFLOW_INSTALL_PYTHON="$install_python" \
+                        "$WORKSPACE/install.sh" --wheel "$wheel" --extras mcp \
                         --no-mcp-register --no-hooks --no-skills
                     expected_version="$(tr -d '\n' < VERSION)"
-                    installed_version="$(run_as_target "$host_python" -c \
+                    installed_version="$("$install_python" -c \
                         'from importlib.metadata import version; print(version("agent-workflow"))')"
                     test "$installed_version" = "$expected_version" || {
                         echo "installed agent-workflow version $installed_version != $expected_version" >&2
