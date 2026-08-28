@@ -9,6 +9,7 @@ if [[ -f "$root/.git" ]]; then
   repo_url="$(dirname "$common_dir")"
 fi
 jenkins_home="${JENKINS_HOME:-/var/lib/jenkins}"
+jenkins_url="${JENKINS_URL:-http://127.0.0.1:8080}"
 job_dir="$jenkins_home/jobs/$job_name"
 config="$job_dir/config.xml"
 case "${1:-}" in
@@ -19,7 +20,7 @@ case "${1:-}" in
       "$root/scripts/jenkins-local-job.xml" > "$tmp"
     mv "$tmp" "$config"
     echo "configured $job_name at $config"
-    echo "Reload Jenkins, then inspect: $JENKINS_URL/job/$job_name/"
+    echo "Reload Jenkins, then inspect: $jenkins_url/job/$job_name/"
     ;;
   inspect)
     test -r "$config"
