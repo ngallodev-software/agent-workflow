@@ -278,3 +278,105 @@ completion/review/acceptance claim.
   and the missing external start transition.
 - No source changes, test changes, package installation, deployment, external
   worker launch, or lifecycle-state mutation was performed by this diagnosis.
+
+## Addendum: prompt-pack delegation retry (2026-08-29)
+
+### What was attempted
+
+The valid `osint-suite-repo-simplification-20260829` prompt pack was retried
+at its dependency-free `TASK-001`, using its recorded Agent Run
+`specgen-e77d7d5fc8268e78` and source revision
+`af7cd1ce6c79b0017fa3c14554807716e9e53feb`.
+
+The ordinary facade invocation, which defaults to headless mode, failed before
+launch with:
+
+```text
+error: delegate stage 'existing-run-validation' failed: agent run ID already
+exists with different immutable inputs: worker_mode
+```
+
+The documented external form reused the existing run successfully:
+
+```text
+worker_mode: external
+state: prepared
+reused_existing_run: True
+worktree_created: False
+```
+
+However, it returned only prose next actions, not an executable launch command.
+The actual contract was discoverable only by separately inspecting the private
+run directory, where `run.sh` invoked the configured external Codex/Luna
+worker. Executing that contract transitioned the durable run from `prepared`
+to `running` and produced worker heartbeat/executor events.
+
+### Corrected lifecycle finding
+
+The earlier conclusion that there is no external start transition is too broad
+for this installed product version. A transition exists, but is implicit in the
+generated external launch script rather than available as a public,
+discoverable Agent-Workflow command. The resulting defect is still material:
+
+1. `delegate` hides a necessary launch artifact while asking the caller to
+   launch it.
+2. Replaying a prepared external run with the default facade produces an
+   opaque immutable-input error instead of reporting the existing worker mode
+   and the exact compatible retry command.
+3. The public CLI/API contract remains unable to record an external start
+   without the host-local generated script, weakening host independence and
+   recoverability.
+
+The minimal remediation is to return a structured `launch_contract` object
+from external `delegate` output, including the exact script/argv, worktree,
+run ID, and transition semantics. On immutable worker-mode mismatch, report
+the recorded mode and a compatible command. A public `start-external` command
+remains preferable for host-independent recovery, but it is no longer required
+to explain the observed `prepared -> running` transition.
+
+### Additional integration issues observed
+
+- The external worker startup logged a model-catalog decode failure:
+  `missing field truncation_policy`. It nevertheless started work. The error
+  printed the multi-megabyte raw catalog response, including base instructions,
+  to stderr. Bound/redact diagnostic bodies before exposing terminal output.
+- `rtk find` accepted the command but ignored GNU `-printf`. This is a wrapper
+  compatibility limitation, not an Agent-Workflow lifecycle failure; callers
+  needing formatted `find` output must use plain `find` or a supported `rtk`
+  form.
+
+No completion, evaluation, review, or acceptance is claimed by this addendum.
+
+## Resolution verification (2026-08-29)
+
+The identified implementation and test gaps are now closed:
+
+- `delegation.py` imports `synchronize_projection` from `run_lifecycle`.
+- External delegation exposes a structured `launch_contract` containing the
+  runner argv, worktree, and binding/start command templates.
+- `agent-run start-external` records only a binding- and generation-matched
+  `prepared -> running` transition and is idempotent for the active binding.
+- Missing bindings, mismatched workers, stale generations, and external host
+  process-control attempts are covered by acceptance and invariant tests.
+- Source import, installed public `delegate`, and immutable retry-mode errors
+  are covered by release and acceptance tests.
+
+The remaining model-catalog decode output and `rtk find -printf` behavior are
+environment/tooling issues, not lifecycle authority defects. No completion,
+evaluation, review, or acceptance is inferred from these test results.
+
+### Completion-integrity observation (2026-08-29)
+
+The external run later reached `status: completed` with a schema-valid
+`completion.json` and an acceptance claim for `AC-001`. Its completion sidecar
+lists four changed `.gitignore` files, but records identical base and head
+revisions (`af7cd1ce6c79b0017fa3c14554807716e9e53feb`). The assigned worktree
+still reports those same four files as modified and uncommitted.
+
+This conflicts with the generated completion guidance, which requires an
+implementation worker to commit changes before publishing a completed sidecar
+and bind `head_revision` to that commit. Completion validation nevertheless
+reported `valid`. Therefore the run is complete only at the worker/completion
+gate; it must not be reviewed or accepted as a revision-bound implementation
+until validation rejects this condition or the worker produces a committed,
+lineage-correct closeout.

@@ -51,9 +51,11 @@ def _matching_existing_run(
     if str(contract["worker_plan"]["mode"]) != worker_mode:
         mismatches.append("worker_mode")
     if mismatches:
+        recorded_mode = str(contract["worker_plan"]["mode"])
         raise WorkflowError(
             "delegate stage 'existing-run-validation' failed: agent run ID already exists "
-            f"with different immutable inputs: {', '.join(mismatches)}"
+            f"with different immutable inputs: {', '.join(mismatches)}; "
+            f"recorded worker_mode={recorded_mode!r}; retry with --worker-mode {recorded_mode}"
         )
 
     status = synchronize_projection(paths.status, source="delegate-idempotent")
@@ -148,6 +150,7 @@ def delegate(
             except WorkflowError as exc:
                 raise _stage_error("agent-run-start", exc) from exc
         return _delegation_result(
+            settings=settings,
             agent_run_id=agent_run_id,
             worktree=selected_workdir,
             role=str(existing.get("role") or role or "implementation"),
@@ -193,6 +196,7 @@ def delegate(
 
     state = str(result.get("status", "prepared" if worker_mode == "external" else "running"))
     return _delegation_result(
+        settings=settings,
         agent_run_id=agent_run_id,
         worktree=selected_workdir,
         role=str(result.get("role") or role or "implementation"),
@@ -205,6 +209,7 @@ def delegate(
 
 def _delegation_result(
     *,
+    settings: Settings,
     agent_run_id: str,
     worktree: Path,
     role: str,
@@ -219,7 +224,7 @@ def _delegation_result(
     their authoritative status/context surfaces instead of being duplicated
     into every delegation response.
     """
-    return {
+    result = {
         "agent_run_id": agent_run_id,
         "role": role,
         "worker_mode": worker_mode,
@@ -229,6 +234,24 @@ def _delegation_result(
         "worktree_created": worktree_created,
         "next_actions": _next_actions(agent_run_id, worker_mode, state),
     }
+    if worker_mode == "external" and state == "prepared":
+        runner = run_dir(settings, agent_run_id) / "run.sh"
+        result["launch_contract"] = {
+            "agent_run_id": agent_run_id,
+            "worker_mode": "external",
+            "worktree": str(worktree),
+            "argv": [str(runner)],
+            "runner_path": str(runner),
+            "bind_command": (
+                "agent-workflow agent-run bind-external "
+                f"{agent_run_id} RUNTIME_TYPE EXTERNAL_WORKER_ID"
+            ),
+            "start_command": (
+                "agent-workflow agent-run start-external "
+                f"{agent_run_id} RUNTIME_TYPE EXTERNAL_WORKER_ID --generation GENERATION"
+            ),
+        }
+    return result
 
 
 def _next_actions(agent_run_id: str, worker_mode: str, state: str) -> list[str]:

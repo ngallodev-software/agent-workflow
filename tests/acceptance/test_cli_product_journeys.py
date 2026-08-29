@@ -66,6 +66,15 @@ def test_installed_delegate_is_importable_and_idempotent(
     assert first["state"] == "prepared"
     assert second["state"] == "prepared"
     assert second["reused_existing_run"] is True
+    assert second["launch_contract"]["argv"][-1].endswith("/run.sh")
+    assert second["launch_contract"]["start_command"].endswith("--generation GENERATION")
+    mismatch = installed_product.run(
+        "--json", "delegate", "delegate-idempotent", prompt, "--workdir", repo,
+        "--worker-mode", "headless", "--config", config, env=product_env,
+    )
+    assert mismatch.returncode == 2
+    assert "recorded worker_mode='external'" in mismatch.stderr
+    assert "--worker-mode external" in mismatch.stderr
 
 
 def test_headless_agent_run_prepare_start_and_provenance_journey(

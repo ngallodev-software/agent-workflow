@@ -11,6 +11,10 @@ Normal agent command cards remain role-scoped and intentionally do not include i
 ## Delegation and Agent Run state
 
 - `agent-workflow --json delegate ...` — compact deterministic delegation result. This remains the preferred common path.
+- External prepared delegation results include a structured `launch_contract`
+  with the exact runner argv, worktree, and bind/start command templates. The
+  runner starts the prepared external Worker; `start-external` records its
+  binding- and generation-checked lifecycle transition.
 - `agent-workflow --json agent-run prepare ...` — public Agent Run preparation view; private provider/model routing and state-root paths are excluded.
 - `agent-workflow --json agent-run status AGENT_RUN_ID` — public lifecycle/health view; private provider/model identity is excluded.
 - `agent-workflow --json agent context AGENT_RUN_ID` — durable worker context using `agent-workflow/agent-context/v1`.
