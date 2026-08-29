@@ -1,9 +1,16 @@
 from __future__ import annotations
 
 import json
+import os
+import pty
+import subprocess
+import time
 from pathlib import Path
 
+import pytest
+
 from tests.conftest import InstalledProduct, git_repo, wait_for_status, write_config
+from agent_workflow.run_lifecycle import transition_execution_path
 
 
 def _run_dir(env: dict[str, str], agent_run_id: str) -> Path:
@@ -161,3 +168,90 @@ def test_external_prepare_is_host_independent_and_process_control_is_unavailable
     terminated = installed_product.json("agent-run", "terminate", "external-run", "--grace-seconds", "0", env=env)
     assert interrupted["outcome"] == "unavailable"
     assert terminated["outcome"] == "unavailable"
+
+    transition_execution_path(
+        run / "status.json",
+        "failed",
+        actor="test",
+        reason="simulate terminal external worker failure",
+    )
+    restarted = installed_product.json(
+        "agent-run", "restart", "external-run", "--new-agent-run-id", "external-retry", env=env,
+    )
+    assert restarted["status"] == "prepared"
+    retry_contract = json.loads((_run_dir(env, "external-retry") / "agent-run-contract.json").read_text())
+    assert retry_contract["worker_plan"]["mode"] == "external"
+    assert retry_contract["worker_plan"]["argv"] == contract["worker_plan"]["argv"]
+    assert retry_contract["agent_run"]["agent_name"] == contract["agent_run"]["agent_name"]
+
+
+@pytest.mark.parametrize("host_mode", ["pipe", "pty"])
+def test_generated_external_launcher_records_durable_start_in_each_host_mode(
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+    fake_agent_path: Path,
+    tmp_path: Path,
+    host_mode: str,
+) -> None:
+    """Execute the published external contract instead of only inspecting it."""
+    repo = tmp_path / f"external-{host_mode}"
+    git_repo(repo)
+    prompt = tmp_path / f"{host_mode}.md"
+    prompt.write_text("Run through the external launch contract.\n", encoding="utf-8")
+    env = dict(product_env)
+    env.update({"FAKE_AGENT_MODE": "slow", "FAKE_AGENT_DELAY": "0.5"})
+    installed_product.json(
+        "agent-run", "prepare", f"external-{host_mode}", repo, prompt,
+        "--worker-mode", "external", "--interactive", "--", fake_agent_path,
+        env=env,
+    )
+    run = _run_dir(env, f"external-{host_mode}")
+    launch = run / "run.sh"
+    launch.chmod(launch.stat().st_mode | 0o111)
+
+    master_fd: int | None = None
+    slave_fd: int | None = None
+    if host_mode == "pty":
+        master_fd, slave_fd = pty.openpty()
+        process = subprocess.Popen(
+            [str(launch)], cwd=repo, env=env, stdin=slave_fd, stdout=slave_fd, stderr=slave_fd,
+            close_fds=True,
+        )
+        os.close(slave_fd)
+        slave_fd = None
+        # The fixture consumes stdin to EOF; send the terminal EOF character
+        # while retaining the pseudo-terminal for the interactive launch.
+        os.write(master_fd, b"\x04")
+    else:
+        process = subprocess.Popen(
+            [str(launch)], cwd=repo, env=env, stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+
+    try:
+        status_path = run / "status.json"
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            if status_path.is_file():
+                status = json.loads(status_path.read_text(encoding="utf-8"))
+                if status.get("status") == "running":
+                    break
+            time.sleep(0.02)
+        else:
+            raise AssertionError("generated external launcher never recorded running")
+
+        assert process.wait(timeout=10) == 0
+        lifecycle = [
+            json.loads(line)
+            for line in (run / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert [event["new"] for event in lifecycle[:2]] == ["prepared", "running"]
+        assert json.loads(status_path.read_text(encoding="utf-8"))["status"] == "completed"
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait()
+        if master_fd is not None:
+            os.close(master_fd)
+        if slave_fd is not None:
+            os.close(slave_fd)
