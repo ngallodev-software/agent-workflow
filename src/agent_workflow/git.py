@@ -74,7 +74,8 @@ def assert_clean(repo: Path) -> GitSnapshot:
         command = " ".join(str(value) for value in snap.cleanliness.get("argv", []))
         raise WorkflowError(
             f"source repository is dirty: {snap.root}; verified by {command}; "
-            "commit/stash or use --allow-dirty"
+            "commit/stash, or use --allow-dirty to create the requested clean "
+            "worktree from the immutable base revision"
         )
     return snap
 

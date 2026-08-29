@@ -14,6 +14,7 @@ from agent_workflow.completion import (
 from agent_workflow.contracts import validate_instance, validate_ticket_identity
 from agent_workflow.errors import WorkflowError
 from agent_workflow.git import snapshot
+from agent_workflow.git import assert_clean
 from agent_workflow.steering import append_delivery_event, replay_delivery_events
 from agent_workflow.repository_closeout import create_repository_closeout
 
@@ -80,6 +81,20 @@ def test_completion_revision_rejects_uncommitted_changed_files() -> None:
         actual_head_revision="a" * 40,
     )
     assert "completed changed_files require a committed revision distinct from base_revision" in errors
+
+
+def test_dirty_source_diagnostic_explains_allow_dirty_base_worktree(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.email", "tests@example.invalid"], check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.name", "Tests"], check=True)
+    (repo / "tracked.txt").write_text("tracked\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "tracked.txt"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "initial"], check=True)
+    (repo / "tracked.txt").write_text("dirty\n", encoding="utf-8")
+
+    with pytest.raises(WorkflowError, match="--allow-dirty to create the requested clean worktree from the immutable base revision"):
+        assert_clean(repo)
 
 
 def test_completion_schema_rejects_string_criteria_before_collection() -> None:
