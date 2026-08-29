@@ -109,55 +109,6 @@ def test_bootstrap_rejects_unsupported_host_before_download(tmp_path: Path) -> N
     assert "unsupported operating system" in result.stderr
 
 
-def test_source_installer_migrates_codex_mcp_duplicates(tmp_path: Path) -> None:
-    home = tmp_path / "home"
-    codex = home / ".codex"
-    codex.mkdir(parents=True)
-    config = codex / "config.toml"
-    config.write_text(
-        '[mcp_servers.other]\ncommand = "other"\n\n'
-        '[mcp_servers.agent-workflow]\ncommand = "old"\n\n'
-        '[mcp_servers.agent-workflow.env]\nOLD = "1"\n\n'
-        '[mcp_servers."agent-workflow"]\ncommand = "older"\n',
-        encoding="utf-8",
-    )
-    dist_info = tmp_path / "mcp-1.28.1.dist-info"
-    dist_info.mkdir()
-    (dist_info / "METADATA").write_text("Metadata-Version: 2.1\nName: mcp\nVersion: 1.28.1\n", encoding="utf-8")
-    (tmp_path / "jsonschema.py").write_text("", encoding="utf-8")
-    (tmp_path / "yaml.py").write_text("", encoding="utf-8")
-    env = os.environ.copy()
-    env.update(
-        {
-            "HOME": str(home),
-            "CODEX_HOME": str(codex),
-            "XDG_CONFIG_HOME": str(home / ".config"),
-            "XDG_DATA_HOME": str(home / ".local/share"),
-            "PYTHONPATH": str(tmp_path),
-        }
-    )
-    command = [
-        "bash",
-        "scripts/install-source.sh",
-        "--no-deps",
-        "--no-skills",
-        "--no-hooks",
-        "--extras",
-        "mcp",
-        "--python",
-        sys.executable,
-    ]
-    for _ in range(2):
-        result = subprocess.run(command, cwd=REPO_ROOT, env=env, text=True, capture_output=True, timeout=30)
-        assert result.returncode == 0, result.stdout + result.stderr
-    text = config.read_text(encoding="utf-8")
-    assert "[mcp_servers.other]" in text
-    assert text.count("[mcp_servers.agent-workflow]") == 1
-    assert '[mcp_servers."agent-workflow"]' not in text
-    assert text.count("BEGIN AGENT-WORKFLOW MANAGED MCP") == 1
-    assert set(tomllib.loads(text)["mcp_servers"]) == {"other", "agent-workflow"}
-
-
 def test_deployment_jenkins_install_skips_harness_mutations() -> None:
     jenkinsfile = (REPO_ROOT / "Jenkinsfile").read_text(encoding="utf-8")
     deployment = jenkinsfile.split('stage(\'Install built wheel\')', 1)[1]
@@ -210,7 +161,7 @@ def test_release_workflow_is_tag_only_and_bundle_builder_is_reproducible(tmp_pat
     forbidden = ("Jenkinsfile", "jenkins-local-job", "/.github/", ".github/workflows")
     assert not any(any(token in name for token in forbidden) for name in names)
 
-def test_source_installer_canonicalizes_owned_hooks_on_reinstall(tmp_path: Path) -> None:
+def test_source_installer_reinstall_canonicalizes_mcp_and_owned_hooks(tmp_path: Path) -> None:
     home = tmp_path / "home"
     codex = home / ".codex"
     claude = home / ".claude"
@@ -232,6 +183,10 @@ def test_source_installer_canonicalizes_owned_hooks_on_reinstall(tmp_path: Path)
     )
     codex_config.write_text(
         'user_setting = "keep"\n\n'
+        '[mcp_servers.other]\ncommand = "other"\n\n'
+        '[mcp_servers.agent-workflow]\ncommand = "old"\n\n'
+        '[mcp_servers.agent-workflow.env]\nOLD = "1"\n\n'
+        '[mcp_servers."agent-workflow"]\ncommand = "older"\n\n'
         + duplicate_block
         + "\n"
         + duplicate_block,
@@ -268,6 +223,11 @@ def test_source_installer_canonicalizes_owned_hooks_on_reinstall(tmp_path: Path)
     fake_modules.mkdir()
     (fake_modules / "jsonschema.py").write_text("", encoding="utf-8")
     (fake_modules / "yaml.py").write_text("", encoding="utf-8")
+    mcp_dist_info = fake_modules / "mcp-1.28.1.dist-info"
+    mcp_dist_info.mkdir()
+    (mcp_dist_info / "METADATA").write_text(
+        "Metadata-Version: 2.1\nName: mcp\nVersion: 1.28.1\n", encoding="utf-8"
+    )
 
     # Use a copied source whose managed hook set no longer contains the gate,
     # simulating migration after a hook asset is retired.
@@ -291,7 +251,8 @@ def test_source_installer_canonicalizes_owned_hooks_on_reinstall(tmp_path: Path)
         "scripts/install-source.sh",
         "--no-deps",
         "--no-skills",
-        "--no-mcp-register",
+        "--extras",
+        "mcp",
         "--python",
         sys.executable,
     ]
@@ -310,6 +271,11 @@ def test_source_installer_canonicalizes_owned_hooks_on_reinstall(tmp_path: Path)
     assert codex_text.count("# agent-workflow managed reminder hooks") == 1
     assert codex_text.count("# end agent-workflow managed reminder hooks") == 1
     assert 'user_setting = "keep"' in codex_text
+    assert "[mcp_servers.other]" in codex_text
+    assert codex_text.count("[mcp_servers.agent-workflow]") == 1
+    assert '[mcp_servers."agent-workflow"]' not in codex_text
+    assert codex_text.count("BEGIN AGENT-WORKFLOW MANAGED MCP") == 1
+    assert set(tomllib.loads(codex_text)["mcp_servers"]) == {"other", "agent-workflow"}
 
     claude_data = json.loads(claude_settings.read_text(encoding="utf-8"))
     commands = [

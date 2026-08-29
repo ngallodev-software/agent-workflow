@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import Any, Iterable, Iterator
 
 from .config import Settings
-from .contracts import validate_instance
 from .errors import WorkflowError
 from .eval.outcomes import classify_attempt
 from .index_sources import (
@@ -73,6 +72,12 @@ def _parse_json_object(data: bytes, path: Path) -> dict[str, Any]:
         raise WorkflowError(f"indexed JSON artifact must be an object: {path}")
     schema = value.get("schema")
     if isinstance(schema, str) and schema.startswith("agent-workflow/"):
+        # JSON Schema is intentionally expensive to import. Query/status-only
+        # index commands never validate source artifacts, so keep the validator
+        # behind the artifact parsing boundary instead of charging every index
+        # CLI process for it.
+        from .contracts import validate_instance
+
         try:
             validate_instance(value, schema, artifact=str(path))
         except WorkflowError as exc:
@@ -110,6 +115,8 @@ def _parse_jsonl_records(
             )
         schema = value.get("schema")
         if isinstance(schema, str) and schema.startswith("agent-workflow/"):
+            from .contracts import validate_instance
+
             try:
                 validate_instance(value, schema, artifact=f"{path}:{source_sequence}")
             except WorkflowError as exc:
@@ -654,7 +661,6 @@ def _sync_locked(
         "error_count": len(errors),
         "errors": errors,
     }
-    validate_instance(report, report["schema"], artifact="SQLite index sync report")
     return report
 
 
@@ -721,7 +727,6 @@ def index_status(settings: Settings) -> dict[str, Any]:
             "last_sync_scope": None,
             "size_bytes": 0,
         }
-        validate_instance(report, report["schema"], artifact="SQLite index status")
         return report
     connection = _connect(settings, readonly=True)
     try:
@@ -791,7 +796,6 @@ def index_status(settings: Settings) -> dict[str, Any]:
         "last_sync_scope": metadata.get("last_sync_scope"),
         "size_bytes": size,
     }
-    validate_instance(report, report["schema"], artifact="SQLite index status")
     return report
 
 
@@ -861,7 +865,6 @@ def verify_index(
         report.update(review_result)
     else:
         report.update({"review_scope": None, "review_valid": None, "review_errors": [], "review_evidence": None})
-    validate_instance(report, report["schema"], artifact="SQLite index verification")
     return report
 
 

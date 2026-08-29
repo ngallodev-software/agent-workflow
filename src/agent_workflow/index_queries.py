@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any, Sequence
 
-from .contracts import validate_instance
 from .errors import WorkflowError
 from .util import validate_id
 
@@ -118,5 +117,4 @@ def build_query_report(
         "kind": kind,
         "rows": rows,
     }
-    validate_instance(report, report["schema"], artifact="SQLite index query")
     return report
