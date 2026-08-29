@@ -140,6 +140,30 @@ if [[ $INSTALL_DEPS -eq 0 ]] && ! "$PYTHON_BIN" -c 'import jsonschema, yaml' >/d
   exit 1
 fi
 mkdir -p "$BIN_DIR" "$CONFIG_DIR"
+is_owned_pip_launcher() {
+  local path="$1"
+  [[ -f "$path" ]] || return 1
+  "$PYTHON_BIN" - "$path" <<'PY'
+from pathlib import Path
+import sys
+
+lines = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+raise SystemExit(
+    0
+    if len(lines) == 6
+    and lines[0].startswith("#!")
+    and lines[1:] == [
+        "import sys",
+        "from agent_workflow.cli import main",
+        "if __name__ == '__main__':",
+        "    sys.argv[0] = sys.argv[0].removesuffix('.exe')",
+        "    sys.exit(main())",
+    ]
+    else 1
+)
+PY
+}
+
 safe_link() {
   local source="$1" destination="$2"
   if [[ -L "$destination" ]]; then
@@ -297,11 +321,15 @@ except BaseException:
 print(f"configured Claude MCP server: {config_path}")
 PY
 }
-if [[ $INSTALL_DEPS -eq 1 && -x "$BIN_DIR/agent-workflow" && ! -L "$BIN_DIR/agent-workflow" ]]; then
-  echo "kept pip-managed launcher: $BIN_DIR/agent-workflow"
-else
-  safe_link "$ROOT/bin/agent-workflow" "$BIN_DIR/agent-workflow"
+launcher_source="$ROOT/bin/agent-workflow"
+installed_launcher="$(dirname "$PYTHON_PATH")/agent-workflow"
+if [[ $INSTALL_DEPS -eq 1 && -x "$installed_launcher" && "$installed_launcher" != "$BIN_DIR/agent-workflow" ]]; then
+  launcher_source="$installed_launcher"
 fi
+if [[ -f "$BIN_DIR/agent-workflow" && ! -L "$BIN_DIR/agent-workflow" ]] && is_owned_pip_launcher "$BIN_DIR/agent-workflow"; then
+  unlink "$BIN_DIR/agent-workflow"
+fi
+safe_link "$launcher_source" "$BIN_DIR/agent-workflow"
 if [[ ! -e "$CONFIG_FILE" ]]; then
   cp "$ROOT/config/agent-workflow.example.toml" "$CONFIG_FILE"
   echo "created config: $CONFIG_FILE"
