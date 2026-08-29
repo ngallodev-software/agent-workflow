@@ -26,7 +26,7 @@ remove_owned_link() {
   fi
 }
 remove_owned_link "$ROOT/bin/agent-workflow" "$HOME/.local/bin/agent-workflow"
-for root in "$HOME/.agents/skills" "$HOME/.codex/skills" "$HOME/.claude/skills"; do
+for root in "$HOME/.agents/skills" "$HOME/.codex/skills" "$HOME/.claude/skills" "$HOME/.pi/agent/skills" "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/skills"; do
   while IFS= read -r -d '' skill_dir; do
     skill="$(basename "$skill_dir")"
     path="$root/$skill"

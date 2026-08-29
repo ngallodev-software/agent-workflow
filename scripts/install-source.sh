@@ -6,8 +6,8 @@ Usage: ./install.sh [--no-skills] [--no-hooks] [--no-mcp-register] [--no-deps] [
                     [--wheel PATH] [--extras NAME[,NAME...]]
 
 Installs this checkout, or a supplied wheel, into the current user's Python
-environment, including its declared core dependencies, then creates launcher, skill
-symlinks, and client hook reminders. The local stdio MCP adapter is an optional
+shared agent-tools Python environment, including its declared core dependencies,
+then creates launcher, skill symlinks, and client hook reminders. The local stdio MCP adapter is an optional
 feature installed and registered only when the `mcp` extra is requested. Missing
 dependencies may require network access.
 
@@ -22,6 +22,10 @@ Options:
   --extras NAME[,NAME...] Install optional feature groups (for example
                           mcp,eval,stats or all). Core dependencies are always
                           included unless --no-deps is set.
+
+By default the shared environment is
+  ${XDG_DATA_HOME:-$HOME/.local/share}/agent-tools/venv
+Override it with AGENT_TOOLS_VENV or pass --python explicitly.
 USAGE
 }
 INSTALL_SKILLS=1
@@ -31,6 +35,10 @@ INSTALL_DEPS=1
 EXTRAS=""
 WHEEL_PATH="${AGENT_WORKFLOW_INSTALL_WHEEL:-}"
 PYTHON_BIN="${AGENT_WORKFLOW_INSTALL_PYTHON:-python3}"
+PYTHON_EXPLICIT=0
+if [[ -n "${AGENT_WORKFLOW_INSTALL_PYTHON:-}" ]]; then
+  PYTHON_EXPLICIT=1
+fi
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --no-skills) INSTALL_SKILLS=0 ;;
@@ -41,6 +49,7 @@ while [[ $# -gt 0 ]]; do
       shift
       [[ $# -gt 0 ]] || { echo "--python requires a value" >&2; exit 2; }
       PYTHON_BIN="$1"
+      PYTHON_EXPLICIT=1
       ;;
     --wheel)
       shift
@@ -63,6 +72,7 @@ CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/agent-workflow"
 CONFIG_FILE="$CONFIG_DIR/config.toml"
 DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 APP_DATA_DIR="$DATA_HOME/agent-workflow"
+SHARED_VENV="${AGENT_TOOLS_VENV:-$DATA_HOME/agent-tools/venv}"
 HOOKS_DATA_DIR="$APP_DATA_DIR/hooks"
 CODEX_HOME_DIR="${CODEX_HOME:-$HOME/.codex}"
 CODEX_CONFIG_FILE="$CODEX_HOME_DIR/config.toml"
@@ -71,6 +81,13 @@ CLAUDE_SETTINGS_FILE="$CLAUDE_CONFIG_DIR/settings.json"
 # MCP is a first-party optional feature. Installation and client registration
 # are requested explicitly through --extras mcp (or --extras all).
 MCP_CONFIG_REQUESTED=0
+if [[ $PYTHON_EXPLICIT -eq 0 ]]; then
+  if [[ ! -x "$SHARED_VENV/bin/python" ]]; then
+    mkdir -p "$(dirname "$SHARED_VENV")"
+    python3 -m venv "$SHARED_VENV"
+  fi
+  PYTHON_BIN="$SHARED_VENV/bin/python"
+fi
 command -v python3 >/dev/null || { echo "python3 is required" >&2; exit 127; }
 command -v "$PYTHON_BIN" >/dev/null || {
   echo "Python interpreter not found: $PYTHON_BIN" >&2
@@ -313,7 +330,13 @@ if [[ $MCP_CONFIG_REQUESTED -eq 1 && $REGISTER_MCP -eq 1 ]]; then
   configure_claude_mcp
 fi
 if [[ $INSTALL_SKILLS -eq 1 ]]; then
-  skill_roots=("$HOME/.agents/skills" "$HOME/.codex/skills" "$HOME/.claude/skills")
+  skill_roots=(
+    "${AGENT_WORKFLOW_SKILLS_ROOT:-$HOME/.agents/skills}"
+    "${CODEX_HOME:-$HOME/.codex}/skills"
+    "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills"
+    "${PI_HOME:-$HOME/.pi}/agent/skills"
+    "${OPENCODE_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode}/skills"
+  )
   skills=()
   while IFS= read -r -d '' skill_dir; do
     skills+=("$(basename "$skill_dir")")
