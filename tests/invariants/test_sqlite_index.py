@@ -14,6 +14,7 @@ from agent_workflow.config import defaults
 from agent_workflow.errors import WorkflowError
 from agent_workflow.index_db import database_path, integrity_authority_path
 from agent_workflow.index_integrity import integrity_input_snapshot, record_integrity_authority
+from agent_workflow.contracts import validate_instance
 from agent_workflow.index_schema import INDEX_APPLICATION_ID, INDEX_SCHEMA_VERSION
 from agent_workflow.index_store import (
     index_status,
@@ -238,6 +239,7 @@ def test_corrupt_run_is_rejected_without_losing_other_runs(tmp_path: Path) -> No
     (corrupt / "incident-events.jsonl").write_text("{not-json}\n", encoding="utf-8")
 
     report = rebuild_index(settings)
+    validate_instance(report, report["schema"], artifact="SQLite index sync report")
     assert report["indexed_count"] == 1
     assert report["error_count"] == 1
     rows = {row["agent_run_id"]: row for row in query_index(settings, "runs")}
@@ -263,8 +265,11 @@ def test_symlinked_source_is_rejected_without_following_target(tmp_path: Path) -
     assert "incident-events.jsonl" in row["index_error"]
     error = query_index(settings, "errors", agent_run_id="unsafe")[0]
     assert error["category"] == "unsafe_source"
-    assert index_status(settings)["freshness"] == "incomplete"
+    status = index_status(settings)
+    validate_instance(status, status["schema"], artifact="SQLite index status")
+    assert status["freshness"] == "incomplete"
     verification = verify_index(settings, full=True)
+    validate_instance(verification, verification["schema"], artifact="SQLite index verification")
     assert verification["valid"] is False
     assert any(item["reason"] == "unsafe_symlink" for item in verification["source_mismatches"])
     with sqlite3.connect(database_path(settings)) as connection:

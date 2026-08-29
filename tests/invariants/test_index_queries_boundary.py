@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from agent_workflow.contracts import validate_instance
 from agent_workflow.errors import WorkflowError
 from agent_workflow.index_queries import build_query, build_query_report
 
@@ -53,5 +54,6 @@ def test_query_report_binds_rows_to_freshness_metadata() -> None:
     rows = [{"agent_run_id": "session-1"}]
     report = build_query_report(status, "runs", rows)
     assert report["schema"] == "agent-workflow/index-query/v1"
+    validate_instance(report, report["schema"], artifact="SQLite index query")
     assert report["freshness"] == "stale"
     assert report["rows"] is rows
