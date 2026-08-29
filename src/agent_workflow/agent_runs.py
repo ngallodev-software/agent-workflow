@@ -270,6 +270,7 @@ def _write_agent_run_contract(
     prompt_sha256: str,
     launch_prompt_sha256: str,
     command: list[str],
+    noninteractive_command: list[str] | None,
     redacted_command: list[str],
     executor: str | None,
     model: str | None,
@@ -354,6 +355,14 @@ def _write_agent_run_contract(
             "command_sha256": hashlib.sha256(
                 json.dumps(command, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
             ).hexdigest(),
+            "noninteractive_argv": list(noninteractive_command or command),
+            "noninteractive_command_sha256": hashlib.sha256(
+                json.dumps(
+                    noninteractive_command or command,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest(),
             "stream_format": stream_format,
             "mode": worker_mode,
             "interactive_stdio": executor_interactive,
@@ -404,6 +413,7 @@ class PreparedWorker:
 
     plan: ExecutorPlan
     command: tuple[str, ...]
+    noninteractive_command: tuple[str, ...] | None
     redacted_command: tuple[str, ...]
     compatibility: dict[str, Any]
     executor_policy: Any
@@ -552,6 +562,23 @@ def _prepare_worker(
         plan.no_go_authorized,
         plan.reasoning_effort,
     )
+    noninteractive_command: tuple[str, ...] | None = None
+    if executor_interactive and plan.name in settings.executors:
+        noninteractive_plan = prepare_executor(
+            settings,
+            plan.name,
+            None,
+            structured=structured,
+            interactive=False,
+            model=plan.model,
+            reasoning_effort=plan.reasoning_effort,
+            allow_no_go_model=allow_no_go_model,
+        )
+        noninteractive = list(noninteractive_plan.argv)
+        noninteractive[0] = require_command(noninteractive[0])
+        if noninteractive_plan.name == "codex" and "--add-dir" not in noninteractive:
+            noninteractive.extend(["--add-dir", str(handoff_dir)])
+        noninteractive_command = tuple(noninteractive)
     compatibility = probe_executor(
         plan.name,
         command,
@@ -574,6 +601,7 @@ def _prepare_worker(
     return PreparedWorker(
         plan=plan,
         command=tuple(command),
+        noninteractive_command=noninteractive_command,
         redacted_command=tuple(redacted),
         compatibility=compatibility,
         executor_policy=policy,
@@ -1160,6 +1188,11 @@ def prepare(
         prompt_sha256=sha256_file(prompt_copy),
         launch_prompt_sha256=sha256_file(launch_prompt),
         command=command,
+        noninteractive_command=(
+            list(prepared_worker.noninteractive_command)
+            if prepared_worker.noninteractive_command
+            else None
+        ),
         redacted_command=redacted_command,
         executor=executor_plan.name,
         model=executor_plan.model,
@@ -1579,7 +1612,7 @@ def restart(
         workdir=Path(str(worktree["path"])),
         prompt_path=prompt_source,
         explicit_command=command,
-        agent_name=None,
+        agent_name=agent_run.get("agent_name"),
         agent_class=agent_run.get("agent_class"),
         model=command_data.get("model"),
         reasoning_effort=contract["runtime_policy"].get("codex_reasoning_effort"),
@@ -1600,10 +1633,9 @@ def restart(
         ),
         tier=agent_run.get("tier"),
         job_path=job_path,
-        allow_active_agent_name=False,
+        allow_active_agent_name=True,
         worker_mode=str(worker_plan.get("mode", "headless")),
     )
     if prepared.get("worker_mode") == "headless":
         return start(settings, new_id)
     return prepared
-

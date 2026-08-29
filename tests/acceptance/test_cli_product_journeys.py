@@ -140,6 +140,13 @@ def test_external_prepare_is_host_independent_and_process_control_is_unavailable
     assert prepared["status"] == "prepared"
     assert prepared["worker_mode"] == "external"
     assert prepared.get("worker_pid") is None
+    run = _run_dir(env, "external-run")
+    runner_text = (run / "run.sh").read_text(encoding="utf-8")
+    assert "--interactive" not in runner_text
+    assert "--non-interactive" in runner_text
+    contract = json.loads((run / "agent-run-contract.json").read_text(encoding="utf-8"))
+    assert contract["worker_plan"]["noninteractive_argv"]
+    assert len(contract["worker_plan"]["noninteractive_command_sha256"]) == 64
 
     start = installed_product.run("--json", "agent-run", "start", "external-run", env=env)
     assert start.returncode == 2

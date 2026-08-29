@@ -160,6 +160,14 @@ def completion_revision_errors(
         errors.append("completed base_revision does not match the launch source revision")
     if not actual_head_revision or value.get("head_revision") != actual_head_revision:
         errors.append("completed head_revision does not match the worktree Git HEAD")
+    if (
+        value.get("changed_files")
+        and expected_base_revision
+        and value.get("base_revision") == value.get("head_revision")
+    ):
+        errors.append(
+            "completed changed_files require a committed revision distinct from base_revision"
+        )
     return errors
 
 

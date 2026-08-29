@@ -65,6 +65,15 @@ def test_substantive_completion_rejects_empty_schema_valid_success() -> None:
     assert "completed result requires at least one command receipt" in errors
 
 
+def test_completion_revision_rejects_uncommitted_changed_files() -> None:
+    errors = completion_revision_errors(
+        _completion(base_revision="a" * 40, head_revision="a" * 40),
+        expected_base_revision="a" * 40,
+        actual_head_revision="a" * 40,
+    )
+    assert "completed changed_files require a committed revision distinct from base_revision" in errors
+
+
 def test_completion_schema_rejects_string_criteria_before_collection() -> None:
     value = _completion(criteria=["criterion text"])
     with pytest.raises(WorkflowError, match="invalid artifact"):
@@ -321,5 +330,3 @@ def test_review_schema_rejects_disposition_as_result() -> None:
     value = _completion(result="changes_requested")
     with pytest.raises(WorkflowError, match="invalid artifact"):
         validate_instance(value, "agent-workflow/completion/v1")
-
-
