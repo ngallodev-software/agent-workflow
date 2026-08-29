@@ -116,3 +116,63 @@ def test_source_installer_removes_stale_hook_files(tmp_path: Path) -> None:
     assert not stale.exists()
     assert unrelated.exists()
     assert (hook_data / "agent-workflow-run-reminder").is_file()
+
+
+def test_source_installer_uses_one_shared_skill_root(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    shutil.copytree(
+        REPO_ROOT,
+        source,
+        ignore=shutil.ignore_patterns(".git", ".pytest_cache", "__pycache__", "*.pyc"),
+    )
+    home = tmp_path / "home"
+    codex = home / ".codex"
+    legacy_agents = home / ".agents" / "skills"
+    legacy_claude = home / ".claude" / "skills"
+    for root in (codex / "skills", legacy_agents, legacy_claude):
+        root.mkdir(parents=True)
+    target = str(source / "skills" / "agent-workflow-orchestrator")
+    for root in (legacy_agents, legacy_claude):
+        (root / "agent-workflow-orchestrator").symlink_to(target)
+    unrelated = legacy_agents / "user-skill"
+    unrelated.symlink_to(source / "skills" / "agent-workflow")
+
+    fake_modules = tmp_path / "fake-modules"
+    fake_modules.mkdir()
+    (fake_modules / "jsonschema.py").write_text("", encoding="utf-8")
+    (fake_modules / "yaml.py").write_text("", encoding="utf-8")
+    env = {
+        **os.environ,
+        "HOME": str(home),
+        "CODEX_HOME": str(codex),
+        "XDG_CONFIG_HOME": str(home / ".config"),
+        "XDG_DATA_HOME": str(home / ".local" / "share"),
+        "PYTHONPATH": str(fake_modules),
+        "AGENT_WORKFLOW_SOURCE_ROOT": str(source),
+    }
+    result = subprocess.run(
+        [
+            str(REPO_ROOT / "scripts" / "install-source.sh"),
+            "--no-deps",
+            "--no-hooks",
+            "--no-mcp-register",
+            "--python",
+            sys.executable,
+        ],
+        cwd=source,
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (codex / "skills" / "agent-workflow-orchestrator").is_symlink()
+    assert not (legacy_agents / "agent-workflow-orchestrator").exists()
+    assert not (legacy_claude / "agent-workflow-orchestrator").exists()
+    assert unrelated.is_symlink()
+    manifest = json.loads((home / ".local" / "share" / "agent-workflow" / "installed-harnesses.json").read_text())
+    assert manifest == {
+        "schema": "agent-workflow/installed-harnesses/v1",
+        "harnesses": ["codex"],
+    }
