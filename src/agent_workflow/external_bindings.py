@@ -16,7 +16,8 @@ from .agent_run_paths import AgentRunPaths
 from .contracts import read_agent_run_contract
 from .errors import WorkflowError
 from .journal import JournalTransactionResult, read_jsonl, transact_jsonl
-from .state import run_dir
+from .run_lifecycle import authoritative_execution_status, transition_execution
+from .state import run_dir, status_path
 from .steering import pending_external_deliveries, record_external_delivery
 from .util import utc_now
 
@@ -254,6 +255,46 @@ def unbind(settings: Any, agent_run_id: str) -> dict[str, Any]:
         transaction=decide,
         max_records=MAX_EVENTS,
         sequence_field="sequence",
+    )
+
+
+def start(
+    settings: Any,
+    agent_run_id: str,
+    *,
+    external_runtime_type: str,
+    external_worker_id: str,
+    generation: int,
+) -> dict[str, Any]:
+    """Record an authorized external host start for the active binding."""
+    runtime_type = _text(external_runtime_type, "external_runtime_type")
+    worker_id = _text(external_worker_id, "external_worker_id")
+    projection = _require_generation(settings, agent_run_id, generation)
+    if projection["external_runtime_type"] != runtime_type:
+        raise WorkflowError("external Worker runtime type does not match binding")
+    if projection["external_worker_id"] != worker_id:
+        raise WorkflowError("external Worker ID does not match binding")
+    run = run_dir(settings, agent_run_id)
+    current = authoritative_execution_status(run)
+    if current == "running":
+        return transition_execution(
+            settings, agent_run_id, "running", actor=worker_id,
+            reason="external Worker start already recorded",
+            projection_source="external-start-idempotent",
+        )
+    if current != "prepared":
+        raise WorkflowError(
+            f"external Worker must start a prepared Agent Run (status={current!r})"
+        )
+    return transition_execution(
+        settings,
+        agent_run_id,
+        "running",
+        actor=worker_id,
+        reason="external Worker started",
+        projection_source="external-start",
+        worker_id=str(projection["worker_id"]),
+        worker_started_at=utc_now(),
     )
 
 

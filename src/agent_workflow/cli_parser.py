@@ -378,6 +378,14 @@ def build_parser(
     bind_external.add_argument("external_runtime_type")
     bind_external.add_argument("external_worker_id")
 
+    start_external = agent_run_commands.add_parser(
+        "start-external", help="record the start of a bound external Worker"
+    )
+    start_external.add_argument("agent_run_id")
+    start_external.add_argument("external_runtime_type")
+    start_external.add_argument("external_worker_id")
+    start_external.add_argument("--generation", type=int, required=True)
+
     observe_external = agent_run_commands.add_parser(
         "observe-external", help="record an observation of the current external Worker binding"
     )

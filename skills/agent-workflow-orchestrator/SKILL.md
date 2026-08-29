@@ -70,7 +70,7 @@ an operational supervisor, not lifecycle authority:
 ```bash
 agent-workflow orchestrator inbox import ORCHESTRATOR_ID
 agent-workflow orchestrator inbox read ORCHESTRATOR_ID --include-content
-agent-workflow orchestrator watch ORCHESTRATOR_ID --max-cycles N
+agent-workflow orchestrator watch ORCHESTRATOR_ID --max-cycles 10
 ```
 
 Transport delivery, worker exit, or an uncorrelated acknowledgement never

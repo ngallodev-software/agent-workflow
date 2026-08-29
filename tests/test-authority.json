@@ -239,7 +239,7 @@
     "release": {
       "max_collected_cases": 22,
       "max_files": 4,
-      "max_test_functions": 22,
+      "max_test_functions": 23,
       "path": "tests/release"
     }
   },

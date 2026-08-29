@@ -88,6 +88,19 @@ def test_shell_entrypoints_and_installer_are_syntax_valid() -> None:
         subprocess.run(["bash", "-n", str(path)], check=True)
 
 
+def test_delegation_module_imports_from_source_checkout() -> None:
+    env = {**os.environ, "PYTHONPATH": str(REPO_ROOT / "src")}
+    result = subprocess.run(
+        [sys.executable, "-c", "import agent_workflow.delegation"],
+        cwd=REPO_ROOT,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_documented_commands_match_the_installed_public_surface(
     installed_product: InstalledProduct, product_env: dict[str, str]
 ) -> None:
