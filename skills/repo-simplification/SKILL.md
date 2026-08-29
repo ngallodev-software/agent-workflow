@@ -13,10 +13,21 @@ packaging/runtime consumption, semantic equivalence, and a reversible validation
 
 1. Read the repository steering file and its sole unfinished-work register. Record the exact
    checkout, branch, dirty baseline, and requested scope; preserve unrelated changes.
-2. Use `codebase-memory-mcp` first for definitions, callers, imports, fan-in/out, and impact.
+2. Before any codebase-memory-mcp query, run the bundled safety check:
+
+   ```bash
+   bash skills/repo-simplification/scripts/ensure-codebase-memory.sh
+   ```
+
+   If the configured/native executable is absent or fails its version probe, the check stops and
+   prints the explicit GitHub installation command. To opt into installation, run `--install`; it
+   shallow-clones the upstream repository into a temporary directory and delegates to its
+   maintained checksum-verifying installer. Never download or execute a remote installer
+   implicitly during analysis.
+3. Use `codebase-memory-mcp` first for definitions, callers, imports, fan-in/out, and impact.
    If its exact-worktree index is absent or stale, create a fresh non-persistent index and compare
    Git porcelain before and after. Use `rg` for literals, docs, manifests, and configuration.
-3. Before any SpecGen command, run the bundled safety check:
+4. Before any SpecGen command, run the bundled safety check:
 
    ```bash
    bash skills/repo-simplification/scripts/ensure-specgen.sh
@@ -26,7 +37,7 @@ packaging/runtime consumption, semantic equivalence, and a reversible validation
    To opt into installation, run `--install`; it shallow-clones the upstream repository into a
    temporary directory and delegates to SpecGen's own `scripts/install.sh`. Never download or
    execute a remote installer implicitly during analysis.
-4. If a canonical specification exists or the work needs durable requirements/evaluation intent,
+5. If a canonical specification exists or the work needs durable requirements/evaluation intent,
    use the installed SpecGen application rather than inventing a report parser:
 
    ```bash
@@ -36,24 +47,24 @@ packaging/runtime consumption, semantic equivalence, and a reversible validation
    ```
 
    These commands are optional; do not invent a spec or assume an Agent-Workflow target.
-5. Triangulate every candidate across four surfaces:
+6. Triangulate every candidate across four surfaces:
    - source and call graph: reachable callers, entry points, imports, and tests;
    - runtime/configuration: CLI, environment, hooks, paths, databases, and live boundaries;
    - packaging/release: `pyproject.toml`/`package.json`/`Cargo.toml`, manifests, installers,
      source archives, wheels, and CI;
    - documentation/contracts: canonical docs, nested compatibility paths, schemas, and examples.
-6. Rank findings as `P0` generated-output hygiene, `P1` authority/contract maintenance, `P2`
+7. Rank findings as `P0` generated-output hygiene, `P1` authority/contract maintenance, `P2`
    bounded private shrinkage, or `P3` research. For each, record ID, evidence paths/lines,
    smallest safe action, dependencies, risk, validation, and status (`new`, `confirmed`,
    `deferred`, `retained`, or `completed`).
-7. Preserve these boundaries unless characterization proves otherwise: security/fail-closed route
+8. Preserve these boundaries unless characterization proves otherwise: security/fail-closed route
    decisions, provenance, receipts and cancellation, public APIs, database authority/migrations,
    package entry points, and standalone compatibility paths.
-8. Evaluate before editing. Prefer deletion or a private helper over a new framework. For a
+9. Evaluate before editing. Prefer deletion or a private helper over a new framework. For a
    proposed removal, prove no consumers and clean build/install/package-content behavior. For a
    consolidation, first lock characterization fixtures for null, legacy, malformed, rollback,
    ordering, and failure semantics. Stop at the first changed contract.
-9. Validate in layers and report each separately: syntax/compile, focused characterization,
+10. Validate in layers and report each separately: syntax/compile, focused characterization,
    component suite, installed-product/build/package smoke, release-content audit, and live or
    external acceptance. Never turn a technical pass into a policy, deployment, or live-runtime
    claim.
@@ -68,6 +79,8 @@ packaging/runtime consumption, semantic equivalence, and a reversible validation
   repository evidence and machine-readable evaluation intent when applicable;
 - `scripts/ensure-specgen.sh`: a fail-closed presence/version check and explicit, opt-in GitHub
   bootstrap through SpecGen's maintained installer;
+- `scripts/ensure-codebase-memory.sh`: a fail-closed executable/configuration check and explicit,
+  opt-in GitHub bootstrap through codebase-memory-mcp's maintained installer;
 - Agent-Workflow's `eval validate`, `eval score`, `eval report`, `assess-sealed-runs`,
   `scripts/audit-release-assets.py`, `scripts/audit-test-suite.py`, `scripts/release-check.sh`,
   package builders, and existing pytest suites: reuse their authority instead of creating a
@@ -76,6 +89,17 @@ packaging/runtime consumption, semantic equivalence, and a reversible validation
 Do not add a dependency, database, service, generic transaction framework, custom graph crawler,
 or broad abstraction for an audit. Existing commands are the deterministic tooling; they identify
 proof targets, not automatic deletion targets.
+
+## Completion artifact
+
+When analysis is complete, write the final human-readable report and any machine-readable evidence
+to the repository that was analyzed, not only to an external temporary location or the analyst
+checkout. Use a neutral,
+repository-local directory such as `docs/repo-analysis/` and a dated, collision-free filename like
+`REPO_SIMPLIFICATION_<YYYYMMDD>.md`; copy JSON evidence beside it when produced. Do not overwrite
+an existing report: add a timestamp or revision suffix. Record the destination paths in the final
+report and preserve the target repository's unrelated dirty changes. If the target is read-only or
+its documentation policy forbids the copy, report that gap and do not claim artifact completion.
 
 ## Output contract
 
