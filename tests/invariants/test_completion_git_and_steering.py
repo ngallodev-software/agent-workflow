@@ -18,6 +18,14 @@ from agent_workflow.steering import append_delivery_event, replay_delivery_event
 from agent_workflow.repository_closeout import create_repository_closeout
 
 
+def test_delegation_import_uses_lifecycle_projection_authority() -> None:
+    """The public delegation facade must import its projection helper from lifecycle."""
+    from agent_workflow import delegation
+    from agent_workflow.run_lifecycle import synchronize_projection
+
+    assert delegation.synchronize_projection is synchronize_projection
+
+
 def _completion(**overrides: object) -> dict[str, object]:
     value: dict[str, object] = {
         "schema": "agent-workflow/completion/v1",

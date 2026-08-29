@@ -10,8 +10,8 @@ from .config import Settings
 from .contracts import read_agent_run_contract
 from .errors import WorkflowError
 from .path import absolute_path, require_directory
-from .run_lifecycle import authoritative_execution_status
-from .state import run_dir, synchronize_projection
+from .run_lifecycle import authoritative_execution_status, synchronize_projection
+from .state import run_dir
 from .util import validate_id
 from .worktrees import create as create_worktree
 
