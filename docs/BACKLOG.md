@@ -209,3 +209,18 @@ before run preparation; exact installed producer/consumer agreement is
 accepted and version/digest mismatch fails closed; the prior supported pack
 version has a deterministic non-mutating migration with source/target digest
 provenance; and installed-wheel conformance proves the full journey.
+
+### GIT-LEASE-001 — Reject completion revisions absent from repository object storage
+
+**Status:** discovered 2026-08-30
+
+`contract-001-bundle-20260830` submitted a schema-valid completion naming
+`77add218...`, but the linked worktree HEAD pointed at that missing object and
+`git fsck --full` reported an invalid SHA pointer. Completion validation must
+verify that the declared head revision exists and resolves in the recorded
+repository before the run can be treated as integration evidence.
+
+**Done when:** a missing completion revision fails closed before review or
+acceptance, the sealed sidecar remains preserved, and a coordinator can recover
+visible uncommitted source changes only through a fresh valid revision plus
+independent rebuild/test evidence.
