@@ -237,7 +237,7 @@
       "path": "tests/invariants"
     },
     "release": {
-      "max_collected_cases": 22,
+      "max_collected_cases": 23,
       "max_files": 4,
       "max_test_functions": 22,
       "path": "tests/release"
@@ -245,7 +245,7 @@
   },
   "schema": "agent-workflow/test-authority/v1",
   "static_budgets": {
-    "max_subprocess_calls": 57,
+    "max_subprocess_calls": 58,
     "max_wheel_build_sites": 1
   }
 }

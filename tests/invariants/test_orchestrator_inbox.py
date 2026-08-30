@@ -135,6 +135,57 @@ def test_watch_replays_durable_messages_without_wakeup_channel(tmp_path: Path) -
     assert len(read_inbox(settings, "watcher")) == 1
 
 
+def test_watch_notifies_after_persisting_bounded_projection(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    source = _make_child(tmp_path, settings, "child-one", "x" * 700)
+    create_registry(settings, "watcher")
+    register_child(settings, "watcher", "child-one")
+    delivered: list[dict] = []
+
+    def adapter(record: dict) -> None:
+        # The adapter observes the durable state before it is called.
+        assert read_inbox(settings, "watcher", event_id=record["event_id"])
+        delivered.append(record)
+
+    result = watch(
+        settings,
+        "watcher",
+        interval_seconds=0.01,
+        notification_adapter=adapter,
+        max_cycles=1,
+    )
+
+    assert result["imported"] == 1
+    assert delivered[0]["schema"] == "agent-workflow/orchestrator-notification/v1"
+    assert delivered[0]["event_id"] == read_inbox(settings, "watcher")[0]["event_id"]
+    assert len(delivered[0]["summary"]) == 512
+    assert set(delivered[0]) == {
+        "schema", "event_id", "orchestrator_id", "sender_agent_run_id", "kind", "summary",
+    }
+    assert source["content"] not in delivered[0]["summary"]
+
+
+def test_watch_notification_failure_does_not_stop_or_lose_event(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    _make_child(tmp_path, settings, "child-one", "durable progress")
+    create_registry(settings, "watcher")
+    register_child(settings, "watcher", "child-one")
+
+    def failing_adapter(_record: dict) -> None:
+        raise RuntimeError("host unavailable")
+
+    result = watch(
+        settings,
+        "watcher",
+        interval_seconds=0.01,
+        notification_adapter=failing_adapter,
+        max_cycles=1,
+    )
+
+    assert result["state"] == "completed"
+    assert len(read_inbox(settings, "watcher")) == 1
+
+
 def test_watch_has_a_single_writer_lease(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     create_registry(settings, "leased-watcher")

@@ -8,7 +8,7 @@ import signal
 import threading
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Mapping
 
 from .config import Settings
 from .errors import WorkflowError
@@ -18,6 +18,27 @@ from .util import utc_now
 
 LOCK_NAME = ".supervisor.lock"
 EVENTS_NAME = "supervisor-events.jsonl"
+NOTIFY_SCHEMA = "agent-workflow/orchestrator-notification/v1"
+MAX_NOTIFY_SUMMARY_CHARS = 512
+
+# IFACE-001: hosts may provide a callable without making the host runtime a
+# dependency of the workflow core.  The callable receives only NOTIFY-001.
+NotificationAdapter = Callable[[Mapping[str, Any]], object]
+
+
+def _notification(event: Mapping[str, Any], orchestrator_id: str) -> dict[str, Any]:
+    """Project an inbox event into the bounded NOTIFY-001 host contract."""
+    summary = event.get("summary", "")
+    if not isinstance(summary, str):
+        summary = str(summary)
+    return {
+        "schema": NOTIFY_SCHEMA,
+        "event_id": event["event_id"],
+        "orchestrator_id": orchestrator_id,
+        "sender_agent_run_id": event["sender_agent_run_id"],
+        "kind": event["kind"],
+        "summary": summary[:MAX_NOTIFY_SUMMARY_CHARS],
+    }
 
 
 def _validate_supervisor_event(value: object, _line_number: int) -> dict[str, Any]:
@@ -53,6 +74,7 @@ def watch(
     batch_size: int = 100,
     max_per_child: int = 25,
     max_cycles: int | None = None,
+    notification_adapter: NotificationAdapter | None = None,
 ) -> dict[str, Any]:
     """Run one active writer that replays durable child journals on a bounded interval."""
     if poll_seconds <= 0 or batch_size < 1 or max_per_child < 1:
@@ -88,6 +110,19 @@ def watch(
                     total_advanced += report["advanced"]
                     total_imported += report["count"]
                     _record(directory, "replay", cycle=cycles, advanced=report["advanced"], imported=report["count"], children=report["children"])
+                    if notification_adapter is not None:
+                        for event in report["imported"]:
+                            try:
+                                notification_adapter(_notification(event, orchestrator_id))
+                            except Exception as exc:
+                                # Delivery is advisory.  The durable inbox and
+                                # source cursor are already authoritative.
+                                _record(
+                                    directory,
+                                    "notification-error",
+                                    cycle=cycles,
+                                    error_type=type(exc).__name__,
+                                )
                 except (OrchestratorInboxError, OSError, WorkflowError) as exc:
                     failures += 1
                     cycles += 1

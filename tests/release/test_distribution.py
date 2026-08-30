@@ -128,6 +128,30 @@ def test_built_wheel_excludes_repository_only_ci_assets(
     assert not any("__pycache__/" in name or name.endswith(".pyc") for name in names)
 
 
+def test_wheel_source_preflight_rejects_stale_build_components() -> None:
+    built = REPO_ROOT / "build" / "lib" / "agent_workflow"
+    source = REPO_ROOT / "src" / "agent_workflow" / "cli_contract.py"
+    built.mkdir(parents=True, exist_ok=True)
+    stale = built / "cli_contract.py"
+    original = stale.read_bytes() if stale.exists() else None
+    stale.write_bytes(source.read_bytes() + b"\n# stale\n")
+    try:
+        result = subprocess.run(
+            [sys.executable, "scripts/verify-wheel-source.py"],
+            cwd=REPO_ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        assert result.returncode == 1
+        assert "cli_contract.py" in result.stderr
+    finally:
+        if original is None:
+            stale.unlink(missing_ok=True)
+        else:
+            stale.write_bytes(original)
+
+
 def test_optional_mcp_profile_rejects_missing_pinned_sdk_before_client_registration(
     tmp_path: Path,
 ) -> None:
