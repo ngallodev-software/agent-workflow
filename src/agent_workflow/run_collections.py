@@ -26,7 +26,7 @@ from .errors import WorkflowError
 from .path import read_regular_file
 from .process import redact_bytes, run, run_bytes
 from .state import update_projection_path
-from .util import atomic_write_json, utc_now
+from .util import atomic_write_bytes, atomic_write_json, utc_now
 
 MAX_COMPLETION_HANDOFF_BYTES = 1024 * 1024
 MAX_PATCH_BYTES = 16 * 1024 * 1024
@@ -215,6 +215,11 @@ def collect_completion(
         except (OSError, UnicodeDecodeError, json.JSONDecodeError, WorkflowError) as exc:
             receipt["validation_status"] = "invalid"
             receipt["validation_errors"] = [str(exc)]
+            # Keep the exact worker submission available for correction and
+            # audit.  This is deliberately separate from the canonical
+            # collection and never becomes terminal evidence.
+            if source is not None:
+                atomic_write_bytes(handoff / ".completion.json.rejected", source_data)
     receipt_path = paths.collections / "completion.json"
     atomic_write_json(receipt_path, receipt)
     update_projection_path(

@@ -5,6 +5,9 @@ from typing import Any
 
 
 _FAILURE_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    # Completion schema errors can contain path-like text (for example a
+    # criterion's enum error), so they must precede generic executor rules.
+    ("completion_invalid", ("completion:", "completion handoff", "completion sidecar", "criteria", "enum")),
     ("command_not_found", ("command not found", "executable not found", "no such file or directory")),
     ("permission_wait", ("permission required", "approval required", "requires approval", "waiting for approval", "allow this command", "do you want to proceed")),
     ("permission_denied", ("permission denied", "operation not permitted", "sandbox denied", "access denied")),
@@ -16,7 +19,7 @@ _FAILURE_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("memory_exhausted", ("out of memory", "oom-kill", "cannot allocate memory")),
     ("output_capture_exhausted", ("capture limit exceeded", "output truncated", "stream drain deadline exceeded")),
     ("executor_protocol_error", ("invalid event", "protocol error", "unsupported stream format")),
-    ("completion_invalid", ("completion:", "completion handoff", "substantive completion")),
+    ("completion_invalid", ("substantive completion",)),
     ("contract_invalid", ("invalid json", "schema", "contract", "digest mismatch")),
 )
 

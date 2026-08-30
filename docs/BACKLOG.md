@@ -100,7 +100,7 @@ initialization but before runner creation. Add rollback for only invocation-
 owned artifacts plus lease release, without altering intentional preflight
 failure records or sealed runs.
 
-### COMP-001 — Preflight completion sidecars and classify their failures correctly
+### COMP-001 — Preflight completion sidecars and classify their failures correctly — COMPLETE
 
 Workers can finish scoped implementation and tests yet submit an intuitive but
 schema-invalid criterion value such as `verified` instead of `pass`. Preserve
@@ -116,6 +116,10 @@ only in-flight (`prepared`, `running`, or `blocked`) handoff correction while
 retaining the rejected bytes. Prove `verified` rejection, `pass` acceptance,
 diagnostic precedence, correction, and post-terminal refusal. See
 [`repo-analysis/COMP-001-FINDINGS-20260830.md`](repo-analysis/COMP-001-FINDINGS-20260830.md).
+
+**Implementation:** worker-facing schema preflight, completion-first
+diagnostics, and byte-preserving rejected-sidecar evidence are implemented;
+independent review and full release validation remain required.
 
 ### LEASE-001 — Retire explicitly abandoned external prepared runs
 

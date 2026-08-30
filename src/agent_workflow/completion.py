@@ -279,3 +279,31 @@ def validate_completion_handoff(run_dir: Path) -> dict[str, Any]:
         "command_count": len(value.get("commands", [])),
         "criterion_count": len(value.get("criteria", [])),
     }
+
+
+def validate_completion_sidecar(handoff_path: Path) -> dict[str, Any]:
+    """Validate a completion sidecar before submission.
+
+    This worker-facing preflight intentionally performs only JSON and schema
+    validation.  Launch-bound identity, Git, and substantive completion
+    checks belong to :func:`validate_completion_handoff` and collection.
+    Invalid schema errors retain JSON Schema's field path and allowed values.
+    """
+    source = Path(handoff_path)
+    read = read_regular_file(source, max_bytes=1024 * 1024)
+    try:
+        value = json.loads(read.data.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise WorkflowError(f"invalid completion sidecar JSON: {exc}") from exc
+    if not isinstance(value, dict):
+        raise WorkflowError("completion sidecar must be a JSON object")
+    validate_instance(value, "agent-workflow/completion/v1", artifact=str(source))
+    return {
+        "schema": "agent-workflow/completion-validation/v1",
+        "source_path": str(source),
+        "source_sha256": read.sha256,
+        "validation_status": "valid",
+        "result": value.get("result"),
+        "criterion_count": len(value.get("criteria", [])),
+        "command_count": len(value.get("commands", [])),
+    }
