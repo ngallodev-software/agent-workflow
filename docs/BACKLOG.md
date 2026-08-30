@@ -99,6 +99,25 @@ can also leave an unusable `prepared` run if it fails after lifecycle
 initialization but before runner creation. Add rollback for only invocation-
 owned artifacts plus lease release, without altering intentional preflight
 failure records or sealed runs.
+
+### COMP-001 — Preflight completion sidecars and classify their failures correctly
+
+Workers can finish scoped implementation and tests yet submit an intuitive but
+schema-invalid criterion value such as `verified` instead of `pass`. Preserve
+strict evidence semantics, but add an authoritative preflight validator,
+field-level corrective feedback, a bounded handoff-only repair path, and a
+completion-schema failure category that cannot be misreported as a missing
+command. Details and byte-bound evidence:
+[`repo-analysis/AGENT_WORKFLOW_COMPLETION_HANDOFF_AND_NAME_LEASE_INCIDENT_20260830.md`](repo-analysis/AGENT_WORKFLOW_COMPLETION_HANDOFF_AND_NAME_LEASE_INCIDENT_20260830.md).
+
+### LEASE-001 — Retire explicitly abandoned external prepared runs
+
+External `prepared` runs without a worker currently retain preferred agent
+names indefinitely: `terminate` correctly cannot control an external host but
+does not supply an auditable lifecycle retirement. Add a narrowly guarded,
+idempotent abandonment action that records authority before releasing the
+name; do not use wall-clock expiry or manual state edits. Details and evidence:
+[`repo-analysis/AGENT_WORKFLOW_COMPLETION_HANDOFF_AND_NAME_LEASE_INCIDENT_20260830.md`](repo-analysis/AGENT_WORKFLOW_COMPLETION_HANDOFF_AND_NAME_LEASE_INCIDENT_20260830.md).
 ### AW-GITDIR-001 — Headless linked-worktree Git administrative scope — COMPLETE
 
 Headless Codex launches now include the resolved Git administrative directory
