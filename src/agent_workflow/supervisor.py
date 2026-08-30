@@ -350,12 +350,26 @@ def supervise_once(
             pass
         _inspect_noninteractive_permission(run, agent_run_id)
         runner_pid, executor_pid = _heartbeat_pids(run)
-        record_health_sample(
-            run,
-            agent_run_id=agent_run_id,
-            runner_pid=runner_pid,
-            executor_pid=executor_pid,
-        )
+        try:
+            record_health_sample(
+                run,
+                agent_run_id=agent_run_id,
+                runner_pid=runner_pid,
+                executor_pid=executor_pid,
+            )
+        except WorkflowError as exc:
+            # Historical sealed journals can be deliberately read-only while a
+            # stale projection still lists the run as active.  Do not let that
+            # projection disable supervision of every other run.
+            results.append(
+                {
+                    **status,
+                    "observed_state": "health_journal_unwritable",
+                    "failure_category": "evidence_corrupt",
+                    "error": str(exc),
+                }
+            )
+            continue
         try:
             observation = observe(settings, agent_run_id)
         except WorkflowError as exc:
