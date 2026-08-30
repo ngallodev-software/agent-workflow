@@ -16,6 +16,7 @@ from .contracts import validate_instance
 from .errors import WorkflowError
 from .eval.commands import CommandSpec, specs_from_data
 from .path import absolute_path, read_regular_file, require_directory
+from .shared_contracts import negotiate_bundle
 
 
 NATIVE_JOB_SCHEMA = "agent-workflow/native-job/v1"
@@ -46,6 +47,7 @@ class ValidatedNativeJob:
     prompt_bytes: bytes
     job_bytes: bytes
     job_sha256: str
+    bundle_provenance: dict[str, Any]
     prompt_relative_path: str
     worktree_target: str
     path_policy: PathPolicy
@@ -109,6 +111,10 @@ def validate_native_job(job_path: Path, *, pack_root: Path) -> ValidatedNativeJo
             f"unsupported native job schema in {path}: {value.get('schema')!r}"
         )
     validate_instance(value, NATIVE_JOB_SCHEMA, artifact=str(path))
+    # Provenance negotiation is deliberately before any worktree binding or
+    # execution preparation.  The bundle validates shared semantics; AW
+    # continues to own native-job interpretation below.
+    bundle_provenance = negotiate_bundle(value.get("bundle_provenance"))
 
     prompt_relative = str(value["prompt_path"])
     prompt_path = _resolve_relative(root, prompt_relative, "prompt_path")
@@ -146,6 +152,7 @@ def validate_native_job(job_path: Path, *, pack_root: Path) -> ValidatedNativeJo
         prompt_bytes=prompt_read.data,
         job_bytes=job_read.data,
         job_sha256=job_read.sha256,
+        bundle_provenance=bundle_provenance,
         prompt_relative_path=prompt_relative,
         worktree_target=worktree_target,
         path_policy=PathPolicy(allowed_paths=allowed, forbidden_paths=forbidden),

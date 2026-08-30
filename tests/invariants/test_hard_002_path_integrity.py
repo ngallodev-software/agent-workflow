@@ -100,6 +100,11 @@ def test_native_job_rejects_symlinked_job_and_prompt_components(tmp_path: Path) 
         "schema": "agent-workflow/native-job/v1",
         "job_id": "job",
         "ticket_id": "ticket",
+        "bundle_provenance": {
+            "bundle_version": "0.1.0",
+            "schema_id": "agent-workflow/prompt-pack/v1",
+            "schema_digest": "cc8efd2446165392ee4a4268a16b63d850fe0efba650e9067d493deb8d2ad51e",
+        },
         "prompt_path": "prompt.md",
         "worktree_target": "work",
         "path_policy": {"allowed_paths": ["src"]},
@@ -116,7 +121,6 @@ def test_native_job_rejects_symlinked_job_and_prompt_components(tmp_path: Path) 
     (root / "job.json").write_text(json.dumps(job), encoding="utf-8")
     with pytest.raises(WorkflowError, match="prompt_path"):
         validate_native_job(root / "job.json", pack_root=root)
-
 
 def test_packaged_schema_authority_is_present_and_duplicate_ids_fail_closed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

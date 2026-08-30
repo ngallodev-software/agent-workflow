@@ -150,6 +150,7 @@ def _write_job_binding(state_dir: Path, job: ValidatedNativeJob, *, agent_run_id
         "job_source_sha256": source_sha256,
         "job_stored_path": str(stored),
         "job_stored_sha256": stored_sha256,
+        "bundle_provenance": job.bundle_provenance,
         "path_policy": {
             "allowed_paths": list(job.path_policy.allowed_paths),
             "forbidden_paths": list(job.path_policy.forbidden_paths),
