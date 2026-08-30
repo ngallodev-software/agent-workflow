@@ -5,7 +5,7 @@
   "invariants": [
     {
       "authority": "replay",
-      "max_test_functions": 6,
+      "max_test_functions": 8,
       "mock_rationale": "Durable message delivery and worker-control adapters are controlled while persist-first ordering remains real.",
       "path": "tests/invariants/test_agent_run_control_boundary.py",
       "rationale": "Persist-first steering, progress, acknowledgement, polling, and worker lifecycle boundaries require deterministic state injection."
@@ -53,7 +53,7 @@
     },
     {
       "authority": "durability",
-      "max_test_functions": 16,
+      "max_test_functions": 19,
       "path": "tests/invariants/test_completion_git_and_steering.py",
       "rationale": "Completion binding, repository identity, and steering delivery are cross-cutting durable-state invariants."
     },
@@ -235,13 +235,13 @@
     "acceptance": {
       "max_collected_cases": 31,
       "max_files": 9,
-      "max_test_functions": 20,
+      "max_test_functions": 21,
       "path": "tests/acceptance"
     },
     "invariants": {
       "max_collected_cases": 201,
       "max_files": 32,
-      "max_test_functions": 186,
+      "max_test_functions": 188,
       "path": "tests/invariants"
     },
     "release": {
@@ -253,7 +253,7 @@
   },
   "schema": "agent-workflow/test-authority/v1",
   "static_budgets": {
-    "max_subprocess_calls": 59,
+    "max_subprocess_calls": 61,
     "max_wheel_build_sites": 1
   }
 }

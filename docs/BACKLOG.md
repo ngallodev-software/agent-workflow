@@ -194,7 +194,7 @@ migration output; it never rewrites sealed historical runs or pack evidence.
 
 ### CONTRACT-001 — Negotiate bundle provenance for generated prompt packs
 
-**Status:** conformance blocker discovered 2026-08-30
+**Status:** complete 2026-08-30
 
 SpecGen pins the bundle dependency and emits bundle/digest strings in
 `workflow.requires`, but the generated `prompt-pack/v1` manifest has no
@@ -212,7 +212,7 @@ provenance; and installed-wheel conformance proves the full journey.
 
 ### GIT-LEASE-001 — Reject completion revisions absent from repository object storage
 
-**Status:** discovered 2026-08-30
+**Status:** complete 2026-08-30
 
 `contract-001-bundle-20260830` submitted a schema-valid completion naming
 `77add218...`, but the linked worktree HEAD pointed at that missing object and
