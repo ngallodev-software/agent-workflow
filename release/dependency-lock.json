@@ -58,12 +58,12 @@
     },
     {
       "name": "specgen-agent-workflow-contracts",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "groups": [
         "runtime"
       ],
       "source_requirements": [
-        "specgen-agent-workflow-contracts==0.1.0"
+        "specgen-agent-workflow-contracts==0.2.0"
       ]
     },
     {

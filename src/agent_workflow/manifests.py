@@ -14,6 +14,7 @@ from .path import absolute_path, inventory_tree, read_regular_file, require_dire
 from .util import atomic_write_bytes
 
 PROMPT_PACK_SCHEMA = "agent-workflow/prompt-pack/v1"
+PROMPT_PACK_V2_SCHEMA = "agent-workflow/prompt-pack/v2"
 PROMPT_PACK_MANIFEST = "pack.yaml"
 ARCHIVE_MANIFEST = "MANIFEST.json"
 
@@ -69,11 +70,50 @@ def load_pack_manifest(root: Path) -> dict[str, Any]:
     value = _load_yaml(path, report)
     if value is None:
         raise WorkflowError("; ".join(report.errors))
-    try:
-        validate_instance(value, PROMPT_PACK_SCHEMA, artifact=str(path))
-    except WorkflowError as exc:
-        raise WorkflowError(str(exc)) from exc
+    _validate_prompt_pack_schema(value, artifact=str(path))
     return value
+
+
+def _validate_prompt_pack_schema(value: dict[str, Any], *, artifact: str) -> str:
+    """Validate a pack with the authority for its declared schema version."""
+    schema_id = value.get("schema")
+    if schema_id == PROMPT_PACK_SCHEMA:
+        validate_instance(value, PROMPT_PACK_SCHEMA, artifact=artifact)
+        return PROMPT_PACK_SCHEMA
+    if schema_id == PROMPT_PACK_V2_SCHEMA:
+        try:
+            from specgen_contracts import negotiate, validate
+            from specgen_contracts.bundle import schema_digest
+        except ImportError as exc:
+            raise WorkflowError(
+                "prompt-pack/v2 requires the specgen-agent-workflow-contracts bundle"
+            ) from exc
+        diagnostics = validate(PROMPT_PACK_V2_SCHEMA, value)
+        if diagnostics:
+            details = "; ".join(
+                f"{'.'.join(str(part) for part in item.get('path', [])) or '$'}: "
+                f"{item.get('message', 'invalid value')}"
+                for item in diagnostics[:20]
+            )
+            raise WorkflowError(f"invalid {artifact}: {details}")
+        provenance = value["bundle_provenance"]
+        try:
+            negotiated = negotiate(
+                bundle_version=provenance["bundle_version"],
+                schema_id=provenance["schema_id"],
+                schema_digest_value=provenance["schema_digest"],
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise WorkflowError(
+                f"incompatible prompt-pack bundle provenance: {exc}"
+            ) from exc
+        if negotiated["schema_digest"] != schema_digest(PROMPT_PACK_V2_SCHEMA):
+            raise WorkflowError("incompatible prompt-pack bundle schema digest")
+        return PROMPT_PACK_V2_SCHEMA
+    raise WorkflowError(
+        f"unsupported prompt-pack schema: {schema_id!r}; expected "
+        f"{PROMPT_PACK_SCHEMA} or {PROMPT_PACK_V2_SCHEMA}; manual migration required"
+    )
 
 
 def _check_required(entries: dict[str, Any], report: ValidationReport) -> None:
@@ -361,7 +401,7 @@ def validate_pack(root: Path, verify_checksums: bool = False) -> ValidationRepor
     entries = {entry.path: entry for entry in inventory}
     report.inventory = inventory
     report.pack_format = "prompt-pack"
-    report.manifest_version = "1"
+    report.manifest_version = None
     report.manifest_path = PROMPT_PACK_MANIFEST
 
     _validate_archive_manifest(root, inventory, entries, report)
@@ -377,11 +417,12 @@ def validate_pack(root: Path, verify_checksums: bool = False) -> ValidationRepor
         _validate_checksum_manifest(root, inventory, entries, report, verify_checksums)
         return report
     try:
-        validate_instance(manifest, PROMPT_PACK_SCHEMA, artifact=PROMPT_PACK_MANIFEST)
+        schema_id = _validate_prompt_pack_schema(manifest, artifact=PROMPT_PACK_MANIFEST)
     except WorkflowError as exc:
         report.errors.append(str(exc))
         _validate_checksum_manifest(root, inventory, entries, report, verify_checksums)
         return report
+    report.manifest_version = schema_id.rsplit("/", 1)[-1]
 
     ticket_ids: set[str] = set()
     agent_run_ids: set[str] = set()
