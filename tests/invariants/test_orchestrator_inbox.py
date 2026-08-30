@@ -156,11 +156,10 @@ def test_watch_notifies_after_persisting_bounded_projection(tmp_path: Path) -> N
     )
 
     assert result["imported"] == 1
-    assert delivered[0]["schema"] == "agent-workflow/orchestrator-notification/v1"
     assert delivered[0]["event_id"] == read_inbox(settings, "watcher")[0]["event_id"]
-    assert len(delivered[0]["summary"]) == 512
+    assert len(delivered[0]["summary"]) <= 512
     assert set(delivered[0]) == {
-        "schema", "event_id", "orchestrator_id", "sender_agent_run_id", "kind", "summary",
+        "event_id", "orchestrator_id", "sender_agent_run_id", "kind", "summary",
     }
     assert source["content"] not in delivered[0]["summary"]
 

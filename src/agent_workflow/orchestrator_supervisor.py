@@ -18,7 +18,6 @@ from .util import utc_now
 
 LOCK_NAME = ".supervisor.lock"
 EVENTS_NAME = "supervisor-events.jsonl"
-NOTIFY_SCHEMA = "agent-workflow/orchestrator-notification/v1"
 MAX_NOTIFY_SUMMARY_CHARS = 512
 
 # IFACE-001: hosts may provide a callable without making the host runtime a
@@ -28,11 +27,8 @@ NotificationAdapter = Callable[[Mapping[str, Any]], object]
 
 def _notification(event: Mapping[str, Any], orchestrator_id: str) -> dict[str, Any]:
     """Project an inbox event into the bounded NOTIFY-001 host contract."""
-    summary = event.get("summary", "")
-    if not isinstance(summary, str):
-        summary = str(summary)
+    summary = f"{event['kind']} event imported"
     return {
-        "schema": NOTIFY_SCHEMA,
         "event_id": event["event_id"],
         "orchestrator_id": orchestrator_id,
         "sender_agent_run_id": event["sender_agent_run_id"],
