@@ -191,3 +191,21 @@ remain outside Agent-Workflow's native `prompt-pack/v1` parser until a
 separately approved adapter exists. When the shared bundle changes a native
 artifact, Agent-Workflow consumes only the bundle's deterministic validated
 migration output; it never rewrites sealed historical runs or pack evidence.
+
+### CONTRACT-001 — Negotiate bundle provenance for generated prompt packs
+
+**Status:** conformance blocker discovered 2026-08-30
+
+SpecGen pins the bundle dependency and emits bundle/digest strings in
+`workflow.requires`, but the generated `prompt-pack/v1` manifest has no
+structured provenance. Agent-Workflow's pack validator reads its local schema
+and does not negotiate the bundle; only the separate native-job path does. A
+real compiled prompt pack can therefore validate without exercising the
+promised exact-version consumer gate.
+
+**Done when:** the versioned shared prompt-pack contract carries structured
+bundle provenance; Agent-Workflow validates it with the installed bundle
+before run preparation; exact installed producer/consumer agreement is
+accepted and version/digest mismatch fails closed; the prior supported pack
+version has a deterministic non-mutating migration with source/target digest
+provenance; and installed-wheel conformance proves the full journey.
