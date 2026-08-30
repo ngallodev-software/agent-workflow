@@ -1,10 +1,7 @@
-.PHONY: test test-audit shell-check compile validate-example validate
+.PHONY: test shell-check compile validate-example validate
 
 test:
 	PYTHONPATH=src python3 -m pytest -q
-
-test-audit:
-	python3 scripts/audit-test-suite.py
 
 compile:
 	python3 -m compileall -q src

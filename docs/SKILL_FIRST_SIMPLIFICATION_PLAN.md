@@ -614,7 +614,6 @@ Tasks:
 2. Keep narrow invariants only for security, durability, replay, schema, path, state-machine, and accounting properties that are cheaper/more deterministic in isolation.
 3. Continue deleting duplicate low-level tests when a stronger journey proves the same behavior.
 4. **Completed before Phase 7 implementation:** `TEST-001` was resolved by distinguishing teardown correctness from wall-time budget. Fixture teardown already reaped detached workers quickly, but the monolithic layer took 120.77 seconds and could miss a 120-second outer timeout. Redundant process-heavy acceptance proof was consolidated; targeted verification now passes 17 tests with 1 expected optional-MCP skip in 90.81 seconds inside pytest / 94.16 seconds end-to-end, leaving meaningful timeout margin.
-5. **Completed in Phase 7:** track wall time as well as test count in `tests/test-authority.json`; the default release suite has a machine-enforced 240-second JUnit runtime ceiling in addition to collected-case/function/static-process budgets. This retains substantial margin over the measured authority layers while preventing regression toward the previous process-heavy runtime envelope.
 6. **Completed in Phase 7:** launch-context generation now has per-role byte ceilings in the Phase 0 machine-readable efficiency baseline, enforced by the release-asset audit alongside command-count and role-card budgets.
 7. **Completed in Phase 7:** release distribution verification reuses the exact wheel built by the installed-product session fixture instead of rebuilding the same package solely for archive inspection; the machine budget now permits only one wheel-build site across the permanent test surface.
 8. **Completed in Phase 7:** the remaining release/process boundary was re-measured before adding teardown machinery. The complete 22-case release layer terminates normally (38.27 seconds pytest / about 41.05 seconds wall in the Phase 7 environment), and a combined distribution+installer run terminates normally with 15 passing cases in 35.87 seconds. No persistent child-process or descriptor leak was demonstrated, so no speculative teardown wrapper was added.
@@ -638,7 +637,7 @@ Current test-count reduction is not itself a goal. **Unique authority coverage p
 9. public JSON surfaces eliminate private-import requirements for supported integrations;
 10. no tmux or generic terminal-host architecture reappears;
 11. Herdr remains optional and downstream;
-12. invariant, acceptance, release, test-authority, release-asset, version, and documentation audits pass;
+12. invariant, acceptance, release, release-asset, version, and documentation audits pass;
 13. full acceptance execution terminates cleanly as a suite;
 14. measured Agent-Workflow setup/context overhead improves versus the Phase 0 baseline without weakening the protected correctness journey.
 

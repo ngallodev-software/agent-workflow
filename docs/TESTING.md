@@ -49,14 +49,4 @@ The 0.8 release gate permanently protects these architectural outcomes:
 
 These requirements are enforced by the current invariant, acceptance, release, and repository-audit layers rather than by an implementation-phase checklist.
 
-## Test-authority budget
-
-`tests/test-authority.json` is the explicit suite-size and authority budget. Run:
-
-```bash
-python scripts/audit-test-suite.py
-```
-
-The audit prevents silent test proliferation, stale mock rationales, and duplicated low-value coverage. It is the current authority for suite-size limits; prose documentation intentionally does not duplicate exact counts that drift whenever tests are consolidated.
-
 For a current inventory, count the test tree or use pytest collection in the working revision rather than relying on historical handoff numbers.

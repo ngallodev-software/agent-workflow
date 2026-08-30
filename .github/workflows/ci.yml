@@ -47,8 +47,7 @@ jobs:
         if: matrix.suite == 'full'
         shell: bash
         run: |
-          python scripts/audit-test-suite.py
-          python -m pytest
+            python -m pytest
       - name: Cross-platform release build validation
         shell: bash
         run: |

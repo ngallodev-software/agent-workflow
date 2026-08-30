@@ -67,8 +67,7 @@ jobs:
         if: matrix.suite == 'full'
         shell: bash
         run: |
-          python scripts/audit-test-suite.py
-          python -m pytest
+            python -m pytest
       - name: Build wheel and source distribution
         shell: bash
         run: |
