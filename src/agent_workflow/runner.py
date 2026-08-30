@@ -482,6 +482,7 @@ def execute(
     first_output_at: str | None = None
     last_normalized_text: str | None = None
     pump_errors: list[str] = []
+    capture_warnings: list[str] = []
     wall_started = time.monotonic()
     runtime = launch.get("runtime_policy")
     # The immutable launch contract carries executor budgets, while the
@@ -810,9 +811,9 @@ def execute(
         },
     )
     if process_result.stdout_truncated:
-        pump_errors.append("stdout capture limit exceeded; output truncated")
+        capture_warnings.append("stdout capture limit exceeded; output truncated")
     if process_result.stderr_truncated:
-        pump_errors.append("stderr capture limit exceeded; output truncated")
+        capture_warnings.append("stderr capture limit exceeded; output truncated")
     if completed_by_child:
         return_code = 0
     if pump_errors:
@@ -931,7 +932,7 @@ def execute(
         ),
         "finished_at": finished_at,
         "exit_code": return_code,
-        "pump_errors": pump_errors,
+        "pump_errors": [*pump_errors, *capture_warnings],
         "failure_category": failure_category,
         "stdout_bytes": process_result.stdout_bytes,
         "stderr_bytes": process_result.stderr_bytes,

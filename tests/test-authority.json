@@ -225,7 +225,7 @@
   ],
   "layers": {
     "acceptance": {
-      "max_collected_cases": 30,
+      "max_collected_cases": 31,
       "max_files": 9,
       "max_test_functions": 20,
       "path": "tests/acceptance"
