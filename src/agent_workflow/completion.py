@@ -151,6 +151,7 @@ def completion_revision_errors(
     *,
     expected_base_revision: str | None,
     actual_head_revision: str | None,
+    repository: Path | None = None,
 ) -> list[str]:
     """Bind completed evidence to the launch baseline and current source HEAD."""
     if value.get("result") != "completed":
@@ -160,6 +161,11 @@ def completion_revision_errors(
         errors.append("completed base_revision does not match the launch source revision")
     if not actual_head_revision or value.get("head_revision") != actual_head_revision:
         errors.append("completed head_revision does not match the worktree Git HEAD")
+    declared = value.get("head_revision")
+    if repository is not None and isinstance(declared, str):
+        result = run(["git", "-C", str(repository), "cat-file", "-e", f"{declared}^{{commit}}"], check=False)
+        if result.returncode != 0:
+            errors.append("completed head_revision is absent from repository Git object storage")
     if (
         value.get("changed_files")
         and expected_base_revision
@@ -251,6 +257,7 @@ def validate_completion_handoff(run_dir: Path) -> dict[str, Any]:
         value,
         expected_base_revision=launch["worktree"].get("source_revision"),
         actual_head_revision=actual_head,
+        repository=workdir,
     )
     repository_closeout = None
     repository_error = None

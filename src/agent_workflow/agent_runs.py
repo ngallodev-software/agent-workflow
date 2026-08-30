@@ -31,7 +31,7 @@ from .executors import (
     executor_identity_for_plan,
     prepare_executor,
 )
-from .git import administrative_dir, snapshot
+from .git import administrative_dir, assert_administrative_dir_writable, snapshot
 from .health import last_event as last_health_event
 from .health import semantic_progress
 from .native_jobs import ValidatedNativeJob, validate_native_job
@@ -957,9 +957,11 @@ def _prepare(
     preflight_snapshot = None
     try:
         preflight_snapshot = snapshot(workdir)
+        assert_administrative_dir_writable(workdir)
     except WorkflowError:
+        if preflight_snapshot is not None:
+            raise
         # Non-Git workdirs are supported for general terminal delegation.
-        pass
     if (
         preflight_snapshot is not None
         and preflight_snapshot.dirty
