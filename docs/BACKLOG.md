@@ -110,6 +110,13 @@ completion-schema failure category that cannot be misreported as a missing
 command. Details and byte-bound evidence:
 [`repo-analysis/AGENT_WORKFLOW_COMPLETION_HANDOFF_AND_NAME_LEASE_INCIDENT_20260830.md`](repo-analysis/AGENT_WORKFLOW_COMPLETION_HANDOFF_AND_NAME_LEASE_INCIDENT_20260830.md).
 
+**Research-backed scope:** expose a read-only field-level preflight validator;
+match completion-schema diagnostics before generic command/path patterns; allow
+only in-flight (`prepared`, `running`, or `blocked`) handoff correction while
+retaining the rejected bytes. Prove `verified` rejection, `pass` acceptance,
+diagnostic precedence, correction, and post-terminal refusal. See
+[`repo-analysis/COMP-001-FINDINGS-20260830.md`](repo-analysis/COMP-001-FINDINGS-20260830.md).
+
 ### LEASE-001 — Retire explicitly abandoned external prepared runs
 
 External `prepared` runs without a worker currently retain preferred agent
@@ -118,6 +125,12 @@ does not supply an auditable lifecycle retirement. Add a narrowly guarded,
 idempotent abandonment action that records authority before releasing the
 name; do not use wall-clock expiry or manual state edits. Details and evidence:
 [`repo-analysis/AGENT_WORKFLOW_COMPLETION_HANDOFF_AND_NAME_LEASE_INCIDENT_20260830.md`](repo-analysis/AGENT_WORKFLOW_COMPLETION_HANDOFF_AND_NAME_LEASE_INCIDENT_20260830.md).
+
+**Research-backed scope:** add an explicit, idempotent retirement action only
+for an unbound external `prepared` run; append durable retirement authority
+before releasing its name. Refuse bound, running, completed, and self-retire
+requests; prove name reuse and historical-record preservation. No expiry or
+manual lease/status edits.
 ### AW-GITDIR-001 — Headless linked-worktree Git administrative scope — COMPLETE
 
 Headless Codex launches now include the resolved Git administrative directory
