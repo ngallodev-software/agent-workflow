@@ -99,6 +99,10 @@ can also leave an unusable `prepared` run if it fails after lifecycle
 initialization but before runner creation. Add rollback for only invocation-
 owned artifacts plus lease release, without altering intentional preflight
 failure records or sealed runs.
+### AW-GITDIR-001 — Headless linked-worktree Git administrative scope — COMPLETE
+
+Headless Codex launches now include the resolved Git administrative directory
+in their writable scope, with regression coverage for linked Git worktrees.
 
 ### BIND-001 — Host-neutral external Worker binding/reconciliation contract — COMPLETE
 

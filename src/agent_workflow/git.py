@@ -68,6 +68,13 @@ def snapshot(path: Path) -> GitSnapshot:
     return GitSnapshot(root, head, branch, dirty, _cleanliness_evidence(status))
 
 
+def administrative_dir(path: Path) -> Path:
+    """Return the resolved Git administrative directory for ``path``."""
+    path = expand_path(path)
+    result = run(["git", "-C", str(path), "rev-parse", "--absolute-git-dir"])
+    return Path(result.stdout.strip()).resolve()
+
+
 def assert_clean(repo: Path) -> GitSnapshot:
     snap = snapshot(repo)
     if snap.dirty:

@@ -31,7 +31,7 @@ from .executors import (
     executor_identity_for_plan,
     prepare_executor,
 )
-from .git import snapshot
+from .git import administrative_dir, snapshot
 from .health import last_event as last_health_event
 from .health import semantic_progress
 from .native_jobs import ValidatedNativeJob, validate_native_job
@@ -523,6 +523,7 @@ def _prepare_worker(
     *,
     executor: str | None,
     explicit_command: list[str] | None,
+    workdir: Path,
     structured: bool,
     executor_interactive: bool,
     model: str | None,
@@ -553,8 +554,15 @@ def _prepare_worker(
         )
     command = list(plan.argv)
     command[0] = require_command(command[0])
-    if plan.name == "codex" and "--add-dir" not in command:
-        command.extend(["--add-dir", str(handoff_dir)])
+    if plan.name == "codex":
+        if "--add-dir" not in command:
+            command.extend(["--add-dir", str(handoff_dir)])
+        try:
+            git_dir = administrative_dir(workdir)
+        except WorkflowError:
+            git_dir = None
+        if git_dir is not None and str(git_dir) not in command:
+            command.extend(["--add-dir", str(git_dir)])
     plan = ExecutorPlan(
         plan.name,
         tuple(command),
@@ -985,6 +993,7 @@ def _prepare(
         settings,
         executor=executor,
         explicit_command=explicit_command,
+        workdir=workdir,
         structured=structured,
         executor_interactive=executor_interactive,
         model=model,

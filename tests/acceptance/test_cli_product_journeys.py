@@ -127,6 +127,41 @@ def test_headless_agent_run_prepare_start_and_provenance_journey(
     assert (run / "final-receipt.json").is_file()
 
 
+def test_headless_codex_scope_includes_linked_worktree_git_directory(
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+    fake_agent_path: Path,
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    git_repo(source)
+    linked = tmp_path / "linked"
+    subprocess.run(
+        ["git", "-C", str(source), "worktree", "add", "-q", str(linked), "HEAD"],
+        check=True,
+    )
+    prompt = tmp_path / "prompt.md"
+    prompt.write_text("Complete the linked worktree task.\n", encoding="utf-8")
+    config = write_config(product_env, fake_agent=fake_agent_path)
+    env = dict(product_env)
+    env["FAKE_AGENT_MODE"] = "structured"
+
+    installed_product.json(
+        "agent-run", "prepare", "linked-gitdir", linked, prompt,
+        "--config", config, "--role", "review", "--tier", "medium",
+        "--structured", env=env,
+    )
+
+    run = _run_dir(env, "linked-gitdir")
+    command = json.loads((run / "command.json").read_text(encoding="utf-8"))["argv"]
+    git_dir = subprocess.run(
+        ["git", "-C", str(linked), "rev-parse", "--absolute-git-dir"],
+        text=True, capture_output=True, check=True,
+    ).stdout.strip()
+    add_dirs = [command[index + 1] for index, value in enumerate(command[:-1]) if value == "--add-dir"]
+    assert git_dir in add_dirs
+
+
 def test_external_prepare_is_host_independent_and_process_control_is_unavailable(
     installed_product: InstalledProduct,
     product_env: dict[str, str],
