@@ -1,7 +1,7 @@
 {
   "schema": "agent-workflow/release-policy/v1",
   "project": "agent-workflow",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "license": {
     "status": "configured",
     "backlog_id": "REL-001",

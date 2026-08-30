@@ -147,7 +147,7 @@
     },
     {
       "authority": "replay",
-      "max_test_functions": 6,
+      "max_test_functions": 8,
       "path": "tests/invariants/test_orchestrator_inbox.py",
       "rationale": "Inbox import, deduplication, fairness, signaling, and cursor recovery require deterministic replay matrices."
     },
