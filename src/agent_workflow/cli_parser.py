@@ -564,6 +564,12 @@ def build_parser(
     terminate.add_argument("agent_run_id")
     terminate.add_argument("--grace-seconds", type=int, default=8)
 
+    retire = agent_run_commands.add_parser(
+        "retire", help="retire an explicitly abandoned external prepared Agent Run"
+    )
+    retire.add_argument("agent_run_id")
+    retire.add_argument("--reason", required=True)
+
     restart = agent_run_commands.add_parser(
         "restart", help="create a new Agent Run from a completed prior run"
     )

@@ -25,6 +25,8 @@ def _next_action(row: dict[str, Any]) -> str:
         return f"agent-workflow agent-run status {agent_run_id}"
     if state in {"failed", "interrupted", "terminated"}:
         return f"agent-workflow agent-run restart {agent_run_id}"
+    if state == "retired":
+        return f"agent-workflow agent-run status {agent_run_id}"
     if row.get("evaluation_required") and not row.get("score_verdict"):
         return f"agent-workflow eval score {agent_run_id}"
     if row.get("disposition") not in {"accepted", "force-accepted"}:

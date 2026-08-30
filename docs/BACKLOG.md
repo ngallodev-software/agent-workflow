@@ -123,7 +123,7 @@ independent review and full release validation remain required.
 
 ### LEASE-001 — Retire explicitly abandoned external prepared runs
 
-External `prepared` runs without a worker currently retain preferred agent
+External `prepared` runs without a worker previously retained preferred agent
 names indefinitely: `terminate` correctly cannot control an external host but
 does not supply an auditable lifecycle retirement. Add a narrowly guarded,
 idempotent abandonment action that records authority before releasing the

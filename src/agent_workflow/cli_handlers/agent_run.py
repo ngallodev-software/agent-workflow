@@ -32,6 +32,7 @@ from ..agent_runs import progress as record_progress
 from ..agent_runs import restart as restart_agent_run
 from ..agent_runs import steer as steer_agent_run
 from ..agent_runs import terminate as terminate_agent_run
+from ..agent_identity import retire_external_agent
 from ..agent_runs import wait_for_message
 from ..state import list_statuses, read_status, repair_status
 
@@ -215,6 +216,10 @@ def handle_agent_run_command(
         return interrupt_agent_run(settings, args.agent_run_id), False
     if command == "terminate":
         return terminate_agent_run(settings, args.agent_run_id, args.grace_seconds), False
+    if command == "retire":
+        return retire_external_agent(
+            settings, agent_run_id=args.agent_run_id, reason=args.reason
+        ), False
     if command == "restart":
         return restart_agent_run(settings, args.agent_run_id, args.new_agent_run_id), False
     if command in {"review", "accept", "reject"}:

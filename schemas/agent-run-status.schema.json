@@ -65,7 +65,8 @@
         "completed",
         "failed",
         "interrupted",
-        "terminated"
+        "terminated",
+        "retired"
       ]
     },
     "disposition": {

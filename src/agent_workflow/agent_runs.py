@@ -1584,6 +1584,8 @@ PUBLIC_AGENT_RUN_FIELDS = (
     "signals",
     "safe_actions",
     "next_action",
+    "retirement_authority",
+    "retired_by_operator",
 )
 
 

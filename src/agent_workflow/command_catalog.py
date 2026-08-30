@@ -62,6 +62,7 @@ _PROFILE_COMMANDS: dict[str, frozenset[str]] = {
             "agent-run steer",
             "agent-run watch",
             "agent-run restart",
+            "agent-run retire",
             "agent-run review",
             "agent-run accept",
             "agent-run reject",

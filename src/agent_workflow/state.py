@@ -14,6 +14,7 @@ TERMINAL_STATUSES = {
     "failed",
     "interrupted",
     "terminated",
+    "retired",
 }
 
 STATUS_SCHEMA = "agent-workflow/agent-run-status/v1"

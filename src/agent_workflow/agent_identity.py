@@ -54,6 +54,127 @@ def status_agent_active(settings: Settings, item: dict[str, Any]) -> bool:
     return worker_alive is not False
 
 
+def has_external_binding(settings: Settings, item: dict[str, Any]) -> bool:
+    """Return whether an external run has a current host binding.
+
+    Binding state is authoritative in its append-only journal.  A malformed
+    or unavailable binding is treated as present so retirement fails closed.
+    """
+    if item.get("worker_mode") != "external":
+        return False
+    agent_run_id = item.get("agent_run_id")
+    if not isinstance(agent_run_id, str) or not agent_run_id:
+        return True
+    try:
+        from .external_bindings import status as external_binding_status
+
+        return bool(external_binding_status(settings, agent_run_id).get("bound"))
+    except (WorkflowError, OSError, ValueError):
+        return True
+
+
+def can_retire_prepared(settings: Settings, item: dict[str, Any]) -> bool:
+    """Return whether an item satisfies the narrow external-retirement gate."""
+    if item.get("worker_mode") != "external" or has_external_binding(settings, item):
+        return False
+    agent_run_id = item.get("agent_run_id")
+    if not isinstance(agent_run_id, str) or not agent_run_id:
+        return False
+    try:
+        return authoritative_execution_status(run_dir(settings, agent_run_id)) == "prepared"
+    except WorkflowError:
+        return False
+
+
+def retire_external_agent(
+    settings: Settings,
+    *,
+    agent_run_id: str,
+    reason: str,
+    actor: str = "operator",
+) -> dict[str, Any]:
+    """Retire one explicitly abandoned, unbound external prepared run.
+
+    The lifecycle transition is the retirement authority.  The name lease is
+    released only after that append-only evidence and its projection exist.
+    """
+    from .agent_run_control import _child_lifecycle_control
+    from .run_lifecycle import synchronize_projection, transition_execution
+
+    child_control = _child_lifecycle_control(agent_run_id)
+    if child_control is not None:
+        raise WorkflowError("an Agent Run cannot retire itself")
+    if not isinstance(reason, str) or not reason.strip():
+        raise WorkflowError("retirement reason must be non-empty")
+    state_dir = run_dir(settings, agent_run_id)
+    status_path = state_dir / "status.json"
+    prior = synchronize_projection(status_path, source="retire")
+    current = authoritative_execution_status(state_dir)
+    retirement_recorded = False
+    events_path = state_dir / "events.jsonl"
+    if events_path.is_file():
+        try:
+            events = [
+                json.loads(line)
+                for line in events_path.read_text(encoding="utf-8").splitlines()
+                if line
+            ]
+            last = events[-1] if events else {}
+            retirement_recorded = (
+                last.get("dimension") == "execution"
+                and last.get("new") == "retired"
+                and last.get("actor") == actor
+                and str(last.get("reason", "")).startswith(
+                    "external prepared run retired:"
+                )
+            )
+        except (OSError, json.JSONDecodeError, AttributeError):
+            retirement_recorded = False
+    if current == "retired" and retirement_recorded:
+        release_agent_name(
+            settings, agent_name=prior.get("agent_name"), agent_run_id=agent_run_id
+        )
+        return {**prior, "outcome": "already_retired"}
+    if current != "prepared":
+        raise WorkflowError(
+            f"only prepared external Agent Runs may be retired (status={current!r})"
+        )
+    if prior.get("worker_mode") != "external":
+        raise WorkflowError("only external Agent Runs may be retired")
+    from .external_bindings import status as external_binding_status
+
+    binding = external_binding_status(settings, agent_run_id)
+    if binding.get("bound"):
+        raise WorkflowError("cannot retire an external Agent Run with an active binding")
+    generation = binding.get("generation", 0)
+    authority = {
+        "actor": actor,
+        "action": "retire_external_prepared",
+        "reason": reason.strip(),
+        "observed_binding_generation": generation,
+        "timestamp": utc_now(),
+    }
+    retired = transition_execution(
+        settings,
+        agent_run_id,
+        "retired",
+        actor=actor,
+        reason=(
+            f"external prepared run retired: {reason.strip()} "
+            f"(observed binding generation {generation})"
+        ),
+        projection_source="retire",
+        retirement_authority=authority,
+        worker_alive=False,
+        finished_at=authority["timestamp"],
+        retired_by_operator=True,
+    )
+    release_agent_name(
+        settings, agent_name=retired.get("agent_name"), agent_run_id=agent_run_id
+    )
+    return {**retired, "outcome": "retired"}
+
+
 def _compat_class_for_role(settings: Settings, role_id: str) -> str:
     if role_id == "review":
         candidate = "review"
