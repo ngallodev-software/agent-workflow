@@ -167,7 +167,10 @@ PY
 safe_link() {
   local source="$1" destination="$2"
   if [[ -L "$destination" ]]; then
-    if [[ "$(readlink "$destination")" != "$source" ]]; then
+    local current_target
+    current_target="$(readlink -f "$destination")"
+    if [[ "$current_target" != "$(readlink -f "$source")" \
+      && ( -z "${installed_launcher:-}" || "$current_target" != "$(readlink -f "$installed_launcher")" ) ]]; then
       echo "refusing to replace unrelated symlink: $destination" >&2
       exit 2
     fi

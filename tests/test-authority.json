@@ -46,7 +46,7 @@
     },
     {
       "authority": "durability",
-      "max_test_functions": 13,
+      "max_test_functions": 16,
       "path": "tests/invariants/test_completion_git_and_steering.py",
       "rationale": "Completion binding, repository identity, and steering delivery are cross-cutting durable-state invariants."
     },
@@ -245,7 +245,7 @@
   },
   "schema": "agent-workflow/test-authority/v1",
   "static_budgets": {
-    "max_subprocess_calls": 56,
+    "max_subprocess_calls": 57,
     "max_wheel_build_sites": 1
   }
 }
