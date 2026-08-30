@@ -64,6 +64,17 @@ agent-workflow agent-run ack RUN MESSAGE_ID "applied" --actor worker
 
 Workers publish structured completion with `agent task-complete`. Required evaluation, independent review, and authorized acceptance/rejection remain separate gates. Do not infer success from worker exit or self-accept because implementation/tests finished.
 
+## Continuous improvement
+
+For every material delegated implementation, prompt-pack execution, recovery, or
+review, actively compare the observed outcome with its declared acceptance and
+evidence. Record actionable strengths, friction, missing evidence, confusing
+contracts, and lifecycle gaps in the durable review/acceptance artifacts or the
+Agent-Workflow backlog. Treat a repeated friction point as product-improvement
+work without waiting for a separate request. Keep the boundary explicit:
+external-host behavior is unverified unless the host supplies evidence, and an
+observation must never replace the required evaluation/review/acceptance gates.
+
 ## Recovery
 
 Recover from source, the immutable Agent Run contract, append-only journals, sealed evidence, and workflow snapshots. Verify the recorded source/worktree baseline, repair rebuildable projections when needed, then resume scheduling or create lineage with `agent-workflow agent-run restart RUN`. Rerun applicable evaluation before acceptance. Never improvise around or mutate sealed evidence.

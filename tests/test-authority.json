@@ -46,6 +46,13 @@
     },
     {
       "authority": "durability",
+      "max_test_functions": 3,
+      "mock_rationale": "Preparation failure boundaries are controlled to prove rollback preserves intentional preflight evidence while removing invocation-owned state.",
+      "path": "tests/invariants/test_agent_prepare_transaction.py",
+      "rationale": "Agent-name leases, handoff artifacts, and run state must roll back atomically after failed preparation."
+    },
+    {
+      "authority": "durability",
       "max_test_functions": 16,
       "path": "tests/invariants/test_completion_git_and_steering.py",
       "rationale": "Completion binding, repository identity, and steering delivery are cross-cutting durable-state invariants."
@@ -147,7 +154,8 @@
     },
     {
       "authority": "replay",
-      "max_test_functions": 8,
+      "max_test_functions": 9,
+      "mock_rationale": "Cursor-write failure is controlled to prove idempotent inbox recovery; the live watcher continuity journey uses a subprocess.",
       "path": "tests/invariants/test_orchestrator_inbox.py",
       "rationale": "Inbox import, deduplication, fairness, signaling, and cursor recovery require deterministic replay matrices."
     },
@@ -245,7 +253,7 @@
   },
   "schema": "agent-workflow/test-authority/v1",
   "static_budgets": {
-    "max_subprocess_calls": 58,
+    "max_subprocess_calls": 59,
     "max_wheel_build_sites": 1
   }
 }

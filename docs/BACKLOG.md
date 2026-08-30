@@ -38,6 +38,68 @@ Produce the content-addressed browser image/runtime digest and verified font evi
 
 ## P1 — Public integration contracts
 
+### TERM-001 — Retire external host terminals after terminal Agent Run state
+
+Agent-Workflow correctly owns no external terminal or process lifecycle, but
+external hosts can leave a background terminal projection visible after the
+Agent Run has a sealed terminal outcome. Define and implement a bounded,
+idempotent host-binding retirement signal based only on public terminal status;
+it must never let host/UI state alter execution, completion, review, or
+acceptance authority. Research must verify the observed terminal host, stale
+PID/reuse safety, normal completion, failure, interruption, and host restart.
+
+**Evidence:** The 2026-08-29 execution runs `TASK-001-a3b4d261`, its retry,
+and both review runs have terminal durable status with no live worker PID or
+process group. The current core intentionally has no terminal-manager
+dependency. The remaining visible background terminal is therefore a host
+projection cleanup gap, not a surviving worker process.
+
+### WATCH-001 — Repair watcher prompt-pack contract and independent evidence
+
+The `agent-workflow-lifecycle-watch-20260829` execution cannot be accepted.
+Its initial implementation completions were invalid, the generated `EVAL-002`
+selector collected no tests, supplied source hashes were stale, and the final
+review found missing live watcher lifetime and duplicate-delivery proof. Keep
+the five-field NOTIFY-001 contract unless a separately approved versioned
+contract supersedes it; a schema marker must not be added incidentally.
+
+**Evidence:** `.agent-workflow-handoff/TASK-002-4d2253b8-review/result.json`,
+`FINDINGS.md`, and `TASK-002-4d2253b8-final-review/result.json`.
+
+**Research conclusion (2026-08-29):** Current source already preserves the
+canonical exact five-field record and redacts the summary. The repair is
+evidence/test coverage, not a schema change. `EVAL-002` selects no tests;
+replace it with concrete current test names. Because `watch()` owns process
+signal handlers, prove live watcher lifetime using a subprocess rather than a
+thread. Force a source-cursor write failure after inbox persistence to show the
+allowed duplicate delivery/restart recovery path while the inbox remains
+singular.
+
+**Done when:** the pack precisely names its test selectors, immutable evidence
+hashes match the reviewed revision, independent tests demonstrate one active
+watcher across child A then B plus duplicate/restart behavior, and a fresh
+completion/evaluation/review/acceptance chain is recorded.
+
+### EXEC-001 — Make completed implementation evidence revision-bound
+
+Completion validation must reject a claimed completed implementation when its
+changed files are not committed to a distinct revision, and delegated prompt
+packs must instruct workers to commit before closeout. The first watcher task
+and its retry demonstrate that schema-valid sidecars alone are insufficient.
+
+**Evidence:** `TASK-001-a3b4d261` failed because changed files had no distinct
+committed revision; `TASK-001-a3b4d261-retry1` failed due placeholder
+completion criteria. Preserve those sealed failures as evidence rather than
+rewriting them.
+
+**Research conclusion (2026-08-29):** Completion validation already rejects
+both observed failures. The remaining defect is transactional preparation:
+`prepare()` writes run/handoff artifacts before it claims the name lease, and
+can also leave an unusable `prepared` run if it fails after lifecycle
+initialization but before runner creation. Add rollback for only invocation-
+owned artifacts plus lease release, without altering intentional preflight
+failure records or sealed runs.
+
 ### BIND-001 — Host-neutral external Worker binding/reconciliation contract — COMPLETE
 
 Implemented in Phase 5. The rebuildable binding projection, idempotent bind/rebind/unbind semantics, generation-guarded pending-delivery retrieval, and transport-attempt reporting are host-neutral and preserve the delivery/acknowledgement boundary. The paired API review found no need for host-specific binding fields.
@@ -69,3 +131,23 @@ The plugin may own workspace/presentation, launching a prepared external worker,
 ### SPEC-001 — AW-optimized spec/eval producer boundary
 
 Integrate the independent spec-generation app/skill only through stable machine-readable spec/eval contracts. It should operate without Agent-Workflow while optionally producing AW-optimized prompt-pack/evaluation inputs; do not absorb general planning/spec generation into the already-dense core.
+
+Agent-Workflow retains interpretation of its native target projection: it
+chooses the actual implementation flow, logical roles and available models,
+serial versus parallel scheduling, execution, evaluation, independent review,
+and sealing. A SpecGen task DAG or parallelism annotation is evidence and a
+planning opportunity, never a forced schedule or runtime routing decision.
+
+**Done when:** the pinned SpecGen release and exact target schemas are captured
+as compatibility fixtures or an approved immutable shared-contract bundle;
+generated-pack conformance tests exercise the public validator and a
+representative execution/review path; incompatible versions or unsupported
+target fields fail closed with an actionable diagnostic. If `CONTRACT-001`
+adopts the bundle, Agent-Workflow retains semantic ownership and interpretation
+of its prompt-pack schema while importing shared schema/descriptor/validation
+and negotiation helpers. A SpecGen-generated native target must match the
+consumer's exact immutable bundle version and digest. Portable SpecGen packs
+remain outside Agent-Workflow's native `prompt-pack/v1` parser until a
+separately approved adapter exists. When the shared bundle changes a native
+artifact, Agent-Workflow consumes only the bundle's deterministic validated
+migration output; it never rewrites sealed historical runs or pack evidence.

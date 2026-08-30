@@ -285,3 +285,39 @@ def claim_agent_name(
             },
         )
         fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
+
+def release_agent_name(
+    settings: Settings,
+    *,
+    agent_name: str | None,
+    agent_run_id: str,
+) -> None:
+    """Release this run's lease without disturbing a newer owner."""
+    lease_root = settings.state_root / "agent-name-leases"
+    lock_path = lease_root / ".lock"
+    if not lease_root.is_dir():
+        return
+    with lock_path.open("a+b") as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        lease_paths = (
+            [lease_root / f"{agent_name}.json"]
+            if agent_name is not None
+            else list(lease_root.glob("*.json"))
+        )
+        for lease_path in lease_paths:
+            if not lease_path.is_file():
+                continue
+            try:
+                lease = json.loads(lease_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                lease = {}
+            if (
+                lease.get("agent_name") == lease_path.stem
+                and lease.get("agent_run_id") == agent_run_id
+            ):
+                try:
+                    lease_path.unlink()
+                except FileNotFoundError:
+                    pass
+        fcntl.flock(lock.fileno(), fcntl.LOCK_UN)

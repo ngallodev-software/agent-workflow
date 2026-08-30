@@ -5,6 +5,7 @@ import json
 import os
 import platform
 import shlex
+import shutil
 import sys
 import time
 from dataclasses import dataclass
@@ -14,7 +15,7 @@ from typing import Any
 
 from .agent_context import initialize as initialize_agent_context
 from .agent_run_paths import AgentRunPaths
-from .agent_identity import claim_agent_name, resolve_agent_identity
+from .agent_identity import claim_agent_name, release_agent_name, resolve_agent_identity
 from .assets import asset_path
 from .config import Settings
 from .config import enforce_trust
@@ -781,6 +782,46 @@ def _prepare_evaluation(
     return runtime_policy, evaluation_policy
 
 def prepare(
+    settings: Settings,
+    *,
+    agent_run_id: str,
+    workdir: Path,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Prepare an Agent Run transactionally, preserving preflight evidence."""
+    state_dir = run_dir(settings, agent_run_id)
+    handoff_dir = absolute_path(workdir) / ".agent-workflow-handoff" / agent_run_id
+    state_existed = state_dir.exists()
+    handoff_existed = handoff_dir.exists() or handoff_dir.is_symlink()
+    try:
+        return _prepare(
+            settings,
+            agent_run_id=agent_run_id,
+            workdir=workdir,
+            **kwargs,
+        )
+    except BaseException:
+        # The preflight-failure record is intentional durable evidence.
+        preserve_preflight = (state_dir / "preflight.json").is_file()
+        if not state_existed and state_dir.exists() and not preserve_preflight:
+            if state_dir.is_symlink():
+                state_dir.unlink()
+            else:
+                shutil.rmtree(state_dir)
+        if not handoff_existed and handoff_dir.exists():
+            if handoff_dir.is_symlink():
+                handoff_dir.unlink()
+            else:
+                shutil.rmtree(handoff_dir)
+        release_agent_name(
+            settings,
+            agent_name=None,
+            agent_run_id=agent_run_id,
+        )
+        raise
+
+
+def _prepare(
     settings: Settings,
     *,
     agent_run_id: str,

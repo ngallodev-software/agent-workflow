@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import fcntl
+import json
 import subprocess
+import sys
+import time
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
+import agent_workflow.orchestrator_inbox as orchestrator_inbox
 from agent_workflow.agent_runs import prepare
 from agent_workflow.config import defaults
 from agent_workflow.errors import WorkflowError
@@ -191,19 +195,80 @@ def test_watch_notification_failure_does_not_stop_or_lose_event(tmp_path: Path) 
 def test_watch_keeps_one_registry_alive_for_successive_children(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     _make_child(tmp_path, settings, "child-a", "first")
-    _make_child(tmp_path, settings, "child-b", "second")
     create_registry(settings, "watcher")
     register_child(settings, "watcher", "child-a")
-    register_child(settings, "watcher", "child-b")
 
-    first = watch(settings, "watcher", interval_seconds=0.01, max_cycles=1, batch_size=1)
-    second = watch(settings, "watcher", interval_seconds=0.01, max_cycles=1, batch_size=1)
+    watcher_code = """
+import json
+import sys
+from dataclasses import replace
+from pathlib import Path
+from agent_workflow.config import defaults
+from agent_workflow.orchestrator_supervisor import watch
 
-    assert first["state"] == second["state"] == "completed"
-    assert first["advanced"] == second["advanced"] == 1
+settings = replace(defaults(Path(sys.argv[1])), state_root=Path(sys.argv[2]))
+print(json.dumps(watch(settings, "watcher", interval_seconds=0.01, max_cycles=200, batch_size=1)), flush=True)
+"""
+    process = subprocess.Popen(
+        [sys.executable, "-c", watcher_code, str(settings.config_path), str(settings.state_root)],
+        cwd=Path(__file__).parents[2],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        events_path = orchestrator_dir(settings, "watcher") / "supervisor-events.jsonl"
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            if events_path.exists() and '"reason":"startup"' in events_path.read_text(encoding="utf-8"):
+                break
+            time.sleep(0.01)
+        else:
+            raise AssertionError("watcher did not start")
+
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline and not read_inbox(settings, "watcher"):
+            time.sleep(0.01)
+        assert read_inbox(settings, "watcher")[0]["sender_agent_run_id"] == "child-a"
+
+        _make_child(tmp_path, settings, "child-b", "second")
+        register_child(settings, "watcher", "child-b")
+        stdout, stderr = process.communicate(timeout=5)
+    finally:
+        if process.poll() is None:
+            process.terminate()
+            process.communicate(timeout=5)
+
+    assert process.returncode == 0, stderr
+    result = json.loads(stdout)
+    assert result["state"] == "completed"
+    assert result["advanced"] == 2
     assert {event["sender_agent_run_id"] for event in read_inbox(settings, "watcher")} == {
         "child-a", "child-b"
     }
+
+
+def test_watch_duplicate_delivery_after_cursor_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = _settings(tmp_path)
+    _make_child(tmp_path, settings, "child-one", "cursor recovery")
+    create_registry(settings, "watcher")
+    register_child(settings, "watcher", "child-one")
+
+    def fail_cursor_write(*_args: object, **_kwargs: object) -> None:
+        raise OSError("simulated cursor write failure")
+
+    monkeypatch.setattr(orchestrator_inbox, "_write_source_cursor", fail_cursor_write)
+    failed = watch(settings, "watcher", interval_seconds=0.01, max_cycles=1)
+    assert failed["state"] == "completed"
+    assert failed["advanced"] == 0
+    assert len(read_inbox(settings, "watcher")) == 1
+
+    monkeypatch.undo()
+    recovered = watch(settings, "watcher", interval_seconds=0.01, max_cycles=1)
+    assert recovered["advanced"] == 1
+    assert recovered["imported"] == 1
+    assert recovered["state"] == "completed"
+    assert len(read_inbox(settings, "watcher")) == 1
 
 
 def test_watch_has_a_single_writer_lease(tmp_path: Path) -> None:
