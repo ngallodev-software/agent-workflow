@@ -183,6 +183,27 @@ def test_watch_notification_failure_does_not_stop_or_lose_event(tmp_path: Path) 
 
     assert result["state"] == "completed"
     assert len(read_inbox(settings, "watcher")) == 1
+    recovered = watch(settings, "watcher", interval_seconds=0.01, max_cycles=1)
+    assert recovered["advanced"] == 0
+    assert len(read_inbox(settings, "watcher")) == 1
+
+
+def test_watch_keeps_one_registry_alive_for_successive_children(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    _make_child(tmp_path, settings, "child-a", "first")
+    _make_child(tmp_path, settings, "child-b", "second")
+    create_registry(settings, "watcher")
+    register_child(settings, "watcher", "child-a")
+    register_child(settings, "watcher", "child-b")
+
+    first = watch(settings, "watcher", interval_seconds=0.01, max_cycles=1, batch_size=1)
+    second = watch(settings, "watcher", interval_seconds=0.01, max_cycles=1, batch_size=1)
+
+    assert first["state"] == second["state"] == "completed"
+    assert first["advanced"] == second["advanced"] == 1
+    assert {event["sender_agent_run_id"] for event in read_inbox(settings, "watcher")} == {
+        "child-a", "child-b"
+    }
 
 
 def test_watch_has_a_single_writer_lease(tmp_path: Path) -> None:
