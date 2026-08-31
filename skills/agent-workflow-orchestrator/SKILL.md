@@ -25,9 +25,13 @@ Use this skill for multi-run coordination or a dependency-ordered workflow. Use
    provider/model/runtime routing:
 
    ```bash
-   agent-workflow delegate CHILD_ID PROMPT --repo REPO --ticket TICKET \
+   agent-workflow delegate CHILD_ID /path/to/prompt.md --repo REPO --ticket TICKET \
      --base-ref BASE_REF --role implementation --tier medium
    ```
+
+   `delegate` reads its positional prompt argument as a regular file path;
+   inline prose is not accepted. Use a durable prompt file or `--pack` for a
+   validated prompt pack.
 
    For a worker owned by another runtime, use `--workdir WORKTREE
    --worker-mode external --interactive`; preparation is not execution. Use
