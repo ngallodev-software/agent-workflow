@@ -43,9 +43,7 @@ jobs:
         run: brew install zstd
       - name: Install test dependencies
         shell: bash
-        env:
-          PIP_EXTRA_INDEX_URL: https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@pypi.pkg.github.com/ngallodev-software/simple/
-        run: python -m pip install 'setuptools>=61' 'pytest>=8,<10' 'jsonschema>=4.18,<5' 'PyYAML>=6.0.3,<7' 'mcp==1.28.1' 'build>=1.2,<2'
+        run: python -m pip install 'setuptools>=61' 'pytest>=8,<10' 'jsonschema>=4.18,<5' 'PyYAML>=6.0.3,<7' 'mcp==1.28.1' 'build>=1.2,<2' 'https://github.com/ngallodev-software/agent-workflow-spec-contracts/releases/download/v0.2.1/specgen_agent_workflow_contracts-0.2.1-py3-none-any.whl#sha256=d254a0b13f2fd1de732dab2abd33da35db9ea365b50b3214e92308fea79d85c2'
       - name: Acceptance and invariant suite
         if: matrix.suite == 'full'
         shell: bash
