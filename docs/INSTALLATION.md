@@ -25,9 +25,12 @@ python -m build
 python -m pip install dist/agent_workflow-*.whl
 ```
 
-The shared contracts wheel is published to GitHub Packages. Set
-`PIP_EXTRA_INDEX_URL` to the organization registry using a token with
-`read:packages`, then install the pinned dependency normally.
+The shared contracts source is hosted on GitHub and installed directly by the
+project dependency:
+
+```bash
+python -m pip install git+https://github.com/ngallodev-software/agent-workflow-spec-contracts.git
+```
 
 Optional feature groups are declared in `pyproject.toml` for evaluation, statistics, completion generation, benchmark visuals, and MCP.
 
