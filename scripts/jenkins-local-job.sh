@@ -20,16 +20,27 @@ trigger() {
   elif [[ -r "$HOME/.config/osint-suite/jenkins.env" ]]; then
     # shellcheck disable=SC1090
     source "$HOME/.config/osint-suite/jenkins.env"
-    JENKINS_USER="${JENKINS_USER:-${OSINT_JENKINS_USER:-}}"
-    JENKINS_TOKEN="${JENKINS_TOKEN:-${OSINT_JENKINS_TOKEN:-}}"
+    if [[ -z "${JENKINS_USER:-}" || -z "${JENKINS_TOKEN:-}" ]]; then
+      JENKINS_USER="${OSINT_JENKINS_USER:-}"
+      JENKINS_TOKEN="${OSINT_JENKINS_TOKEN:-}"
+      JENKINS_URL="${OSINT_JENKINS_URL:-$jenkins_url}"
+    fi
   fi
   [[ -n "${JENKINS_USER:-}" && -n "${JENKINS_TOKEN:-}" ]] || {
     echo "JENKINS_USER and JENKINS_TOKEN are required to trigger $job_name" >&2
     exit 2
   }
+  jenkins_url="${JENKINS_URL:-$jenkins_url}"
   mkdir -p "$(dirname "$cli")"
-  [[ -s "$cli" ]] || curl -fsS "$jenkins_url/jnlpJars/jenkins-cli.jar" -o "$cli"
-  java -jar "$cli" -s "$jenkins_url" -auth "$JENKINS_USER:$JENKINS_TOKEN" build "$job_name"
+  if ! jar tf "$cli" >/dev/null 2>&1; then
+    tmp_cli="$(mktemp "${cli}.XXXXXX")"
+    trap 'rm -f "$tmp_cli"' RETURN
+    curl -fsS "$jenkins_url/jnlpJars/jenkins-cli.jar" -o "$tmp_cli"
+    jar tf "$tmp_cli" >/dev/null
+    mv "$tmp_cli" "$cli"
+    trap - RETURN
+  fi
+  java -jar "$cli" -s "$jenkins_url" -auth "$JENKINS_USER:$JENKINS_TOKEN" -http build "$job_name"
 }
 case "${1:-}" in
   configure)
