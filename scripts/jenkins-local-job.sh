@@ -2,7 +2,7 @@
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 job_name="${JENKINS_JOB_NAME:-agent-workflow-local}"
-branch="${JENKINS_BRANCH:-master}"
+branch="${JENKINS_BRANCH:-release-tooling}"
 repo_url="${JENKINS_REPO_URL:-$(git -C "$root" rev-parse --show-toplevel)}"
 if [[ -f "$root/.git" ]]; then
   common_dir="$(git -C "$root" rev-parse --path-format=absolute --git-common-dir)"

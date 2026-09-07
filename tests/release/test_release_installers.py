@@ -131,6 +131,14 @@ def test_jenkins_benchmark_smoke_and_optional_cli_artifact_are_explicit() -> Non
     assert "codebase-memory-cli-release-tooling" in local_job
 
 
+def test_local_jenkins_job_is_pinned_to_release_tooling_without_polling() -> None:
+    helper = (REPO_ROOT / "scripts" / "jenkins-local-job.sh").read_text(encoding="utf-8")
+    job = (REPO_ROOT / "scripts" / "jenkins-local-job.xml").read_text(encoding="utf-8")
+    assert 'branch="${JENKINS_BRANCH:-release-tooling}"' in helper
+    assert "<triggers/>" in job
+    assert "pollSCM" not in job
+
+
 def test_release_workflow_is_tag_only_and_bundle_builder_is_reproducible(tmp_path: Path) -> None:
     workflow = (REPO_ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
     assert "pull_request" not in workflow

@@ -1,6 +1,6 @@
 <?xml version='1.1' encoding='UTF-8'?>
 <flow-definition plugin="workflow-job">
-  <description>Local-only agent-workflow build, test, release check, and install.</description>
+  <description>Local-only Agent-Workflow release-tooling build, test, release check, and install. No SCM polling.</description>
   <keepDependencies>false</keepDependencies>
   <properties>
     <jenkins.model.BuildDiscarderProperty>
