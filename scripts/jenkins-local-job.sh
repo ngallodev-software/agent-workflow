@@ -17,6 +17,11 @@ trigger() {
   if [[ -r "${XDG_CONFIG_HOME:-$HOME/.config}/agent-workflow/jenkins.env" ]]; then
     # shellcheck disable=SC1090
     source "${XDG_CONFIG_HOME:-$HOME/.config}/agent-workflow/jenkins.env"
+  elif [[ -r "$HOME/.config/osint-suite/jenkins.env" ]]; then
+    # shellcheck disable=SC1090
+    source "$HOME/.config/osint-suite/jenkins.env"
+    JENKINS_USER="${JENKINS_USER:-${OSINT_JENKINS_USER:-}}"
+    JENKINS_TOKEN="${JENKINS_TOKEN:-${OSINT_JENKINS_TOKEN:-}}"
   fi
   [[ -n "${JENKINS_USER:-}" && -n "${JENKINS_TOKEN:-}" ]] || {
     echo "JENKINS_USER and JENKINS_TOKEN are required to trigger $job_name" >&2

@@ -139,6 +139,7 @@ def test_local_jenkins_job_is_pinned_to_release_tooling_without_polling() -> Non
     assert "pollSCM" not in job
     assert "install-hook" in helper
     assert "symbolic-ref --short HEAD" in helper
+    assert "osint-suite/jenkins.env" in helper
     post_commit = (REPO_ROOT / "scripts" / "jenkins-local-post-commit").read_text(encoding="utf-8")
     assert "release-tooling" in post_commit
     assert "jenkins-local-job.sh\" trigger" in post_commit
