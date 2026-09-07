@@ -137,6 +137,11 @@ def test_local_jenkins_job_is_pinned_to_release_tooling_without_polling() -> Non
     assert 'branch="${JENKINS_BRANCH:-release-tooling}"' in helper
     assert "<triggers/>" in job
     assert "pollSCM" not in job
+    assert "install-hook" in helper
+    assert "symbolic-ref --short HEAD" in helper
+    post_commit = (REPO_ROOT / "scripts" / "jenkins-local-post-commit").read_text(encoding="utf-8")
+    assert "release-tooling" in post_commit
+    assert "jenkins-local-job.sh\" trigger" in post_commit
 
 
 def test_release_workflow_is_tag_only_and_bundle_builder_is_reproducible(tmp_path: Path) -> None:
