@@ -22,6 +22,7 @@ pipeline {
             steps {
                 sh '''
                     rm -rf "$WORKSPACE/.jenkins-venv" "$WORKSPACE/.jenkins-local-venv"
+                    rm -rf "$WORKSPACE/jenkins-artifacts" "$WORKSPACE/.jenkins-benchmark-worktrees"
                     rm -rf "$VENV"
                     python3 -m venv "$VENV"
                     "$VENV/bin/python" -m pip install \
