@@ -34,6 +34,7 @@ from .service import (
     verify_benchmark,
     visual_capture_benchmark,
 )
+from .targets import prepare_target
 
 __all__ = [
     "BENCHMARK_EXECUTOR_SCHEMA",
@@ -61,4 +62,5 @@ __all__ = [
     "validate_spec",
     "verify_benchmark",
     "visual_capture_benchmark",
+    "prepare_target",
 ]

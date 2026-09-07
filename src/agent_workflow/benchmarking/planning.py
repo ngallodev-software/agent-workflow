@@ -54,7 +54,7 @@ def _git_version() -> str | None:
     return value or None
 
 
-def _environment_identity(executor: dict[str, Any]) -> dict[str, Any]:
+def _environment_identity(executor: dict[str, Any], codebase_memory_mode: str) -> dict[str, Any]:
     value = {
         "platform": platform.platform(),
         "python": platform.python_version(),
@@ -63,6 +63,7 @@ def _environment_identity(executor: dict[str, Any]) -> dict[str, Any]:
         "git": _git_version(),
         "locale": "C",
         "timezone": "UTC",
+        "codebase_memory_mode": codebase_memory_mode,
         "executor": {
             "provider": executor["provider"],
             "executor": executor["executor"],
@@ -78,11 +79,12 @@ def _environment_identity(executor: dict[str, Any]) -> dict[str, Any]:
     return value
 
 
-def _effective_prompt(*, canonical_task: str, phase_prompt: str, wrapper: str, arm: str, phase_id: str, case_id: str) -> str:
+def _effective_prompt(*, canonical_task: str, phase_prompt: str, wrapper: str, arm: str, phase_id: str, case_id: str, codebase_memory_mode: str) -> str:
     return "\n\n".join(
         [
             NEUTRAL_ENVELOPE.strip(),
             f"# Benchmark identity\n\nArm: `{arm}`\nCase: `{case_id}`\nPhase: `{phase_id}`",
+            f"# Codebase-memory tool mode\n\nUse only `{codebase_memory_mode}` for codebase-memory assistance in this cohort. Do not use another codebase-memory integration.",
             "# Canonical task\n\n" + canonical_task.strip(),
             "# Current phase\n\n" + phase_prompt.strip(),
             "# Arm execution profile\n\n" + wrapper.strip(),
@@ -152,11 +154,14 @@ def create_run_plan(
     assistance_cohort: str | None = None,
     policy_path: Path | None = None,
     runtime_lock_path: Path | None = None,
+    codebase_memory_mode: str = "none",
 ) -> dict[str, Any]:
     spec_path = spec_path.expanduser().resolve()
     executor_path = executor_path.expanduser().resolve()
     base_spec = validate_spec(spec_path)
     executor = validate_executor_config(executor_path)
+    if codebase_memory_mode not in {"none", "mcp", "cli"}:
+        raise WorkflowError("benchmark codebase-memory mode must be none, mcp, or cli")
     policy = (
         load_operating_policy(policy_path)
         if policy_path is not None
@@ -276,8 +281,8 @@ def create_run_plan(
             })
             phase_contents.append({"id": str(phase["id"]), "content": content})
         task_prompt_sha256 = canonical_json_sha256({"canonical_task": canonical_task, "phases": phase_contents})
-        environment = _environment_identity(executor)
-        tool_policy_sha256 = canonical_json_sha256(executor.get("tool_policy", {}))
+        environment = _environment_identity(executor, codebase_memory_mode)
+        tool_policy_sha256 = canonical_json_sha256({"tool_policy": executor.get("tool_policy", {}), "codebase_memory_mode": codebase_memory_mode})
         resource_policy_sha256 = canonical_json_sha256({
             "timeout_seconds": executor["timeout_seconds"],
             "max_stdout_bytes": executor["max_stdout_bytes"],
@@ -333,6 +338,7 @@ def create_run_plan(
                                 phase_prompt=_read_text(child(spec_path.parent, phase["prompt_path"], "phase prompt")),
                                 wrapper=profiles[arm]["wrapper"], arm=arm,
                                 phase_id=str(phase["id"]), case_id=str(case["id"]),
+                                codebase_memory_mode=codebase_memory_mode,
                             )
                             prompt_file = prompts_dir / f"{phase['id']}.md"
                             prompt_file.write_text(prompt, encoding="utf-8")
@@ -388,6 +394,7 @@ def create_run_plan(
                 "runtime_lock_sha256": sha256_file(selected_runtime_lock),
             },
             "authentication_evidence": authentication_evidence,
+            "codebase_memory_mode": codebase_memory_mode,
         }
         if scoring_identity is not None:
             plan["scoring_identity"] = scoring_identity
@@ -399,6 +406,7 @@ def create_run_plan(
         atomic_write_json(run_dir / "experiment-manifest.json", {
             "schema": "agent-workflow/benchmark-experiment-manifest/v1", "run_id": run_id,
             "benchmark_id": spec["benchmark_id"], "authentication_mode": executor["authentication"]["mode"],
+            "codebase_memory_mode": codebase_memory_mode,
             "billing": executor["billing"], "assistance_cohort": assistance_cohort,
             "operating_policy": effective_policy,
             "arms": {arm: {"profile_id": profiles[arm]["profile_id"], "constraint_profile_sha256": profiles[arm]["constraint_profile_sha256"], "arm_wrapper_sha256": profiles[arm]["wrapper_sha256"], "enabled_features": spec["arms"][arm]["enabled_features"], "disabled_features": spec["arms"][arm]["disabled_features"]} for arm in ("control_raw", "workflow_full")},

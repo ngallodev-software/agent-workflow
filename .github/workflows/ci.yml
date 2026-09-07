@@ -59,9 +59,16 @@ jobs:
           python scripts/build-release-bundles.py \
             --version "v$(python -c 'print(__import__("pathlib").Path("VERSION").read_text().strip())')" \
             --wheel "$wheel" --sdist "$sdist" --output-dir dist
-          find dist -maxdepth 1 -type f \( -name '*.whl' -o -name '*.tar.gz' \) -print0 \
+          find dist -maxdepth 1 -type f \( -name '*.whl' -o -name '*.tar.gz' -o -name '*.zip' \) -print0 \
             | sort -z | xargs -0 sha256sum > dist/SHA256SUMS
           python scripts/audit-release-assets.py
+      - name: Install built wheel on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $wheel = Get-ChildItem dist/agent_workflow-*.whl | Select-Object -First 1 -ExpandProperty FullName
+          ./install.ps1 -Python python -Wheel $wheel
+          python -c "from importlib.metadata import version; assert version('agent-workflow') == open('VERSION').read().strip()"
       - name: Compile and release assets
         if: runner.os != 'Windows'
         shell: bash

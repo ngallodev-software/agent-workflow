@@ -35,6 +35,41 @@ agent-workflow benchmark suite-export /tmp/priority-picker-v2 \
   --benchmark-id priority-picker-v2
 ```
 
+## External target preparation
+
+Versioned target manifests pin a Git remote, commit, and Git tree identity.
+Prepare a detached, clean checkout before planning:
+
+```bash
+agent-workflow benchmark target-prepare TARGET.json /tmp/benchmark-target
+```
+
+The command clones or fetches the target, verifies its `origin`, commit, and
+tree exactly, then checks it out detached. Built-in Priority Picker suites
+still require their own frozen fixture hash; an external repository needs a
+separately versioned suite whose fixture contract matches that target.
+
+The packaged target examples under `assets/benchmark-targets/` currently pin
+Herdr and codebase-memory-cli.
+
+## Codebase-memory comparison mode
+
+Both `codebase-memory-mcp` and `codebase-memory-cli` may be installed. Choose
+one neutral cohort mode when planning: `--codebase-memory-mode none|mcp|cli`.
+The selected mode is injected into both arms as
+`AGENT_WORKFLOW_CODEBASE_MEMORY_MODE`, appears in the same neutral prompt, and
+is sealed into the run identity. A benchmark arm must not use the other
+codebase-memory integration. The executor integration remains operator-owned:
+install/configure only the chosen tool for the cohort, and record its binary or
+MCP endpoint identity with the benchmark evidence.
+
+In Jenkins, the deterministic contract smoke always runs. Set
+`CBM_CLI_JENKINS_JOB` to opt into downloading the latest successful
+codebase-memory-cli Jenkins artifact; optionally set `CBM_CLI_JENKINS_URL` and
+the masked `CBM_CLI_JENKINS_AUTH` for a separate protected controller. The
+artifact hash, source revision, executable version, and upstream build URL are
+checked before use.
+
 ## Experimental arms
 
 Every pair contains two isolated arms.
@@ -190,7 +225,8 @@ agent-workflow benchmark readiness /tmp/priority-picker-v2/benchmark-spec.json \
 agent-workflow benchmark plan /tmp/priority-picker-v2/benchmark-spec.json \
   --repo /path/to/target --base-ref HEAD \
   --executor /tmp/priority-picker-v2/executors/codex-subscription.json \
-  --policy /tmp/priority-picker-v2/policies/development.json
+  --policy /tmp/priority-picker-v2/policies/development.json \
+  --codebase-memory-mode cli
 agent-workflow benchmark run RUN_PLAN.json
 ```
 

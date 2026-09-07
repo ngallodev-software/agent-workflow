@@ -85,7 +85,7 @@ jobs:
       - name: Write checksum manifest
         shell: bash
         run: |
-          find dist -maxdepth 1 -type f \( -name '*.whl' -o -name '*.tar.gz' \) -print0 \
+          find dist -maxdepth 1 -type f \( -name '*.whl' -o -name '*.tar.gz' -o -name '*.zip' \) -print0 \
             | sort -z | xargs -0 sha256sum > dist/SHA256SUMS
       - name: Audit release assets
         shell: bash
@@ -119,7 +119,7 @@ jobs:
           sdist=$(python -c 'from pathlib import Path; print(next(Path("dist").glob("agent_workflow-*.tar.gz")))')
           python scripts/build-release-bundles.py \
             --version "$RELEASE_TAG" --wheel "$wheel" --sdist "$sdist" --output-dir dist
-          find dist -maxdepth 1 -type f \( -name '*.whl' -o -name '*.tar.gz' \) -print0 \
+          find dist -maxdepth 1 -type f \( -name '*.whl' -o -name '*.tar.gz' -o -name '*.zip' \) -print0 \
             | sort -z | xargs -0 sha256sum > dist/SHA256SUMS
           python scripts/audit-release-assets.py
       - name: Publish tagged release

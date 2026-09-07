@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tarfile
 import tomllib
+import zipfile
 from pathlib import Path
 
 from tests.conftest import REPO_ROOT
@@ -118,6 +119,15 @@ def test_deployment_jenkins_install_skips_harness_mutations() -> None:
     assert '"$WORKSPACE/install.sh"' in deployment
 
 
+def test_jenkins_benchmark_smoke_and_optional_cli_artifact_are_explicit() -> None:
+    jenkinsfile = (REPO_ROOT / "Jenkinsfile").read_text(encoding="utf-8")
+    assert "stage('Benchmark contract smoke')" in jenkinsfile
+    assert "test_benchmark_target_and_tool_mode.py" in jenkinsfile
+    assert "stage('Fetch latest codebase-memory-cli artifact')" in jenkinsfile
+    assert "lastSuccessfulBuild/artifact" in jenkinsfile
+    assert "sha256sum -c" in jenkinsfile
+
+
 def test_release_workflow_is_tag_only_and_bundle_builder_is_reproducible(tmp_path: Path) -> None:
     workflow = (REPO_ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
     assert "pull_request" not in workflow
@@ -144,14 +154,15 @@ def test_release_workflow_is_tag_only_and_bundle_builder_is_reproducible(tmp_pat
         str(output),
     ]
     subprocess.run(command, cwd=REPO_ROOT, check=True, capture_output=True, text=True)
-    first = {path.name: path.read_bytes() for path in output.glob("agent-workflow-*.tar.gz")}
+    first = {path.name: path.read_bytes() for path in output.glob("agent-workflow-*.*")}
     subprocess.run(command, cwd=REPO_ROOT, check=True, capture_output=True, text=True)
-    second = {path.name: path.read_bytes() for path in output.glob("agent-workflow-*.tar.gz")}
+    second = {path.name: path.read_bytes() for path in output.glob("agent-workflow-*.*")}
     assert first == second
     assert set(first) == {
         f"agent-workflow-{CURRENT_VERSION}-linux.tar.gz",
         f"agent-workflow-{CURRENT_VERSION}-wsl2.tar.gz",
         f"agent-workflow-{CURRENT_VERSION}-macos.tar.gz",
+        f"agent-workflow-{CURRENT_VERSION}-windows.zip",
     }
     with tarfile.open(output / f"agent-workflow-{CURRENT_VERSION}-macos.tar.gz", "r:gz") as archive:
         names = set(archive.getnames())
@@ -160,6 +171,10 @@ def test_release_workflow_is_tag_only_and_bundle_builder_is_reproducible(tmp_pat
     assert f"agent-workflow-{CURRENT_VERSION}-macos/agent_workflow-{CURRENT_VERSION}-py3-none-any.whl" in names
     forbidden = ("Jenkinsfile", "jenkins-local-job", "/.github/", ".github/workflows")
     assert not any(any(token in name for token in forbidden) for name in names)
+    with zipfile.ZipFile(output / f"agent-workflow-{CURRENT_VERSION}-windows.zip") as archive:
+        names = set(archive.namelist())
+    assert f"agent-workflow-{CURRENT_VERSION}-windows/install.ps1" in names
+    assert f"agent-workflow-{CURRENT_VERSION}-windows/agent_workflow-{CURRENT_VERSION}-py3-none-any.whl" in names
 
 def test_source_installer_reinstall_canonicalizes_mcp_and_owned_hooks(tmp_path: Path) -> None:
     home = tmp_path / "home"

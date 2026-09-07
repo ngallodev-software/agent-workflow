@@ -36,6 +36,9 @@
         "publication"
       ]
     },
+    "codebase_memory_mode": {
+      "enum": ["none", "mcp", "cli"]
+    },
     "coordinator": {
       "additionalProperties": false,
       "properties": {
@@ -895,6 +898,7 @@
     "created_at",
     "state",
     "claim_level",
+    "codebase_memory_mode",
     "source",
     "coordinator",
     "identities",

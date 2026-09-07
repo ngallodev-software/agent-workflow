@@ -37,6 +37,47 @@ pipeline {
                 }
             }
         }
+        stage('Benchmark contract smoke') {
+            steps {
+                sh 'python -m pytest -q tests/invariants/test_benchmark_target_and_tool_mode.py'
+            }
+        }
+        stage('Fetch latest codebase-memory-cli artifact') {
+            when {
+                expression { return env.CBM_CLI_JENKINS_JOB?.trim() }
+            }
+            steps {
+                sh '''
+                    set -eu
+                    artifact_dir='jenkins-artifacts/codebase-memory-cli-linux-amd64'
+                    base_url="${CBM_CLI_JENKINS_URL:-${JENKINS_URL:?set CBM_CLI_JENKINS_URL or JENKINS_URL}}"
+                    job_path="$(printf '%s' "$CBM_CLI_JENKINS_JOB" | sed 's#/#/job/#g')"
+                    artifact_url="${base_url%/}/job/${job_path}/lastSuccessfulBuild/artifact/${artifact_dir}"
+                    fetch() {
+                        if [ -n "${CBM_CLI_JENKINS_AUTH:-}" ]; then
+                            curl -fsSLo "$1" -u "$CBM_CLI_JENKINS_AUTH" "$2"
+                        else
+                            curl -fsSLo "$1" "$2"
+                        fi
+                    }
+                    mkdir -p "$artifact_dir"
+                    fetch "$artifact_dir/build.json" "${base_url%/}/job/${job_path}/lastSuccessfulBuild/api/json"
+                    for name in SHA256SUMS codebase-memory-cli source-revision version.txt; do
+                        fetch "$artifact_dir/$name" "$artifact_url/$name"
+                    done
+                    sha256sum -c "$artifact_dir/SHA256SUMS"
+                    test -x "$artifact_dir/codebase-memory-cli"
+                    "$artifact_dir/codebase-memory-cli" --version
+                    test -s "$artifact_dir/source-revision"
+                    python - "$artifact_dir/build.json" <<'PY'
+                    import json
+                    import sys
+                    build = json.load(open(sys.argv[1], encoding="utf-8"))
+                    print(f"codebase-memory-cli upstream build: {build['number']} {build['url']}")
+                    PY
+                '''
+            }
+        }
         stage('Build') {
             steps {
                 sh '''

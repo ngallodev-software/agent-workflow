@@ -45,6 +45,14 @@ def test_shell_entrypoints_and_installer_are_syntax_valid() -> None:
         subprocess.run(["bash", "-n", str(path)], check=True)
 
 
+def test_windows_installer_is_a_packaged_native_entrypoint() -> None:
+    installer = REPO_ROOT / "install.ps1"
+    assert installer.is_file()
+    text = installer.read_text(encoding="utf-8")
+    assert "agent-workflow requires Python 3.11+" in text
+    assert "MCP registration, skills, and hooks are intentionally not changed" in text
+
+
 def test_documented_commands_match_the_installed_public_surface(
     installed_product: InstalledProduct, product_env: dict[str, str]
 ) -> None:

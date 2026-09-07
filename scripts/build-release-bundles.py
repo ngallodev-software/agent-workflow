@@ -10,16 +10,21 @@ import os
 import shutil
 import tarfile
 import tempfile
+import zipfile
 from pathlib import Path
 
 
-PLATFORMS = ("linux", "wsl2", "macos")
+PLATFORMS = ("linux", "wsl2", "macos", "windows")
 REQUIRED_FILES = (
     "install.sh",
     "uninstall.sh",
     "scripts/install-source.sh",
     "scripts/configure-hooks.py",
     "bin/agent-workflow",
+    "config/agent-workflow.example.toml",
+)
+WINDOWS_REQUIRED_FILES = (
+    "install.ps1",
     "config/agent-workflow.example.toml",
 )
 REQUIRED_TREES = ("schemas", "evals", "docs/man", "skills", "scripts/hooks")
@@ -39,15 +44,17 @@ def digest(path: Path) -> str:
     return hasher.hexdigest()
 
 
-def copy_release_surface(root: Path, destination: Path) -> None:
-    for relative in REQUIRED_FILES:
+def copy_release_surface(root: Path, destination: Path, *, platform: str) -> None:
+    required_files = WINDOWS_REQUIRED_FILES if platform == "windows" else REQUIRED_FILES
+    required_trees = ("schemas", "evals", "docs/man") if platform == "windows" else REQUIRED_TREES
+    for relative in required_files:
         source = root / relative
         if not source.is_file():
             raise SystemExit(f"missing release bundle file: {relative}")
         target = destination / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, target)
-    for relative in REQUIRED_TREES:
+    for relative in required_trees:
         source = root / relative
         if not source.is_dir():
             raise SystemExit(f"missing release bundle tree: {relative}")
@@ -82,13 +89,23 @@ def build_bundle(root: Path, wheel: Path, version: str, platform: str, output: P
     with tempfile.TemporaryDirectory(prefix="agent-workflow-bundle-") as temporary:
         staging = Path(temporary) / bundle_name
         staging.mkdir()
-        copy_release_surface(root, staging)
+        copy_release_surface(root, staging, platform=platform)
         shutil.copy2(wheel, staging / wheel.name)
         assert_repository_only_paths_absent(staging)
         (staging / ".release-bundle").write_text(f"{version}\n{platform}\n", encoding="utf-8")
         for path in staging.rglob("*"):
             os.utime(path, (0, 0), follow_symlinks=False)
         output.mkdir(parents=True, exist_ok=True)
+        if platform == "windows":
+            archive = output / f"{bundle_name}.zip"
+            with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zipped:
+                for path in sorted(staging.rglob("*")):
+                    if path.is_file():
+                        info = zipfile.ZipInfo(str(path.relative_to(staging.parent)).replace("\\", "/"))
+                        info.date_time = (1980, 1, 1, 0, 0, 0)
+                        info.external_attr = 0o100644 << 16
+                        zipped.writestr(info, path.read_bytes())
+            return archive
         archive = output / f"{bundle_name}.tar.gz"
         with archive.open("wb") as raw:
             with gzip.GzipFile(fileobj=raw, mode="wb", compresslevel=9, mtime=0) as compressed:

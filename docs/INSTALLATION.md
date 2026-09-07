@@ -34,6 +34,16 @@ python -m pip install git+https://github.com/ngallodev-software/agent-workflow-s
 
 Optional feature groups are declared in `pyproject.toml` for evaluation, statistics, completion generation, benchmark visuals, and MCP.
 
+## Windows 11
+
+Install a built wheel from PowerShell:
+
+```powershell
+.\install.ps1 -Python python -Wheel .\dist\agent_workflow-*.whl
+```
+
+This installs the Python launcher and creates `%APPDATA%\agent-workflow\config.toml` without registering MCP, skills, or hooks. That avoids mixing MCP and CLI benchmark integrations; choose the benchmark cohort explicitly with `--codebase-memory-mode`.
+
 ## Configuration
 
 Configuration is normally read from the XDG configuration path. The core config defines executor, Git, policy, security, plugin, workflow, and evidence behavior. It does not select an interactive terminal backend.
