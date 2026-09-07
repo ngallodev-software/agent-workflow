@@ -231,6 +231,12 @@ Any such integration must preserve these invariants:
 
 Unfinished external-host work belongs only in [BACKLOG.md](BACKLOG.md).
 
+The optional terminal projection adapter follows the same boundary: it polls
+public terminal execution status, records an idempotent host-local retirement
+intent keyed by binding generation, and closes only its matching opaque host
+handle. It does not control processes or alter execution, completion, review,
+or acceptance. A host restart reconstructs this projection from its journal.
+
 ## MCP boundary
 
 The MCP server is currently a local stdio, bounded read-only adapter over shared application services. It does not become a second workflow engine and does not dynamically convert the CLI catalog into executable tools. See [MCP_SERVER.md](MCP_SERVER.md).

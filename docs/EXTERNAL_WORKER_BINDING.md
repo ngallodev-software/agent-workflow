@@ -65,3 +65,16 @@ unbound generation are rejected, preventing a replaced host Worker from
 mutating current delivery evidence. The host remains unable to mark work
 complete, reviewed, accepted, rejected, or otherwise transition Agent Run
 lifecycle through this adapter.
+
+## Terminal projection retirement
+
+An optional host may use the dependency-free
+`agent_workflow.external_host_projection` adapter to retire its own
+terminal/pane projection after polling the public `agent-run status` and
+`agent-run external-binding` JSON views. The host journal keys a projection by
+`(agent_run_id, worker_id, binding_generation)` and stores the opaque host
+handle, so a reused PID or rebound generation cannot close a different
+projection. Retirement is idempotent and host-local; it never kills by PID,
+changes Agent Run execution, writes completion/evaluation/review/acceptance,
+or requires `unbind-external`. Missing, malformed, or stale public views retain
+the projection as unknown.
