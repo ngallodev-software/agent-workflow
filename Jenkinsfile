@@ -67,6 +67,7 @@ pipeline {
                         fetch "$artifact_dir/$name" "$artifact_url/$name"
                     done
                     sha256sum -c "$artifact_dir/SHA256SUMS"
+                    chmod 0755 "$artifact_dir/codebase-memory-cli"
                     test -x "$artifact_dir/codebase-memory-cli"
                     "$artifact_dir/codebase-memory-cli" --version
                     test -s "$artifact_dir/source-revision"
