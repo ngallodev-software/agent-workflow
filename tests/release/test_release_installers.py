@@ -142,9 +142,36 @@ def test_local_jenkins_job_is_pinned_to_release_tooling_without_polling() -> Non
     assert "install-hook" in helper
     assert "symbolic-ref --short HEAD" in helper
     assert "osint-suite/jenkins.env" in helper
+    assert "JENKINS_CONFIG_FILE" in helper
+    assert "getent passwd" in helper
     post_commit = (REPO_ROOT / "scripts" / "jenkins-local-post-commit").read_text(encoding="utf-8")
     assert "release-tooling" in post_commit
     assert "jenkins-local-job.sh\" trigger" in post_commit
+
+
+def test_local_jenkins_trigger_handles_hook_without_home_or_xdg(tmp_path: Path) -> None:
+    fixture_root = tmp_path / "repo"
+    (fixture_root / "scripts").mkdir(parents=True)
+    shutil.copy2(REPO_ROOT / "scripts" / "jenkins-local-job.sh", fixture_root / "scripts" / "jenkins-local-job.sh")
+    subprocess.run(["git", "init", "-qb", "release-tooling", str(fixture_root)], check=True)
+    helper = fixture_root / "scripts" / "jenkins-local-job.sh"
+    env = {
+        "PATH": os.environ["PATH"],
+        "JENKINS_HOME": str(tmp_path / "jenkins"),
+        "JENKINS_CLI": str(tmp_path / "jenkins-cli.jar"),
+        "JENKINS_CONFIG_FILE": str(tmp_path / "missing-jenkins.env"),
+    }
+    result = subprocess.run(
+        ["bash", str(helper), "trigger"],
+        cwd=fixture_root,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "JENKINS_USER and JENKINS_TOKEN are required" in result.stderr
+    assert "JENKINS_TOKEN=" not in result.stderr
 
 
 def test_release_workflow_is_tag_only_and_bundle_builder_is_reproducible(tmp_path: Path) -> None:

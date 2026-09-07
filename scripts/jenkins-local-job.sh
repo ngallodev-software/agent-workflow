@@ -14,12 +14,28 @@ cli="${JENKINS_CLI:-/tmp/agent-workflow-jenkins-cli.jar}"
 job_dir="$jenkins_home/jobs/$job_name"
 config="$job_dir/config.xml"
 trigger() {
-  if [[ -r "${XDG_CONFIG_HOME:-$HOME/.config}/agent-workflow/jenkins.env" ]]; then
+  config_home="${XDG_CONFIG_HOME:-}"
+  home_dir="${HOME:-}"
+  if [[ -z "$home_dir" ]] && command -v getent >/dev/null 2>&1; then
+    home_dir="$(getent passwd "$(id -u)" | cut -d: -f6)"
+  fi
+  config_paths=()
+  if [[ -n "${JENKINS_CONFIG_FILE:-}" ]]; then
+    config_paths+=("$JENKINS_CONFIG_FILE")
+  else
+    [[ -n "$config_home" ]] && config_paths+=("$config_home/agent-workflow/jenkins.env")
+    [[ -n "$home_dir" ]] && config_paths+=("$home_dir/.config/agent-workflow/jenkins.env")
+  fi
+  for config_path in "${config_paths[@]}"; do
+    if [[ -r "$config_path" ]]; then
     # shellcheck disable=SC1090
-    source "${XDG_CONFIG_HOME:-$HOME/.config}/agent-workflow/jenkins.env"
-  elif [[ -r "$HOME/.config/osint-suite/jenkins.env" ]]; then
+      source "$config_path"
+      break
+    fi
+  done
+  if [[ -z "${JENKINS_CONFIG_FILE:-}" && -n "$home_dir" && -r "$home_dir/.config/osint-suite/jenkins.env" ]]; then
     # shellcheck disable=SC1090
-    source "$HOME/.config/osint-suite/jenkins.env"
+    source "$home_dir/.config/osint-suite/jenkins.env"
     if [[ -z "${JENKINS_USER:-}" || -z "${JENKINS_TOKEN:-}" ]]; then
       JENKINS_USER="${OSINT_JENKINS_USER:-}"
       JENKINS_TOKEN="${OSINT_JENKINS_TOKEN:-}"
