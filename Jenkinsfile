@@ -72,12 +72,7 @@ pipeline {
                     test -x "$artifact_dir/codebase-memory-cli"
                     "$artifact_dir/codebase-memory-cli" --version
                     test -s "$artifact_dir/source-revision"
-                    python - "$artifact_dir/build.json" <<'PY'
-                    import json
-                    import sys
-                    build = json.load(open(sys.argv[1], encoding="utf-8"))
-                    print(f"codebase-memory-cli upstream build: {build['number']} {build['url']}")
-                    PY
+                    python -c "import json, sys; build = json.load(open(sys.argv[1], encoding='utf-8')); print('codebase-memory-cli upstream build: {} {}'.format(build['number'], build['url']))" "$artifact_dir/build.json"
                     '''
                 }
             }
