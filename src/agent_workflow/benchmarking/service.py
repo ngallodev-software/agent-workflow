@@ -177,6 +177,7 @@ def create_plan(
     assistance_cohort: str | None = None,
     policy: Path | None = None,
     runtime_lock: Path | None = None,
+    codebase_memory_mode: str = "none",
 ) -> dict[str, Any]:
     return create_run_plan(
         settings,
@@ -191,6 +192,7 @@ def create_plan(
         assistance_cohort=assistance_cohort,
         policy_path=policy,
         runtime_lock_path=runtime_lock,
+        codebase_memory_mode=codebase_memory_mode,
     )
 
 

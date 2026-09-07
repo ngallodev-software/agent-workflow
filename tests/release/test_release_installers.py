@@ -126,6 +126,10 @@ def test_jenkins_benchmark_smoke_and_optional_cli_artifact_are_explicit() -> Non
     assert "stage('Fetch latest codebase-memory-cli artifact')" in jenkinsfile
     assert "lastSuccessfulBuild/artifact" in jenkinsfile
     assert "sha256sum -c" in jenkinsfile
+    assert "agent-workflow-local-jenkins-api" in jenkinsfile
+    assert "stage('Capture synthetic CLI benchmark')" in jenkinsfile
+    assert "--codebase-memory-mode cli" in jenkinsfile
+    assert "archiveArtifacts artifacts: 'jenkins-artifacts/**'" in jenkinsfile
     local_job = (REPO_ROOT / "scripts" / "jenkins-local-job.xml").read_text(encoding="utf-8")
     assert "CBM_CLI_JENKINS_JOB" in local_job
     assert "codebase-memory-cli-release-tooling" in local_job
