@@ -15,6 +15,16 @@
     <org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty>
       <abortPrevious>false</abortPrevious>
     </org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>CBM_CLI_JENKINS_JOB</name>
+          <description>Latest successful codebase-memory-cli job to verify before the benchmark smoke.</description>
+          <defaultValue>codebase-memory-cli-release-tooling</defaultValue>
+          <trim>true</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
   </properties>
   <definition class="org.jenkinsci.plugins.workflow.cps.CpsScmFlowDefinition">
     <scm class="hudson.plugins.git.GitSCM">

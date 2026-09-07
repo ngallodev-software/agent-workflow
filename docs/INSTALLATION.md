@@ -50,11 +50,11 @@ Configuration is normally read from the XDG configuration path. The core config 
 
 ## Tagged bootstrap install
 
-For a published release, pin the release explicitly. For version `0.9.1`:
+For a published release, pin the release explicitly. For version `0.9.2`:
 
 ```bash
-curl -fsSL https://github.com/ngallodev-software/agent-workflow/releases/download/v0.9.1/install.sh | \
-  sh -s -- --version v0.9.1
+curl -fsSL https://github.com/ngallodev-software/agent-workflow/releases/download/v0.9.2/install.sh | \
+  sh -s -- --version v0.9.2
 ```
 
 The version is intentional: the 0.9 line builds on the breaking Agent Run/headless-core rewrite and does not carry terminal-host compatibility.

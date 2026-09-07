@@ -126,6 +126,9 @@ def test_jenkins_benchmark_smoke_and_optional_cli_artifact_are_explicit() -> Non
     assert "stage('Fetch latest codebase-memory-cli artifact')" in jenkinsfile
     assert "lastSuccessfulBuild/artifact" in jenkinsfile
     assert "sha256sum -c" in jenkinsfile
+    local_job = (REPO_ROOT / "scripts" / "jenkins-local-job.xml").read_text(encoding="utf-8")
+    assert "CBM_CLI_JENKINS_JOB" in local_job
+    assert "codebase-memory-cli-release-tooling" in local_job
 
 
 def test_release_workflow_is_tag_only_and_bundle_builder_is_reproducible(tmp_path: Path) -> None:
