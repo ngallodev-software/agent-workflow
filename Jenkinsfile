@@ -133,38 +133,6 @@ pipeline {
                 '''
             }
         }
-        stage('Install built wheel') {
-            steps {
-                sh '''
-                    set -eu
-                    install_python="$VENV/bin/python"
-                    test -x "$install_python" || {
-                        echo "Jenkins install interpreter is missing: $install_python" >&2
-                        exit 2
-                    }
-                    wheel="$(find "$WORKSPACE/dist" -maxdepth 1 -type f -name 'agent_workflow-*.whl' -print -quit)"
-                    test -n "$wheel" || {
-                        echo 'built agent-workflow wheel is missing' >&2
-                        exit 2
-                    }
-                    test -x "$WORKSPACE/install.sh" || {
-                        echo "workspace install root is invalid: $WORKSPACE" >&2
-                        exit 2
-                    }
-                    AGENT_WORKFLOW_INSTALL_PYTHON="$install_python" \
-                        "$WORKSPACE/install.sh" --wheel "$wheel" --extras mcp \
-                        --no-mcp-register --no-hooks --no-skills
-                    expected_version="$(tr -d '\n' < VERSION)"
-                    installed_version="$("$install_python" -c \
-                        'from importlib.metadata import version; print(version("agent-workflow"))')"
-                    test "$installed_version" = "$expected_version" || {
-                        echo "installed agent-workflow version $installed_version != $expected_version" >&2
-                        exit 2
-                    }
-                    echo "Installed agent-workflow version: $installed_version"
-                '''
-            }
-        }
     }
     post {
         always {

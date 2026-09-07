@@ -110,13 +110,11 @@ def test_bootstrap_rejects_unsupported_host_before_download(tmp_path: Path) -> N
     assert "unsupported operating system" in result.stderr
 
 
-def test_deployment_jenkins_install_skips_harness_mutations() -> None:
+def test_deployment_jenkins_does_not_install_into_jenkins_home() -> None:
     jenkinsfile = (REPO_ROOT / "Jenkinsfile").read_text(encoding="utf-8")
-    deployment = jenkinsfile.split('stage(\'Install built wheel\')', 1)[1]
-    assert "--no-mcp-register --no-hooks --no-skills" in deployment
-    assert 'install_python="$VENV/bin/python"' in deployment
-    assert "sudo" not in deployment
-    assert '"$WORKSPACE/install.sh"' in deployment
+    assert "stage('Install built wheel')" not in jenkinsfile
+    assert '"$WORKSPACE/install.sh"' not in jenkinsfile
+    assert "sudo" not in jenkinsfile
 
 
 def test_jenkins_benchmark_smoke_and_optional_cli_artifact_are_explicit() -> None:
