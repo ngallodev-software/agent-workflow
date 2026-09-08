@@ -155,7 +155,6 @@ def test_source_installer_uses_one_shared_skill_root(tmp_path: Path) -> None:
             str(REPO_ROOT / "scripts" / "install-source.sh"),
             "--no-deps",
             "--no-hooks",
-            "--no-mcp-register",
             "--python",
             sys.executable,
         ],

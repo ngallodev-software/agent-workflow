@@ -3,13 +3,14 @@ set -euo pipefail
 usage() {
   cat <<'USAGE'
 Usage: ./install.sh [--no-skills] [--no-hooks] [--no-deps] [--python PATH]
-                    [--wheel PATH] [--extras NAME[,NAME...]]
+                    [--wheel PATH] [--extras NAME[,NAME...]] [--harnesses NAME[,NAME...]]
 
 Installs this checkout, or a supplied wheel, into the current user's Python
-environment, including its declared core dependencies, then creates launcher, skill
-symlinks, and client hook reminders. MCP is deliberately excluded from this default
-installer; use scripts/install-mcp.sh to opt into the local stdio adapter. Missing
-dependencies may require network access.
+environment, including its declared core dependencies, then creates launcher, shared
+skill symlinks, and client hook reminders. Codex skill installation is the default;
+Claude and generic harness roots are opt-in. MCP is deliberately excluded from this
+default installer; use scripts/install-mcp.sh to opt into the local stdio adapter.
+Missing dependencies may require network access.
 
 Options:
   --no-skills            Skip installation of agent skill symlinks.
@@ -21,12 +22,15 @@ Options:
                           eval,stats,completion or all). Core dependencies are
                           always included unless --no-deps is set. MCP must be
                           installed with scripts/install-mcp.sh.
+  --harnesses NAME[,NAME...] Install skill links for codex (default), claude,
+                            and/or generic. Generic uses the .agents skill root.
 USAGE
 }
 INSTALL_SKILLS=1
 INSTALL_HOOKS=1
 INSTALL_DEPS=1
 EXTRAS=""
+INSTALL_HARNESSES="codex"
 WHEEL_PATH="${AGENT_WORKFLOW_INSTALL_WHEEL:-}"
 PYTHON_BIN="${AGENT_WORKFLOW_INSTALL_PYTHON:-python3}"
 while [[ $# -gt 0 ]]; do
@@ -49,6 +53,11 @@ while [[ $# -gt 0 ]]; do
       [[ $# -gt 0 ]] || { echo "--extras requires a value" >&2; exit 2; }
       EXTRAS="$1"
       ;;
+    --harnesses)
+      shift
+      [[ $# -gt 0 ]] || { echo "--harnesses requires a value" >&2; exit 2; }
+      INSTALL_HARNESSES="$1"
+      ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -62,6 +71,7 @@ DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 APP_DATA_DIR="$DATA_HOME/agent-workflow"
 HOOKS_DATA_DIR="$APP_DATA_DIR/hooks"
 CODEX_HOME_DIR="${CODEX_HOME:-$HOME/.codex}"
+SHARED_SKILLS_DIR="$CODEX_HOME_DIR/skills"
 CODEX_CONFIG_FILE="$CODEX_HOME_DIR/config.toml"
 CLAUDE_CONFIG_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 CLAUDE_SETTINGS_FILE="$CLAUDE_CONFIG_DIR/settings.json"
@@ -80,6 +90,20 @@ if [[ ",$EXTRAS," == *,mcp,* ]]; then
   echo "MCP is opt-in; use scripts/install-mcp.sh" >&2
   exit 2
 fi
+declare -A harness_roots=(
+  [codex]="$SHARED_SKILLS_DIR"
+  [claude]="$HOME/.claude/skills"
+  [generic]="$HOME/.agents/skills"
+)
+declare -A selected_harnesses=()
+IFS=',' read -r -a harness_list <<< "$INSTALL_HARNESSES"
+for harness in "${harness_list[@]}"; do
+  [[ -n "${harness_roots[$harness]+x}" ]] || {
+    echo "unknown harness: $harness (expected codex, claude, or generic)" >&2
+    exit 2
+  }
+  selected_harnesses["$harness"]=1
+done
 if [[ $INSTALL_DEPS -eq 1 ]]; then
   if ! "$PYTHON_BIN" -m pip --version >/dev/null 2>&1; then
     echo "pip is missing for $PYTHON_PATH; trying ensurepip" >&2
@@ -177,17 +201,42 @@ else
   echo "kept existing config: $CONFIG_FILE"
 fi
 if [[ $INSTALL_SKILLS -eq 1 ]]; then
-  skill_roots=("$HOME/.agents/skills" "$HOME/.codex/skills" "$HOME/.claude/skills")
   skills=()
   while IFS= read -r -d '' skill_dir; do
     skills+=("$(basename "$skill_dir")")
   done < <(find "$ROOT/skills" -mindepth 1 -maxdepth 1 -type d -print0 | sort -z)
-  mkdir -p "${skill_roots[@]}"
-  for root in "${skill_roots[@]}"; do
+  for harness in "${harness_list[@]}"; do
+    root="${harness_roots[$harness]}"
+    mkdir -p "$root"
     for skill in "${skills[@]}"; do
       safe_link "$ROOT/skills/$skill" "$root/$skill"
     done
   done
+
+  # Remove only links owned by older all-harness installations.
+  for legacy_harness in generic claude; do
+    [[ -n "${selected_harnesses[$legacy_harness]+x}" ]] && continue
+    legacy_root="${harness_roots[$legacy_harness]}"
+    for skill in "${skills[@]}"; do
+      legacy_link="$legacy_root/$skill"
+      if [[ -L "$legacy_link" && "$(readlink "$legacy_link")" == "$ROOT/skills/$skill" ]]; then
+        unlink "$legacy_link"
+      fi
+    done
+  done
+
+  mkdir -p "$APP_DATA_DIR"
+  "$PYTHON_PATH" - "$APP_DATA_DIR/installed-harnesses.json" "${harness_list[@]}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+output, *harnesses = sys.argv[1:]
+Path(output).write_text(
+    json.dumps({"schema": "agent-workflow/installed-harnesses/v1", "harnesses": harnesses}, indent=2) + "\n",
+    encoding="utf-8",
+)
+PY
 fi
 
 # Keep host-discoverable, non-Python release assets in dedicated XDG
