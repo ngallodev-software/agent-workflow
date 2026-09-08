@@ -170,8 +170,3 @@ def test_source_installer_uses_one_shared_skill_root(tmp_path: Path) -> None:
     assert not (legacy_agents / "agent-workflow-orchestrator").exists()
     assert not (legacy_claude / "agent-workflow-orchestrator").exists()
     assert unrelated.is_symlink()
-    manifest = json.loads((home / ".local" / "share" / "agent-workflow" / "installed-harnesses.json").read_text())
-    assert manifest == {
-        "schema": "agent-workflow/installed-harnesses/v1",
-        "harnesses": ["codex"],
-    }

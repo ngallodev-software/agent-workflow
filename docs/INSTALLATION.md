@@ -32,6 +32,11 @@ project dependency:
 python -m pip install git+https://github.com/ngallodev-software/agent-workflow-spec-contracts.git
 ```
 
+The source installer links skills into Codex by default. Opt into other
+harness roots explicitly, for example `bash scripts/install-source.sh
+--harnesses codex,claude,generic`; omitted legacy harnesses have only
+Agent-Workflow-owned links removed.
+
 Optional feature groups are declared in `pyproject.toml` for evaluation, statistics, completion generation, benchmark visuals, and MCP. The default source installer does not install or register MCP. To opt in explicitly from a checkout or release bundle:
 
 ```bash

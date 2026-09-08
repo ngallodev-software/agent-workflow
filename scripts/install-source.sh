@@ -225,18 +225,6 @@ if [[ $INSTALL_SKILLS -eq 1 ]]; then
     done
   done
 
-  mkdir -p "$APP_DATA_DIR"
-  "$PYTHON_PATH" - "$APP_DATA_DIR/installed-harnesses.json" "${harness_list[@]}" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-output, *harnesses = sys.argv[1:]
-Path(output).write_text(
-    json.dumps({"schema": "agent-workflow/installed-harnesses/v1", "harnesses": harnesses}, indent=2) + "\n",
-    encoding="utf-8",
-)
-PY
 fi
 
 # Keep host-discoverable, non-Python release assets in dedicated XDG

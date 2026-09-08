@@ -122,6 +122,10 @@ jobs:
           find dist -maxdepth 1 -type f \( -name '*.whl' -o -name '*.tar.gz' -o -name '*.zip' \) -print0 \
             | sort -z | xargs -0 sha256sum > dist/SHA256SUMS
           python scripts/audit-release-assets.py
+      - name: Enforce release policy
+        env:
+          AGENT_WORKFLOW_ENFORCE_RELEASE_BLOCKERS: "1"
+        run: ./scripts/release-check.sh
       - name: Publish tagged release
         run: |
           gh release create "$RELEASE_TAG" --verify-tag --generate-notes dist/*
