@@ -79,8 +79,10 @@ def test_documented_commands_match_the_installed_public_surface(
     catalog = installed_product.run("commands", "--format", "markdown", env=product_env, check=True).stdout
     assert "agent-workflow eval compare --output OUTPUT baseline candidate" in catalog
 
-    # Keep the orchestrator skill's maintained leaf examples and the shipped
-    # profile in lockstep with the parser-derived catalog.
+    # Keep the common orchestrator path in the shipped profile and within its
+    # enforced agent-visible budgets. Advanced recovery, registry/inbox, and
+    # sealing commands remain documented by the skill and can use the absent-
+    # command/--help path when needed.
     profile = json.loads(
         installed_product.run(
             "commands", "--format", "json", "--role", "orchestrator",
@@ -89,10 +91,17 @@ def test_documented_commands_match_the_installed_public_surface(
     )
     represented = {item["command"] for item in profile["commands"]}
     assert {
-        "agent-run progress", "agent-run ack", "agent-run message-state",
-        "workflow validate", "workflow verify",
-        "orchestrator registry register", "orchestrator inbox read",
+        "agent roles", "delegate", "worktree list", "agent-run list",
+        "agent-run status", "agent-run message-state", "agent-run progress",
+        "agent-run ack", "agent-run summary", "workflow validate",
+        "workflow status", "workflow verify",
     } <= represented
+    assert len(profile["commands"]) <= 20
+    card = installed_product.run(
+        "commands", "--format", "markdown", "--role", "orchestrator",
+        env=product_env, check=True,
+    ).stdout
+    assert len(card.encode("utf-8")) <= 5120
 
 
 def test_built_wheel_excludes_repository_only_ci_assets(
