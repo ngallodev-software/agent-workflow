@@ -121,7 +121,7 @@ The core is deliberately host-independent. A future plugin may project Agent Run
 
 ## Version
 
-Version `0.9.0` builds on the breaking 0.8 headless-core rewrite and begins the skill-first product-surface simplification. Older terminal-host-era runtime and schema compatibility is intentionally not carried forward. See the [0.9 skill-first simplification plan](docs/SKILL_FIRST_SIMPLIFICATION_PLAN.md).
+Version `0.10.0` builds on the breaking 0.8 headless-core rewrite and the skill-first product-surface simplification. Older terminal-host-era runtime and schema compatibility is intentionally not carried forward. See the [0.9 skill-first simplification plan](docs/SKILL_FIRST_SIMPLIFICATION_PLAN.md).
 
 ## Repository-only CI assets
 
