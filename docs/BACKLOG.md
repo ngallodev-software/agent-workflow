@@ -40,13 +40,13 @@ Produce the content-addressed browser image/runtime digest and verified font evi
 
 ### TERM-001 — Retire external host terminals after terminal Agent Run state
 
-Agent-Workflow correctly owns no external terminal or process lifecycle, but
-external hosts can leave a background terminal projection visible after the
-Agent Run has a sealed terminal outcome. Define and implement a bounded,
-idempotent host-binding retirement signal based only on public terminal status;
-it must never let host/UI state alter execution, completion, review, or
-acceptance authority. Research must verify the observed terminal host, stale
-PID/reuse safety, normal completion, failure, interruption, and host restart.
+Status remains open. The core implementation intentionally owns no external
+terminal or process lifecycle (implementation boundary established); no
+host-binding retirement signal has been implemented or independently reviewed,
+and no host verification/acceptance evidence exists. A future implementation
+must define a bounded, idempotent retirement signal based only on public
+terminal status and cover stale PID/reuse safety, normal completion, failure,
+interruption, and host restart without changing workflow authority.
 
 **Evidence:** The 2026-08-29 execution runs `TASK-001-a3b4d261`, its retry,
 and both review runs have terminal durable status with no live worker PID or
@@ -56,33 +56,31 @@ projection cleanup gap, not a surviving worker process.
 
 ### WATCH-001 — Repair watcher prompt-pack contract and independent evidence
 
-The `agent-workflow-lifecycle-watch-20260829` execution cannot be accepted.
-Its initial implementation completions were invalid, the generated `EVAL-002`
-selector collected no tests, supplied source hashes were stale, and the final
-review found missing live watcher lifetime and duplicate-delivery proof. Keep
-the five-field NOTIFY-001 contract unless a separately approved versioned
-contract supersedes it; a schema marker must not be added incidentally.
+The historical `agent-workflow-lifecycle-watch-20260829` prompt pack was
+retired with the pre-0.8 pack scaffolding and is not recreated. The current
+watcher integration tests are the authoritative evidence surface. Keep the
+five-field NOTIFY-001 contract unless a separately approved versioned contract
+supersedes it; a schema marker must not be added incidentally.
 
 **Evidence:** `.agent-workflow-handoff/TASK-002-4d2253b8-review/result.json`,
 `FINDINGS.md`, and `TASK-002-4d2253b8-final-review/result.json`.
 
-**Research conclusion (2026-08-29):** Current source already preserves the
-canonical exact five-field record and redacts the summary. The repair is
-evidence/test coverage, not a schema change. `EVAL-002` selects no tests;
-replace it with concrete current test names. Because `watch()` owns process
-signal handlers, prove live watcher lifetime using a subprocess rather than a
-thread. Force a source-cursor write failure after inbox persistence to show the
-allowed duplicate delivery/restart recovery path while the inbox remains
-singular.
+**Current evidence (2026-09-08):** Current source preserves the canonical
+exact five-field record and redacts the summary. The focused integration tests
+name the live subprocess lifetime journey and the cursor-failure restart
+journey directly. The latter forces a cursor-write failure after inbox
+persistence, then verifies recovery and the allowed repeat notification while
+the durable inbox remains singular. No historical selector/hash sidecar is
+current or authoritative.
 
-**Done when:** the pack precisely names its test selectors, immutable evidence
-hashes match the reviewed revision, independent tests demonstrate one active
-watcher across child A then B plus duplicate/restart behavior, and a fresh
-completion/evaluation/review/acceptance chain is recorded.
+**Done when:** an independent current review and acceptance chain records the
+focused tests and this revision; implementation evidence alone is not
+acceptance.
 
 ### EXEC-001 — Make completed implementation evidence revision-bound
 
-Completion validation must reject a claimed completed implementation when its
+Status remains open pending independent review and acceptance. Completion
+validation must reject a claimed completed implementation when its
 changed files are not committed to a distinct revision, and delegated prompt
 packs must instruct workers to commit before closeout. The first watcher task
 and its retry demonstrate that schema-valid sidecars alone are insufficient.
@@ -92,8 +90,13 @@ committed revision; `TASK-001-a3b4d261-retry1` failed due placeholder
 completion criteria. Preserve those sealed failures as evidence rather than
 rewriting them.
 
-**Research conclusion (2026-08-29):** Completion validation already rejects
-both observed failures. The remaining defect is transactional preparation:
+**Implementation evidence (2026-09-08):** Completion validation rejects both
+observed failures, and transactional preparation rollback is implemented and
+covered by focused tests. This is implementation evidence only; no independent
+review or acceptance disposition is recorded yet. The original sealed failures
+remain preserved evidence.
+
+The transactional preparation requirement is:
 `prepare()` writes run/handoff artifacts before it claims the name lease, and
 can also leave an unusable `prepared` run if it fails after lifecycle
 initialization but before runner creation. Add rollback for only invocation-

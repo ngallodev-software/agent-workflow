@@ -230,6 +230,7 @@ print(json.dumps(watch(settings, "watcher", interval_seconds=0.01, max_cycles=20
         while time.monotonic() < deadline and not read_inbox(settings, "watcher"):
             time.sleep(0.01)
         assert read_inbox(settings, "watcher")[0]["sender_agent_run_id"] == "child-a"
+        assert process.poll() is None
 
         _make_child(tmp_path, settings, "child-b", "second")
         register_child(settings, "watcher", "child-b")
@@ -257,17 +258,36 @@ def test_watch_duplicate_delivery_after_cursor_failure(tmp_path: Path, monkeypat
     def fail_cursor_write(*_args: object, **_kwargs: object) -> None:
         raise OSError("simulated cursor write failure")
 
+    first_notifications: list[dict] = []
     monkeypatch.setattr(orchestrator_inbox, "_write_source_cursor", fail_cursor_write)
-    failed = watch(settings, "watcher", interval_seconds=0.01, max_cycles=1)
+    failed = watch(
+        settings,
+        "watcher",
+        interval_seconds=0.01,
+        notification_adapter=first_notifications.append,
+        max_cycles=1,
+    )
     assert failed["state"] == "completed"
     assert failed["advanced"] == 0
+    assert first_notifications == []
     assert len(read_inbox(settings, "watcher")) == 1
 
     monkeypatch.undo()
-    recovered = watch(settings, "watcher", interval_seconds=0.01, max_cycles=1)
+    recovered_notifications: list[dict] = []
+    recovered = watch(
+        settings,
+        "watcher",
+        interval_seconds=0.01,
+        notification_adapter=recovered_notifications.append,
+        max_cycles=1,
+    )
     assert recovered["advanced"] == 1
     assert recovered["imported"] == 1
     assert recovered["state"] == "completed"
+    assert len(recovered_notifications) == 1
+    assert set(recovered_notifications[0]) == {
+        "event_id", "orchestrator_id", "sender_agent_run_id", "kind", "summary",
+    }
     assert len(read_inbox(settings, "watcher")) == 1
 
 

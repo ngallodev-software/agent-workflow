@@ -54,6 +54,12 @@ This installs the Python launcher and creates `%APPDATA%\agent-workflow\config.t
 
 Configuration is normally read from the XDG configuration path. The core config defines executor, Git, policy, security, plugin, workflow, and evidence behavior. It does not select an interactive terminal backend.
 
+The shipped [`schemas/config.schema.json`](../schemas/config.schema.json) is the
+public JSON Schema for the configuration document and is installed with the
+other schemas. Runtime TOML parsing and policy validation remain owned by
+`src/agent_workflow/config.py`; the schema is a contract/reference check, not a
+second configuration validator.
+
 ## Tagged bootstrap install
 
 For a published release, pin the release explicitly. For version `0.9.2`:
