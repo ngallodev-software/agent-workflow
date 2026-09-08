@@ -181,13 +181,15 @@ def bind(
         }
         return JournalTransactionResult(value=value, record=record)
 
-    return transact_jsonl(
+    result = transact_jsonl(
         _journal(settings, agent_run_id),
         validator=_validate_event,
         transaction=decide,
         max_records=MAX_EVENTS,
         sequence_field="sequence",
     )
+    validate_instance(result, SCHEMA, artifact="external Worker binding")
+    return result
 
 
 def observe(settings: Any, agent_run_id: str) -> dict[str, Any]:
@@ -215,13 +217,15 @@ def observe(settings: Any, agent_run_id: str) -> dict[str, Any]:
             record=record,
         )
 
-    return transact_jsonl(
+    result = transact_jsonl(
         _journal(settings, agent_run_id),
         validator=_validate_event,
         transaction=decide,
         max_records=MAX_EVENTS,
         sequence_field="sequence",
     )
+    validate_instance(result, SCHEMA, artifact="external Worker binding")
+    return result
 
 
 def unbind(settings: Any, agent_run_id: str) -> dict[str, Any]:
@@ -251,13 +255,15 @@ def unbind(settings: Any, agent_run_id: str) -> dict[str, Any]:
         }
         return JournalTransactionResult(value=value, record=record)
 
-    return transact_jsonl(
+    result = transact_jsonl(
         _journal(settings, agent_run_id),
         validator=_validate_event,
         transaction=decide,
         max_records=MAX_EVENTS,
         sequence_field="sequence",
     )
+    validate_instance(result, SCHEMA, artifact="external Worker binding")
+    return result
 
 
 def start(
