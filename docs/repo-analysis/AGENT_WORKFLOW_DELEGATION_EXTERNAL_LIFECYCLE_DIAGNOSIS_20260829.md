@@ -380,3 +380,41 @@ reported `valid`. Therefore the run is complete only at the worker/completion
 gate; it must not be reviewed or accepted as a revision-bound implementation
 until validation rejects this condition or the worker produces a committed,
 lineage-correct closeout.
+
+### Continuation/restart failure (2026-08-29)
+
+Because a terminal Agent Run cannot receive steering, a continuation requires
+lineage. `agent-workflow agent-run restart` with a new run ID failed before
+preparation:
+
+```text
+error: agent profile 'bridge' cannot use an explicit command
+```
+
+Creating an equivalent fresh external delegation on the original dirty
+worktree required `--allow-dirty`, after which the host successfully persisted
+the closeout instruction as a queued steering message. The generated external
+launch contract then failed in both supported execution contexts:
+
+```text
+# non-TTY
+Error: stdin is not a terminal
+
+# TTY
+runner.py: error: unrecognized arguments: --interactive
+```
+
+The generated `run.sh` appends `--interactive` to
+`python -m agent_workflow.runner`, but that runner's parser accepts only
+`--run-dir` and `--command-b64`. Its non-TTY branch omits the interactive
+flag, but invokes a Codex command form that requires a terminal. Consequently
+the valid prepared retry cannot launch and its queued steering cannot be
+acknowledged.
+
+Minimal fix: make the runner accept and implement `--interactive`, or remove
+that flag from generated scripts and emit a non-interactive Codex `exec`
+contract for the non-TTY path. Add an integration test that executes each
+generated external `run.sh` once with a TTY and once without, asserting either
+a started Agent Run or an intentionally documented supported-mode error. Also
+make `agent-run restart` able to reproduce the recorded external command for
+the `bridge` profile, rather than rejecting its own persisted profile.

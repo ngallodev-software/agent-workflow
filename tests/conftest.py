@@ -19,7 +19,7 @@ import jsonschema
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-TERMINAL_STATES = {"completed", "failed", "interrupted", "terminated"}
+TERMINAL_STATES = {"completed", "failed", "interrupted", "terminated", "retired"}
 
 
 @dataclass(frozen=True)

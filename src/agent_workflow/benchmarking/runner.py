@@ -66,6 +66,7 @@ def _render_command(
         "AGENT_WORKFLOW_BENCHMARK_USAGE_FILE": values["usage_file"],
         "AGENT_WORKFLOW_BENCHMARK_STAGE_DIR": values["stage_dir"],
         "AGENT_WORKFLOW_BENCHMARK_PAIR_NONCE": values["pair_nonce"],
+        "AGENT_WORKFLOW_CODEBASE_MEMORY_MODE": str(plan.get("codebase_memory_mode", "none")),
         **{str(key): str(value) for key, value in plan["executor"].get("environment", {}).items()},
     }
     delivery = plan["executor"]["prompt_delivery"]

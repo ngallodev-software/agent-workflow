@@ -444,11 +444,6 @@ def load_settings(path: Path | None = None) -> Settings:
             profile_interactive,
             profile_class,
         )
-    unknown_profiles = set(profiles) - set(preferred_names)
-    if unknown_profiles:
-        raise WorkflowError(
-            "agent profiles must be listed in preferred_names: " + ", ".join(sorted(unknown_profiles))
-        )
     role_config = data.get("roles", {})
     if not isinstance(role_config, dict):
         raise WorkflowError("[roles] must be a table")

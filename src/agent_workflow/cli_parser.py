@@ -572,6 +572,12 @@ def build_parser(
     terminate.add_argument("agent_run_id")
     terminate.add_argument("--grace-seconds", type=int, default=8)
 
+    retire = agent_run_commands.add_parser(
+        "retire", help="retire an explicitly abandoned external prepared Agent Run"
+    )
+    retire.add_argument("agent_run_id")
+    retire.add_argument("--reason", required=True)
+
     restart = agent_run_commands.add_parser(
         "restart", help="create a new Agent Run from a completed prior run"
     )
@@ -723,6 +729,9 @@ def build_parser(
     benchmark_fixture.add_argument("spec", type=Path)
     benchmark_fixture.add_argument("destination", type=Path)
     benchmark_fixture.add_argument("--force", action="store_true")
+    benchmark_target = benchmark_commands.add_parser("target-prepare", help="clone or refresh a manifest-pinned external benchmark target")
+    benchmark_target.add_argument("manifest", type=Path)
+    benchmark_target.add_argument("destination", type=Path)
     benchmark_plan = benchmark_commands.add_parser("plan", help="create coordinator and paired arm worktrees and seal a run plan")
     benchmark_plan.add_argument("spec", type=Path)
     benchmark_plan.add_argument("--executor", type=Path, required=True)
@@ -735,6 +744,7 @@ def build_parser(
     benchmark_plan.add_argument("--assistance-cohort", choices=("unassisted", "assisted"))
     benchmark_plan.add_argument("--policy", type=Path)
     benchmark_plan.add_argument("--runtime-lock", type=Path)
+    benchmark_plan.add_argument("--codebase-memory-mode", choices=("none", "mcp", "cli"), default="none")
     for name, help_text in (
         ("run", "execute, capture, score, consolidate, and report a benchmark run"),
         ("resume", "resume an idempotent benchmark pipeline"),

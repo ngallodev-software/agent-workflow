@@ -15,6 +15,7 @@ from ..benchmarking import (
     create_plan as create_benchmark_plan,
     export_builtin_suite as export_benchmark_suite,
     prepare_or_submit_review as benchmark_review,
+    prepare_target as prepare_benchmark_target,
     render_benchmark_report as render_comparative_benchmark_report,
     resume_benchmark,
     run_benchmark,
@@ -68,6 +69,8 @@ def handle_benchmark_command(
             args.destination,
             force=args.force,
         )
+    if command == "target-prepare":
+        return prepare_benchmark_target(args.manifest, args.destination)
     if command == "plan":
         return create_benchmark_plan(
             settings,
@@ -82,6 +85,7 @@ def handle_benchmark_command(
             assistance_cohort=args.assistance_cohort,
             policy=args.policy,
             runtime_lock=args.runtime_lock,
+            codebase_memory_mode=args.codebase_memory_mode,
         )
     if command == "run":
         return run_benchmark(settings, args.run)

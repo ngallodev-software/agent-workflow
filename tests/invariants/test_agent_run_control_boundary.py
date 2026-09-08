@@ -16,6 +16,7 @@ from agent_workflow.agent_run_control import (
     terminate,
     wait_for_message,
 )
+from agent_workflow.agent_identity import can_retire_prepared, retire_external_agent
 
 
 def _settings(tmp_path: Path):
@@ -123,3 +124,30 @@ def test_terminal_status_is_returned_without_lifecycle_rewrite(tmp_path: Path) -
         assert interrupt(settings, "run-1") is terminal
         assert terminate(settings, "run-1", 0) is terminal
     transition.assert_not_called()
+
+
+def test_external_retirement_requires_unbound_prepared_run_and_releases_name(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    status = {"agent_run_id": "run-1", "agent_name": "worker", "worker_mode": "external"}
+    retired = {**status, "status": "retired", "retirement_authority": {"action": "retire"}}
+    with (
+        patch("agent_workflow.agent_run_control._child_lifecycle_control", return_value=None),
+        patch("agent_workflow.run_lifecycle.synchronize_projection", return_value=status),
+        patch("agent_workflow.agent_identity.authoritative_execution_status", return_value="prepared"),
+        patch("agent_workflow.external_bindings.status", return_value={"bound": False, "generation": 2}),
+        patch("agent_workflow.run_lifecycle.transition_execution", return_value=retired) as transition,
+        patch("agent_workflow.agent_identity.release_agent_name") as release,
+        patch("agent_workflow.agent_identity.run_dir", return_value=tmp_path / "run"),
+    ):
+        result = retire_external_agent(settings, agent_run_id="run-1", reason="abandoned")
+    assert result["outcome"] == "retired"
+    transition.assert_called_once()
+    release.assert_called_once_with(settings, agent_name="worker", agent_run_id="run-1")
+
+
+def test_external_retirement_refuses_bound_and_non_external_runs(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    with patch("agent_workflow.agent_identity.authoritative_execution_status", return_value="prepared"):
+        assert not can_retire_prepared(
+            settings, {"agent_run_id": "run-1", "worker_mode": "headless"}
+        )

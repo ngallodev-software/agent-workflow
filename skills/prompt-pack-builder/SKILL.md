@@ -1,11 +1,16 @@
 ---
 name: prompt-pack-builder
-description: Create and validate reproducible host-independent prompt packs with tasks, result contracts, evaluations, and deterministic archives.
+description: Create and validate reproducible Agent-Workflow prompt packs with tasks, result contracts, evaluations, and deterministic archives.
 ---
 
 # Prompt-Pack Builder Skill
 
-Use this specialization to create reproducible host-independent prompt packs. Follow `skills/agent-workflow/SKILL.md` for execution lifecycle, Agent Run identity, worker-mode selection, provenance, messaging, recovery, and acceptance boundaries.
+Use this specialization to create reproducible Agent-Workflow prompt packs.
+Follow `skills/agent-workflow/SKILL.md` for execution lifecycle, Agent Run
+identity, worker-mode selection, provenance, messaging, recovery, acceptance,
+and continuous-improvement boundaries. A pack's instructions can be
+host-neutral; its `agent-workflow/prompt-pack/v1` manifest is Agent-Workflow
+specific.
 
 `pack.yaml` is the single authoritative, versioned machine-readable workflow/task manifest. Phase directories contain human-readable prompts and runbooks only; do not create a second workflow manifest. A pack may define phases/tasks and dependencies, prompts and writable scope, expected outputs, result JSON Schemas, evaluation commands/policies, review requirements, and completion instructions.
 

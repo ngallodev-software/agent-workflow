@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import hashlib
+import os
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -68,13 +70,36 @@ def snapshot(path: Path) -> GitSnapshot:
     return GitSnapshot(root, head, branch, dirty, _cleanliness_evidence(status))
 
 
+def administrative_dir(path: Path) -> Path:
+    """Return the resolved Git administrative directory for ``path``."""
+    path = expand_path(path)
+    result = run(["git", "-C", str(path), "rev-parse", "--absolute-git-dir"])
+    return Path(result.stdout.strip()).resolve()
+
+
+def assert_administrative_dir_writable(path: Path) -> Path:
+    """Prove Git administrative storage is writable before launching a worker."""
+    git_dir = administrative_dir(path)
+    try:
+        fd, probe = tempfile.mkstemp(prefix=".agent-workflow-write-probe-", dir=git_dir)
+        os.close(fd)
+        os.unlink(probe)
+    except OSError as exc:
+        raise WorkflowError(
+            f"Git administrative directory is not writable: {git_dir}; "
+            "coordinate a commit from the coordinator and retry"
+        ) from exc
+    return git_dir
+
+
 def assert_clean(repo: Path) -> GitSnapshot:
     snap = snapshot(repo)
     if snap.dirty:
         command = " ".join(str(value) for value in snap.cleanliness.get("argv", []))
         raise WorkflowError(
             f"source repository is dirty: {snap.root}; verified by {command}; "
-            "commit/stash or use --allow-dirty"
+            "commit/stash, or use --allow-dirty to create the requested clean "
+            "worktree from the immutable base revision"
         )
     return snap
 

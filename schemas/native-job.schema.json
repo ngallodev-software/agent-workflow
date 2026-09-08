@@ -6,6 +6,7 @@
     "schema",
     "job_id",
     "ticket_id",
+    "bundle_provenance",
     "prompt_path",
     "worktree_target",
     "path_policy",
@@ -16,6 +17,17 @@
     "schema": {"const": "agent-workflow/native-job/v1"},
     "job_id": {"type": "string", "minLength": 1},
     "ticket_id": {"type": "string", "minLength": 1},
+    "bundle_provenance": {
+      "type": "object",
+      "required": ["bundle_version", "schema_id", "schema_digest"],
+      "properties": {
+        "bundle_version": {"type": "string", "minLength": 1},
+        "schema_id": {"type": "string", "minLength": 1},
+        "schema_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "features": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+      },
+      "additionalProperties": false
+    },
     "prompt_path": {"type": "string", "minLength": 1},
     "worktree_target": {"type": "string", "minLength": 1},
     "path_policy": {

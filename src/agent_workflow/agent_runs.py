@@ -5,6 +5,7 @@ import json
 import os
 import platform
 import shlex
+import shutil
 import sys
 import time
 from dataclasses import dataclass
@@ -14,7 +15,7 @@ from typing import Any
 
 from .agent_context import initialize as initialize_agent_context
 from .agent_run_paths import AgentRunPaths
-from .agent_identity import claim_agent_name, resolve_agent_identity
+from .agent_identity import claim_agent_name, release_agent_name, resolve_agent_identity
 from .assets import asset_path
 from .config import Settings
 from .config import enforce_trust
@@ -30,7 +31,7 @@ from .executors import (
     executor_identity_for_plan,
     prepare_executor,
 )
-from .git import snapshot
+from .git import administrative_dir, assert_administrative_dir_writable, snapshot
 from .health import last_event as last_health_event
 from .health import semantic_progress
 from .native_jobs import ValidatedNativeJob, validate_native_job
@@ -149,6 +150,7 @@ def _write_job_binding(state_dir: Path, job: ValidatedNativeJob, *, agent_run_id
         "job_source_sha256": source_sha256,
         "job_stored_path": str(stored),
         "job_stored_sha256": stored_sha256,
+        "bundle_provenance": job.bundle_provenance,
         "path_policy": {
             "allowed_paths": list(job.path_policy.allowed_paths),
             "forbidden_paths": list(job.path_policy.forbidden_paths),
@@ -270,6 +272,7 @@ def _write_agent_run_contract(
     prompt_sha256: str,
     launch_prompt_sha256: str,
     command: list[str],
+    noninteractive_command: list[str] | None,
     redacted_command: list[str],
     executor: str | None,
     model: str | None,
@@ -354,6 +357,14 @@ def _write_agent_run_contract(
             "command_sha256": hashlib.sha256(
                 json.dumps(command, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
             ).hexdigest(),
+            "noninteractive_argv": list(noninteractive_command or command),
+            "noninteractive_command_sha256": hashlib.sha256(
+                json.dumps(
+                    noninteractive_command or command,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest(),
             "stream_format": stream_format,
             "mode": worker_mode,
             "interactive_stdio": executor_interactive,
@@ -404,6 +415,7 @@ class PreparedWorker:
 
     plan: ExecutorPlan
     command: tuple[str, ...]
+    noninteractive_command: tuple[str, ...] | None
     redacted_command: tuple[str, ...]
     compatibility: dict[str, Any]
     executor_policy: Any
@@ -512,6 +524,7 @@ def _prepare_worker(
     *,
     executor: str | None,
     explicit_command: list[str] | None,
+    workdir: Path,
     structured: bool,
     executor_interactive: bool,
     model: str | None,
@@ -542,8 +555,15 @@ def _prepare_worker(
         )
     command = list(plan.argv)
     command[0] = require_command(command[0])
-    if plan.name == "codex" and "--add-dir" not in command:
-        command.extend(["--add-dir", str(handoff_dir)])
+    if plan.name == "codex":
+        if "--add-dir" not in command:
+            command.extend(["--add-dir", str(handoff_dir)])
+        try:
+            git_dir = administrative_dir(workdir)
+        except WorkflowError:
+            git_dir = None
+        if git_dir is not None and str(git_dir) not in command:
+            command.extend(["--add-dir", str(git_dir)])
     plan = ExecutorPlan(
         plan.name,
         tuple(command),
@@ -552,6 +572,23 @@ def _prepare_worker(
         plan.no_go_authorized,
         plan.reasoning_effort,
     )
+    noninteractive_command: tuple[str, ...] | None = None
+    if executor_interactive and plan.name in settings.executors:
+        noninteractive_plan = prepare_executor(
+            settings,
+            plan.name,
+            None,
+            structured=structured,
+            interactive=False,
+            model=plan.model,
+            reasoning_effort=plan.reasoning_effort,
+            allow_no_go_model=allow_no_go_model,
+        )
+        noninteractive = list(noninteractive_plan.argv)
+        noninteractive[0] = require_command(noninteractive[0])
+        if noninteractive_plan.name == "codex" and "--add-dir" not in noninteractive:
+            noninteractive.extend(["--add-dir", str(handoff_dir)])
+        noninteractive_command = tuple(noninteractive)
     compatibility = probe_executor(
         plan.name,
         command,
@@ -574,6 +611,7 @@ def _prepare_worker(
     return PreparedWorker(
         plan=plan,
         command=tuple(command),
+        noninteractive_command=noninteractive_command,
         redacted_command=tuple(redacted),
         compatibility=compatibility,
         executor_policy=policy,
@@ -757,6 +795,46 @@ def prepare(
     *,
     agent_run_id: str,
     workdir: Path,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Prepare an Agent Run transactionally, preserving preflight evidence."""
+    state_dir = run_dir(settings, agent_run_id)
+    handoff_dir = absolute_path(workdir) / ".agent-workflow-handoff" / agent_run_id
+    state_existed = state_dir.exists()
+    handoff_existed = handoff_dir.exists() or handoff_dir.is_symlink()
+    try:
+        return _prepare(
+            settings,
+            agent_run_id=agent_run_id,
+            workdir=workdir,
+            **kwargs,
+        )
+    except BaseException:
+        # The preflight-failure record is intentional durable evidence.
+        preserve_preflight = (state_dir / "preflight.json").is_file()
+        if not state_existed and state_dir.exists() and not preserve_preflight:
+            if state_dir.is_symlink():
+                state_dir.unlink()
+            else:
+                shutil.rmtree(state_dir)
+        if not handoff_existed and handoff_dir.exists():
+            if handoff_dir.is_symlink():
+                handoff_dir.unlink()
+            else:
+                shutil.rmtree(handoff_dir)
+        release_agent_name(
+            settings,
+            agent_name=None,
+            agent_run_id=agent_run_id,
+        )
+        raise
+
+
+def _prepare(
+    settings: Settings,
+    *,
+    agent_run_id: str,
+    workdir: Path,
     prompt_path: Path,
     executor: str | None = None,
     agent_name: str | None = None,
@@ -879,9 +957,11 @@ def prepare(
     preflight_snapshot = None
     try:
         preflight_snapshot = snapshot(workdir)
+        assert_administrative_dir_writable(workdir)
     except WorkflowError:
+        if preflight_snapshot is not None:
+            raise
         # Non-Git workdirs are supported for general terminal delegation.
-        pass
     if (
         preflight_snapshot is not None
         and preflight_snapshot.dirty
@@ -916,6 +996,7 @@ def prepare(
         settings,
         executor=executor,
         explicit_command=explicit_command,
+        workdir=workdir,
         structured=structured,
         executor_interactive=executor_interactive,
         model=model,
@@ -1160,6 +1241,11 @@ def prepare(
         prompt_sha256=sha256_file(prompt_copy),
         launch_prompt_sha256=sha256_file(launch_prompt),
         command=command,
+        noninteractive_command=(
+            list(prepared_worker.noninteractive_command)
+            if prepared_worker.noninteractive_command
+            else None
+        ),
         redacted_command=redacted_command,
         executor=executor_plan.name,
         model=executor_plan.model,
@@ -1501,6 +1587,8 @@ PUBLIC_AGENT_RUN_FIELDS = (
     "signals",
     "safe_actions",
     "next_action",
+    "retirement_authority",
+    "retired_by_operator",
 )
 
 
@@ -1579,7 +1667,7 @@ def restart(
         workdir=Path(str(worktree["path"])),
         prompt_path=prompt_source,
         explicit_command=command,
-        agent_name=None,
+        agent_name=agent_run.get("agent_name"),
         agent_class=agent_run.get("agent_class"),
         model=command_data.get("model"),
         reasoning_effort=contract["runtime_policy"].get("codex_reasoning_effort"),
@@ -1600,10 +1688,9 @@ def restart(
         ),
         tier=agent_run.get("tier"),
         job_path=job_path,
-        allow_active_agent_name=False,
+        allow_active_agent_name=True,
         worker_mode=str(worker_plan.get("mode", "headless")),
     )
     if prepared.get("worker_mode") == "headless":
         return start(settings, new_id)
     return prepared
-

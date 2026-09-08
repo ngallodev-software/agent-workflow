@@ -133,6 +133,37 @@ def test_invalid_completion_fails_but_evidence_is_preserved(
     assert (run / "final-receipt.json").is_file()
 
 
+def test_valid_completion_survives_bounded_auxiliary_output(
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+    fake_agent_path: Path,
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    git_repo(repo)
+    prompt = tmp_path / "prompt.md"
+    prompt.write_text("Complete despite noisy diagnostics.\n", encoding="utf-8")
+    env = dict(product_env)
+    env["FAKE_AGENT_MODE"] = "noisy"
+
+    prepare_and_start_agent_run(
+        installed_product,
+        "noisy-completion",
+        repo,
+        prompt,
+        "--tier",
+        "low",
+        "--",
+        fake_agent_path,
+        env=env,
+    )
+    status = wait_for_status(env, "noisy-completion")
+    assert status["status"] == "completed"
+    assert status["completion_validation_status"] == "valid"
+    assert status["stdout_truncated"] is True
+    assert status["stderr_truncated"] is True
+
+
 def test_failed_headless_run_restarts_as_new_agent_run_with_lineage(
     installed_product: InstalledProduct,
     product_env: dict[str, str],

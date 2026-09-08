@@ -145,8 +145,8 @@ def test_installed_trusted_plugin_is_explicit_atomic_and_recoverable(
         "--config", disabled, "--json", "plugins", "list", env=env, check=True
     )
     inventory_data = json.loads(inventory.stdout)
-    assert inventory_data["plugins"][0]["name"] == "fixture"
-    assert inventory_data["plugins"][0]["loaded"] is False
+    fixture = next(item for item in inventory_data["plugins"] if item["name"] == "fixture")
+    assert fixture["loaded"] is False
     assert not marker.exists(), "disabled entry-point candidate was imported"
 
     executed = installed_product.run(
@@ -182,7 +182,8 @@ def test_installed_trusted_plugin_is_explicit_atomic_and_recoverable(
     )
     suppressed_data = json.loads(suppressed.stdout)
     assert suppressed_data["suppressed"] is True
-    assert suppressed_data["plugins"][0]["suppressed"] is True
+    fixture = next(item for item in suppressed_data["plugins"] if item["name"] == "fixture")
+    assert fixture["suppressed"] is True
     assert not marker.exists(), "--no-plugins imported an enabled candidate"
 
     unavailable = installed_product.run(

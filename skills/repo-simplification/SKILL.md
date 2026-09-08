@@ -82,7 +82,7 @@ packaging/runtime consumption, semantic equivalence, and a reversible validation
 - `scripts/ensure-codebase-memory.sh`: a fail-closed executable/configuration check and explicit,
   opt-in GitHub bootstrap through codebase-memory-mcp's maintained installer;
 - Agent-Workflow's `eval validate`, `eval score`, `eval report`, `assess-sealed-runs`,
-  `scripts/audit-release-assets.py`, `scripts/audit-test-suite.py`, `scripts/release-check.sh`,
+  `scripts/audit-release-assets.py`, `scripts/release-check.sh`,
   package builders, and existing pytest suites: reuse their authority instead of creating a
   second release or test framework.
 

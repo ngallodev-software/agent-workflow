@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import os
+import json
 import subprocess
 from pathlib import Path
 
@@ -10,12 +10,22 @@ from agent_workflow.completion import (
     completion_revision_errors,
     substantive_completion_errors,
     validate_completion_repository_closeout,
+    validate_completion_sidecar,
 )
-from agent_workflow.contracts import validate_instance, validate_ticket_identity
+from agent_workflow.contracts import validate_instance
+from agent_workflow.diagnostics import classify_failure
 from agent_workflow.errors import WorkflowError
-from agent_workflow.git import snapshot
+from agent_workflow.git import assert_clean
 from agent_workflow.steering import append_delivery_event, replay_delivery_events
 from agent_workflow.repository_closeout import create_repository_closeout
+
+
+def test_delegation_import_uses_lifecycle_projection_authority() -> None:
+    """The public delegation facade must import its projection helper from lifecycle."""
+    from agent_workflow import delegation
+    from agent_workflow.run_lifecycle import synchronize_projection
+
+    assert delegation.synchronize_projection is synchronize_projection
 
 
 def _completion(**overrides: object) -> dict[str, object]:
@@ -65,10 +75,61 @@ def test_substantive_completion_rejects_empty_schema_valid_success() -> None:
     assert "completed result requires at least one command receipt" in errors
 
 
+def test_completion_revision_rejects_uncommitted_changed_files() -> None:
+    errors = completion_revision_errors(
+        _completion(base_revision="a" * 40, head_revision="a" * 40),
+        expected_base_revision="a" * 40,
+        actual_head_revision="a" * 40,
+    )
+    assert "completed changed_files require a committed revision distinct from base_revision" in errors
+
+
+def test_dirty_source_diagnostic_explains_allow_dirty_base_worktree(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.email", "tests@example.invalid"], check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.name", "Tests"], check=True)
+    (repo / "tracked.txt").write_text("tracked\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "tracked.txt"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "initial"], check=True)
+    (repo / "tracked.txt").write_text("dirty\n", encoding="utf-8")
+
+    with pytest.raises(WorkflowError, match="--allow-dirty to create the requested clean worktree from the immutable base revision"):
+        assert_clean(repo)
+
+
 def test_completion_schema_rejects_string_criteria_before_collection() -> None:
     value = _completion(criteria=["criterion text"])
     with pytest.raises(WorkflowError, match="invalid artifact"):
         validate_instance(value, "agent-workflow/completion/v1")
+
+
+def test_completion_sidecar_preflight_reports_enum_field_and_allowed_values(tmp_path: Path) -> None:
+    value = _completion(criteria=[{
+        "id": "criterion-1",
+        "result": "verified",
+        "evidence": ["focused test passed"],
+    }])
+    path = tmp_path / "completion.json"
+    path.write_text(json.dumps(value), encoding="utf-8")
+    with pytest.raises(WorkflowError, match=r"criteria\.0\.result.*pass.*not_verified"):
+        validate_completion_sidecar(path)
+
+
+def test_completion_sidecar_preflight_accepts_valid_schema_without_semantic_checks(
+    tmp_path: Path,
+) -> None:
+    value = _completion(result="partial", unresolved=["follow-up"])
+    path = tmp_path / "completion.json"
+    path.write_text(json.dumps(value), encoding="utf-8")
+    assert validate_completion_sidecar(path)["validation_status"] == "valid"
+
+
+def test_completion_schema_diagnostic_precedes_missing_command() -> None:
+    assert classify_failure(
+        exit_code=127,
+        stderr="completion criteria[0].result enum rejected; command not found",
+    ) == "completion_invalid"
 
 
 def test_completion_schema_requires_criterion_evidence() -> None:
@@ -321,5 +382,3 @@ def test_review_schema_rejects_disposition_as_result() -> None:
     value = _completion(result="changes_requested")
     with pytest.raises(WorkflowError, match="invalid artifact"):
         validate_instance(value, "agent-workflow/completion/v1")
-
-

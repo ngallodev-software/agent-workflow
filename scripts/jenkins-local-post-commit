@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+[[ "$(git -C "$root" symbolic-ref --short HEAD 2>/dev/null || true)" == "release-tooling" ]] || exit 0
+nohup "$root/scripts/jenkins-local-job.sh" trigger >/dev/null 2>&1 &

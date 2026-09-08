@@ -61,3 +61,8 @@ When comparative benchmark capability is intentionally in use, `agent-workflow -
 ## Compatibility boundary
 
 External hosts and plugins should compose these CLI contracts. They should not import `agent_workflow.*` implementation modules, read mutable status files directly, infer lifecycle state from process state, scrape terminal output, or duplicate Agent-Workflow's durable authorities in a host-owned schema.
+
+For operator display, keep worker identity, execution status, review,
+acceptance, and host projection state as separate fields. A host projection
+may be retired only after the public execution status is terminal; projection
+state must never be fed back into lifecycle or disposition authority.

@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import fcntl
+import json
 import subprocess
+import sys
+import time
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
+import agent_workflow.orchestrator_inbox as orchestrator_inbox
 from agent_workflow.agent_runs import prepare
 from agent_workflow.config import defaults
 from agent_workflow.errors import WorkflowError
@@ -132,6 +136,138 @@ def test_watch_replays_durable_messages_without_wakeup_channel(tmp_path: Path) -
     assert first["advanced"] == 1
     assert first["imported"] == 1
     assert second["advanced"] == 0
+    assert len(read_inbox(settings, "watcher")) == 1
+
+
+def test_watch_notifies_after_persisting_bounded_projection(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    source = _make_child(tmp_path, settings, "child-one", "x" * 700)
+    create_registry(settings, "watcher")
+    register_child(settings, "watcher", "child-one")
+    delivered: list[dict] = []
+
+    def adapter(record: dict) -> None:
+        # The adapter observes the durable state before it is called.
+        assert read_inbox(settings, "watcher", event_id=record["event_id"])
+        delivered.append(record)
+
+    result = watch(
+        settings,
+        "watcher",
+        interval_seconds=0.01,
+        notification_adapter=adapter,
+        max_cycles=1,
+    )
+
+    assert result["imported"] == 1
+    assert delivered[0]["event_id"] == read_inbox(settings, "watcher")[0]["event_id"]
+    assert len(delivered[0]["summary"]) <= 512
+    assert set(delivered[0]) == {
+        "event_id", "orchestrator_id", "sender_agent_run_id", "kind", "summary",
+    }
+    assert source["content"] not in delivered[0]["summary"]
+
+
+def test_watch_notification_failure_does_not_stop_or_lose_event(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    _make_child(tmp_path, settings, "child-one", "durable progress")
+    create_registry(settings, "watcher")
+    register_child(settings, "watcher", "child-one")
+
+    def failing_adapter(_record: dict) -> None:
+        raise RuntimeError("host unavailable")
+
+    result = watch(
+        settings,
+        "watcher",
+        interval_seconds=0.01,
+        notification_adapter=failing_adapter,
+        max_cycles=1,
+    )
+
+    assert result["state"] == "completed"
+    assert len(read_inbox(settings, "watcher")) == 1
+    recovered = watch(settings, "watcher", interval_seconds=0.01, max_cycles=1)
+    assert recovered["advanced"] == 0
+    assert len(read_inbox(settings, "watcher")) == 1
+
+
+def test_watch_keeps_one_registry_alive_for_successive_children(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    _make_child(tmp_path, settings, "child-a", "first")
+    create_registry(settings, "watcher")
+    register_child(settings, "watcher", "child-a")
+
+    watcher_code = """
+import json
+import sys
+from dataclasses import replace
+from pathlib import Path
+from agent_workflow.config import defaults
+from agent_workflow.orchestrator_supervisor import watch
+
+settings = replace(defaults(Path(sys.argv[1])), state_root=Path(sys.argv[2]))
+print(json.dumps(watch(settings, "watcher", interval_seconds=0.01, max_cycles=200, batch_size=1)), flush=True)
+"""
+    process = subprocess.Popen(
+        [sys.executable, "-c", watcher_code, str(settings.config_path), str(settings.state_root)],
+        cwd=Path(__file__).parents[2],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        events_path = orchestrator_dir(settings, "watcher") / "supervisor-events.jsonl"
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            if events_path.exists() and '"reason":"startup"' in events_path.read_text(encoding="utf-8"):
+                break
+            time.sleep(0.01)
+        else:
+            raise AssertionError("watcher did not start")
+
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline and not read_inbox(settings, "watcher"):
+            time.sleep(0.01)
+        assert read_inbox(settings, "watcher")[0]["sender_agent_run_id"] == "child-a"
+
+        _make_child(tmp_path, settings, "child-b", "second")
+        register_child(settings, "watcher", "child-b")
+        stdout, stderr = process.communicate(timeout=5)
+    finally:
+        if process.poll() is None:
+            process.terminate()
+            process.communicate(timeout=5)
+
+    assert process.returncode == 0, stderr
+    result = json.loads(stdout)
+    assert result["state"] == "completed"
+    assert result["advanced"] == 2
+    assert {event["sender_agent_run_id"] for event in read_inbox(settings, "watcher")} == {
+        "child-a", "child-b"
+    }
+
+
+def test_watch_duplicate_delivery_after_cursor_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = _settings(tmp_path)
+    _make_child(tmp_path, settings, "child-one", "cursor recovery")
+    create_registry(settings, "watcher")
+    register_child(settings, "watcher", "child-one")
+
+    def fail_cursor_write(*_args: object, **_kwargs: object) -> None:
+        raise OSError("simulated cursor write failure")
+
+    monkeypatch.setattr(orchestrator_inbox, "_write_source_cursor", fail_cursor_write)
+    failed = watch(settings, "watcher", interval_seconds=0.01, max_cycles=1)
+    assert failed["state"] == "completed"
+    assert failed["advanced"] == 0
+    assert len(read_inbox(settings, "watcher")) == 1
+
+    monkeypatch.undo()
+    recovered = watch(settings, "watcher", interval_seconds=0.01, max_cycles=1)
+    assert recovered["advanced"] == 1
+    assert recovered["imported"] == 1
+    assert recovered["state"] == "completed"
     assert len(read_inbox(settings, "watcher")) == 1
 
 

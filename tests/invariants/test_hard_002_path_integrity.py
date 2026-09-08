@@ -14,6 +14,7 @@ from agent_workflow.contracts import _schema_index, load_schema
 from agent_workflow.errors import WorkflowError
 from agent_workflow.manifests import validate_pack
 from agent_workflow.native_jobs import validate_native_job
+from specgen_contracts.bundle import schema_digest
 from agent_workflow.pack import archive, scaffold
 from agent_workflow.path import inventory_tree, read_inventory_file
 
@@ -100,6 +101,11 @@ def test_native_job_rejects_symlinked_job_and_prompt_components(tmp_path: Path) 
         "schema": "agent-workflow/native-job/v1",
         "job_id": "job",
         "ticket_id": "ticket",
+        "bundle_provenance": {
+            "bundle_version": "0.2.0",
+            "schema_id": "agent-workflow/prompt-pack/v1",
+            "schema_digest": schema_digest("agent-workflow/prompt-pack/v1"),
+        },
         "prompt_path": "prompt.md",
         "worktree_target": "work",
         "path_policy": {"allowed_paths": ["src"]},
@@ -116,7 +122,6 @@ def test_native_job_rejects_symlinked_job_and_prompt_components(tmp_path: Path) 
     (root / "job.json").write_text(json.dumps(job), encoding="utf-8")
     with pytest.raises(WorkflowError, match="prompt_path"):
         validate_native_job(root / "job.json", pack_root=root)
-
 
 def test_packaged_schema_authority_is_present_and_duplicate_ids_fail_closed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

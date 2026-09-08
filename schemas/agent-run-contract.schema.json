@@ -356,6 +356,17 @@
             "null"
           ]
         },
+        "noninteractive_argv": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "noninteractive_command_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
         "stream_format": {
           "enum": [
             "text",

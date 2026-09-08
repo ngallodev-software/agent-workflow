@@ -590,7 +590,10 @@ def replay_registered(
             source = records[sequence]
             if source["kind"] in _EVENT_KINDS:
                 result = import_message(settings, orchestrator_id, sid, source)
-                imported.append(_metadata(result["event"], include_content=False) | {"duplicate": result["duplicate"]})
+                # Replay callers may project this into an advisory host
+                # notification.  Keep the summary internal to this report;
+                # public inbox reads remain metadata-only by default.
+                imported.append(_metadata(result["event"], include_content=True) | {"duplicate": result["duplicate"]})
             _write_source_cursor(_cursor_path(directory, child), child, source["sequence"], source)
             cursors[sid] = source["sequence"]
             position += 1

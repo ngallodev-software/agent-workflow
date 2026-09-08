@@ -94,15 +94,14 @@ def _write_runner(
     runner_invocation = (
         f"{shlex.quote(python_executable)} -m agent_workflow.runner "
         f"--run-dir {shlex.quote(str(state_dir))} "
-        f"--command-b64 {shlex.quote(command_blob)} "
-        f"{'--interactive ' if interactive else ''}"
+        f"--command-b64 {shlex.quote(command_blob)}"
     )
     if interactive:
         runner_command = (
             "if [[ -t 0 ]]; then\n"
             f"    exec {runner_invocation}\n"
             "else\n"
-            f"    exec {runner_invocation.replace('--interactive ', '', 1)}\n"
+            f"    exec {runner_invocation} --non-interactive\n"
             "fi"
         )
     else:

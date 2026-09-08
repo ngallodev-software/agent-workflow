@@ -439,6 +439,7 @@ def execute(
     *,
     stream_format: str,
     interactive: bool = False,
+    force_noninteractive: bool = False,
     heartbeat_seconds: float = 5.0,
 ) -> int:
     run_dir = run_dir.resolve()
@@ -448,16 +449,23 @@ def execute(
     workdir = contract_workdir
     worker_plan = launch["worker_plan"]
     contract_command = [str(value) for value in worker_plan["argv"]]
+    if force_noninteractive:
+        contract_command = [
+            str(value)
+            for value in worker_plan.get("noninteractive_argv", contract_command)
+        ]
     if command:
         encoded = json.dumps(command, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         actual_digest = hashlib.sha256(encoded).hexdigest()
-        expected_digest = worker_plan.get("command_sha256")
+        expected_digest = worker_plan.get(
+            "noninteractive_command_sha256" if force_noninteractive else "command_sha256"
+        )
         if not isinstance(expected_digest, str) or actual_digest != expected_digest:
             raise WorkflowError("runtime command does not match immutable launch contract")
     else:
         command = contract_command
     stream_format = str(worker_plan["stream_format"])
-    interactive = bool(worker_plan["interactive_stdio"])
+    interactive = bool(worker_plan["interactive_stdio"]) and not force_noninteractive
     status_path = paths.status
     prompt_read = read_regular_file(run_dir / launch["prompt"]["launch_stored"])
     if prompt_read.sha256 != launch["prompt"]["launch_sha256"]:
@@ -474,6 +482,7 @@ def execute(
     first_output_at: str | None = None
     last_normalized_text: str | None = None
     pump_errors: list[str] = []
+    capture_warnings: list[str] = []
     wall_started = time.monotonic()
     runtime = launch.get("runtime_policy")
     # The immutable launch contract carries executor budgets, while the
@@ -802,9 +811,9 @@ def execute(
         },
     )
     if process_result.stdout_truncated:
-        pump_errors.append("stdout capture limit exceeded; output truncated")
+        capture_warnings.append("stdout capture limit exceeded; output truncated")
     if process_result.stderr_truncated:
-        pump_errors.append("stderr capture limit exceeded; output truncated")
+        capture_warnings.append("stderr capture limit exceeded; output truncated")
     if completed_by_child:
         return_code = 0
     if pump_errors:
@@ -923,7 +932,7 @@ def execute(
         ),
         "finished_at": finished_at,
         "exit_code": return_code,
-        "pump_errors": pump_errors,
+        "pump_errors": [*pump_errors, *capture_warnings],
         "failure_category": failure_category,
         "stdout_bytes": process_result.stdout_bytes,
         "stderr_bytes": process_result.stderr_bytes,
@@ -981,9 +990,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--run-dir", type=Path, required=True)
     parser.add_argument("--command-b64")
+    parser.add_argument("--non-interactive", action="store_true")
     args = parser.parse_args(argv)
     command: list[str] = []
-    if args.command_b64:
+    if args.command_b64 and not args.non_interactive:
         try:
             decoded = base64.b64decode(args.command_b64, validate=True)
             value = json.loads(decoded.decode("utf-8"))
@@ -998,6 +1008,7 @@ def main(argv: list[str] | None = None) -> int:
         command,
         stream_format="text",
         interactive=False,
+        force_noninteractive=args.non_interactive,
     )
 
 

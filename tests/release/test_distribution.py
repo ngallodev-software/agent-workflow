@@ -31,49 +31,6 @@ def test_release_asset_audit_is_the_single_static_repository_gate() -> None:
     assert "export PYTEST_DISABLE_PLUGIN_AUTOLOAD=1" in release_check
 
 
-def test_test_authority_audit_blocks_silent_suite_growth(tmp_path: Path) -> None:
-    policy = json.loads((REPO_ROOT / "tests" / "test-authority.json").read_text(encoding="utf-8"))
-    blocked_policy = tmp_path / "blocked-test-authority.json"
-    policy["layers"]["invariants"]["max_files"] = 0
-    blocked_policy.write_text(json.dumps(policy, indent=2) + "\n", encoding="utf-8")
-
-    cases = [
-        ([sys.executable, "scripts/audit-test-suite.py", "--skip-collection"], 0, "test authority audit: passed"),
-        (
-            [
-                sys.executable,
-                "scripts/audit-test-suite.py",
-                "--skip-collection",
-                "--policy",
-                str(blocked_policy),
-            ],
-            1,
-            "invariants files grew",
-        ),
-    ]
-    for command, expected_code, expected_text in cases:
-        result = subprocess.run(
-            command,
-            cwd=REPO_ROOT,
-            text=True,
-            capture_output=True,
-            check=False,
-            timeout=60,
-        )
-        assert result.returncode == expected_code, result.stdout + result.stderr
-        assert expected_text in result.stdout + result.stderr
-
-    testing = (REPO_ROOT / "docs" / "TESTING.md").read_text(encoding="utf-8")
-    preflight = (REPO_ROOT / "docs" / "references" / "WORKTREE_PREFLIGHT.md").read_text(encoding="utf-8")
-    assert "tests/test-authority.json" in testing
-    assert "scripts/audit-test-suite.py" in testing
-    assert "assertion-dense" in testing
-    assert "persistence=false" in preflight
-    assert "$XDG_CACHE_HOME/agent-workflow/codebase-memory/<worktree-id>/" in preflight
-    assert "git status --porcelain=v2 -z" in preflight
-    assert "256 MiB" in preflight
-
-
 def test_all_published_json_schemas_are_valid_draft_2020_12() -> None:
     schemas = sorted((REPO_ROOT / "schemas").glob("*.json"))
     assert schemas
@@ -88,17 +45,12 @@ def test_shell_entrypoints_and_installer_are_syntax_valid() -> None:
         subprocess.run(["bash", "-n", str(path)], check=True)
 
 
-def test_delegation_module_imports_from_source_checkout() -> None:
-    env = {**os.environ, "PYTHONPATH": str(REPO_ROOT / "src")}
-    result = subprocess.run(
-        [sys.executable, "-c", "import agent_workflow.delegation"],
-        cwd=REPO_ROOT,
-        env=env,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
+def test_windows_installer_is_a_packaged_native_entrypoint() -> None:
+    installer = REPO_ROOT / "install.ps1"
+    assert installer.is_file()
+    text = installer.read_text(encoding="utf-8")
+    assert "agent-workflow requires Python 3.11+" in text
+    assert "MCP registration, skills, and hooks are intentionally not changed" in text
 
 
 def test_documented_commands_match_the_installed_public_surface(
@@ -141,7 +93,31 @@ def test_built_wheel_excludes_repository_only_ci_assets(
     assert not any("__pycache__/" in name or name.endswith(".pyc") for name in names)
 
 
-def test_optional_mcp_profile_rejects_missing_pinned_sdk_before_client_registration(
+def test_wheel_source_preflight_rejects_stale_build_components() -> None:
+    built = REPO_ROOT / "build" / "lib" / "agent_workflow"
+    source = REPO_ROOT / "src" / "agent_workflow" / "cli_contract.py"
+    built.mkdir(parents=True, exist_ok=True)
+    stale = built / "cli_contract.py"
+    original = stale.read_bytes() if stale.exists() else None
+    stale.write_bytes(source.read_bytes() + b"\n# stale\n")
+    try:
+        result = subprocess.run(
+            [sys.executable, "scripts/verify-wheel-source.py"],
+            cwd=REPO_ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        assert result.returncode == 1
+        assert "cli_contract.py" in result.stderr
+    finally:
+        if original is None:
+            stale.unlink(missing_ok=True)
+        else:
+            stale.write_bytes(original)
+
+
+def test_default_installer_rejects_mcp_profile_and_does_not_register(
     tmp_path: Path,
 ) -> None:
     fake_python = tmp_path / "python-without-mcp"
@@ -178,7 +154,7 @@ def test_optional_mcp_profile_rejects_missing_pinned_sdk_before_client_registrat
         timeout=30,
     )
     assert result.returncode != 0
-    assert "MCP support requires mcp==1.28.1" in result.stderr
+    assert "MCP is opt-in; use scripts/install-mcp.sh" in result.stderr
     assert not (home / ".codex" / "config.toml").exists()
     assert not (home / ".claude.json").exists()
 

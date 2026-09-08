@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 import json
+import os
+import pty
 import subprocess
+import time
 from pathlib import Path
 
+import pytest
+
 from tests.conftest import InstalledProduct, git_repo, wait_for_status, write_config
+from agent_workflow.run_lifecycle import transition_execution_path
 
 
 def _run_dir(env: dict[str, str], agent_run_id: str) -> Path:
@@ -23,7 +29,7 @@ def test_installed_cli_exposes_headless_agent_run_surface(
     assert " launch " not in f" {help_text} "
 
     agent_run_help = installed_product.run("agent-run", "--help", env=product_env, check=True).stdout
-    for command in ("prepare", "start", "start-external", "status", "steer", "progress", "ack", "interrupt", "terminate", "restart"):
+    for command in ("prepare", "start", "status", "steer", "progress", "ack", "interrupt", "terminate", "restart"):
         assert command in agent_run_help
 
     doctor = installed_product.json("doctor", env=product_env)
@@ -38,43 +44,8 @@ def test_installed_cli_exposes_headless_agent_run_surface(
 
     catalog = installed_product.json("commands", "--format", "json", env=product_env)
     represented = {item["command"] for item in catalog["commands"]}
-    assert {"agent-run prepare", "agent-run start", "agent-run start-external", "agent-run status", "agent task-complete", "worktree closeout"} <= represented
+    assert {"agent-run prepare", "agent-run start", "agent-run status", "agent task-complete", "worktree closeout"} <= represented
     assert "launch" not in represented
-
-
-def test_installed_delegate_is_importable_and_idempotent(
-    installed_product: InstalledProduct,
-    product_env: dict[str, str],
-    fake_agent_path: Path,
-    tmp_path: Path,
-) -> None:
-    repo = tmp_path / "delegate-repo"
-    git_repo(repo)
-    prompt = tmp_path / "delegate.md"
-    prompt.write_text("Prepare this delegation.\n", encoding="utf-8")
-    config = write_config(product_env, fake_agent=fake_agent_path)
-    first = installed_product.json(
-        "delegate", "delegate-idempotent", prompt, "--workdir", repo,
-        "--worker-mode", "external", "--interactive", "--config", config,
-        env=product_env,
-    )
-    second = installed_product.json(
-        "delegate", "delegate-idempotent", prompt, "--workdir", repo,
-        "--worker-mode", "external", "--interactive", "--config", config,
-        env=product_env,
-    )
-    assert first["state"] == "prepared"
-    assert second["state"] == "prepared"
-    assert second["reused_existing_run"] is True
-    assert second["launch_contract"]["argv"][-1].endswith("/run.sh")
-    assert second["launch_contract"]["start_command"].endswith("--generation GENERATION")
-    mismatch = installed_product.run(
-        "--json", "delegate", "delegate-idempotent", prompt, "--workdir", repo,
-        "--worker-mode", "headless", "--config", config, env=product_env,
-    )
-    assert mismatch.returncode == 2
-    assert "recorded worker_mode='external'" in mismatch.stderr
-    assert "--worker-mode external" in mismatch.stderr
 
 
 def test_headless_agent_run_prepare_start_and_provenance_journey(
@@ -156,6 +127,41 @@ def test_headless_agent_run_prepare_start_and_provenance_journey(
     assert (run / "final-receipt.json").is_file()
 
 
+def test_headless_codex_scope_includes_linked_worktree_git_directory(
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+    fake_agent_path: Path,
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    git_repo(source)
+    linked = tmp_path / "linked"
+    subprocess.run(
+        ["git", "-C", str(source), "worktree", "add", "-q", str(linked), "HEAD"],
+        check=True,
+    )
+    prompt = tmp_path / "prompt.md"
+    prompt.write_text("Complete the linked worktree task.\n", encoding="utf-8")
+    config = write_config(product_env, fake_agent=fake_agent_path)
+    env = dict(product_env)
+    env["FAKE_AGENT_MODE"] = "structured"
+
+    installed_product.json(
+        "agent-run", "prepare", "linked-gitdir", linked, prompt,
+        "--config", config, "--role", "review", "--tier", "medium",
+        "--structured", env=env,
+    )
+
+    run = _run_dir(env, "linked-gitdir")
+    command = json.loads((run / "command.json").read_text(encoding="utf-8"))["argv"]
+    git_dir = subprocess.run(
+        ["git", "-C", str(linked), "rev-parse", "--absolute-git-dir"],
+        text=True, capture_output=True, check=True,
+    ).stdout.strip()
+    add_dirs = [command[index + 1] for index, value in enumerate(command[:-1]) if value == "--add-dir"]
+    assert git_dir in add_dirs
+
+
 def test_external_prepare_is_host_independent_and_process_control_is_unavailable(
     installed_product: InstalledProduct,
     product_env: dict[str, str],
@@ -176,102 +182,111 @@ def test_external_prepare_is_host_independent_and_process_control_is_unavailable
     assert prepared["status"] == "prepared"
     assert prepared["worker_mode"] == "external"
     assert prepared.get("worker_pid") is None
+    run = _run_dir(env, "external-run")
+    runner_text = (run / "run.sh").read_text(encoding="utf-8")
+    assert "--interactive" not in runner_text
+    assert "--non-interactive" in runner_text
+    contract = json.loads((run / "agent-run-contract.json").read_text(encoding="utf-8"))
+    assert contract["worker_plan"]["noninteractive_argv"]
+    assert len(contract["worker_plan"]["noninteractive_command_sha256"]) == 64
 
     start = installed_product.run("--json", "agent-run", "start", "external-run", env=env)
     assert start.returncode == 2
     assert "external" in start.stderr.lower()
 
-    binding = installed_product.json(
-        "agent-run", "bind-external", "external-run", "test-runtime", "worker-a", env=env
-    )
-    assert binding["generation"] == 1
-    started = installed_product.json(
-        "agent-run", "start-external", "external-run", "test-runtime", "worker-a",
-        "--generation", "1", env=env,
-    )
-    assert started["status"] == "running"
-    lifecycle = [
-        json.loads(line)["new"]
-        for line in (_run_dir(env, "external-run") / "events.jsonl").read_text().splitlines()
-        if line
-    ]
-    assert lifecycle[:2] == ["prepared", "running"]
-    started_again = installed_product.json(
-        "agent-run", "start-external", "external-run", "test-runtime", "worker-a",
-        "--generation", "1", env=env,
-    )
-    assert started_again["status"] == "running"
-
-    run = _run_dir(env, "external-run")
-    handoff = repo / ".agent-workflow-handoff" / "external-run"
-    completion = json.loads((handoff / "completion-template.json").read_text())
-    head = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
-    completion.update(
-        {
-            "base_revision": head,
-            "head_revision": head,
-            "criteria": [{"id": "external-start", "result": "pass", "evidence": ["started"]}],
-            "commands": [{"argv": ["external-worker"], "cwd": str(repo), "exit_code": 0, "receipt": "started"}],
-        }
-    )
-    (handoff / "completion.json").write_text(json.dumps(completion), encoding="utf-8")
-    completed = installed_product.json(
-        "agent", "task-complete", "external-run", "--actor", "external-worker",
-        "--summary", "external assignment complete", env=env,
-    )
-    assert completed["state"] == "closed"
-
     # External lifecycle operations do not guess at runtime-host control.
+    status_path = _run_dir(env, "external-run") / "status.json"
+    status = json.loads(status_path.read_text())
+    status["status"] = "running"
+    status_path.write_text(json.dumps(status), encoding="utf-8")
     interrupted = installed_product.json("agent-run", "interrupt", "external-run", env=env)
     terminated = installed_product.json("agent-run", "terminate", "external-run", "--grace-seconds", "0", env=env)
     assert interrupted["outcome"] == "unavailable"
     assert terminated["outcome"] == "unavailable"
 
+    transition_execution_path(
+        run / "status.json",
+        "failed",
+        actor="test",
+        reason="simulate terminal external worker failure",
+    )
+    restarted = installed_product.json(
+        "agent-run", "restart", "external-run", "--new-agent-run-id", "external-retry", env=env,
+    )
+    assert restarted["status"] == "prepared"
+    retry_contract = json.loads((_run_dir(env, "external-retry") / "agent-run-contract.json").read_text())
+    assert retry_contract["worker_plan"]["mode"] == "external"
+    assert retry_contract["worker_plan"]["argv"] == contract["worker_plan"]["argv"]
+    assert retry_contract["agent_run"]["agent_name"] == contract["agent_run"]["agent_name"]
 
-def test_external_start_rejects_missing_mismatched_and_stale_bindings(
+
+@pytest.mark.parametrize("host_mode", ["pipe", "pty"])
+def test_generated_external_launcher_records_durable_start_in_each_host_mode(
     installed_product: InstalledProduct,
     product_env: dict[str, str],
     fake_agent_path: Path,
     tmp_path: Path,
+    host_mode: str,
 ) -> None:
-    prompt = tmp_path / "external.md"
-    prompt.write_text("Prepare only.\n", encoding="utf-8")
-    for run_id in ("missing-binding", "mismatched-binding", "stale-binding"):
-        repo = tmp_path / run_id
-        git_repo(repo)
-        installed_product.json(
-            "agent-run", "prepare", run_id, repo, prompt,
-            "--worker-mode", "external", "--interactive", "--", fake_agent_path,
-            env=product_env,
+    """Execute the published external contract instead of only inspecting it."""
+    repo = tmp_path / f"external-{host_mode}"
+    git_repo(repo)
+    prompt = tmp_path / f"{host_mode}.md"
+    prompt.write_text("Run through the external launch contract.\n", encoding="utf-8")
+    env = dict(product_env)
+    env.update({"FAKE_AGENT_MODE": "slow", "FAKE_AGENT_DELAY": "0.5"})
+    installed_product.json(
+        "agent-run", "prepare", f"external-{host_mode}", repo, prompt,
+        "--worker-mode", "external", "--interactive", "--", fake_agent_path,
+        env=env,
+    )
+    run = _run_dir(env, f"external-{host_mode}")
+    launch = run / "run.sh"
+    launch.chmod(launch.stat().st_mode | 0o111)
+
+    master_fd: int | None = None
+    slave_fd: int | None = None
+    if host_mode == "pty":
+        master_fd, slave_fd = pty.openpty()
+        process = subprocess.Popen(
+            [str(launch)], cwd=repo, env=env, stdin=slave_fd, stdout=slave_fd, stderr=slave_fd,
+            close_fds=True,
+        )
+        os.close(slave_fd)
+        slave_fd = None
+        # The fixture consumes stdin to EOF; send the terminal EOF character
+        # while retaining the pseudo-terminal for the interactive launch.
+        os.write(master_fd, b"\x04")
+    else:
+        process = subprocess.Popen(
+            [str(launch)], cwd=repo, env=env, stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
         )
 
-    missing = installed_product.run(
-        "--json", "agent-run", "start-external", "missing-binding", "runtime", "worker",
-        "--generation", "1", env=product_env,
-    )
-    assert missing.returncode == 2
-    assert "not bound" in missing.stderr.lower()
+    try:
+        status_path = run / "status.json"
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            if status_path.is_file():
+                status = json.loads(status_path.read_text(encoding="utf-8"))
+                if status.get("status") == "running":
+                    break
+            time.sleep(0.02)
+        else:
+            raise AssertionError("generated external launcher never recorded running")
 
-    installed_product.json(
-        "agent-run", "bind-external", "mismatched-binding", "runtime", "worker-a", env=product_env
-    )
-    mismatch = installed_product.run(
-        "--json", "agent-run", "start-external", "mismatched-binding", "runtime", "worker-b",
-        "--generation", "1", env=product_env,
-    )
-    assert mismatch.returncode == 2
-    assert "does not match" in mismatch.stderr.lower()
-
-    installed_product.json(
-        "agent-run", "bind-external", "stale-binding", "runtime", "worker-a", env=product_env
-    )
-    rebound = installed_product.json(
-        "agent-run", "bind-external", "stale-binding", "runtime", "worker-b", env=product_env
-    )
-    assert rebound["generation"] == 2
-    stale = installed_product.run(
-        "--json", "agent-run", "start-external", "stale-binding", "runtime", "worker-a",
-        "--generation", "1", env=product_env,
-    )
-    assert stale.returncode == 2
-    assert "stale" in stale.stderr.lower()
+        assert process.wait(timeout=10) == 0
+        lifecycle = [
+            json.loads(line)
+            for line in (run / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert [event["new"] for event in lifecycle[:2]] == ["prepared", "running"]
+        assert json.loads(status_path.read_text(encoding="utf-8"))["status"] == "completed"
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait()
+        if master_fd is not None:
+            os.close(master_fd)
+        if slave_fd is not None:
+            os.close(slave_fd)

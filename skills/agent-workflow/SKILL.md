@@ -41,13 +41,17 @@ External hosts are execution/presentation adapters only. They do not replace Age
 Prefer the deterministic facade; it composes existing worktree/Agent Run authorities rather than creating another lifecycle.
 
 ```bash
-agent-workflow delegate RUN PROMPT --repo REPO --ticket TICKET --base-ref BASE_REF --role implementation --tier medium
+agent-workflow delegate RUN /path/to/prompt.md --repo REPO --ticket TICKET --base-ref BASE_REF --role implementation --tier medium
 ```
+
+The positional prompt argument is a path to a regular prompt file, not inline
+prompt text. For substantial or reproducible work, keep that file in the
+assigned worktree or use `--pack /path/to/pack` for a validated prompt pack.
 
 For an external worker:
 
 ```bash
-agent-workflow delegate RUN PROMPT --workdir WORKTREE --worker-mode external --interactive --role implementation
+agent-workflow delegate RUN /path/to/prompt.md --workdir WORKTREE --worker-mode external --interactive --role implementation
 ```
 
 External mode prepares only. Launch the returned worker contract with the external host. Normal agents choose a logical role, never provider/model/runtime routing. Use lower-level `worktree create`, `agent-run prepare`, and `agent-run start` only for recovery, diagnostics, or explicit operator control.
@@ -63,6 +67,17 @@ agent-workflow agent-run ack RUN MESSAGE_ID "applied" --actor worker
 ```
 
 Workers publish structured completion with `agent task-complete`. Required evaluation, independent review, and authorized acceptance/rejection remain separate gates. Do not infer success from worker exit or self-accept because implementation/tests finished.
+
+## Continuous improvement
+
+For every material delegated implementation, prompt-pack execution, recovery, or
+review, actively compare the observed outcome with its declared acceptance and
+evidence. Record actionable strengths, friction, missing evidence, confusing
+contracts, and lifecycle gaps in the durable review/acceptance artifacts or the
+Agent-Workflow backlog. Treat a repeated friction point as product-improvement
+work without waiting for a separate request. Keep the boundary explicit:
+external-host behavior is unverified unless the host supplies evidence, and an
+observation must never replace the required evaluation/review/acceptance gates.
 
 ## Recovery
 

@@ -16,7 +16,6 @@ from .events import append_lifecycle_event, reconstruct_lifecycle
 from .state import (
     STATUS_SCHEMA,
     read_status_path,
-    run_dir,
     status_path,
     _update_projection_path_unchecked,
     write_projection_path,
@@ -30,11 +29,12 @@ EXECUTION_STATUSES = {
     "failed",
     "interrupted",
     "terminated",
+    "retired",
 }
 
 _ALLOWED_TRANSITIONS: dict[str | None, set[str]] = {
     None: {"prepared", "failed"},
-    "prepared": {"running", "interruption_requested", "terminated", "failed"},
+    "prepared": {"running", "interruption_requested", "terminated", "retired", "failed"},
     "running": {"interruption_requested", "completed", "failed", "interrupted", "terminated"},
     "interruption_requested": {"completed", "failed", "interrupted", "terminated"},
     "completed": set(),
