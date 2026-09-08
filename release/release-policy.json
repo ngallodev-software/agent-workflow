@@ -16,7 +16,7 @@
         "response_policy": "SECURITY.md; closeout requires administrator enablement and a successful private notification drill"
     },
     "compatibility": {
-        "status": "supported",
+        "status": "candidate",
         "backlog_id": "REL-003",
         "matrix_id": "public-preview-candidate-1",
         "evidence_required": true,
