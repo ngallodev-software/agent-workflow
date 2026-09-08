@@ -117,7 +117,7 @@ def test_wheel_source_preflight_rejects_stale_build_components() -> None:
             stale.write_bytes(original)
 
 
-def test_optional_mcp_profile_rejects_missing_pinned_sdk_before_client_registration(
+def test_default_installer_rejects_mcp_profile_and_does_not_register(
     tmp_path: Path,
 ) -> None:
     fake_python = tmp_path / "python-without-mcp"
@@ -154,7 +154,7 @@ def test_optional_mcp_profile_rejects_missing_pinned_sdk_before_client_registrat
         timeout=30,
     )
     assert result.returncode != 0
-    assert "MCP support requires mcp==1.28.1" in result.stderr
+    assert "MCP is opt-in; use scripts/install-mcp.sh" in result.stderr
     assert not (home / ".codex" / "config.toml").exists()
     assert not (home / ".claude.json").exists()
 

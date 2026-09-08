@@ -222,7 +222,43 @@ def test_release_workflow_is_tag_only_and_bundle_builder_is_reproducible(tmp_pat
     assert f"agent-workflow-{CURRENT_VERSION}-windows/install.ps1" in names
     assert f"agent-workflow-{CURRENT_VERSION}-windows/agent_workflow-{CURRENT_VERSION}-py3-none-any.whl" in names
 
-def test_source_installer_reinstall_canonicalizes_mcp_and_owned_hooks(tmp_path: Path) -> None:
+def test_source_installer_does_not_register_mcp(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    fake_modules = tmp_path / "fake-modules"
+    fake_modules.mkdir()
+    (fake_modules / "jsonschema.py").write_text("", encoding="utf-8")
+    (fake_modules / "yaml.py").write_text("", encoding="utf-8")
+    env = os.environ.copy()
+    env.update(
+        {
+            "HOME": str(home),
+            "XDG_CONFIG_HOME": str(home / ".config"),
+            "XDG_DATA_HOME": str(home / ".local/share"),
+            "PYTHONPATH": str(fake_modules),
+        }
+    )
+    result = subprocess.run(
+        [
+            "bash",
+            "scripts/install-source.sh",
+            "--no-deps",
+            "--no-skills",
+            "--no-hooks",
+            "--python",
+            sys.executable,
+        ],
+        cwd=REPO_ROOT,
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not (home / ".codex" / "config.toml").exists()
+    assert not (home / ".claude.json").exists()
+
+
+def test_mcp_installer_registers_and_cleans_only_owned_entries(tmp_path: Path) -> None:
     home = tmp_path / "home"
     codex = home / ".codex"
     claude = home / ".claude"
@@ -309,11 +345,9 @@ def test_source_installer_reinstall_canonicalizes_mcp_and_owned_hooks(tmp_path: 
     )
     command = [
         "bash",
-        "scripts/install-source.sh",
+        "scripts/install-mcp.sh",
         "--no-deps",
         "--no-skills",
-        "--extras",
-        "mcp",
         "--python",
         sys.executable,
     ]
@@ -338,6 +372,9 @@ def test_source_installer_reinstall_canonicalizes_mcp_and_owned_hooks(tmp_path: 
     assert codex_text.count("BEGIN AGENT-WORKFLOW MANAGED MCP") == 1
     assert set(tomllib.loads(codex_text)["mcp_servers"]) == {"other", "agent-workflow"}
 
+    claude_mcp = home / ".claude.json"
+    assert json.loads(claude_mcp.read_text(encoding="utf-8"))["mcpServers"]["agent-workflow"]["type"] == "stdio"
+
     claude_data = json.loads(claude_settings.read_text(encoding="utf-8"))
     commands = [
         entry["command"]
@@ -351,3 +388,16 @@ def test_source_installer_reinstall_canonicalizes_mcp_and_owned_hooks(tmp_path: 
     assert commands.count(unrelated) == 1
     assert not stale_owned.exists()
     assert stale.exists()
+
+    result = subprocess.run(
+        ["bash", "scripts/install-mcp.sh", "--unregister", "--python", sys.executable],
+        cwd=source,
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "removed Agent-Workflow Codex MCP" in result.stdout
+    assert set(tomllib.loads(codex_config.read_text(encoding="utf-8"))["mcp_servers"]) == {"other"}
+    assert "agent-workflow" not in json.loads(claude_mcp.read_text(encoding="utf-8"))["mcpServers"]

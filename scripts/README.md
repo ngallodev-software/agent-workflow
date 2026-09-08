@@ -2,6 +2,8 @@
 
 Scripts in this directory support repository bootstrap, release validation/evidence, CI integration, version synchronization, and other maintainer workflows. Durable product lifecycle behavior belongs in `src/agent_workflow/`, not in shell wrappers maintained as a second implementation surface.
 
+`install-source.sh` is the default CLI installer and deliberately excludes MCP. `install-mcp.sh` is the separate explicit opt-in for the optional MCP SDK, entry point, and Codex/Claude registration.
+
 Prompt-pack helper scripts are packaged only in `src/agent_workflow/assets/prompt-pack-root/` and are materialized by `agent-workflow pack scaffold`. The repository no longer keeps byte-identical compatibility copies under `scripts/` or `templates/`.
 
 ## Release evidence

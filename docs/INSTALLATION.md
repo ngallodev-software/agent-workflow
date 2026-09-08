@@ -32,7 +32,13 @@ project dependency:
 python -m pip install git+https://github.com/ngallodev-software/agent-workflow-spec-contracts.git
 ```
 
-Optional feature groups are declared in `pyproject.toml` for evaluation, statistics, completion generation, benchmark visuals, and MCP.
+Optional feature groups are declared in `pyproject.toml` for evaluation, statistics, completion generation, benchmark visuals, and MCP. The default source installer does not install or register MCP. To opt in explicitly from a checkout or release bundle:
+
+```bash
+bash scripts/install-mcp.sh
+```
+
+Use `--no-register` to install the MCP adapter without changing Codex or Claude configuration. Use `--unregister` to remove only Agent-Workflow-owned MCP entries.
 
 ## Windows 11
 

@@ -19,6 +19,7 @@ REQUIRED_FILES = (
     "install.sh",
     "uninstall.sh",
     "scripts/install-source.sh",
+    "scripts/install-mcp.sh",
     "scripts/configure-hooks.py",
     "bin/agent-workflow",
     "config/agent-workflow.example.toml",
