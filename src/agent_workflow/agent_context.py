@@ -14,6 +14,7 @@ from .errors import WorkflowError
 from .journal import JournalTransactionResult, transact_jsonl
 from .events import append_lifecycle_event
 from .messages import append_message, bridge_available, bridge_required, write_control_intent
+from .path import read_regular_file
 from .state import list_statuses, read_status, run_dir
 from .run_lifecycle import authoritative_execution_status
 from .util import atomic_write_json, expand_path, sha256_file, utc_now, validate_id
@@ -28,8 +29,8 @@ MAX_ITEMS = 64
 
 def _read_json(path: Path) -> dict[str, Any]:
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        value = json.loads(read_regular_file(path, max_bytes=1024 * 1024).data.decode("utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, WorkflowError) as exc:
         raise WorkflowError(f"cannot read agent context {path}: {exc}") from exc
     if not isinstance(value, dict) or value.get("schema") != CONTEXT_SCHEMA:
         raise WorkflowError(f"invalid agent context: {path}")
@@ -123,7 +124,10 @@ def initialize(
 
 def read(settings: Settings, agent_run_id: str) -> dict[str, Any]:
     validate_id(agent_run_id, "agent run ID")
-    return _read_json(run_dir(settings, agent_run_id) / CONTEXT_NAME)
+    value = _read_json(run_dir(settings, agent_run_id) / CONTEXT_NAME)
+    if value.get("agent_run_id") != agent_run_id:
+        raise WorkflowError("agent context Agent Run identity does not match requested run")
+    return value
 
 
 def _items(values: list[str] | None, label: str) -> list[str]:
@@ -233,6 +237,30 @@ def apply_bridged_completion(
     context = _read_json(state_dir / CONTEXT_NAME)
     if context.get("agent_run_id") != agent_run_id:
         raise WorkflowError("bridged completion Agent Run identity mismatch")
+    if context.get("state") == "closed":
+        completed = context.get("completed_assignment")
+        if not isinstance(completed, dict) or completed.get("summary") != summary:
+            raise WorkflowError("closed assignment evidence does not match task completion")
+        records = []
+        try:
+            from .journal import read_jsonl
+            records = read_jsonl(
+                state_dir / LEDGER_NAME,
+                validator=_validate_assignment_record,
+                missing_ok=True,
+                sequence_field="sequence",
+            )
+        except (OSError, WorkflowError) as exc:
+            raise WorkflowError("cannot validate closed assignment evidence") from exc
+        if not any(
+            item.get("event") == "task_completed"
+            and item.get("assignment_id") == completed.get("assignment_id")
+            and item.get("summary") == summary
+            and item.get("actor") == actor
+            for item in records
+        ):
+            raise WorkflowError("closed assignment evidence does not match task completion")
+        return context
     if context.get("worker_mode") != "external" or not context.get("interactive"):
         raise WorkflowError("task-complete is only available to an interactive external worker")
     if context.get("state") != "busy" or not isinstance(context.get("current_assignment"), dict):
@@ -270,5 +298,4 @@ def apply_bridged_completion(
         receipt_refs=[LEDGER_NAME, CONTEXT_NAME],
     )
     return context
-
 

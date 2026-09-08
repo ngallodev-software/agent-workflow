@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/public-message-state/v1",
+  "type": "object",
+  "required": ["schema", "agent_run_id", "latest_sequence", "truncated", "pending", "pending_count", "pending_truncated", "steering"],
+  "properties": {
+    "schema": {"const": "agent-workflow/public-message-state/v1"},
+    "agent_run_id": {"type": "string", "minLength": 1},
+    "latest_sequence": {"type": "integer", "minimum": 0},
+    "truncated": {"type": "boolean"},
+    "pending_count": {"type": "integer", "minimum": 0},
+    "pending_truncated": {"type": "boolean"},
+    "pending": {"type": "array", "items": {"type": "object", "additionalProperties": true}},
+    "steering": {"type": "array", "items": {"type": "object", "additionalProperties": true}}
+  },
+  "additionalProperties": true
+}

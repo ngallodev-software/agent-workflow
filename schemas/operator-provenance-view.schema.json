@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/operator-provenance-view/v1",
+  "type": "object",
+  "required": ["schema", "restricted", "agent_run_id"],
+  "properties": {
+    "schema": {"const": "agent-workflow/operator-provenance-view/v1"},
+    "restricted": {"const": true},
+    "agent_run_id": {"type": "string", "minLength": 1}
+  },
+  "additionalProperties": true
+}

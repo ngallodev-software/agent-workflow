@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/public-run-summary/v1",
+  "type": "object",
+  "required": ["schema", "agent_run_id", "execution", "assignment", "completion", "evaluation", "review", "acceptance", "policy_result"],
+  "properties": {
+    "schema": {"const": "agent-workflow/public-run-summary/v1"},
+    "agent_run_id": {"type": "string", "minLength": 1},
+    "role": {"type": ["string", "null"]},
+    "worker_mode": {"type": ["string", "null"]},
+    "execution": {"type": "object", "additionalProperties": true},
+    "assignment": {"type": "object", "additionalProperties": true},
+    "completion": {"type": "object", "additionalProperties": true},
+    "evaluation": {"type": "object", "additionalProperties": true},
+    "review": {"type": "object", "additionalProperties": true},
+    "acceptance": {"type": "object", "additionalProperties": true},
+    "policy_result": {}
+  },
+  "additionalProperties": true
+}

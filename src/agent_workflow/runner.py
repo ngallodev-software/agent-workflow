@@ -40,6 +40,7 @@ from .messages import (
     CONTROL_BRIDGE_MAX_BYTES,
     CONTROL_BRIDGE_SCHEMA,
     append_message,
+    replay_messages,
 )
 from .steering import (
     STEERING_INBOX_ENV,
@@ -137,6 +138,7 @@ def _drain_control_bridge(
         intent: dict[str, Any] | None = None
         request_id: str | None = None
         outcome, reason = "rejected", "malformed control intent"
+        completion_message_retry = False
         try:
             mode = source.lstat().st_mode
             if stat.S_ISLNK(mode) or not stat.S_ISREG(mode) or source.stat().st_size > CONTROL_BRIDGE_MAX_BYTES:
@@ -230,14 +232,36 @@ def _drain_control_bridge(
                     )
                     outcome, reason = "applied", "authoritative host append"
             else:
-                append_message(
-                    run_dir, agent_run_id=agent_run_id, direction="child_to_parent",
-                    kind=intent_kind, actor=str(value["actor"]),
-                    content=str(value["content"]),
-                    correlation_id=value.get("correlation_id"),
-                )
+                if intent_kind == "task_complete":
+                    existing = replay_messages(run_dir)
+                    matching = [
+                        item for item in existing
+                        if item["kind"] == "task_complete"
+                        and item["actor"] == str(value["actor"])
+                        and item["content"] == str(value["content"])
+                    ]
+                    if not matching:
+                        completion_message_retry = True
+                        append_message(
+                            run_dir, agent_run_id=agent_run_id, direction="child_to_parent",
+                            kind=intent_kind, actor=str(value["actor"]),
+                            content=str(value["content"]),
+                        )
+                    elif len(matching) > 1:
+                        raise WorkflowError("duplicate task completion messages")
+                else:
+                    append_message(
+                        run_dir, agent_run_id=agent_run_id, direction="child_to_parent",
+                        kind=intent_kind, actor=str(value["actor"]),
+                        content=str(value["content"]),
+                        correlation_id=value.get("correlation_id"),
+                    )
                 outcome, reason = "applied", "authoritative host append"
         except (OSError, UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError, ValueError, WorkflowError) as exc:
+            if completion_message_retry:
+                # Assignment/lifecycle evidence is durable, but the intent remains
+                # replayable until its parent-facing message is durably appended.
+                continue
             reason = str(exc)
             correlation_id = intent.get("correlation_id") if intent else None
             try:

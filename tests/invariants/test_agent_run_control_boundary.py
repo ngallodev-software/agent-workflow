@@ -17,6 +17,8 @@ from agent_workflow.agent_run_control import (
     wait_for_message,
 )
 from agent_workflow.agent_identity import can_retire_prepared, retire_external_agent
+from agent_workflow.messages import append_message, replay_messages
+from agent_workflow.public_api import message_state
 
 
 def _settings(tmp_path: Path):
@@ -44,6 +46,30 @@ def test_steer_persists_before_delivery_and_preserves_delivery_evidence(tmp_path
         "delivery_outcome": "queued",
         "delivery_event_id": "delivery-1",
     }
+
+
+def test_message_state_counts_pending_steer_beyond_bounded_message_projection(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    run = settings.state_root / "runs" / "run-1"
+    steer_message = append_message(
+        run, agent_run_id="run-1", direction="parent_to_child", kind="steer",
+        actor="parent", content="old pending steer",
+    )
+    for index in range(512):
+        append_message(
+            run, agent_run_id="run-1", direction="child_to_parent", kind="progress",
+            actor="child", content=f"progress {index}",
+        )
+    with patch(
+        "agent_workflow.public_api.read_messages",
+        return_value=replay_messages(run),
+    ):
+        result = message_state(settings, "run-1")
+    assert result["latest_sequence"] == 513
+    assert result["pending_count"] == 1
+    assert result["pending_truncated"] is True
+    assert result["pending"] == []
+    assert all(item["message_id"] != steer_message["message_id"] for item in result["steering"])
 
 
 def test_progress_uses_child_bridge_without_touching_host_state(tmp_path: Path) -> None:

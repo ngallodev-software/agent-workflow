@@ -55,6 +55,11 @@ def test_headless_completion_is_sealed_and_lifecycle_is_separate(
     assert accepted["disposition"] == "accepted"
     projected = installed_product.json("agent-run", "status", "success-run", env=product_env)
     assert projected["disposition"] == "accepted"
+    summary = installed_product.json("agent-run", "summary", "success-run", env=product_env)
+    assert summary["review"]["state"] == "reviewed"
+    assert summary["review"]["actor"] == "reviewer"
+    assert summary["acceptance"]["state"] == "accepted"
+    assert summary["acceptance"]["actor"] == "maintainer"
 
 
 def test_persist_first_steer_progress_ack_and_replay_survive_process_boundaries(
