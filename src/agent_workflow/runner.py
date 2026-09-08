@@ -385,6 +385,7 @@ def _child_environment(
     if isinstance(configured, list):
         names.update(value for value in configured if isinstance(value, str) and value)
     names.discard("XDG_STATE_HOME")
+    names.discard("AGENT_WORKFLOW_TICKET_ID")
     values = {
         CONTROL_BRIDGE_ENV: str(bridge_dir),
         STEERING_INBOX_ENV: str(steering_dir),
