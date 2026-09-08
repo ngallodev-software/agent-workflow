@@ -1,67 +1,67 @@
 {
-  "schema": "agent-workflow/release-policy/v1",
-  "project": "agent-workflow",
-  "version": "0.10.0",
-  "license": {
-    "status": "configured",
-    "backlog_id": "REL-001",
-    "spdx_expression": "Apache-2.0",
-    "file": "LICENSE",
-    "distribution_policy": "Source and binary distributions are licensed under Apache-2.0 and must preserve the license text."
-  },
-  "security_channel": {
-    "status": "blocked",
-    "backlog_id": "REL-002",
-    "contact": "GitHub Private Vulnerability Reporting for the canonical public repository",
-    "response_policy": "SECURITY.md; closeout requires administrator enablement and a successful private notification drill"
-  },
-  "compatibility": {
-    "status": "candidate",
-    "backlog_id": "REL-003",
-    "matrix_id": "public-preview-candidate-1",
-    "evidence_required": true,
-    "combinations": [
-      {
-        "id": "linux-py311-fixture",
-        "status": "candidate",
-        "host": "Linux distribution and kernel to be pinned by REL-003",
-        "python": "3.11",
-        "executor": "deterministic fixture",
-        "executor_version": "repository fixture",
-        "notes": "Default installed-product lane; not public-support evidence.",
-        "execution_mode": "headless"
-      },
-      {
-        "id": "linux-py312-codex",
-        "status": "candidate",
-        "host": "Linux distribution and kernel to be pinned by REL-003",
-        "python": "3.12",
-        "executor": "Codex CLI",
-        "executor_version": null,
-        "notes": "Requires clean-host live evidence and an executor compatibility decision.",
-        "execution_mode": "headless"
-      },
-      {
-        "id": "linux-py312-claude",
-        "status": "candidate",
-        "host": "Linux distribution and kernel to be pinned by REL-003",
-        "python": "3.12",
-        "executor": "Claude Code",
-        "executor_version": null,
-        "notes": "Requires clean-host live evidence and an executor compatibility decision.",
-        "execution_mode": "headless"
-      },
-      {
-        "id": "linux-py313-fixture",
-        "status": "candidate",
-        "host": "Linux distribution and kernel to be pinned by REL-003",
-        "python": "3.13",
-        "executor": "deterministic fixture",
-        "executor_version": "repository fixture",
-        "notes": "CI candidate only; not public-support evidence.",
-        "execution_mode": "headless"
-      }
-    ],
-    "evidence": []
-  }
+    "schema": "agent-workflow/release-policy/v1",
+    "project": "agent-workflow",
+    "version": "0.10.0",
+    "license": {
+        "status": "configured",
+        "backlog_id": "REL-001",
+        "spdx_expression": "Apache-2.0",
+        "file": "LICENSE",
+        "distribution_policy": "Source and binary distributions are licensed under Apache-2.0 and must preserve the license text."
+    },
+    "security_channel": {
+        "status": "configured",
+        "backlog_id": "REL-002",
+        "contact": "GitHub Private Vulnerability Reporting",
+        "response_policy": "SECURITY.md; closeout requires administrator enablement and a successful private notification drill"
+    },
+    "compatibility": {
+        "status": "supported",
+        "backlog_id": "REL-003",
+        "matrix_id": "public-preview-candidate-1",
+        "evidence_required": true,
+        "combinations": [
+            {
+                "id": "linux-py311-fixture",
+                "status": "candidate",
+                "host": "Linux distribution and kernel to be pinned by REL-003",
+                "python": "3.11",
+                "executor": "deterministic fixture",
+                "executor_version": "repository fixture",
+                "notes": "Default installed-product lane; not public-support evidence.",
+                "execution_mode": "headless"
+            },
+            {
+                "id": "linux-py312-codex",
+                "status": "candidate",
+                "host": "Linux distribution and kernel to be pinned by REL-003",
+                "python": "3.12",
+                "executor": "Codex CLI",
+                "executor_version": null,
+                "notes": "Requires clean-host live evidence and an executor compatibility decision.",
+                "execution_mode": "headless"
+            },
+            {
+                "id": "linux-py312-claude",
+                "status": "candidate",
+                "host": "Linux distribution and kernel to be pinned by REL-003",
+                "python": "3.12",
+                "executor": "Claude Code",
+                "executor_version": null,
+                "notes": "Requires clean-host live evidence and an executor compatibility decision.",
+                "execution_mode": "headless"
+            },
+            {
+                "id": "linux-py313-fixture",
+                "status": "candidate",
+                "host": "Linux distribution and kernel to be pinned by REL-003",
+                "python": "3.13",
+                "executor": "deterministic fixture",
+                "executor_version": "repository fixture",
+                "notes": "CI candidate only; not public-support evidence.",
+                "execution_mode": "headless"
+            }
+        ],
+        "evidence": []
+    }
 }
