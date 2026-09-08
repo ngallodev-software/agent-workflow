@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from .agent_run_paths import AgentRunPaths
-from .contracts import read_agent_run_contract
+from .contracts import read_agent_run_contract, validate_instance
 from .errors import WorkflowError
 from .journal import JournalTransactionResult, read_jsonl, transact_jsonl
 from .run_lifecycle import authoritative_execution_status, transition_execution
@@ -129,7 +129,9 @@ def status(settings: Any, agent_run_id: str) -> dict[str, Any]:
         max_records=MAX_EVENTS,
         sequence_field="sequence",
     )
-    return _project(events, agent_run_id)
+    result = _project(events, agent_run_id)
+    validate_instance(result, SCHEMA, artifact="external Worker binding")
+    return result
 
 
 def bind(
@@ -315,13 +317,15 @@ def pending_delivery(
     """Return messages pending host delivery for the active binding generation."""
     projection = _require_generation(settings, agent_run_id, generation)
     items = pending_external_deliveries(run_dir(settings, agent_run_id))
-    return {
+    result = {
         "schema": DELIVERY_SCHEMA,
         "agent_run_id": agent_run_id,
         "worker_id": projection["worker_id"],
         "generation": projection["generation"],
         "messages": items,
     }
+    validate_instance(result, DELIVERY_SCHEMA, artifact="external Worker pending delivery")
+    return result
 
 
 def report_delivery(
@@ -343,7 +347,7 @@ def report_delivery(
         attempt=attempt,
         reason=reason,
     )
-    return {
+    result = {
         "schema": DELIVERY_RESULT_SCHEMA,
         "agent_run_id": agent_run_id,
         "worker_id": projection["worker_id"],
@@ -352,3 +356,5 @@ def report_delivery(
         "delivery": event,
         "acknowledged": event["outcome"] in {"applied", "rejected"},
     }
+    validate_instance(result, DELIVERY_RESULT_SCHEMA, artifact="external Worker delivery result")
+    return result

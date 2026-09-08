@@ -96,12 +96,14 @@ class Page(Generic[T]):
     next_after: int | None
 
     def as_dict(self) -> dict[str, Any]:
-        return {
+        result = {
             "schema": PAGE_SCHEMA,
             "items": list(self.items),
             "count": len(self.items),
             "next_after": self.next_after,
         }
+        validate_instance(result, PAGE_SCHEMA, artifact="MCP page")
+        return result
 
 
 @dataclass(frozen=True)
@@ -117,7 +119,9 @@ class ServiceError(WorkflowError):
         self.category = category
 
     def as_dict(self) -> dict[str, str]:
-        return {"schema": ERROR_SCHEMA, "error": self.category, "message": str(self)}
+        result = {"schema": ERROR_SCHEMA, "error": self.category, "message": str(self)}
+        validate_instance(result, ERROR_SCHEMA, artifact="MCP error")
+        return result
 
 
 def _page(request: PageRequest, values: list[T]) -> Page[T]:
@@ -513,6 +517,10 @@ class WorkflowReadService:
             "errors": ["pack_validation_failed"] if report["errors"] else [],
             "warnings": ["pack_validation_warning"] if report["warnings"] else [],
         }
+        try:
+            validate_instance(result, "agent-workflow/mcp-pack-validation/v1", artifact="MCP pack validation")
+        except WorkflowError as exc:
+            raise ServiceError("invalid_evidence", "pack validation result is invalid") from exc
         try:
             descriptor = open_beneath(selected, "MANIFEST.sha256", flags=os.O_RDONLY)
         except OSError:

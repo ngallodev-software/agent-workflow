@@ -3,7 +3,7 @@
 ## Normal delegation
 
 1. Create or validate an isolated worktree.
-2. Prepare an Agent Run by logical role (normally `--role implementation`, `review`, or `exploration`).
+2. Prepare an Agent Run by logical role (normally `--role implementation`, `review`, or `exploration`). The command profile is a separate bounded CLI surface: `exploration` currently maps explicitly to the `implementation` profile.
 3. For headless mode, start the worker.
 4. Observe lifecycle state and durable progress.
 5. Persist steering requests when needed.
@@ -29,7 +29,7 @@ Changing a private role binding must not require changing a workflow, prompt, ro
 
 Use `--worker-mode external` when another runtime will launch the worker. Preparation remains durable and host-independent. The external runtime is presentation/execution infrastructure, not workflow authority.
 
-Agent-workflow does not guess external process ownership or silently control an external host. Host-specific binding/reconciliation remains future work unless an explicit public integration contract is present.
+Agent-workflow does not guess external process ownership or silently control an external host. The implemented host-neutral binding and generation-checked delivery contract is documented in [EXTERNAL_WORKER_BINDING.md](EXTERNAL_WORKER_BINDING.md); host-specific UI/process behavior remains outside the core.
 
 ## Recovery and restore
 

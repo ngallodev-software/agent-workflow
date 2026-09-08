@@ -1,0 +1,11 @@
+{
+  "$id": "agent-workflow/external-worker-delivery-result/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema", "agent_run_id", "worker_id", "generation", "correlation_id", "delivery", "acknowledged"],
+  "properties": {
+    "schema": {"const": "agent-workflow/external-worker-delivery-result/v1"}, "agent_run_id": {"type": "string", "minLength": 1}, "worker_id": {"type": "string", "minLength": 1},
+    "generation": {"type": "integer", "minimum": 1}, "correlation_id": {"type": "string", "minLength": 1},
+    "delivery": {"type": "object", "additionalProperties": true}, "acknowledged": {"type": "boolean"}
+  }
+}

@@ -79,6 +79,21 @@ def test_documented_commands_match_the_installed_public_surface(
     catalog = installed_product.run("commands", "--format", "markdown", env=product_env, check=True).stdout
     assert "agent-workflow eval compare --output OUTPUT baseline candidate" in catalog
 
+    # Keep the orchestrator skill's maintained leaf examples and the shipped
+    # profile in lockstep with the parser-derived catalog.
+    profile = json.loads(
+        installed_product.run(
+            "commands", "--format", "json", "--role", "orchestrator",
+            env=product_env, check=True,
+        ).stdout
+    )
+    represented = {item["command"] for item in profile["commands"]}
+    assert {
+        "agent-run progress", "agent-run ack", "agent-run message-state",
+        "workflow validate", "workflow verify",
+        "orchestrator registry register", "orchestrator inbox read",
+    } <= represented
+
 
 def test_built_wheel_excludes_repository_only_ci_assets(
     installed_product: InstalledProduct,

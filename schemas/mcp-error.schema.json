@@ -1,0 +1,1 @@
+{"$id":"agent-workflow/mcp-error/v1","$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,"required":["schema","error","message"],"properties":{"schema":{"const":"agent-workflow/mcp-error/v1"},"error":{"type":"string","minLength":1},"message":{"type":"string","minLength":1},"correlation_id":{"type":"string","minLength":1}}}

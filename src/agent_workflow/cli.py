@@ -25,7 +25,7 @@ def main(argv: list[str] | None = None) -> int:
         # materialize only their own top-level branch from the same parser source.
         parser = (
             build_parser(plugin_registry)
-            if load_plugins
+            if load_plugins or requested_command == "commands"
             else build_parser(command_scope=requested_command)
         )
         args = parse_args(parser, argv)

@@ -52,7 +52,7 @@ Binding and delivery observations remain operational data. They cannot complete,
 
 ## Workflow status
 
-`agent-workflow --json workflow status SNAPSHOT --run-dir RUN_DIR` is the stable workflow-level structured status surface. It remains a projection of workflow/scheduler authority rather than a parallel workflow state store.
+`agent-workflow --json workflow status RUN_DIR SNAPSHOT` is the stable workflow-level structured status surface. It remains a projection of workflow/scheduler authority rather than a parallel workflow state store.
 
 ## Benchmark status
 

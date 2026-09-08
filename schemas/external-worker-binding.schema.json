@@ -1,0 +1,17 @@
+{
+  "$id": "agent-workflow/external-worker-binding/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema", "agent_run_id", "bound", "worker_id", "external_runtime_type", "external_worker_id", "generation", "bound_at", "last_observed_at"],
+  "properties": {
+    "schema": {"const": "agent-workflow/external-worker-binding/v1"},
+    "agent_run_id": {"type": "string", "minLength": 1},
+    "bound": {"type": "boolean"},
+    "worker_id": {"type": ["string", "null"], "minLength": 1},
+    "external_runtime_type": {"type": ["string", "null"], "minLength": 1},
+    "external_worker_id": {"type": ["string", "null"], "minLength": 1},
+    "generation": {"type": "integer", "minimum": 0},
+    "bound_at": {"type": ["string", "null"]},
+    "last_observed_at": {"type": ["string", "null"]}
+  }
+}

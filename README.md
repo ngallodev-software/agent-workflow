@@ -18,7 +18,7 @@ A worker has one of two modes:
 - **headless** — agent-workflow launches and owns the local worker process group;
 - **external** — agent-workflow prepares the Agent Run and execution contract, while another runtime launches the worker.
 
-The core intentionally does not own workspace, pane, window, or interactive terminal layout. External interactive hosts are future integrations rather than core dependencies.
+The core intentionally does not own workspace, pane, window, or interactive terminal layout. External hosts may consume the implemented host-neutral, generation-checked binding/delivery contract in [EXTERNAL_WORKER_BINDING.md](docs/EXTERNAL_WORKER_BINDING.md), while interactive layout remains outside the core.
 
 ## What agent-workflow owns
 

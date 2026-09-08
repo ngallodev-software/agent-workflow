@@ -1,0 +1,1 @@
+{"$id":"agent-workflow/mcp-page/v1","$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,"required":["schema","items","count","next_after"],"properties":{"schema":{"const":"agent-workflow/mcp-page/v1"},"items":{"type":"array"},"count":{"type":"integer","minimum":0},"next_after":{"type":["integer","null"],"minimum":0}}}

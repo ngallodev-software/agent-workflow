@@ -1,0 +1,12 @@
+{
+  "$id": "agent-workflow/external-worker-pending-delivery/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema", "agent_run_id", "worker_id", "generation", "messages"],
+  "properties": {
+    "schema": {"const": "agent-workflow/external-worker-pending-delivery/v1"},
+    "agent_run_id": {"type": "string", "minLength": 1}, "worker_id": {"type": "string", "minLength": 1},
+    "generation": {"type": "integer", "minimum": 1},
+    "messages": {"type": "array", "items": {"type": "object", "additionalProperties": true}}
+  }
+}
