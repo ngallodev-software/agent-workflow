@@ -38,6 +38,20 @@ Produce the content-addressed browser image/runtime digest and verified font evi
 
 ## P1 — Public integration contracts
 
+### EXT-HOST-001 — Make external-host launch consumption mandatory and observable
+
+An external Codex host can dispatch a Worker after `agent-run prepare` without
+consuming the returned launch contract. The Worker then produces evidence, but
+the Agent Run remains unbound and `prepared`, so `agent task-complete` correctly
+refuses to seal it. Preserve that refusal: fix the host adapter to bind the
+external Worker, call `start-external` with the active generation before work,
+and surface a clear preflight error when either step is absent.
+
+**Done when:** an external-host integration test proves the ordered
+`prepared -> bound -> running -> task-complete` path and proves that a failed
+binding/start prevents dispatch rather than stranding a completed Worker in
+`prepared`.
+
 ### TERM-001 — Retire external host terminals after terminal Agent Run state
 
 Status remains open. The core implementation intentionally owns no external
