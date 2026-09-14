@@ -22,7 +22,6 @@ pipeline {
             steps {
                 sh '''
                     rm -rf "$WORKSPACE/.jenkins-venv" "$WORKSPACE/.jenkins-local-venv"
-                    rm -rf "$WORKSPACE/jenkins-artifacts" "$WORKSPACE/.jenkins-benchmark-worktrees"
                     rm -rf "$VENV"
                     python3 -m venv "$VENV"
                     "$VENV/bin/python" -m pip install \
@@ -41,72 +40,6 @@ pipeline {
         stage('Benchmark contract smoke') {
             steps {
                 sh 'python -m pytest -q tests/invariants/test_benchmark_target_and_tool_mode.py'
-            }
-        }
-        stage('Fetch latest codebase-memory-cli artifact') {
-            when {
-                expression { return env.CBM_CLI_JENKINS_JOB?.trim() }
-            }
-            steps {
-                withCredentials([usernameColonPassword(credentialsId: 'agent-workflow-local-jenkins-api', variable: 'CBM_CLI_JENKINS_AUTH')]) {
-                    sh '''
-                    set -eu
-                    artifact_dir='jenkins-artifacts/codebase-memory-cli-linux-amd64'
-                    base_url="${CBM_CLI_JENKINS_URL:-${JENKINS_URL:?set CBM_CLI_JENKINS_URL or JENKINS_URL}}"
-                    job_path="$(printf '%s' "$CBM_CLI_JENKINS_JOB" | sed 's#/#/job/#g')"
-                    artifact_url="${base_url%/}/job/${job_path}/lastSuccessfulBuild/artifact/${artifact_dir}"
-                    fetch() {
-                        if [ -n "${CBM_CLI_JENKINS_AUTH:-}" ]; then
-                            curl -fsSLo "$1" -u "$CBM_CLI_JENKINS_AUTH" "$2"
-                        else
-                            curl -fsSLo "$1" "$2"
-                        fi
-                    }
-                    mkdir -p "$artifact_dir"
-                    fetch "$artifact_dir/build.json" "${base_url%/}/job/${job_path}/lastSuccessfulBuild/api/json"
-                    for name in SHA256SUMS codebase-memory-cli source-revision version.txt; do
-                        fetch "$artifact_dir/$name" "$artifact_url/$name"
-                    done
-                    sha256sum -c "$artifact_dir/SHA256SUMS"
-                    chmod 0755 "$artifact_dir/codebase-memory-cli"
-                    test -x "$artifact_dir/codebase-memory-cli"
-                    "$artifact_dir/codebase-memory-cli" --version
-                    test -s "$artifact_dir/source-revision"
-                    python -c "import json, sys; build = json.load(open(sys.argv[1], encoding='utf-8')); print('codebase-memory-cli upstream build: {} {}'.format(build['number'], build['url']))" "$artifact_dir/build.json"
-                    '''
-                }
-            }
-        }
-        stage('Capture synthetic CLI benchmark') {
-            when {
-                expression { return env.CBM_CLI_JENKINS_JOB?.trim() }
-            }
-            steps {
-                sh '''
-                    set -eu
-                    artifact_dir='jenkins-artifacts/codebase-memory-cli-linux-amd64'
-                    benchmark_dir='jenkins-artifacts/agent-workflow-benchmarks'
-                    export PATH="$WORKSPACE/$artifact_dir:$PATH"
-                    codebase-memory-cli --version
-                    rm -rf "$benchmark_dir"
-                    mkdir -p "$benchmark_dir"
-                    agent-workflow --json benchmark suite-export --benchmark-id priority-picker-fast-v1 "$benchmark_dir/suite" > "$benchmark_dir/suite-export.json"
-                    agent-workflow --json benchmark fixture-create "$benchmark_dir/suite/benchmark-spec.json" "$benchmark_dir/fixture" > "$benchmark_dir/fixture-create.json"
-                    run_id="jenkins-$BUILD_NUMBER"
-                    agent-workflow --json benchmark plan "$benchmark_dir/suite/benchmark-spec.json" \
-                        --executor "$benchmark_dir/suite/executors/synthetic.json" \
-                        --repo "$benchmark_dir/fixture" --run-id "$run_id" --repetitions 1 \
-                        --worktree-root "$WORKSPACE/.jenkins-benchmark-worktrees" \
-                        --codebase-memory-mode cli > "$benchmark_dir/plan.json"
-                    plan="$(python -c 'import json; print(json.load(open("jenkins-artifacts/agent-workflow-benchmarks/plan.json"))["run_plan"])')"
-                    agent-workflow --json benchmark run "$plan" > "$benchmark_dir/run.json"
-                    agent-workflow --json benchmark live-stop "$plan" > "$benchmark_dir/live-stop.json"
-                    run_dir="$(dirname "$plan")"
-                    cp -a "$run_dir" "$benchmark_dir/run"
-                    cp "$artifact_dir/source-revision" "$artifact_dir/version.txt" "$benchmark_dir/"
-                    test -s "$benchmark_dir/run/report.json"
-                    test -s "$benchmark_dir/run/consolidation-receipt.json"
-                '''
             }
         }
         stage('Build') {
@@ -132,11 +65,6 @@ pipeline {
                     echo "Linux installer: $linux_installer"
                 '''
             }
-        }
-    }
-    post {
-        always {
-            archiveArtifacts artifacts: 'jenkins-artifacts/**', fingerprint: true, allowEmptyArchive: true
         }
     }
 }
