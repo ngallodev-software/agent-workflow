@@ -33,7 +33,7 @@
     "process_result_present": {"type": "boolean"},
     "executor_result": {"enum": ["completed", "failed", "interrupted", "lost"]},
     "completion_result": {"enum": ["valid", "missing", "invalid"]},
-    "terminal_status": {"enum": ["failed", "interrupted"]},
+    "terminal_status": {"enum": ["completed", "failed", "interrupted"]},
     "failure_category": {"type": "string"}
   },
   "additionalProperties": false

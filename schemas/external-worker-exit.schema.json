@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/external-worker-exit/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "agent_run_id", "worker_id", "generation", "actor", "reason", "completion_reported", "exit_observed", "observed_at"],
+  "properties": {
+    "schema": {"const": "agent-workflow/external-worker-exit/v1"},
+    "agent_run_id": {"type": "string", "minLength": 1},
+    "worker_id": {"type": "string", "minLength": 1},
+    "generation": {"type": "integer", "minimum": 1},
+    "actor": {"type": "string", "minLength": 1},
+    "reason": {"type": "string", "minLength": 1},
+    "completion_reported": {"const": true},
+    "exit_observed": {"const": true},
+    "observed_at": {"type": "string", "minLength": 1}
+  }
+}

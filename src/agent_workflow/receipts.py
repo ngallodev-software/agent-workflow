@@ -58,6 +58,7 @@ SEALED_OPTIONAL_ARTIFACTS = (
     "remediation-events.jsonl",
     "process-result.json",
     "recovery-finalization.json",
+    "external-worker-exit.json",
 )
 SEALED_OPTIONAL_TREES = ("assignments",)
 
@@ -482,6 +483,9 @@ def _seal_run_unlocked(run_dir: Path, *, agent_run_id: str) -> dict[str, Any]:
         read_contract(
             recovery_finalization, "agent-workflow/recovery-finalization/v1"
         )
+    external_exit = run_dir / "external-worker-exit.json"
+    if external_exit.is_file():
+        read_contract(external_exit, "agent-workflow/external-worker-exit/v1")
     controls = run_dir / "control-events.jsonl"
     if controls.is_file():
         for line_number, raw in enumerate(controls.read_text(encoding="utf-8").splitlines(), start=1):

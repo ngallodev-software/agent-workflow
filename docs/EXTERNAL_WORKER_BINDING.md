@@ -66,6 +66,23 @@ mutating current delivery evidence. The host remains unable to mark work
 complete, reviewed, accepted, rejected, or otherwise transition Agent Run
 lifecycle through this adapter.
 
+## External Worker exit observation
+
+An authorized operator may record the terminal observation for the currently
+running binding generation:
+
+```text
+agent-workflow --json agent-run external-exit AGENT_RUN_ID --generation GENERATION --actor ACTOR --reason REASON
+```
+
+This writes one idempotent, durable `external-worker-exit.json` record keyed by
+the binding generation. It records only that completion was reported and exit
+was observed, plus actor/reason provenance; it never records a PID, return code,
+or `process-result.json`, and does not claim completion, review, or acceptance.
+Stale, unbound, prepared, and sealed runs are rejected. Recovery finalization
+may use this observation to seal `completed` only alongside a schema-valid
+completion handoff.
+
 ## Terminal projection retirement
 
 An optional host may use the dependency-free
