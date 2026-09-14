@@ -20,6 +20,7 @@ from ..external_bindings import pending_delivery as pending_external_delivery
 from ..external_bindings import report_delivery as report_external_delivery
 from ..external_bindings import status as external_worker_binding_status
 from ..external_bindings import start as start_external_worker
+from ..external_bindings import external_exit as record_external_exit
 from ..external_bindings import unbind as unbind_external_worker
 from ..lifecycle import record as record_lifecycle
 from ..public_api import message_state, operator_provenance, run_summary
@@ -145,6 +146,17 @@ def handle_agent_run_command(
                 external_runtime_type=args.external_runtime_type,
                 external_worker_id=args.external_worker_id,
                 generation=args.generation,
+            ),
+            False,
+        )
+    if command == "external-exit":
+        return (
+            record_external_exit(
+                settings,
+                args.agent_run_id,
+                generation=args.generation,
+                actor=args.actor,
+                reason=args.reason,
             ),
             False,
         )

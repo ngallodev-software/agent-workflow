@@ -11,6 +11,7 @@ import pytest
 
 from tests.conftest import InstalledProduct, git_repo, wait_for_status, write_config
 from agent_workflow.run_lifecycle import transition_execution_path
+from agent_workflow.receipts import completion_template, verify_seal_details
 
 
 def _run_dir(env: dict[str, str], agent_run_id: str) -> Path:
@@ -218,6 +219,64 @@ def test_external_prepare_is_host_independent_and_process_control_is_unavailable
     assert retry_contract["worker_plan"]["mode"] == "external"
     assert retry_contract["worker_plan"]["argv"] == contract["worker_plan"]["argv"]
     assert retry_contract["agent_run"]["agent_name"] == contract["agent_run"]["agent_name"]
+
+
+def test_external_exit_completes_only_after_task_completion_and_rebuilds_receipt(
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+    fake_agent_path: Path,
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "external-success"
+    git_repo(repo)
+    prompt = tmp_path / "external-success.md"
+    prompt.write_text("Complete through the external exit contract.\n", encoding="utf-8")
+    env = dict(product_env)
+    installed_product.json(
+        "agent-run", "prepare", "external-success", repo, prompt,
+        "--worker-mode", "external", "--interactive", "--ticket", "EXT-HOST-002",
+        "--", fake_agent_path, env=env,
+    )
+    run = _run_dir(env, "external-success")
+    binding = installed_product.json(
+        "agent-run", "bind-external", "external-success", "host", "worker-host", env=env,
+    )
+    assert binding["generation"] == 1
+    installed_product.json(
+        "agent-run", "start-external", "external-success", "host", "worker-host",
+        "--generation", "1", env=env,
+    )
+    handoff = repo / ".agent-workflow-handoff" / "external-success" / "completion.json"
+    completion = completion_template(
+        agent_run_id="external-success", ticket_id="EXT-HOST-002", pack_id=None,
+        base_revision=json.loads((run / "source-baseline.json").read_text())["components"]["primary"]["head"],
+    )
+    completion.update({
+        "head_revision": completion["base_revision"],
+        "changed_files": [],
+        "criteria": [{"id": "external-exit", "result": "pass", "evidence": ["ordered integration journey"]}],
+        "commands": [{"argv": ["true"], "cwd": str(repo), "exit_code": 0, "receipt": "success"}],
+    })
+    handoff.write_text(json.dumps(completion), encoding="utf-8")
+    completed = installed_product.json(
+        "agent", "task-complete", "external-success", "--actor", "worker", "--summary", "handoff reported", env=env,
+    )
+    assert completed["state"] == "closed"
+    assert not (run / "final-receipt.json").exists()
+    exit_observation = installed_product.json(
+        "agent-run", "external-exit", "external-success", "--generation", "1",
+        "--actor", "operator", "--reason", "host observed worker exit", env=env,
+    )
+    assert exit_observation["completion_reported"] is True
+    assert "pid" not in exit_observation and "returncode" not in exit_observation
+    assert not any(key in exit_observation for key in ("review", "acceptance"))
+    finalized = installed_product.json("agent-run", "finalize", "external-success", env=env)
+    assert finalized["outcome"] == "finalized"
+    assert finalized["terminal_status"] == "completed"
+    receipt, _ = verify_seal_details(run)
+    assert [item["path"] for item in receipt["artifacts"]].count("external-worker-exit.json") == 1
+    repaired = installed_product.json("agent-run", "repair", "external-success", env=env)
+    assert repaired["status"] == "completed"
 
 
 @pytest.mark.parametrize("host_mode", ["pipe", "pty"])

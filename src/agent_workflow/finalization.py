@@ -33,6 +33,7 @@ from .state import run_dir, update_projection
 from .run_lifecycle import authoritative_execution_status, synchronize_projection, transition_execution
 from .run_collections import capture_patch, collect_completion, collect_task_result
 from .util import atomic_write_json, sha256_file, utc_now
+from .contracts import read_contract
 
 RECOVERY_FINALIZATION_SCHEMA = "agent-workflow/recovery-finalization/v1"
 
@@ -149,6 +150,12 @@ def finalize_run(
         runner_sample = process_sample(runner_pid)
         executor_sample = process_sample(executor_pid)
         process_result = _json_object(run / "process-result.json")
+        external_exit_path = run / "external-worker-exit.json"
+        external_exit = (
+            read_contract(external_exit_path, "agent-workflow/external-worker-exit/v1")
+            if external_exit_path.is_file()
+            else None
+        )
         observed = observation or {}
         worker_alive = observed.get("worker_alive")
         observed_state = observed.get("observed_state")
@@ -157,7 +164,7 @@ def finalize_run(
             raise WorkflowError("cannot recovery-finalize while the runner process is alive")
         if executor_sample.get("alive") is True:
             raise WorkflowError("cannot recovery-finalize while the executor process is alive")
-        if not process_result and not (
+        if not process_result and external_exit is None and not (
             observed_state == "orphaned" and worker_alive is False
         ):
             raise WorkflowError(
@@ -167,6 +174,11 @@ def finalize_run(
         workdir = Path(str(launch["worktree"]["path"]))
         finished_at = utc_now()
         completion = collect_completion(run, workdir)
+        completion_result = str(completion["validation_status"])
+        if external_exit is not None and completion_result != "valid":
+            raise WorkflowError(
+                "external Worker exit requires a schema-valid completion handoff"
+            )
         collect_task_result(run, workdir)
         capture_patch(workdir, run, run / "patch.diff")
 
@@ -186,14 +198,16 @@ def finalize_run(
             provenance.get("budgets") if isinstance(provenance.get("budgets"), dict) else None,
             wall_seconds=wall_seconds,
         )
-        executor_result, exit_code, failure_category = _executor_result(process_result)
-        completion_result = str(completion["validation_status"])
+        if external_exit is not None:
+            executor_result, exit_code, failure_category = "completed", None, "external_exit_observed"
+        else:
+            executor_result, exit_code, failure_category = _executor_result(process_result)
         if completion_result == "invalid":
             failure_category = "completion_invalid"
         elif completion_result == "missing" and executor_result == "completed":
             failure_category = "completion_missing"
 
-        terminal_status = (
+        terminal_status = "completed" if executor_result == "completed" else (
             "interrupted" if executor_result == "interrupted" else "failed"
         )
         recovery = {
@@ -288,7 +302,18 @@ def finalize_run(
             actor=actor,
             reason=reason,
             projection_source="recovery-finalization",
-            **{key: value for key, value in final_status.items() if key not in {"agent_run_id", "status"}},
+            **{
+                key: value
+                for key, value in final_status.items()
+                if key not in {
+                    "agent_run_id",
+                    "status",
+                    "projection_source",
+                    "final_receipt_path",
+                    "final_receipt_sha256",
+                    "sealed_artifact_count",
+                }
+            },
             final_receipt_path=str(run / "final-receipt.json"),
             final_receipt_sha256=digest,
             sealed_artifact_count=len(receipt["artifacts"]),

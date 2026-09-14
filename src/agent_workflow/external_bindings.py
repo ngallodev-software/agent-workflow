@@ -26,6 +26,7 @@ EVENT_SCHEMA = "agent-workflow/external-worker-binding-event/v1"
 MAX_EVENTS = 4096
 DELIVERY_SCHEMA = "agent-workflow/external-worker-pending-delivery/v1"
 DELIVERY_RESULT_SCHEMA = "agent-workflow/external-worker-delivery-result/v1"
+EXIT_SCHEMA = "agent-workflow/external-worker-exit/v1"
 _ACTIONS = frozenset({"bound", "observed", "unbound"})
 
 
@@ -315,6 +316,55 @@ def _require_generation(settings: Any, agent_run_id: str, generation: int) -> di
     if generation != projection["generation"]:
         raise WorkflowError("external Worker binding generation is stale")
     return projection
+
+
+def external_exit(
+    settings: Any,
+    agent_run_id: str,
+    *,
+    generation: int,
+    actor: str,
+    reason: str,
+) -> dict[str, Any]:
+    """Record an authorized terminal observation from an external Worker host.
+
+    This is deliberately a host observation, not a completion or review action.
+    The record contains no process details and is only accepted while the
+    binding generation is running.
+    """
+    projection = _require_generation(settings, agent_run_id, generation)
+    actor = _text(actor, "actor")
+    reason = _text(reason, "reason")
+    run = run_dir(settings, agent_run_id)
+    current = authoritative_execution_status(run)
+    if current != "running":
+        raise WorkflowError(
+            f"external Worker exit requires a running Agent Run (status={current!r})"
+        )
+    path = AgentRunPaths(run).root / "external-worker-exit.json"
+    if path.is_file():
+        from .contracts import read_contract
+
+        existing = read_contract(path, EXIT_SCHEMA)
+        if existing.get("generation") == generation:
+            return existing
+        raise WorkflowError("external Worker exit record has a different generation")
+    result = {
+        "schema": EXIT_SCHEMA,
+        "agent_run_id": agent_run_id,
+        "worker_id": projection["worker_id"],
+        "generation": generation,
+        "actor": actor,
+        "reason": reason,
+        "completion_reported": True,
+        "exit_observed": True,
+        "observed_at": utc_now(),
+    }
+    validate_instance(result, EXIT_SCHEMA, artifact="external Worker exit")
+    from .util import atomic_write_json
+
+    atomic_write_json(path, result)
+    return result
 
 
 def pending_delivery(

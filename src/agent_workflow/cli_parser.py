@@ -386,6 +386,14 @@ def build_parser(
     start_external.add_argument("external_worker_id")
     start_external.add_argument("--generation", type=int, required=True)
 
+    external_exit = agent_run_commands.add_parser(
+        "external-exit", help="record an authorized terminal observation from an external Worker"
+    )
+    external_exit.add_argument("agent_run_id")
+    external_exit.add_argument("--generation", type=int, required=True)
+    external_exit.add_argument("--actor", required=True)
+    external_exit.add_argument("--reason", required=True)
+
     observe_external = agent_run_commands.add_parser(
         "observe-external", help="record an observation of the current external Worker binding"
     )
