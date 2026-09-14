@@ -52,6 +52,59 @@ and surface a clear preflight error when either step is absent.
 binding/start prevents dispatch rather than stranding a completed Worker in
 `prepared`.
 
+### EXT-HOST-002 — Record authorized external Worker exit without fabricating process evidence
+
+An external Worker can complete, publish a valid `agent task-complete` handoff,
+and have its host-confirmed exit recorded by an operator, but the public
+external-binding contract has no terminal-exit operation. `agent-run finalize`
+therefore refuses the run because no AW-owned `process-result.json` exists.
+External hosts must not fabricate a PID, return code, or process-result
+artifact merely to satisfy that recovery path.
+
+**Reproduction (2026-09-14):**
+
+1. Prepare an external run, bind the host Worker, and call `start-external`.
+2. Have the Worker commit its scoped change and publish a schema-valid
+   `agent task-complete` handoff.
+3. After the external Worker exits, run `agent-workflow agent-run finalize
+   RUN_ID`.
+4. Observe: `recovery finalization requires a durable process result or a
+   confirmed dead orphan observation`; `terminate` and `interrupt` report
+   that external worker lifecycle control is not configured.
+
+**Evidence:** OSINT Suite runs `bella-lookout-slice-a-20260914`,
+`bella-lookout-slice-a-redaction-20260914`, and
+`bella-lookout-slice-b-20260914` had valid completion handoffs and no
+AW-owned external process. The first two exposed recovery defects: an
+authorized exit was classified as `executor_lost`, then recovery sealing
+failed on duplicate projection fields/schema constraints. The local runtime
+was patched only to continue the authorized work; those changes are not a
+source-controlled Agent-Workflow fix.
+
+**Required design:** add a narrow, authenticated/operator-authorized,
+idempotent `external-exit` recording operation for a currently bound external
+Worker generation. Record only host-observable terminal facts (for example,
+completion reported and exit observed), not a fabricated PID, exit code, or
+process result. It must reject stale generations, unbound/prepared runs,
+already-sealed runs, and attempts to convert host observation into completion,
+review, or acceptance. Recovery finalization may seal a run as `completed`
+only when this durable exit record and a valid completion handoff both exist;
+otherwise preserve the current refusal/failure behavior.
+
+**Acceptance evidence:** integration tests cover the successful ordered path
+`prepared -> bound -> running -> task-complete -> external-exit -> finalized
+completed`, repeated exit-record idempotency, stale-generation rejection,
+missing/invalid completion refusal, and the absence of any
+`process-result.json` requirement for that successful external path. Tests
+must also prove that external exit recording does not itself create
+completion, review, or acceptance, and that sealed receipts/projections rebuild
+without duplicate-keyword or schema failures.
+
+**Implementation evidence (2026-09-14):** `8708d18` adds the generation-bound,
+idempotent public operation and recovery path without process fabrication.
+Focused invariant and CLI-product coverage passed; independent release
+acceptance remains pending Jenkins evidence.
+
 ### TERM-001 — Retire external host terminals after terminal Agent Run state
 
 Status remains open. The core implementation intentionally owns no external
