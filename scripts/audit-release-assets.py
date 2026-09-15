@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import stat
 import subprocess
@@ -88,6 +89,21 @@ def release_files(root: Path = ROOT) -> tuple[Path, ...]:
 
 def fail(message: str) -> None:
     errors.append(message)
+
+
+def is_executable(path: Path) -> bool:
+    if path.stat().st_mode & stat.S_IXUSR:
+        return True
+    if os.name != "nt":
+        return False
+    result = subprocess.run(
+        ["git", "ls-files", "--stage", "--", str(path.relative_to(ROOT))],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    return result.returncode == 0 and result.stdout.startswith("100755 ")
 
 
 def parse_frontmatter(path: Path) -> dict[str, str]:
@@ -568,12 +584,13 @@ def main(argv: list[str] | None = None) -> int:
         destination = Path(tmp) / "audit-pack"
         try:
             scaffold_pack(destination, 2, "audit-pack")
-            report = validate_pack(destination)
-            if not report.ok:
-                for error in report.errors:
-                    fail(f"generated prompt-pack scaffold: {error}")
+            if os.name != "nt":  # Windows lacks the descriptor-only directory APIs validate_pack requires.
+                report = validate_pack(destination)
+                if not report.ok:
+                    for error in report.errors:
+                        fail(f"generated prompt-pack scaffold: {error}")
             for script in sorted((destination / "scripts").glob("*.sh")):
-                if not script.stat().st_mode & stat.S_IXUSR:
+                if not is_executable(script):
                     fail(f"generated prompt-pack scaffold: {script.name} is not executable")
         except Exception as exc:
             fail(f"generated prompt-pack scaffold failed: {exc}")
@@ -588,7 +605,7 @@ def main(argv: list[str] | None = None) -> int:
         ROOT / "scripts/hooks/codebase-memory-session-reminder",
         ROOT / "scripts/hooks/rtk-session-reminder",
     ]:
-        if not path.stat().st_mode & stat.S_IXUSR:
+        if not is_executable(path):
             fail(f"{path.relative_to(ROOT)}: is not executable")
 
     # Local Markdown links must resolve.

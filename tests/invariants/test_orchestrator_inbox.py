@@ -209,7 +209,7 @@ from agent_workflow.config import defaults
 from agent_workflow.orchestrator_supervisor import watch
 
 settings = replace(defaults(Path(sys.argv[1])), state_root=Path(sys.argv[2]))
-print(json.dumps(watch(settings, "watcher", interval_seconds=0.01, poll_seconds=0.01, max_cycles=200, batch_size=1)), flush=True)
+print(json.dumps(watch(settings, "watcher", interval_seconds=0.01, poll_seconds=0.01, batch_size=1)), flush=True)
 """
     env = os.environ.copy()
     env["PYTHONPATH"] = str(Path(__file__).parents[2] / "src") + os.pathsep + env.get("PYTHONPATH", "")
@@ -239,6 +239,11 @@ print(json.dumps(watch(settings, "watcher", interval_seconds=0.01, poll_seconds=
 
         _make_child(tmp_path, settings, "child-b", "second")
         register_child(settings, "watcher", "child-b")
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline and len(read_inbox(settings, "watcher")) < 2:
+            time.sleep(0.01)
+        assert len(read_inbox(settings, "watcher")) == 2
+        process.terminate()
         stdout, stderr = process.communicate(timeout=5)
     finally:
         if process.poll() is None:
@@ -247,7 +252,7 @@ print(json.dumps(watch(settings, "watcher", interval_seconds=0.01, poll_seconds=
 
     assert process.returncode == 0, stderr
     result = json.loads(stdout)
-    assert result["state"] == "completed"
+    assert result["state"] == "shutdown"
     assert result["advanced"] == 2
     assert {event["sender_agent_run_id"] for event in read_inbox(settings, "watcher")} == {
         "child-a", "child-b"
