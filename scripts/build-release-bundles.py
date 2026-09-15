@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import gzip
 import hashlib
-import os
 import shutil
 import tarfile
 import tempfile
@@ -94,8 +93,6 @@ def build_bundle(root: Path, wheel: Path, version: str, platform: str, output: P
         shutil.copy2(wheel, staging / wheel.name)
         assert_repository_only_paths_absent(staging)
         (staging / ".release-bundle").write_text(f"{version}\n{platform}\n", encoding="utf-8")
-        for path in staging.rglob("*"):
-            os.utime(path, (0, 0), follow_symlinks=False)
         output.mkdir(parents=True, exist_ok=True)
         if platform == "windows":
             archive = output / f"{bundle_name}.zip"

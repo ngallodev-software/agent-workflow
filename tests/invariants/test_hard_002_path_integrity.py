@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import errno
 import os
 import socket
 import subprocess
@@ -32,9 +33,11 @@ def test_pack_validation_rejects_irregular_entries(tmp_path: Path, entry_type: s
         listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         try:
             listener.bind(str(entry))
-        except PermissionError:
+        except OSError as exc:
             listener.close()
-            pytest.skip("filesystem socket creation is not permitted")
+            if exc.errno in {errno.EACCES, errno.ENAMETOOLONG}:
+                pytest.skip("filesystem socket creation is not permitted")
+            raise
     try:
         report = validate_pack(pack, verify_checksums=False)
         assert not report.ok

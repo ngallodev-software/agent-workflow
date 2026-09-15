@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import fcntl
 import json
+import os
+import shutil
 import subprocess
 import sys
 import time
@@ -48,7 +50,7 @@ def _make_child(tmp_path: Path, settings, agent_run_id: str, content: str) -> di
         agent_run_id=agent_run_id,
         workdir=repo,
         prompt_path=prompt,
-        explicit_command=["/bin/true"],
+        explicit_command=[shutil.which("true") or "true"],
         structured=True,
         worker_mode="headless",
     )
@@ -209,12 +211,15 @@ from agent_workflow.orchestrator_supervisor import watch
 settings = replace(defaults(Path(sys.argv[1])), state_root=Path(sys.argv[2]))
 print(json.dumps(watch(settings, "watcher", interval_seconds=0.01, max_cycles=200, batch_size=1)), flush=True)
 """
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(Path(__file__).parents[2] / "src") + os.pathsep + env.get("PYTHONPATH", "")
     process = subprocess.Popen(
         [sys.executable, "-c", watcher_code, str(settings.config_path), str(settings.state_root)],
         cwd=Path(__file__).parents[2],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        env=env,
     )
     try:
         events_path = orchestrator_dir(settings, "watcher") / "supervisor-events.jsonl"
