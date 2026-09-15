@@ -9,7 +9,10 @@ modules remain responsible for record schemas and cross-record semantics.
 from __future__ import annotations
 
 import contextlib
-import fcntl
+try:
+    import fcntl
+except ModuleNotFoundError:  # Windows has no POSIX advisory-lock module.
+    fcntl = None
 import json
 import os
 import stat
@@ -21,6 +24,15 @@ from .errors import WorkflowError
 from .path import require_directory
 
 T = TypeVar("T")
+_LOCK_EX = fcntl.LOCK_EX if fcntl is not None else 0
+_LOCK_SH = fcntl.LOCK_SH if fcntl is not None else 0
+_LOCK_UN = fcntl.LOCK_UN if fcntl is not None else 0
+
+
+def _flock(descriptor: int, operation: int) -> None:
+    if fcntl is None:
+        raise WorkflowError("journal locking is unavailable on this platform")
+    fcntl.flock(descriptor, operation)
 
 
 class JournalCapacityError(WorkflowError):
@@ -82,11 +94,11 @@ def _validate_open_file(descriptor: int, path: Path, *, single_link: bool) -> os
 @contextlib.contextmanager
 def locked_descriptor(descriptor: int, *, exclusive: bool) -> Iterator[int]:
     """Hold an advisory lock on an already-open descriptor."""
-    fcntl.flock(descriptor, fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH)
+    _flock(descriptor, _LOCK_EX if exclusive else _LOCK_SH)
     try:
         yield descriptor
     finally:
-        fcntl.flock(descriptor, fcntl.LOCK_UN)
+        _flock(descriptor, _LOCK_UN)
 
 
 @contextlib.contextmanager
@@ -136,12 +148,12 @@ def locked_file(
                 raise WorkflowError(f"cannot open journal without following links: {path}") from exc
 
         _validate_open_file(descriptor, path, single_link=single_link)
-        fcntl.flock(descriptor, fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH)
+        _flock(descriptor, _LOCK_EX if exclusive else _LOCK_SH)
         try:
             _validate_open_file(descriptor, path, single_link=single_link)
             yield descriptor, created
         finally:
-            fcntl.flock(descriptor, fcntl.LOCK_UN)
+            _flock(descriptor, _LOCK_UN)
     finally:
         if descriptor is not None:
             if created:

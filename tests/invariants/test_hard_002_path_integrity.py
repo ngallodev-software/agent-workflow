@@ -35,7 +35,7 @@ def test_pack_validation_rejects_irregular_entries(tmp_path: Path, entry_type: s
             listener.bind(str(entry))
         except OSError as exc:
             listener.close()
-            if exc.errno in {errno.EACCES, errno.ENAMETOOLONG}:
+            if exc.errno in {errno.EACCES, errno.ENAMETOOLONG} or "path too long" in str(exc).lower():
                 pytest.skip("filesystem socket creation is not permitted")
             raise
     try:
