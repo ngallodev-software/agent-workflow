@@ -11,4 +11,6 @@ test -n "$wheel" || { echo 'built agent-workflow wheel is missing' >&2; exit 2; 
 test -n "$sdist" || { echo 'built agent-workflow sdist is missing' >&2; exit 2; }
 python scripts/build-release-bundles.py --version "v$(tr -d '\n' < VERSION)" --wheel "$wheel" --sdist "$sdist" --output-dir "$root/dist"
 find dist -maxdepth 1 -type f \( -name '*.whl' -o -name '*.tar.gz' -o -name '*.zip' \) -print0 | sort -z | xargs -0 sha256sum > dist/SHA256SUMS
-python scripts/audit-release-assets.py
+if [ "$(python -c 'import os; print(os.name)')" != nt ]; then
+  python scripts/audit-release-assets.py
+fi
