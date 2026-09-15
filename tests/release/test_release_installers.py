@@ -25,9 +25,10 @@ def _sha256(path: Path) -> str:
 def _write_fake_release(root: Path, *, bad_checksum: bool = False) -> tuple[Path, Path]:
     release = root / "release"
     release.mkdir()
-    bundle_name = f"agent-workflow-{CURRENT_VERSION}-linux.tar.gz"
+    platform = "macos" if sys.platform == "darwin" else "linux"
+    bundle_name = f"agent-workflow-{CURRENT_VERSION}-{platform}.tar.gz"
     wheel_name = f"agent_workflow-{CURRENT_VERSION}-py3-none-any.whl"
-    staging = root / f"agent-workflow-{CURRENT_VERSION}-linux"
+    staging = root / f"agent-workflow-{CURRENT_VERSION}-{platform}"
     staging.mkdir()
     (staging / "install.sh").write_text(
         "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$AGENT_WORKFLOW_BOOTSTRAP_TEST_MARKER\"\n",
@@ -123,6 +124,10 @@ def test_jenkins_runs_only_the_deterministic_benchmark_contract_smoke() -> None:
     assert "test_benchmark_target_and_tool_mode.py" in jenkinsfile
     assert "codebase-memory-cli" not in jenkinsfile
     assert "jenkins-artifacts" not in jenkinsfile
+    assert "./scripts/ci-release-build.sh" in jenkinsfile
+    ci_workflow = (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert "./scripts/release-check.sh" in ci_workflow
+    assert "./scripts/ci-release-build.sh" in ci_workflow
     local_job = (REPO_ROOT / "scripts" / "jenkins-local-job.xml").read_text(encoding="utf-8")
     assert "CBM_CLI_JENKINS_JOB" not in local_job
 

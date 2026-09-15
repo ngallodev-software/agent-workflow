@@ -45,18 +45,7 @@ pipeline {
         stage('Build') {
             steps {
                 sh '''
-                    set -eu
-                    rm -rf build dist
-                    python -m build --sdist --wheel --no-isolation
-                    wheel="$(find "$WORKSPACE/dist" -maxdepth 1 -type f -name 'agent_workflow-*.whl' -print -quit)"
-                    sdist="$(find "$WORKSPACE/dist" -maxdepth 1 -type f -name 'agent_workflow-*.tar.gz' -print -quit)"
-                    test -n "$wheel" || { echo 'built agent-workflow wheel is missing' >&2; exit 2; }
-                    test -n "$sdist" || { echo 'built agent-workflow sdist is missing' >&2; exit 2; }
-                    python scripts/build-release-bundles.py \
-                        --version "v$(tr -d '\n' < VERSION)" \
-                        --wheel "$wheel" \
-                        --sdist "$sdist" \
-                        --output-dir "$WORKSPACE/dist"
+                    ./scripts/ci-release-build.sh
                     linux_installer="$WORKSPACE/dist/agent-workflow-$(tr -d '\n' < VERSION)-linux.tar.gz"
                     test -s "$linux_installer" || {
                         echo "Linux installer bundle is missing: $linux_installer" >&2
