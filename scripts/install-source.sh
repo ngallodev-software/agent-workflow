@@ -90,19 +90,25 @@ if [[ ",$EXTRAS," == *,mcp,* ]]; then
   echo "MCP is opt-in; use scripts/install-mcp.sh" >&2
   exit 2
 fi
-declare -A harness_roots=(
-  [codex]="$SHARED_SKILLS_DIR"
-  [claude]="$HOME/.claude/skills"
-  [generic]="$HOME/.agents/skills"
-)
-declare -A selected_harnesses=()
+harness_root() {
+  case "$1" in
+    codex) printf '%s\n' "$SHARED_SKILLS_DIR" ;;
+    claude) printf '%s\n' "$HOME/.claude/skills" ;;
+    generic) printf '%s\n' "$HOME/.agents/skills" ;;
+    *) return 1 ;;
+  esac
+}
+
+harness_selected() {
+  case ",$INSTALL_HARNESSES," in *",$1,"*) return 0 ;; *) return 1 ;; esac
+}
+
 IFS=',' read -r -a harness_list <<< "$INSTALL_HARNESSES"
 for harness in "${harness_list[@]}"; do
-  [[ -n "${harness_roots[$harness]+x}" ]] || {
+  harness_root "$harness" >/dev/null || {
     echo "unknown harness: $harness (expected codex, claude, or generic)" >&2
     exit 2
   }
-  selected_harnesses["$harness"]=1
 done
 if [[ $INSTALL_DEPS -eq 1 ]]; then
   if ! "$PYTHON_BIN" -m pip --version >/dev/null 2>&1; then
@@ -206,7 +212,7 @@ if [[ $INSTALL_SKILLS -eq 1 ]]; then
     skills+=("$(basename "$skill_dir")")
   done < <(find "$ROOT/skills" -mindepth 1 -maxdepth 1 -type d -print0 | sort -z)
   for harness in "${harness_list[@]}"; do
-    root="${harness_roots[$harness]}"
+    root="$(harness_root "$harness")"
     mkdir -p "$root"
     for skill in "${skills[@]}"; do
       safe_link "$ROOT/skills/$skill" "$root/$skill"
@@ -215,8 +221,8 @@ if [[ $INSTALL_SKILLS -eq 1 ]]; then
 
   # Remove only links owned by older all-harness installations.
   for legacy_harness in generic claude; do
-    [[ -n "${selected_harnesses[$legacy_harness]+x}" ]] && continue
-    legacy_root="${harness_roots[$legacy_harness]}"
+    harness_selected "$legacy_harness" && continue
+    legacy_root="$(harness_root "$legacy_harness")"
     for skill in "${skills[@]}"; do
       legacy_link="$legacy_root/$skill"
       if [[ -L "$legacy_link" && "$(readlink "$legacy_link")" == "$ROOT/skills/$skill" ]]; then

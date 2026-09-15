@@ -217,6 +217,7 @@ def test_release_workflow_is_tag_only_and_bundle_builder_is_reproducible(tmp_pat
     assert f"agent-workflow-{CURRENT_VERSION}-windows/agent_workflow-{CURRENT_VERSION}-py3-none-any.whl" in names
 
 def test_source_installer_does_not_register_mcp(tmp_path: Path) -> None:
+    assert "declare -A" not in (REPO_ROOT / "scripts" / "install-source.sh").read_text(encoding="utf-8")
     home = tmp_path / "home"
     fake_modules = tmp_path / "fake-modules"
     fake_modules.mkdir()
