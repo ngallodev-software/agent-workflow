@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .config import LUNA_MODEL, LUNA_REASONING_EFFORTS, Settings
+from .config import LUNA_REASONING_EFFORTS, Settings
 from .errors import WorkflowError
 from .process import ExecutableIdentity, executor_identity
 
@@ -131,8 +131,6 @@ def prepare_executor(
         selected_model, authorized = _select_model(
             settings, executor, model or explicit_model, allow_no_go_model
         )
-        if executor == "codex" and selected_model != LUNA_MODEL:
-            raise WorkflowError("automatic Codex selection requires gpt-5.6-luna")
         selected_effort = _select_reasoning_effort(
             settings, executor, reasoning_effort, explicit_effort
         )
@@ -179,8 +177,6 @@ def prepare_executor(
     selected_model, authorized = _select_model(
         settings, executor, model or configured_model, allow_no_go_model
     )
-    if executor == "codex" and selected_model != LUNA_MODEL:
-        raise WorkflowError("automatic Codex selection requires gpt-5.6-luna")
     selected_effort = _select_reasoning_effort(
         settings, executor, reasoning_effort, _explicit_reasoning_effort(argv)
     )

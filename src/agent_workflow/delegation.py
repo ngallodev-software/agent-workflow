@@ -236,12 +236,16 @@ def _delegation_result(
     }
     if worker_mode == "external" and state == "prepared":
         runner = run_dir(settings, agent_run_id) / "run.sh"
+        handoff = worktree / ".agent-workflow-handoff" / agent_run_id
         result["launch_contract"] = {
             "agent_run_id": agent_run_id,
             "worker_mode": "external",
             "worktree": str(worktree),
             "argv": [str(runner)],
             "runner_path": str(runner),
+            "launch_prompt_path": str(runner.parent / "launch-prompt.md"),
+            "handoff_dir": str(handoff),
+            "completion_template_path": str(handoff / "completion-template.json"),
             "bind_command": (
                 "agent-workflow agent-run bind-external "
                 f"{agent_run_id} RUNTIME_TYPE EXTERNAL_WORKER_ID"
@@ -249,6 +253,15 @@ def _delegation_result(
             "start_command": (
                 "agent-workflow agent-run start-external "
                 f"{agent_run_id} RUNTIME_TYPE EXTERNAL_WORKER_ID --generation GENERATION"
+            ),
+            "pending_delivery_command": (
+                "agent-workflow agent-run pending-external-delivery "
+                f"{agent_run_id} --generation GENERATION"
+            ),
+            "report_delivery_command": (
+                "agent-workflow agent-run report-external-delivery "
+                f"{agent_run_id} MESSAGE_ID --generation GENERATION --attempt ATTEMPT "
+                "--outcome delivered --reason REASON"
             ),
         }
     return result

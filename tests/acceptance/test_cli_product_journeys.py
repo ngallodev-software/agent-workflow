@@ -182,6 +182,8 @@ def test_external_prepare_is_host_independent_and_process_control_is_unavailable
     )
     assert prepared["status"] == "prepared"
     assert prepared["worker_mode"] == "external"
+    assert prepared["steering_adapter"] == "external-host-v1"
+    assert prepared["steering_supported"] is True
     assert prepared.get("worker_pid") is None
     run = _run_dir(env, "external-run")
     runner_text = (run / "run.sh").read_text(encoding="utf-8")
@@ -190,6 +192,8 @@ def test_external_prepare_is_host_independent_and_process_control_is_unavailable
     contract = json.loads((run / "agent-run-contract.json").read_text(encoding="utf-8"))
     assert contract["worker_plan"]["noninteractive_argv"]
     assert len(contract["worker_plan"]["noninteractive_command_sha256"]) == 64
+    assert contract["runtime_policy"]["steering"]["adapter"] == "external-host-v1"
+    assert "acknowledge a steer message ID" in (run / "launch-prompt.md").read_text()
 
     start = installed_product.run("--json", "agent-run", "start", "external-run", env=env)
     assert start.returncode == 2
@@ -277,6 +281,58 @@ def test_external_exit_completes_only_after_task_completion_and_rebuilds_receipt
     assert [item["path"] for item in receipt["artifacts"]].count("external-worker-exit.json") == 1
     repaired = installed_product.json("agent-run", "repair", "external-success", env=env)
     assert repaired["status"] == "completed"
+
+
+def test_external_delivery_rejects_stale_and_unbound_generations(
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+    fake_agent_path: Path,
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "external-delivery"
+    git_repo(repo)
+    prompt = tmp_path / "external-delivery.md"
+    prompt.write_text("Exercise host delivery.\n", encoding="utf-8")
+    env = dict(product_env)
+    installed_product.json(
+        "agent-run", "prepare", "external-delivery", repo, prompt,
+        "--worker-mode", "external", "--interactive", "--", fake_agent_path,
+        env=env,
+    )
+    first = installed_product.json(
+        "agent-run", "bind-external", "external-delivery", "host", "worker-1", env=env,
+    )
+    installed_product.json(
+        "agent-run", "start-external", "external-delivery", "host", "worker-1",
+        "--generation", str(first["generation"]), env=env,
+    )
+    steer = installed_product.json(
+        "agent-run", "steer", "external-delivery", "deliver this", "--actor", "parent", env=env,
+    )
+    second = installed_product.json(
+        "agent-run", "bind-external", "external-delivery", "host", "worker-2", env=env,
+    )
+    stale = installed_product.run(
+        "agent-run", "report-external-delivery", "external-delivery", steer["message_id"],
+        "--generation", str(first["generation"]), "--attempt", "1", "--outcome", "delivered",
+        "--reason", "old host", env=env,
+    )
+    assert stale.returncode == 2
+    assert "stale" in stale.stderr
+    delivered = installed_product.json(
+        "agent-run", "report-external-delivery", "external-delivery", steer["message_id"],
+        "--generation", str(second["generation"]), "--attempt", "1", "--outcome", "delivered",
+        "--reason", "current host", env=env,
+    )
+    assert delivered["acknowledged"] is False
+    installed_product.json("agent-run", "unbind-external", "external-delivery", env=env)
+    unbound = installed_product.run(
+        "agent-run", "report-external-delivery", "external-delivery", steer["message_id"],
+        "--generation", str(second["generation"]), "--attempt", "2", "--outcome", "delivered",
+        "--reason", "unbound host", env=env,
+    )
+    assert unbound.returncode == 2
+    assert "not bound" in unbound.stderr
 
 
 @pytest.mark.parametrize("host_mode", ["pipe", "pty"])
