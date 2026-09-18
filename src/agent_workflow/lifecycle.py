@@ -228,6 +228,16 @@ def record(
         "collections/completion.json",
         "agent-workflow/completion-collection/v1",
     )
+    result_contract = final_status.get("result_contract")
+    if isinstance(result_contract, dict) and result_contract.get("required", True):
+        task_result, _ = read_sealed_contract(
+            run,
+            final_receipt,
+            "collections/task-result.json",
+            "agent-workflow/task-result-collection/v1",
+        )
+        if task_result.get("validation_status") != "valid":
+            raise WorkflowError("acceptance requires a valid collected task result")
     chain = lifecycle_receipts(run, expected_final_receipt_sha256=expected)
     if chain and chain[-1]["receipt"].get("action") == "accepted":
         raise WorkflowError("lifecycle disposition is already terminal")

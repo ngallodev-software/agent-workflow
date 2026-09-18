@@ -233,7 +233,7 @@ def _write_launch_prompt(
         [
             f"- handoff: `{handoff_dir}`; template: `{handoff_dir / 'completion-template.json'}` (read-only)",
             "- Copy the template to atomic `completion.json` and satisfy `agent-workflow/completion/v1`. Runtime completion paths outside the handoff directory are collector-owned.",
-            "- Review runs keep `result` separate from `review_disposition` (`approved|changes_requested|blocked`). Completion is never acceptance.",
+            "- Only an assigned independent reviewer sets `review_disposition`; implementation workers omit it. Completion is never acceptance.",
             "- `result: completed` normally requires no unresolved items and only final passing verification commands; completed reviews may cite a failed target gate only with `changes_requested`.",
             "- `.agent-workflow-handoff/` is runtime-only and locally Git-excluded: never stage, commit, or force-add it. Commit source first, then write the sidecar with `head_revision` equal to the current `git rev-parse HEAD`.",
             "- Durable progress/steering uses the scoped `progress`, `steer`, and `ack` commands; acknowledge steering before applying it and never expose secrets.",
