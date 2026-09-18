@@ -113,11 +113,11 @@ or provider SDK dependencies to the Agent-Workflow host.
 
 ## Tagged bootstrap install
 
-For a published release, pin the release explicitly. For version `0.10.0`:
+For a published release, pin the release explicitly. For version `0.10.1`:
 
 ```bash
-curl -fsSL https://github.com/ngallodev-software/agent-workflow/releases/download/v0.10.0/install.sh | \
-  sh -s -- --version v0.10.0
+curl -fsSL https://github.com/ngallodev-software/agent-workflow/releases/download/v0.10.1/install.sh | \
+  sh -s -- --version v0.10.1
 ```
 
 The version is intentional: the 0.9 line builds on the breaking Agent Run/headless-core rewrite and does not carry terminal-host compatibility.

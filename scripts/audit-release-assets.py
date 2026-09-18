@@ -17,7 +17,10 @@ sys.path.insert(0, str(ROOT / "src"))
 from agent_workflow.release_evidence import validate_dependency_lock
 from agent_workflow.manifests import load_pack_manifest, validate_pack
 from agent_workflow.pack import scaffold as scaffold_pack
-from agent_workflow.benchmarking.contracts import validate_executor_config, validate_spec
+from agent_workflow.benchmarking.contracts import (
+    validate_executor_config,
+    validate_spec,
+)
 from agent_workflow.benchmarking.service import materialize_builtin_suite
 from agent_workflow.skill_examples import validate_skill_command_examples
 from agent_workflow.skill_evals import validate_primary_skill_behavior
@@ -81,10 +84,15 @@ def release_files(root: Path = ROOT) -> tuple[Path, ...]:
             continue
         if any(part == ".git" for part in rel.parts):
             continue
-        if rel.as_posix() in EXCLUDED_FILES or rel.suffix in {".pyc", ".sha256", ".zst"}:
+        if rel.as_posix() in EXCLUDED_FILES or rel.suffix in {
+            ".pyc",
+            ".sha256",
+            ".zst",
+        }:
             continue
         files.append(path)
     return tuple(sorted(files))
+
 
 def fail(message: str) -> None:
     errors.append(message)
@@ -108,13 +116,13 @@ def parse_frontmatter(path: Path) -> dict[str, str]:
         if not sep or not key.strip() or not value.strip():
             fail(f"{path.relative_to(ROOT)}:{index}: invalid frontmatter entry")
             continue
-        data[key.strip()] = value.strip().strip('"\'')
+        data[key.strip()] = value.strip().strip("\"'")
     return data
 
 
 def _unquote(value: str) -> str:
     value = value.strip()
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"\"", "'"}:
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
         return value[1:-1]
     return value
 
@@ -154,7 +162,16 @@ def _backlog_rows() -> dict[str, dict[str, str]]:
             continue
         state = ""
         for candidate in cells[1:5]:
-            if candidate in {"ready", "blocked", "needs-decision", "deferred", "done", "completed", "in-progress", "in-review"}:
+            if candidate in {
+                "ready",
+                "blocked",
+                "needs-decision",
+                "deferred",
+                "done",
+                "completed",
+                "in-progress",
+                "in-review",
+            }:
                 state = candidate
                 break
         rows[item_id] = {"section": section, "state": state}
@@ -168,10 +185,12 @@ def _audit_backlog_and_prompt_pack_ownership() -> None:
     global_task_ids: dict[str, str] = {}
     owners: dict[str, set[str]] = {}
 
-    pack_dirs = (
-        sorted(path for path in packs_root.iterdir() if path.is_dir() and (path / "pack.yaml").is_file())
-        if packs_root.is_dir()
-        else []
+    pack_dirs = sorted(
+        {
+            path.parent
+            for path in release_files()
+            if path.name == "pack.yaml" and path.parent.parent == packs_root
+        }
     )
     for pack_dir in pack_dirs:
         pack_name = pack_dir.name
@@ -210,16 +229,22 @@ def _audit_backlog_and_prompt_pack_ownership() -> None:
                 backlog_id = str(task.get("backlog_id") or "")
                 if task_type in {"gate", "review", "historical"}:
                     if backlog_id:
-                        fail(f"{location}: {task_type} task {task_id} must not claim backlog_id")
+                        fail(
+                            f"{location}: {task_type} task {task_id} must not claim backlog_id"
+                        )
                     continue
                 if not backlog_id:
-                    fail(f"{location}: implementation task {task_id} missing backlog_id")
+                    fail(
+                        f"{location}: implementation task {task_id} missing backlog_id"
+                    )
                     continue
                 if backlog_id not in backlog:
                     fail(f"{location}: unknown backlog_id {backlog_id}")
                     continue
                 if backlog[backlog_id].get("state") == "done":
-                    fail(f"{location}: active task owns completed backlog item {backlog_id}")
+                    fail(
+                        f"{location}: active task owns completed backlog item {backlog_id}"
+                    )
                 claimed.add(backlog_id)
                 owners.setdefault(backlog_id, set()).add(pack_name)
         if declared != claimed:
@@ -230,7 +255,9 @@ def _audit_backlog_and_prompt_pack_ownership() -> None:
 
     for backlog_id, pack_names in sorted(owners.items()):
         if len(pack_names) > 1:
-            fail(f"docs/BACKLOG.md: {backlog_id} is owned by multiple active packs: {sorted(pack_names)}")
+            fail(
+                f"docs/BACKLOG.md: {backlog_id} is owned by multiple active packs: {sorted(pack_names)}"
+            )
 
     skill = ROOT / "skills" / "release-drift-auditor" / "SKILL.md"
     if not skill.is_file():
@@ -241,21 +268,26 @@ def _audit_backlog_and_prompt_pack_ownership() -> None:
 
     future_root = ROOT / "tests" / "future"
     for path in sorted(future_root.glob("test_*.py")):
-        ids = set(re.findall(r"\b[A-Z][A-Z0-9-]*-\d+\b", path.read_text(encoding="utf-8")))
+        ids = set(
+            re.findall(r"\b[A-Z][A-Z0-9-]*-\d+\b", path.read_text(encoding="utf-8"))
+        )
         if not ids:
-            fail(f"{path.relative_to(ROOT)}: strict future test does not name a backlog ID")
+            fail(
+                f"{path.relative_to(ROOT)}: strict future test does not name a backlog ID"
+            )
             continue
         unknown = sorted(item for item in ids if item not in backlog)
         if unknown:
             fail(f"{path.relative_to(ROOT)}: unknown backlog IDs {unknown}")
 
 
-
 def _audit_builtin_benchmark_layouts() -> None:
     """Validate canonical layered built-ins and reject a duplicate authoring mirror."""
     duplicate_root = ROOT / "benchmarks" / "specs"
     if duplicate_root.exists():
-        fail(f"{duplicate_root.relative_to(ROOT)}: duplicate benchmark source mirror must not exist")
+        fail(
+            f"{duplicate_root.relative_to(ROOT)}: duplicate benchmark source mirror must not exist"
+        )
 
     package_root = ROOT / "src" / "agent_workflow" / "assets" / "benchmarks"
     if not package_root.is_dir():
@@ -267,12 +299,18 @@ def _audit_builtin_benchmark_layouts() -> None:
         fail(f"{shared_root.relative_to(ROOT)}: shared benchmark layers are missing")
         return
 
-    for suite in sorted(path for path in package_root.iterdir() if path.is_dir() and path.name != "_shared"):
+    for suite in sorted(
+        path
+        for path in package_root.iterdir()
+        if path.is_dir() and path.name != "_shared"
+    ):
         layout_path = suite / "suite-layout.json"
         try:
             layout = json.loads(layout_path.read_text(encoding="utf-8"))
         except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-            fail(f"{layout_path.relative_to(ROOT)}: invalid built-in suite layout: {exc}")
+            fail(
+                f"{layout_path.relative_to(ROOT)}: invalid built-in suite layout: {exc}"
+            )
             continue
         layers = layout.get("layers") if isinstance(layout, dict) else None
         if not isinstance(layers, list) or not layers:
@@ -307,15 +345,23 @@ def _audit_builtin_benchmark_layouts() -> None:
             rel = path.relative_to(suite)
             shared = layer_files.get(rel)
             if shared is not None and shared.read_bytes() == path.read_bytes():
-                fail(f"{path.relative_to(ROOT)}: duplicates identical content already supplied by a shared layer")
+                fail(
+                    f"{path.relative_to(ROOT)}: duplicates identical content already supplied by a shared layer"
+                )
 
         try:
-            with tempfile.TemporaryDirectory(prefix=f"aw-benchmark-{suite.name}-", dir=ROOT) as temp_dir:
-                materialized = materialize_builtin_suite(Path(temp_dir) / suite.name, suite.name)
+            with tempfile.TemporaryDirectory(
+                prefix=f"aw-benchmark-{suite.name}-", dir=ROOT
+            ) as temp_dir:
+                materialized = materialize_builtin_suite(
+                    Path(temp_dir) / suite.name, suite.name
+                )
                 validate_spec(materialized / "benchmark-spec.json")
                 validate_executor_config(materialized / "executors" / "synthetic.json")
         except Exception as exc:
-            fail(f"{layout_path.relative_to(ROOT)}: built-in suite does not materialize cleanly: {exc}")
+            fail(
+                f"{layout_path.relative_to(ROOT)}: built-in suite does not materialize cleanly: {exc}"
+            )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -408,23 +454,38 @@ def main(argv: list[str] | None = None) -> int:
     lock_path = ROOT / "release" / "dependency-lock.json"
     for required in (policy_path, lock_path):
         if not required.is_file() or required.is_symlink():
-            fail(f"{required.relative_to(ROOT)}: required regular release metadata file is missing")
+            fail(
+                f"{required.relative_to(ROOT)}: required regular release metadata file is missing"
+            )
     if policy_path.is_file() and lock_path.is_file():
         try:
             policy = json.loads(policy_path.read_text(encoding="utf-8"))
             lock = json.loads(lock_path.read_text(encoding="utf-8"))
             import jsonschema
 
-            policy_schema = json.loads((ROOT / "schemas" / "release-policy.schema.json").read_text(encoding="utf-8"))
-            lock_schema = json.loads((ROOT / "schemas" / "dependency-lock.schema.json").read_text(encoding="utf-8"))
+            policy_schema = json.loads(
+                (ROOT / "schemas" / "release-policy.schema.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            lock_schema = json.loads(
+                (ROOT / "schemas" / "dependency-lock.schema.json").read_text(
+                    encoding="utf-8"
+                )
+            )
             jsonschema.Draft202012Validator(policy_schema).validate(policy)
             jsonschema.Draft202012Validator(lock_schema).validate(lock)
             for label, value in (("release policy", policy), ("dependency lock", lock)):
-                if value.get("project") != "agent-workflow" or value.get("version") != EXPECTED_VERSION:
+                if (
+                    value.get("project") != "agent-workflow"
+                    or value.get("version") != EXPECTED_VERSION
+                ):
                     fail(f"release/{label}: project/version must match VERSION")
             for message in validate_dependency_lock(ROOT, lock):
                 fail(f"release/dependency-lock.json: {message}")
-            pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+            pyproject = tomllib.loads(
+                (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+            )
             release_data = set(
                 pyproject.get("tool", {})
                 .get("setuptools", {})
@@ -432,7 +493,9 @@ def main(argv: list[str] | None = None) -> int:
                 .get("share/agent-workflow/release", [])
             )
             if "release/*.json" not in release_data:
-                fail("pyproject.toml: release policy and dependency lock are not included in built artifacts")
+                fail(
+                    "pyproject.toml: release policy and dependency lock are not included in built artifacts"
+                )
         except Exception as exc:
             fail(f"release metadata validation failed: {exc}")
 
@@ -443,7 +506,9 @@ def main(argv: list[str] | None = None) -> int:
         except tomllib.TOMLDecodeError as exc:
             fail(f"{path.relative_to(ROOT)}: invalid TOML: {exc}")
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    for index, block in enumerate(re.findall(r"```toml\n(.*?)```", readme, re.DOTALL), 1):
+    for index, block in enumerate(
+        re.findall(r"```toml\n(.*?)```", readme, re.DOTALL), 1
+    ):
         try:
             tomllib.loads(block)
         except tomllib.TOMLDecodeError as exc:
@@ -467,21 +532,26 @@ def main(argv: list[str] | None = None) -> int:
         ROOT / "pyproject.toml": f'version = "{EXPECTED_VERSION}"',
         ROOT / "agent-workflow.yaml": f"version: {EXPECTED_VERSION}",
         ROOT / "src/agent_workflow/__init__.py": f'__version__ = "{EXPECTED_VERSION}"',
-        ROOT / "src/agent_workflow/cli_parser.py": 'from . import __version__',
+        ROOT / "src/agent_workflow/cli_parser.py": "from . import __version__",
         ROOT / "src/agent_workflow/doctor.py": '"version": __version__',
-        ROOT / "docs/man/agent-workflow-workflow.1": f"agent-workflow {EXPECTED_VERSION}",
+        ROOT
+        / "docs/man/agent-workflow-workflow.1": f"agent-workflow {EXPECTED_VERSION}",
         ROOT / "docs/man/agent-workflow-index.1": f"agent-workflow {EXPECTED_VERSION}",
     }
     for path, needle in version_locations.items():
         if needle not in path.read_text(encoding="utf-8"):
-            fail(f"{path.relative_to(ROOT)}: missing expected version marker {needle!r}")
+            fail(
+                f"{path.relative_to(ROOT)}: missing expected version marker {needle!r}"
+            )
 
     # Phase 0 agent-efficiency baseline is generated from the live parser/launch
     # context and guards against unmeasured agent-facing drift without adding a
     # separate unit-test surface.
     efficiency_baseline = ROOT / "release" / "agent-efficiency-baseline.json"
     if not efficiency_baseline.is_file():
-        fail("release/agent-efficiency-baseline.json: Phase 0 efficiency baseline is missing")
+        fail(
+            "release/agent-efficiency-baseline.json: Phase 0 efficiency baseline is missing"
+        )
     else:
         try:
             baseline = json.loads(efficiency_baseline.read_text(encoding="utf-8"))
@@ -491,13 +561,24 @@ def main(argv: list[str] | None = None) -> int:
             if baseline.get("schema") != "agent-workflow/agent-efficiency-baseline/v1":
                 fail("release/agent-efficiency-baseline.json: unexpected schema")
             if baseline.get("application_version") != "0.9.0":
-                fail("release/agent-efficiency-baseline.json: must retain the 0.9.0 Phase 0 comparison version")
+                fail(
+                    "release/agent-efficiency-baseline.json: must retain the 0.9.0 Phase 0 comparison version"
+                )
             roles = baseline.get("roles")
-            if not isinstance(roles, dict) or set(roles) != {"implementation", "review", "orchestrator"}:
-                fail("release/agent-efficiency-baseline.json: missing Phase 0 role measurements")
+            if not isinstance(roles, dict) or set(roles) != {
+                "implementation",
+                "review",
+                "orchestrator",
+            }:
+                fail(
+                    "release/agent-efficiency-baseline.json: missing Phase 0 role measurements"
+                )
         result = subprocess.run(
             [sys.executable, str(ROOT / "scripts" / "measure-agent-efficiency.py")],
-            cwd=ROOT, text=True, capture_output=True, check=False,
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
         )
         if result.returncode != 0:
             fail("scripts/measure-agent-efficiency.py: current measurement failed")
@@ -505,7 +586,9 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 current_efficiency = json.loads(result.stdout)
             except json.JSONDecodeError:
-                fail("scripts/measure-agent-efficiency.py: current measurement is not valid JSON")
+                fail(
+                    "scripts/measure-agent-efficiency.py: current measurement is not valid JSON"
+                )
             else:
                 targets = baseline.get("targets", {})
                 current_roles = current_efficiency.get("roles", {})
@@ -514,18 +597,34 @@ def main(argv: list[str] | None = None) -> int:
                     command_limit = targets.get(f"{role}_role_commands_max")
                     card_limit = targets.get(f"{role}_role_card_bytes_max")
                     launch_limit = targets.get(f"{role}_launch_context_bytes_max")
-                    if not all(isinstance(value, int) for value in (command_limit, card_limit, launch_limit)):
-                        fail(f"release/agent-efficiency-baseline.json: missing {role} surface targets")
+                    if not all(
+                        isinstance(value, int)
+                        for value in (command_limit, card_limit, launch_limit)
+                    ):
+                        fail(
+                            f"release/agent-efficiency-baseline.json: missing {role} surface targets"
+                        )
                         continue
-                    if role_value.get("command_count", command_limit + 1) > command_limit:
+                    if (
+                        role_value.get("command_count", command_limit + 1)
+                        > command_limit
+                    ):
                         fail(
                             f"command profile {role}: exceeds {command_limit}-command agent-visible budget"
                         )
-                    if role_value.get("command_card_bytes", card_limit + 1) > card_limit:
+                    if (
+                        role_value.get("command_card_bytes", card_limit + 1)
+                        > card_limit
+                    ):
                         fail(
                             f"command profile {role}: exceeds {card_limit}-byte command-card budget"
                         )
-                    if role_value.get("launch_context_overhead_bytes", launch_limit + 1) > launch_limit:
+                    if (
+                        role_value.get(
+                            "launch_context_overhead_bytes", launch_limit + 1
+                        )
+                        > launch_limit
+                    ):
                         fail(
                             f"launch context {role}: exceeds {launch_limit}-byte overhead budget"
                         )
@@ -547,24 +646,35 @@ def main(argv: list[str] | None = None) -> int:
     ]
     for path in stale_prompt_pack_mirrors:
         if path.exists():
-            fail(f"{path.relative_to(ROOT)}: obsolete prompt-pack source mirror must not exist")
+            fail(
+                f"{path.relative_to(ROOT)}: obsolete prompt-pack source mirror must not exist"
+            )
 
     required_scaffold_assets = [
         ROOT / "src/agent_workflow/assets/prompt-pack-root/README.md",
-        ROOT / "src/agent_workflow/assets/prompt-pack-root/templates/TICKET_COMPLETION.md",
-        ROOT / "src/agent_workflow/assets/prompt-pack-root/templates/PHASE_GATE_REPORT.md",
-        ROOT / "src/agent_workflow/assets/prompt-pack-root/templates/source-baseline.example.json",
-        ROOT / "src/agent_workflow/assets/prompt-pack-root/scripts/validate-prompt-pack.sh",
+        ROOT
+        / "src/agent_workflow/assets/prompt-pack-root/templates/TICKET_COMPLETION.md",
+        ROOT
+        / "src/agent_workflow/assets/prompt-pack-root/templates/PHASE_GATE_REPORT.md",
+        ROOT
+        / "src/agent_workflow/assets/prompt-pack-root/templates/source-baseline.example.json",
+        ROOT
+        / "src/agent_workflow/assets/prompt-pack-root/scripts/validate-prompt-pack.sh",
         ROOT / "src/agent_workflow/assets/phase/README.md",
         ROOT / "src/agent_workflow/assets/phase/MASTER_IMPLEMENTATION_PROMPT.md",
-        ROOT / "src/agent_workflow/assets/phase/tickets/P{{PHASE_NUMBER}}-00-baseline-and-preflight.md",
+        ROOT
+        / "src/agent_workflow/assets/phase/tickets/P{{PHASE_NUMBER}}-00-baseline-and-preflight.md",
     ]
     for path in required_scaffold_assets:
         if not path.is_file():
-            fail(f"{path.relative_to(ROOT)}: canonical packaged scaffold asset is missing")
+            fail(
+                f"{path.relative_to(ROOT)}: canonical packaged scaffold asset is missing"
+            )
 
     # Validate the product behavior rather than byte parity between duplicate trees.
-    with tempfile.TemporaryDirectory(prefix="agent-workflow-scaffold-audit-", dir=ROOT) as tmp:
+    with tempfile.TemporaryDirectory(
+        prefix="agent-workflow-scaffold-audit-", dir=ROOT
+    ) as tmp:
         destination = Path(tmp) / "audit-pack"
         try:
             scaffold_pack(destination, 2, "audit-pack")
@@ -574,7 +684,9 @@ def main(argv: list[str] | None = None) -> int:
                     fail(f"generated prompt-pack scaffold: {error}")
             for script in sorted((destination / "scripts").glob("*.sh")):
                 if not script.stat().st_mode & stat.S_IXUSR:
-                    fail(f"generated prompt-pack scaffold: {script.name} is not executable")
+                    fail(
+                        f"generated prompt-pack scaffold: {script.name} is not executable"
+                    )
         except Exception as exc:
             fail(f"generated prompt-pack scaffold failed: {exc}")
 
@@ -605,11 +717,12 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 resolved.relative_to(ROOT.resolve())
             except ValueError:
-                fail(f"{path.relative_to(ROOT)}: local link escapes repository: {target}")
+                fail(
+                    f"{path.relative_to(ROOT)}: local link escapes repository: {target}"
+                )
                 continue
             if not resolved.exists():
                 fail(f"{path.relative_to(ROOT)}: broken local link: {target}")
-
 
     # Canonical benchmark package parity and backlog/prompt-pack ownership.
     _audit_builtin_benchmark_layouts()
