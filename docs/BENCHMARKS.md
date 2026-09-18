@@ -63,12 +63,9 @@ codebase-memory integration. The executor integration remains operator-owned:
 install/configure only the chosen tool for the cohort, and record its binary or
 MCP endpoint identity with the benchmark evidence.
 
-In Jenkins, the deterministic contract smoke always runs. Set
-`CBM_CLI_JENKINS_JOB` to opt into downloading the latest successful
-codebase-memory-cli Jenkins artifact; optionally set `CBM_CLI_JENKINS_URL` and
-the masked `CBM_CLI_JENKINS_AUTH` for a separate protected controller. The
-artifact hash, source revision, executable version, and upstream build URL are
-checked before use.
+In Jenkins, the deterministic contract smoke always runs. Real CLI benchmark
+evidence remains an explicit operator-run evaluation, not a release build
+dependency.
 
 ## Experimental arms
 

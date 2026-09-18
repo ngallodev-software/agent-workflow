@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import tarfile
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -137,7 +138,6 @@ def archive(
             "prompt pack validation failed:\n- " + "\n- ".join(report.errors)
         )
 
-    require_command("tar")
     require_command("zstd")
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="agent-workflow-pack-") as tmp:
@@ -185,19 +185,16 @@ def archive(
             encoding="utf-8",
         )
         tar_path = staged_parent / "pack.tar"
-        tar_command = [
-            "tar",
-            "--sort=name",
-            "--mtime=@0",
-            "--owner=0",
-            "--group=0",
-            "--numeric-owner",
-            "-C",
-            str(staged_parent),
-            "-cf",
-            str(tar_path),
-            staged.name,
-        ]
+        with tarfile.open(tar_path, "w", format=tarfile.PAX_FORMAT) as tar:
+            for path in (staged, *sorted(staged.rglob("*"))):
+                info = tar.gettarinfo(str(path), arcname=str(path.relative_to(staged_parent)))
+                info.mtime = info.uid = info.gid = 0
+                info.uname = info.gname = ""
+                if path.is_file():
+                    with path.open("rb") as stream:
+                        tar.addfile(info, stream)
+                else:
+                    tar.addfile(info)
         zstd_command = [
             "zstd",
             f"-{settings.archive_level}",
@@ -205,13 +202,6 @@ def archive(
             "-q",
             "-o", str(output), str(tar_path),
         ]
-        tar_result = run(
-            tar_command,
-            check=False,
-            timeout_seconds=300,
-            max_stdout_bytes=64 * 1024,
-            max_stderr_bytes=256 * 1024,
-        )
         zstd_result = run(
             zstd_command,
             check=False,
@@ -219,12 +209,11 @@ def archive(
             max_stdout_bytes=64 * 1024,
             max_stderr_bytes=256 * 1024,
         )
-        if tar_result.returncode or zstd_result.returncode:
+        if zstd_result.returncode:
             output.unlink(missing_ok=True)
             raise WorkflowError(
                 "archive failed: "
-                f"tar={tar_result.returncode}, zstd={zstd_result.returncode}: "
-                f"{zstd_result.stderr.strip()}"
+                f"zstd={zstd_result.returncode}: {zstd_result.stderr.strip()}"
             )
 
     run(["zstd", "-t", "-q", str(output)])

@@ -25,9 +25,10 @@ def _sha256(path: Path) -> str:
 def _write_fake_release(root: Path, *, bad_checksum: bool = False) -> tuple[Path, Path]:
     release = root / "release"
     release.mkdir()
-    bundle_name = f"agent-workflow-{CURRENT_VERSION}-linux.tar.gz"
+    platform = "macos" if sys.platform == "darwin" else "linux"
+    bundle_name = f"agent-workflow-{CURRENT_VERSION}-{platform}.tar.gz"
     wheel_name = f"agent_workflow-{CURRENT_VERSION}-py3-none-any.whl"
-    staging = root / f"agent-workflow-{CURRENT_VERSION}-linux"
+    staging = root / f"agent-workflow-{CURRENT_VERSION}-{platform}"
     staging.mkdir()
     (staging / "install.sh").write_text(
         "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$AGENT_WORKFLOW_BOOTSTRAP_TEST_MARKER\"\n",
@@ -117,20 +118,18 @@ def test_deployment_jenkins_does_not_install_into_jenkins_home() -> None:
     assert "sudo" not in jenkinsfile
 
 
-def test_jenkins_benchmark_smoke_and_optional_cli_artifact_are_explicit() -> None:
+def test_jenkins_runs_only_the_deterministic_benchmark_contract_smoke() -> None:
     jenkinsfile = (REPO_ROOT / "Jenkinsfile").read_text(encoding="utf-8")
     assert "stage('Benchmark contract smoke')" in jenkinsfile
     assert "test_benchmark_target_and_tool_mode.py" in jenkinsfile
-    assert "stage('Fetch latest codebase-memory-cli artifact')" in jenkinsfile
-    assert "lastSuccessfulBuild/artifact" in jenkinsfile
-    assert "sha256sum -c" in jenkinsfile
-    assert "agent-workflow-local-jenkins-api" in jenkinsfile
-    assert "stage('Capture synthetic CLI benchmark')" in jenkinsfile
-    assert "--codebase-memory-mode cli" in jenkinsfile
-    assert "archiveArtifacts artifacts: 'jenkins-artifacts/**'" in jenkinsfile
+    assert "codebase-memory-cli" not in jenkinsfile
+    assert "jenkins-artifacts" not in jenkinsfile
+    assert "./scripts/ci-release-build.sh" in jenkinsfile
+    ci_workflow = (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert "./scripts/release-check.sh" in ci_workflow
+    assert "./scripts/ci-release-build.sh" in ci_workflow
     local_job = (REPO_ROOT / "scripts" / "jenkins-local-job.xml").read_text(encoding="utf-8")
-    assert "CBM_CLI_JENKINS_JOB" in local_job
-    assert "codebase-memory-cli-release-tooling" in local_job
+    assert "CBM_CLI_JENKINS_JOB" not in local_job
 
 
 def test_local_jenkins_job_is_pinned_to_release_tooling_without_polling() -> None:
@@ -223,6 +222,7 @@ def test_release_workflow_is_tag_only_and_bundle_builder_is_reproducible(tmp_pat
     assert f"agent-workflow-{CURRENT_VERSION}-windows/agent_workflow-{CURRENT_VERSION}-py3-none-any.whl" in names
 
 def test_source_installer_does_not_register_mcp(tmp_path: Path) -> None:
+    assert "declare -A" not in (REPO_ROOT / "scripts" / "install-source.sh").read_text(encoding="utf-8")
     home = tmp_path / "home"
     fake_modules = tmp_path / "fake-modules"
     fake_modules.mkdir()

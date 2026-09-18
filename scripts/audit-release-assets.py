@@ -310,7 +310,7 @@ def _audit_builtin_benchmark_layouts() -> None:
                 fail(f"{path.relative_to(ROOT)}: duplicates identical content already supplied by a shared layer")
 
         try:
-            with tempfile.TemporaryDirectory(prefix=f"aw-benchmark-{suite.name}-") as temp_dir:
+            with tempfile.TemporaryDirectory(prefix=f"aw-benchmark-{suite.name}-", dir=ROOT) as temp_dir:
                 materialized = materialize_builtin_suite(Path(temp_dir) / suite.name, suite.name)
                 validate_spec(materialized / "benchmark-spec.json")
                 validate_executor_config(materialized / "executors" / "synthetic.json")
@@ -342,8 +342,8 @@ def main(argv: list[str] | None = None) -> int:
             continue
         placeholders = PLACEHOLDER_RE.findall(text)
         if placeholders and not (
-            str(rel).startswith("templates/")
-            or str(rel).startswith("src/agent_workflow/assets/")
+            rel.as_posix().startswith("templates/")
+            or rel.as_posix().startswith("src/agent_workflow/assets/")
             or rel == Path("src/agent_workflow/pack.py")
             or rel == Path("scripts/audit-release-assets.py")
             or rel == Path("HANDOFF_SOURCE_MANIFEST.json")
@@ -564,7 +564,7 @@ def main(argv: list[str] | None = None) -> int:
             fail(f"{path.relative_to(ROOT)}: canonical packaged scaffold asset is missing")
 
     # Validate the product behavior rather than byte parity between duplicate trees.
-    with tempfile.TemporaryDirectory(prefix="agent-workflow-scaffold-audit-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="agent-workflow-scaffold-audit-", dir=ROOT) as tmp:
         destination = Path(tmp) / "audit-pack"
         try:
             scaffold_pack(destination, 2, "audit-pack")
