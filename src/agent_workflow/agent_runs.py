@@ -454,7 +454,11 @@ class PreparedAgentRun:
 
     def initial_status(self) -> dict[str, Any]:
         policy = self.worker.executor_policy
-        steering_adapter = policy.steering_adapter if policy else "unsupported"
+        steering_adapter = (
+            "external-host-v1"
+            if self.worker_mode == "external"
+            else policy.steering_adapter if policy else "unsupported"
+        )
         return {
             "schema": "agent-workflow/agent-run-status/v1",
             "agent_run_id": self.agent_run_id,
@@ -1012,11 +1016,16 @@ def _prepare(
     compatibility = prepared_worker.compatibility
     executor_policy = prepared_worker.executor_policy
     environment_allowlist = list(prepared_worker.environment_allowlist)
+    steering_adapter = (
+        "external-host-v1"
+        if worker_mode == "external"
+        else executor_policy.steering_adapter if executor_policy else "unsupported"
+    )
     runtime_policy: dict[str, Any] = {
         "no_go_authorized": executor_plan.no_go_authorized,
         "codex_reasoning_effort": executor_plan.reasoning_effort,
         "steering": {
-            "adapter": (executor_policy.steering_adapter if executor_policy else "unsupported"),
+            "adapter": steering_adapter,
             "deadline_seconds": 300,
             "max_attempts": 1,
         },
@@ -1090,7 +1099,7 @@ def _prepare(
         interactive=interactive,
         detached_interactive=not interactive and executor_interactive,
         command_artifacts=command_artifacts,
-        steering_adapter=(executor_policy.steering_adapter if executor_policy else "unsupported"),
+        steering_adapter=steering_adapter,
     )
 
     git_info = _write_source_baseline(
@@ -1215,9 +1224,7 @@ def _prepare(
             ticket_id=ticket_id,
             native_job=native_job,
             environment_allowlist=environment_allowlist,
-            steering_adapter=(
-                executor_policy.steering_adapter if executor_policy else "unsupported"
-            ),
+            steering_adapter=steering_adapter,
         )
 
     agent_run_contract = _write_agent_run_contract(
@@ -1571,6 +1578,7 @@ PUBLIC_AGENT_RUN_FIELDS = (
     "durable_failure_category",
     "observed_failure_category",
     "completion_validation_status",
+    "steering_adapter",
     "steering_supported",
     "steering_reason",
     "job_id",

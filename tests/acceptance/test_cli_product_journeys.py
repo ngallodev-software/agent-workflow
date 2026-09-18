@@ -182,6 +182,8 @@ def test_external_prepare_is_host_independent_and_process_control_is_unavailable
     )
     assert prepared["status"] == "prepared"
     assert prepared["worker_mode"] == "external"
+    assert prepared["steering_adapter"] == "external-host-v1"
+    assert prepared["steering_supported"] is True
     assert prepared.get("worker_pid") is None
     run = _run_dir(env, "external-run")
     runner_text = (run / "run.sh").read_text(encoding="utf-8")
@@ -190,6 +192,8 @@ def test_external_prepare_is_host_independent_and_process_control_is_unavailable
     contract = json.loads((run / "agent-run-contract.json").read_text(encoding="utf-8"))
     assert contract["worker_plan"]["noninteractive_argv"]
     assert len(contract["worker_plan"]["noninteractive_command_sha256"]) == 64
+    assert contract["runtime_policy"]["steering"]["adapter"] == "external-host-v1"
+    assert "acknowledge a steer message ID" in (run / "launch-prompt.md").read_text()
 
     start = installed_product.run("--json", "agent-run", "start", "external-run", env=env)
     assert start.returncode == 2

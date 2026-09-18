@@ -250,6 +250,15 @@ def _delegation_result(
                 "agent-workflow agent-run start-external "
                 f"{agent_run_id} RUNTIME_TYPE EXTERNAL_WORKER_ID --generation GENERATION"
             ),
+            "pending_delivery_command": (
+                "agent-workflow agent-run pending-external-delivery "
+                f"{agent_run_id} --generation GENERATION"
+            ),
+            "report_delivery_command": (
+                "agent-workflow agent-run report-external-delivery "
+                f"{agent_run_id} MESSAGE_ID --generation GENERATION --attempt ATTEMPT "
+                "--outcome delivered --reason REASON"
+            ),
         }
     return result
 
