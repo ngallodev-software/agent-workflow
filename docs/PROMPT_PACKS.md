@@ -16,9 +16,9 @@ The repository intentionally does **not** keep byte-identical prompt-pack mirror
 
 Prompt packs must describe Agent Runs and workers without assuming an interactive host. A host-specific integration may be documented separately from the pack's durable workflow contract.
 
-## Current format
+## Supported formats
 
-Prompt packs have one workflow format: `agent-workflow/prompt-pack/v1`. The root `pack.yaml` is the only authoritative task/phase manifest and contains the phase graph, task IDs, Agent Run IDs, dependencies, prompt paths, optional backlog ownership, and result-contract references. Phase directories are human-readable material only and do not contain `task-manifest.yaml`.
+Native prompt packs use `agent-workflow/prompt-pack/v1`. Packs generated against the installed shared-contract bundle may use `agent-workflow/prompt-pack/v2`; they must declare matching `bundle_provenance`, and validation fails closed if the installed bundle does not match. The root `pack.yaml` is the only authoritative task/phase manifest and contains the phase graph, task IDs, Agent Run IDs, dependencies, prompt paths, optional backlog ownership, and result-contract references. Phase directories are human-readable material only and do not contain `task-manifest.yaml`.
 
 `MANIFEST.json` is reserved for the deterministic archive-integrity inventory created by `agent-workflow pack archive`; it is not valid in an unpackaged source prompt pack. `MANIFEST.sha256` remains the optional source-pack checksum sidecar.
 
