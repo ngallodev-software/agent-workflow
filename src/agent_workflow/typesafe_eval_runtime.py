@@ -59,7 +59,7 @@ def run_static(cases: Sequence[Mapping[str, Any]], *, feature_id: str, control: 
     result = []
     for case in cases:
         for repetition in range(repetitions):
-            obs = make_observation(feature_id=feature_id, mode="static", identity={"dataset_version": case.get("dataset_version", "unknown"), "repetition": repetition}, source_input=case, projected_input=case, case_id=case.get("case_id"), control=lambda case=case: control(case), candidate=lambda case=case: candidate(case))
+            obs = make_observation(feature_id=feature_id, mode="static", identity={"dataset_version": case.get("dataset_version", "unknown")}, source_input=case, projected_input=case, case_id=case.get("case_id"), control=lambda case=case: control(case), candidate=lambda case=case: candidate(case))
             store.put_observation(obs)
             from .typesafe_eval import OutcomeJoiner
             outcome = OutcomeJoiner().join(obs["observation_id"], "static-oracle", {"oracle": dict(oracle(case))})
