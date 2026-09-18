@@ -8,8 +8,12 @@ Plugins are Python distributions advertising the `agent_workflow.plugins` entry-
 
 ```toml
 [plugins]
-enabled = ["agent-workflow-spec"]
+enabled = ["agent-workflow-typesafe"]
 ```
+
+`agent-workflow-typesafe` is an example external plugin name; it is enabled
+only when that plugin's release artifact is installed in the same Python
+environment as the host. The host does not download plugin source dynamically.
 
 Every configured plugin is required to be installed, uniquely discoverable, and compatible with the current plugin API when a plugin-aware surface is requested. Normal built-in lifecycle commands skip plugin discovery entirely; plugin inventory, doctor/completion, the full maintainer catalog, and unknown top-level commands load the configured registry on demand. A plugin registration failure therefore blocks plugin-aware surfaces without adding import/discovery cost to ordinary Agent Run operations. Use the global recovery option to suppress configured plugins explicitly:
 
@@ -41,6 +45,12 @@ API does not by itself certify the plugin's product or SDK compatibility: the
 plugin owns that matrix, and host qualification records the exact tested
 Agent-Workflow/plugin/SDK pair separately. The host must not infer that
 qualification from the handoff or from API compatibility alone.
+
+For an operator rollback, remove the plugin name from `[plugins].enabled` or
+use the global `--no-plugins` option, install a previously qualified wheel in
+the same environment, and repeat the inventory/doctor checks. Suppression is
+host recovery; it does not mark the plugin compatible or change Agent Run
+authority.
 
 If the candidate is missing, has the wrong digest, is not installed, or fails
 the host API check, do not substitute a source checkout or silently continue
