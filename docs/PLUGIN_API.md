@@ -20,6 +20,35 @@ agent-workflow --no-plugins doctor
 
 `agent-workflow plugins list --json` reports discovered distribution metadata, configured enablement, load state, and suppression state.
 
+## Ingesting an external plugin release
+
+An external plugin is consumed as an immutable installed distribution, not as a
+checkout or a vendored source tree. The host-side input is the plugin release
+artifact (normally a wheel) plus its `plugin-integration-handoff/v1` record.
+Before installation, the host verifies that the record names the supplied
+artifact filename and exact lowercase SHA-256, and records the plugin version
+and target host API version. It then installs that exact artifact into an
+isolated environment containing the target Agent-Workflow product. The
+handoff is an input and compatibility record; it does not grant the plugin
+authority over Agent Runs, policy, evaluation, review, or acceptance.
+
+After installation, add the plugin entry-point name to `[plugins].enabled` and
+use `agent-workflow plugins list --json` (or another plugin-aware surface) to
+verify discovery and loading. The host checks the plugin's declared
+`PluginDescriptor.api_version` against the host's supported plugin API and
+reports the installed distribution and plugin versions. A compatible plugin
+API does not by itself certify the plugin's product or SDK compatibility: the
+plugin owns that matrix, and host qualification records the exact tested
+Agent-Workflow/plugin/SDK pair separately. The host must not infer that
+qualification from the handoff or from API compatibility alone.
+
+If the candidate is missing, has the wrong digest, is not installed, or fails
+the host API check, do not substitute a source checkout or silently continue
+with another version. Disable the entry or use `--no-plugins` for core-only
+recovery, then resolve the release-artifact or compatibility issue before
+claiming qualification. No plugin-specific dependency belongs in
+Agent-Workflow's core dependencies.
+
 ## Public descriptor
 
 An entry point exports either a `PluginDescriptor` or a zero-argument callable returning one. Commands are declared without mutating a core global registry:
