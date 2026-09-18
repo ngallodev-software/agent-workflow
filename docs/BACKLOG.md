@@ -144,6 +144,43 @@ current or authoritative.
 focused tests and this revision; implementation evidence alone is not
 acceptance.
 
+### ORCH-REACT-001 — Watcher-driven deterministic workflow progression
+
+Use the existing `orchestrator watch` process as the long-running driver that
+replays durable child events, reconciles one explicitly bound workflow through
+current workflow/scheduler authority, launches newly eligible work, and records
+bounded durable `attention_required` evidence when no already-authorized
+deterministic continuation exists. Do not add a second daemon or use LLM turns
+as the clock that advances routine orchestration.
+
+The workflow-aware path must bind an orchestrator explicitly to one workflow
+run and canonical snapshot digest; it must not discover workflow authority by
+scanning state directories. Inbox-only orchestrator registries remain valid.
+Replay is at-least-once while workflow effects remain exactly-once through
+authoritative workflow/Agent Run evidence and restart-safe reaction/cursor
+handling.
+
+The existing watcher notification callback remains advisory and may be invoked
+only after durable attention evidence is committed. Callback failure cannot
+roll back or authorize inbox, workflow, scheduler, review, or acceptance state.
+No callback is required for deterministic progression.
+
+**Decision:** [`DEC-009`](DECISIONS/DEC-009-WATCHER-DRIVEN-ORCHESTRATOR-PROGRESSION.md).
+
+**Explicit non-goals:** Codex App Server wake/resume transport, generalized
+host notification transport, a notification plugin framework, and Typesafe AI
+decision augmentation. Those remain deferred until the deterministic
+watcher/reactor path is proven.
+
+**Done when:** a real end-to-end journey starts `orchestrator watch`, then
+durably completes running node A after the watcher is already active, issues no
+manual `react_once`, `workflow resume`, inbox import, status, or equivalent
+tick, and observes dependent node B launch exactly once. Restart/replay must
+not launch B twice. Acceptance also requires invalid completion to remain
+non-progressing, inbox-only watch compatibility, durable attention before
+advisory notification, callback-failure recovery, and preservation of distinct
+completion/evaluation/review/acceptance gates.
+
 ### EXEC-001 — Make completed implementation evidence revision-bound
 
 Status remains open pending independent review and acceptance. Completion
