@@ -9,13 +9,14 @@ acceptance state.
 from __future__ import annotations
 
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Iterator, Mapping
 
 from .agent_run_paths import AgentRunPaths
 from .contracts import read_agent_run_contract, validate_instance
 from .errors import WorkflowError
-from .journal import JournalTransactionResult, read_jsonl, transact_jsonl
+from .journal import JournalTransactionResult, locked_file, read_jsonl, transact_jsonl
 from .run_lifecycle import authoritative_execution_status, transition_execution
 from .state import run_dir, status_path
 from .steering import pending_external_deliveries, record_external_delivery
@@ -32,6 +33,14 @@ _ACTIONS = frozenset({"bound", "observed", "unbound"})
 
 def _journal(settings: Any, agent_run_id: str) -> Path:
     return AgentRunPaths(run_dir(settings, agent_run_id)).root / "external-worker-bindings.jsonl"
+
+
+@contextmanager
+def _binding_gate(settings: Any, agent_run_id: str) -> Iterator[None]:
+    """Serialize rebinding with generation-authorized host delivery."""
+    path = AgentRunPaths(run_dir(settings, agent_run_id)).root / "external-worker-binding.lock"
+    with locked_file(path, exclusive=True, create=True, create_parent=True):
+        yield
 
 
 def _require_external_run(settings: Any, agent_run_id: str) -> None:
@@ -182,13 +191,14 @@ def bind(
         }
         return JournalTransactionResult(value=value, record=record)
 
-    result = transact_jsonl(
-        _journal(settings, agent_run_id),
-        validator=_validate_event,
-        transaction=decide,
-        max_records=MAX_EVENTS,
-        sequence_field="sequence",
-    )
+    with _binding_gate(settings, agent_run_id):
+        result = transact_jsonl(
+            _journal(settings, agent_run_id),
+            validator=_validate_event,
+            transaction=decide,
+            max_records=MAX_EVENTS,
+            sequence_field="sequence",
+        )
     validate_instance(result, SCHEMA, artifact="external Worker binding")
     return result
 
@@ -256,13 +266,14 @@ def unbind(settings: Any, agent_run_id: str) -> dict[str, Any]:
         }
         return JournalTransactionResult(value=value, record=record)
 
-    result = transact_jsonl(
-        _journal(settings, agent_run_id),
-        validator=_validate_event,
-        transaction=decide,
-        max_records=MAX_EVENTS,
-        sequence_field="sequence",
-    )
+    with _binding_gate(settings, agent_run_id):
+        result = transact_jsonl(
+            _journal(settings, agent_run_id),
+            validator=_validate_event,
+            transaction=decide,
+            max_records=MAX_EVENTS,
+            sequence_field="sequence",
+        )
     validate_instance(result, SCHEMA, artifact="external Worker binding")
     return result
 
@@ -395,14 +406,15 @@ def report_delivery(
     reason: str,
 ) -> dict[str, Any]:
     """Record host transport evidence without recording acknowledgement."""
-    projection = _require_generation(settings, agent_run_id, generation)
-    event = record_external_delivery(
-        run_dir(settings, agent_run_id),
-        correlation_id=correlation_id,
-        outcome=outcome,
-        attempt=attempt,
-        reason=reason,
-    )
+    with _binding_gate(settings, agent_run_id):
+        projection = _require_generation(settings, agent_run_id, generation)
+        event = record_external_delivery(
+            run_dir(settings, agent_run_id),
+            correlation_id=correlation_id,
+            outcome=outcome,
+            attempt=attempt,
+            reason=reason,
+        )
     result = {
         "schema": DELIVERY_RESULT_SCHEMA,
         "agent_run_id": agent_run_id,
