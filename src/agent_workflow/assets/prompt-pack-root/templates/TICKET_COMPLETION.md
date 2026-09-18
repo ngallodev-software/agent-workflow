@@ -51,6 +51,11 @@ rejects completed evidence that does not bind to those revisions. Every command
 must use an absolute `cwd`, every criterion result must be `pass`, `fail`, or
 `not_verified`, and `result: completed` requires `unresolved: []`.
 
+`.agent-workflow-handoff/` is runtime-only and worktree-locally Git-excluded.
+Never stage, commit, or force-add a completion sidecar. Write it only after the
+last source commit, otherwise committing the sidecar changes `HEAD` and makes its
+own revision claim invalid.
+
 Reviewers must provide the same schema-valid sidecar evidence for the review
 run, including the exact commands and exit codes they actually ran. Reviewers
 must also set `review_disposition` to `approved`, `changes_requested`, or
