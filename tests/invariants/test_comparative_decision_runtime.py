@@ -1,14 +1,32 @@
 from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
+import sys
 
+from agent_workflow._legacy_typesafe_eval import comparison_report, make_observation, validate_observation
 from agent_workflow.config import defaults
 from agent_workflow.comparative_eval_runtime import EvidenceStore
 from agent_workflow.scheduler import SchedulerService
 
 
-def test_scheduler_persists_precomputed_comparative_routing_without_raw_text(tmp_path: Path) -> None:
+def _shared_library() -> ModuleType:
+    module = ModuleType("agent_workflow_comparative_eval")
+    module.make_observation = lambda **kwargs: make_observation(
+        **{key: value for key, value in kwargs.items() if key not in {"candidate_applied", "authoritative_arm"}}
+    )
+    module.validate_observation = validate_observation
+    module.comparison_report = comparison_report
+    module.make_outcome = lambda observation_id, outcome_kind, outcome: {
+        "observation_id": observation_id,
+        "outcome_kind": outcome_kind,
+        "outcome": dict(outcome),
+    }
+    return module
+
+
+def test_scheduler_persists_precomputed_comparative_routing_without_raw_text(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setitem(sys.modules, "agent_workflow_comparative_eval", _shared_library())
     settings=replace(defaults(tmp_path / "missing.toml"),decision_mode="comparative")
     plugin=SimpleNamespace(descriptor=SimpleNamespace(name="semantic-plugin"))
     mode=SimpleNamespace(name="shadow-mode",provider="semantic",capture_comparison=True)
