@@ -17,11 +17,6 @@ sys.path.insert(0, str(ROOT / "src"))
 from agent_workflow.release_evidence import validate_dependency_lock
 from agent_workflow.manifests import load_pack_manifest, validate_pack
 from agent_workflow.pack import scaffold as scaffold_pack
-from agent_workflow.benchmarking.contracts import (
-    validate_executor_config,
-    validate_spec,
-)
-from agent_workflow.benchmarking.service import materialize_builtin_suite
 from agent_workflow.skill_examples import validate_skill_command_examples
 from agent_workflow.skill_evals import validate_primary_skill_behavior
 
@@ -279,89 +274,6 @@ def _audit_backlog_and_prompt_pack_ownership() -> None:
         unknown = sorted(item for item in ids if item not in backlog)
         if unknown:
             fail(f"{path.relative_to(ROOT)}: unknown backlog IDs {unknown}")
-
-
-def _audit_builtin_benchmark_layouts() -> None:
-    """Validate canonical layered built-ins and reject a duplicate authoring mirror."""
-    duplicate_root = ROOT / "benchmarks" / "specs"
-    if duplicate_root.exists():
-        fail(
-            f"{duplicate_root.relative_to(ROOT)}: duplicate benchmark source mirror must not exist"
-        )
-
-    package_root = ROOT / "src" / "agent_workflow" / "assets" / "benchmarks"
-    if not package_root.is_dir():
-        fail(f"{package_root.relative_to(ROOT)}: built-in benchmark assets are missing")
-        return
-
-    shared_root = package_root / "_shared"
-    if not shared_root.is_dir():
-        fail(f"{shared_root.relative_to(ROOT)}: shared benchmark layers are missing")
-        return
-
-    for suite in sorted(
-        path
-        for path in package_root.iterdir()
-        if path.is_dir() and path.name != "_shared"
-    ):
-        layout_path = suite / "suite-layout.json"
-        try:
-            layout = json.loads(layout_path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-            fail(
-                f"{layout_path.relative_to(ROOT)}: invalid built-in suite layout: {exc}"
-            )
-            continue
-        layers = layout.get("layers") if isinstance(layout, dict) else None
-        if not isinstance(layers, list) or not layers:
-            fail(f"{layout_path.relative_to(ROOT)}: layers must be a non-empty list")
-            continue
-
-        layer_files: dict[Path, Path] = {}
-        for layer in layers:
-            if not isinstance(layer, str) or not layer.startswith("_shared/"):
-                fail(f"{layout_path.relative_to(ROOT)}: invalid shared layer {layer!r}")
-                continue
-            layer_root = package_root / layer
-            if not layer_root.is_dir():
-                fail(f"{layout_path.relative_to(ROOT)}: missing shared layer {layer}")
-                continue
-            for path in layer_root.rglob("*"):
-                if not path.is_file() or path.is_symlink():
-                    continue
-                rel = path.relative_to(layer_root)
-                previous = layer_files.get(rel)
-                if previous is not None:
-                    fail(
-                        f"{layout_path.relative_to(ROOT)}: shared layers overlap at {rel}; "
-                        f"{previous.relative_to(ROOT)} and {path.relative_to(ROOT)}"
-                    )
-                else:
-                    layer_files[rel] = path
-
-        for path in suite.rglob("*"):
-            if not path.is_file() or path.is_symlink() or path == layout_path:
-                continue
-            rel = path.relative_to(suite)
-            shared = layer_files.get(rel)
-            if shared is not None and shared.read_bytes() == path.read_bytes():
-                fail(
-                    f"{path.relative_to(ROOT)}: duplicates identical content already supplied by a shared layer"
-                )
-
-        try:
-            with tempfile.TemporaryDirectory(
-                prefix=f"aw-benchmark-{suite.name}-", dir=ROOT
-            ) as temp_dir:
-                materialized = materialize_builtin_suite(
-                    Path(temp_dir) / suite.name, suite.name
-                )
-                validate_spec(materialized / "benchmark-spec.json")
-                validate_executor_config(materialized / "executors" / "synthetic.json")
-        except Exception as exc:
-            fail(
-                f"{layout_path.relative_to(ROOT)}: built-in suite does not materialize cleanly: {exc}"
-            )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -724,8 +636,7 @@ def main(argv: list[str] | None = None) -> int:
             if not resolved.exists():
                 fail(f"{path.relative_to(ROOT)}: broken local link: {target}")
 
-    # Canonical benchmark package parity and backlog/prompt-pack ownership.
-    _audit_builtin_benchmark_layouts()
+    # Backlog and prompt-pack ownership.
     _audit_backlog_and_prompt_pack_ownership()
 
     if errors:

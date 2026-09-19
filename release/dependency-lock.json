@@ -1,7 +1,7 @@
 {
   "schema": "agent-workflow/dependency-lock/v1",
   "project": "agent-workflow",
-  "version": "0.10.1",
+  "version": "0.10.2",
   "scope": "direct-dependencies",
   "follow_up": "HARD-010",
   "packages": [
@@ -117,13 +117,13 @@
       ]
     },
     {
-      "name": "playwright",
-      "version": "1.57.0",
+      "name": "agent-workflow-comparative-eval",
+      "version": "0.1.0",
       "groups": [
-        "benchmark-visual"
+        "comparative-eval"
       ],
       "source_requirements": [
-        "playwright==1.57.0"
+        "agent-workflow-comparative-eval==0.1.0"
       ]
     }
   ]
