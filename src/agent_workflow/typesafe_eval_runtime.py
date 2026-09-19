@@ -36,7 +36,7 @@ class EvidenceStore:
             self.db.execute("INSERT INTO outcomes VALUES (?, ?, ?)", (record["observation_id"], record["outcome_kind"], payload))
         except sqlite3.IntegrityError:
             old = self.db.execute("SELECT payload FROM outcomes WHERE id=? AND kind=?", (record["observation_id"], record["outcome_kind"])).fetchone()
-            if old is None or old[0] != payload:
+            if old is None or json.loads(old[0]).get("outcome") != dict(record.get("outcome", {})):
                 raise ValueError("outcome key already contains different evidence")
         self.db.commit()
 
@@ -66,6 +66,45 @@ def run_static(cases: Sequence[Mapping[str, Any]], *, feature_id: str, control: 
             store.put_outcome(outcome)
             result.append(obs)
     return result
+
+
+def reports_by_cohort(store: EvidenceStore) -> list[dict[str, Any]]:
+    """Return one report per cohort; never silently pool unlike identities."""
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for observation in store.observations():
+        key = json.dumps((observation["feature_id"], observation["mode"], observation["identity"]), sort_keys=True)
+        groups.setdefault(key, []).append(observation)
+    outcomes = store.outcomes()
+    return [comparison_report(items, [x for x in outcomes if x["observation_id"] in {o["observation_id"] for o in items}]) for items in groups.values()]
+
+
+def join_delayed_outcome(store: EvidenceStore, observation_id: str, outcome_kind: str, outcome: Mapping[str, Any]) -> dict[str, Any]:
+    """Persist a lifecycle outcome separately; retries are idempotent."""
+    existing = next((item for item in store.outcomes() if item["observation_id"] == observation_id and item["outcome_kind"] == outcome_kind), None)
+    if existing is not None:
+        if existing["outcome"] != dict(outcome):
+            raise ValueError("outcome key already contains different evidence")
+        return existing
+    record = OutcomeJoiner().join(observation_id, outcome_kind, outcome)
+    store.put_outcome(record)
+    return record
+
+
+def enforce_non_regression(report: Mapping[str, Any], *, minimum_candidate_rate: float | None = None, maximum_timeout_rate: float | None = None) -> tuple[str, ...]:
+    """Optional versioned gate; absent thresholds remain descriptive."""
+    failures: list[str] = []
+    counts = report.get("counts", {})
+    if minimum_candidate_rate is not None:
+        eligible = int(counts.get("oracle_eligible", 0))
+        candidate = int(report.get("correctness", {}).get("candidate_only", 0)) + int(report.get("correctness", {}).get("both_correct", 0))
+        if not eligible or candidate / eligible < minimum_candidate_rate:
+            failures.append("candidate correctness below threshold")
+    if maximum_timeout_rate is not None:
+        total = int(counts.get("observations", 0))
+        timeouts = int(report.get("reliability", {}).get("candidate_timeouts", 0))
+        if total and timeouts / total > maximum_timeout_rate:
+            failures.append("candidate timeout rate above threshold")
+    return tuple(failures)
 
 
 class ShadowCapture:
