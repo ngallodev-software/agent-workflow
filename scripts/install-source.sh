@@ -179,7 +179,8 @@ safe_link() {
     local current_target
     current_target="$(readlink -f "$destination")"
     if [[ "$current_target" != "$(readlink -f "$source")" \
-      && ( -z "${installed_launcher:-}" || "$current_target" != "$(readlink -f "$installed_launcher")" ) ]]; then
+      && ( -z "${installed_launcher:-}" || "$current_target" != "$(readlink -f "$installed_launcher")" ) \
+      && ! ( "$destination" == "$BIN_DIR/agent-workflow" && "$current_target" == "$(readlink -f "$ROOT/bin/agent-workflow")" ) ]]; then
       echo "refusing to replace unrelated symlink: $destination" >&2
       exit 2
     fi
