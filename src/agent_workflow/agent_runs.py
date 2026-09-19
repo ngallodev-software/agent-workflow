@@ -15,7 +15,12 @@ from typing import Any
 
 from .agent_context import initialize as initialize_agent_context
 from .agent_run_paths import AgentRunPaths
-from .agent_identity import claim_agent_name, release_agent_name, resolve_agent_identity
+from .agent_identity import (
+    AgentNameInUseError,
+    claim_agent_name,
+    release_agent_name,
+    resolve_agent_identity,
+)
 from .assets import asset_path
 from .config import Settings
 from .config import enforce_trust
@@ -31,12 +36,12 @@ from .executors import (
     executor_identity_for_plan,
     prepare_executor,
 )
-from .git import administrative_dir, assert_administrative_dir_writable, snapshot
+from .git import administrative_dirs, assert_administrative_dir_writable, snapshot
 from .health import last_event as last_health_event
 from .health import semantic_progress
 from .native_jobs import ValidatedNativeJob, validate_native_job
 from .preflight import preflight_error, preflight_run_record, resolve_prerequisites
-from .manifests import task_result_contract
+from .manifests import load_pack_manifest, task_result_contract
 from .process import ProcessRequest, redact_argv, require_command, run, secret_values_from_argv, spawn_detached
 from .receipts import completion_template, initial_completion, initial_provenance, update_provenance
 from .agent_run_control import (
@@ -88,25 +93,86 @@ from .path import absolute_path, read_regular_file, require_directory
 
 
 
+def _looks_like_pack_path(value: str) -> bool:
+    candidate = Path(value).expanduser()
+    return (
+        candidate.is_absolute()
+        or candidate.exists()
+        or value.startswith((".", "~"))
+        or "/" in value
+        or "\\" in value
+    )
+
+
+def _resolve_pack_reference(
+    *,
+    pack_reference: str | None,
+    prompt_source: Path,
+    prompt_pack_root_override: Path | None,
+) -> tuple[Path | None, str | None]:
+    """Resolve ``--pack`` as either a stable ID or an explicit pack root path."""
+    prompt_source = absolute_path(prompt_source)
+    discovered_root = (
+        require_directory(absolute_path(prompt_pack_root_override), label="pack root")
+        if prompt_pack_root_override is not None
+        else _discover_prompt_pack_root(prompt_source)
+    )
+    if pack_reference is None:
+        return discovered_root, None
+
+    value = str(pack_reference)
+    if _looks_like_pack_path(value):
+        selected_root = require_directory(
+            absolute_path(Path(value).expanduser()),
+            label="pack root",
+        )
+        if prompt_pack_root_override is not None and selected_root != discovered_root:
+            raise WorkflowError(
+                f"--pack path disagrees with the preserved prompt-pack root: {selected_root}"
+            )
+        try:
+            prompt_source.relative_to(selected_root)
+        except ValueError as exc:
+            raise WorkflowError(
+                f"launch prompt is outside selected --pack root: {prompt_source}"
+            ) from exc
+        selected_id = _pack_id(selected_root)
+        validate_id(selected_id, "pack ID")
+        return selected_root, selected_id
+
+    validate_id(value, "pack ID")
+    if discovered_root is not None:
+        selected_id = _pack_id(discovered_root)
+        if value != selected_id:
+            raise WorkflowError(
+                f"--pack disagrees with prompt pack: {value} != {selected_id}"
+            )
+    return discovered_root, value
+
+
 def _bind_native_job(
     *,
     job_path: Path,
+    pack_root: Path,
     prompt_path: Path,
     workdir: Path,
     ticket_id: str | None,
     pack_id: str | None,
 ) -> ValidatedNativeJob:
-    """Perform all job checks before any runtime state is created."""
-    pack_root = _discover_prompt_pack_root(prompt_path)
-    if pack_root is None:
-        raise WorkflowError("--job requires a prompt under a selected prompt pack")
-    job = validate_native_job(absolute_path(job_path), pack_root=pack_root)
+    """Perform all native-job checks before any runtime state is created."""
+    candidate = job_path
+    if not candidate.is_absolute():
+        pack_candidate = pack_root / candidate
+        candidate = pack_candidate if pack_candidate.exists() else candidate
+    job = validate_native_job(absolute_path(candidate), pack_root=pack_root)
     if job.prompt_path != absolute_path(prompt_path):
         raise WorkflowError(
             "native job prompt_path disagrees with launch prompt: "
             f"{job.prompt_relative_path}"
         )
-    expected_workdir = require_directory(pack_root / job.worktree_target, label="native job worktree target")
+    expected_workdir = require_directory(
+        pack_root / job.worktree_target, label="native job worktree target"
+    )
     if expected_workdir != absolute_path(workdir):
         raise WorkflowError(
             "native job worktree_target disagrees with launch workdir: "
@@ -123,6 +189,90 @@ def _bind_native_job(
         )
     return job
 
+
+def _bind_pack_task(
+    *,
+    task_id: str,
+    pack_root: Path,
+    prompt_path: Path,
+    ticket_id: str | None,
+    pack_id: str | None,
+) -> tuple[str, str]:
+    """Bind a v1/v2 pack task ID to its declared Markdown prompt."""
+    validate_id(task_id, "pack task ID")
+    manifest = load_pack_manifest(pack_root)
+    selected_task: dict[str, Any] | None = None
+    for phase in manifest.get("phases", []):
+        if not isinstance(phase, dict):
+            continue
+        for task in phase.get("tasks", []):
+            if isinstance(task, dict) and str(task.get("id", "")) == task_id:
+                selected_task = task
+                break
+        if selected_task is not None:
+            break
+    if selected_task is None:
+        raise WorkflowError(
+            f"--job {task_id!r} is neither a native JSON job path nor a task ID in pack.yaml"
+        )
+
+    prompt_relative = str(selected_task.get("prompt", ""))
+    task_prompt = absolute_path(pack_root / prompt_relative)
+    try:
+        task_prompt.relative_to(pack_root)
+    except ValueError as exc:
+        raise WorkflowError(
+            f"pack task {task_id!r} prompt escapes pack root: {prompt_relative}"
+        ) from exc
+    read_regular_file(task_prompt)
+    if task_prompt != absolute_path(prompt_path):
+        raise WorkflowError(
+            f"pack task {task_id!r} prompt disagrees with launch prompt: {prompt_relative}"
+        )
+    if ticket_id is not None and ticket_id != task_id:
+        raise WorkflowError(f"--ticket disagrees with pack task: {ticket_id} != {task_id}")
+    selected_pack_id = _pack_id(pack_root)
+    if pack_id is not None and pack_id != selected_pack_id:
+        raise WorkflowError(
+            f"--pack disagrees with selected pack: {pack_id} != {selected_pack_id}"
+        )
+    return task_id, selected_pack_id
+
+
+def _resolve_job_reference(
+    *,
+    job_reference: Path,
+    pack_root: Path | None,
+    prompt_path: Path,
+    workdir: Path,
+    ticket_id: str | None,
+    pack_id: str | None,
+) -> tuple[ValidatedNativeJob | None, str | None, str | None]:
+    if pack_root is None:
+        raise WorkflowError(
+            "--job requires a selected prompt pack; pass --pack /path/to/pack or use a prompt under one"
+        )
+    raw = str(job_reference)
+    candidate = job_reference if job_reference.is_absolute() else pack_root / job_reference
+    if raw.lower().endswith(".json") or candidate.is_file():
+        native = _bind_native_job(
+            job_path=job_reference,
+            pack_root=pack_root,
+            prompt_path=prompt_path,
+            workdir=workdir,
+            ticket_id=ticket_id,
+            pack_id=pack_id,
+        )
+        return native, native.ticket_id, _pack_id(pack_root)
+
+    selected_ticket, selected_pack = _bind_pack_task(
+        task_id=raw,
+        pack_root=pack_root,
+        prompt_path=prompt_path,
+        ticket_id=ticket_id,
+        pack_id=pack_id,
+    )
+    return None, selected_ticket, selected_pack
 
 def _write_job_binding(state_dir: Path, job: ValidatedNativeJob, *, agent_run_id: str, workdir: Path) -> dict[str, Any]:
     """Snapshot the validated source bytes and write the immutable binding receipt."""
@@ -196,6 +346,9 @@ def _write_launch_prompt(
     detached_interactive: bool = False,
     command_artifacts: dict[str, Any],
     steering_adapter: str = "unsupported",
+    dirty_at_launch: bool = False,
+    dirty_authorized: bool = False,
+    retry_context: str | None = None,
 ) -> Path:
     paths = AgentRunPaths(state_dir)
     context = [
@@ -214,6 +367,22 @@ def _write_launch_prompt(
     if result_contract is not None:
         context.append(
             f"- task_result: write atomic `AGENT_WORKFLOW_HANDOFF_DIR/result.json` satisfying `{result_contract['schema']}`."
+        )
+    if dirty_at_launch and dirty_authorized:
+        context.append(
+            "- Operator-approved source drift: this worktree was intentionally dirty at launch via --allow-dirty. "
+            "Treat those pre-existing changes as the recorded baseline, including overlap with assigned files; "
+            "do not mark the task blocked merely because the baseline is dirty. Preserve unrelated drift and report only new ticket-scoped changes."
+        )
+    if retry_context is not None:
+        context.extend(
+            [
+                "",
+                "## Operator retry context",
+                "This immutable context applies to this lineage retry in addition to the original ticket:",
+                retry_context.strip(),
+                "",
+            ]
         )
     if interactive:
         if steering_adapter != "unsupported":
@@ -234,9 +403,13 @@ def _write_launch_prompt(
             f"- handoff: `{handoff_dir}`; template: `{handoff_dir / 'completion-template.json'}` (read-only)",
             "- Copy the template to atomic `completion.json` and satisfy `agent-workflow/completion/v1`. Runtime completion paths outside the handoff directory are collector-owned.",
             "- Only an assigned independent reviewer sets `review_disposition`; implementation workers omit it. Completion is never acceptance.",
+            "- Criterion `result` is an exact enum: use only `pass`, `fail`, or `not_verified` (never `verified`, `passed`, or free-form text).",
             "- `result: completed` normally requires no unresolved items and only final passing verification commands; completed reviews may cite a failed target gate only with `changes_requested`.",
+            "- If a verification command cannot run (for example missing dependencies), record the affected criterion as `not_verified`; do not claim `completed` while also recording that command with a nonzero exit code.",
             "- `.agent-workflow-handoff/` is runtime-only and locally Git-excluded: never stage, commit, or force-add it. Commit source first, then write the sidecar with `head_revision` equal to the current `git rev-parse HEAD`.",
+            "- After writing `completion.json`, run `agent completion-validate` before exiting. Correct any schema, enum, revision, command, or substantive-evidence error first.",
             "- Durable progress/steering uses the scoped `progress`, `steer`, and `ack` commands; acknowledge steering before applying it and never expose secrets.",
+            "- Authenticated external-service credentials are intentionally not inherited into controlled workers. If a ticket needs privileged GitHub or other host-authenticated mutation, leave exact proposed actions/evidence for the host rather than weakening credential isolation.",
             "",
             "---",
             "",
@@ -560,15 +733,23 @@ def _prepare_worker(
         )
     command = list(plan.argv)
     command[0] = require_command(command[0])
+    def add_codex_dir(argv: list[str], directory: Path) -> None:
+        expected = str(directory)
+        for index, value in enumerate(argv):
+            if value == "--add-dir" and index + 1 < len(argv) and argv[index + 1] == expected:
+                return
+            if value == f"--add-dir={expected}":
+                return
+        argv.extend(["--add-dir", expected])
+
     if plan.name == "codex":
-        if "--add-dir" not in command:
-            command.extend(["--add-dir", str(handoff_dir)])
+        add_codex_dir(command, handoff_dir)
         try:
-            git_dir = administrative_dir(workdir)
+            git_dirs = administrative_dirs(workdir)
         except WorkflowError:
-            git_dir = None
-        if git_dir is not None and str(git_dir) not in command:
-            command.extend(["--add-dir", str(git_dir)])
+            git_dirs = ()
+        for git_dir in git_dirs:
+            add_codex_dir(command, git_dir)
     plan = ExecutorPlan(
         plan.name,
         tuple(command),
@@ -591,8 +772,14 @@ def _prepare_worker(
         )
         noninteractive = list(noninteractive_plan.argv)
         noninteractive[0] = require_command(noninteractive[0])
-        if noninteractive_plan.name == "codex" and "--add-dir" not in noninteractive:
-            noninteractive.extend(["--add-dir", str(handoff_dir)])
+        if noninteractive_plan.name == "codex":
+            add_codex_dir(noninteractive, handoff_dir)
+            try:
+                git_dirs = administrative_dirs(workdir)
+            except WorkflowError:
+                git_dirs = ()
+            for git_dir in git_dirs:
+                add_codex_dir(noninteractive, git_dir)
         noninteractive_command = tuple(noninteractive)
     compatibility = probe_executor(
         plan.name,
@@ -866,12 +1053,11 @@ def _prepare(
     allow_active_agent_name: bool = False,
     workflow_context: dict[str, Any] | None = None,
     worker_mode: str = "headless",
+    retry_context: str | None = None,
 ) -> dict[str, Any]:
     validate_id(agent_run_id, "agent run ID")
     if ticket_id:
         validate_id(ticket_id, "ticket ID")
-    if pack_id:
-        validate_id(pack_id, "pack ID")
     workdir = require_directory(absolute_path(workdir), label="workdir")
     enforce_trust(settings, workdir=workdir)
     prompt_path = absolute_path(prompt_path)
@@ -880,7 +1066,37 @@ def _prepare(
         prompt_read = read_regular_file(prompt_source)
     except WorkflowError as exc:
         raise WorkflowError(f"prompt is not a regular file: {prompt_source.name}") from exc
-    preflight = resolve_prerequisites(settings, prerequisite_ids or [])
+    prompt_pack_root, pack_id = _resolve_pack_reference(
+        pack_reference=pack_id,
+        prompt_source=prompt_source,
+        prompt_pack_root_override=prompt_pack_root_override,
+    )
+    profile = settings.agent_profiles.get(agent_name) if agent_name is not None else None
+    review_prerequisite = (
+        role == "review"
+        or agent_class == "review"
+        or (profile is not None and profile.agent_class == "review")
+        or (
+            role is None
+            and agent_class is None
+            and executor is None
+            and model is None
+            and explicit_command is None
+            and not allow_no_go_model
+            and reasoning_effort is None
+            and settings.default_agent_role == "review"
+        )
+    )
+    prerequisite_requirement = (
+        "sealed_completed"
+        if review_prerequisite
+        else "accepted"
+    )
+    preflight = resolve_prerequisites(
+        settings,
+        prerequisite_ids or [],
+        requirement=prerequisite_requirement,
+    )
     if preflight["status"] != "accepted":
         state_dir = run_dir(settings, agent_run_id)
         if state_dir.exists() and any(state_dir.iterdir()):
@@ -907,13 +1123,14 @@ def _prepare(
         raise preflight_error(preflight)
     native_job: ValidatedNativeJob | None = None
     if job_path is not None:
-        native_job = _bind_native_job(
-            job_path=job_path, prompt_path=prompt_source,
-            workdir=workdir, ticket_id=ticket_id, pack_id=pack_id,
+        native_job, ticket_id, pack_id = _resolve_job_reference(
+            job_reference=job_path,
+            pack_root=prompt_pack_root,
+            prompt_path=prompt_source,
+            workdir=workdir,
+            ticket_id=ticket_id,
+            pack_id=pack_id,
         )
-    if native_job is not None:
-        ticket_id = native_job.ticket_id
-        pack_id = _pack_id(native_job.pack_root)
     if worker_mode not in {"headless", "external"}:
         raise WorkflowError("worker_mode must be 'headless' or 'external'")
     # Headless execution is the core default. External workers may request an
@@ -923,42 +1140,6 @@ def _prepare(
         interactive = False
     elif interactive is None:
         interactive = True
-    identity = resolve_agent_identity(
-        settings,
-        requested_name=agent_name,
-        requested_role=role,
-        requested_class=agent_class,
-        executor=executor,
-        model=model,
-        allow_no_go_model=allow_no_go_model,
-        explicit_command=explicit_command,
-        interactive=interactive,
-        reasoning_effort=reasoning_effort,
-        allow_active_name=allow_active_agent_name,
-    )
-    agent_name = identity.agent_name
-    agent_class = identity.agent_class
-    role_id = identity.role_id
-    role_digest = identity.role_digest
-    role_instructions = identity.role_instructions
-    command_profile = identity.command_profile
-    runtime_alias = identity.runtime_alias
-    executor = identity.executor
-    model = identity.model
-    reasoning_effort = identity.reasoning_effort
-    allow_no_go_model = identity.allow_no_go_model
-    interactive = identity.interactive
-    # Review runs may be sent through the host acceptance gate.  Bind their
-    # risk tier before any mutable child-controlled state exists; accepting a
-    # review with a missing tier would otherwise fail only after inspection.
-    if agent_class == "review" and tier is None:
-        raise WorkflowError(
-            "acceptance-capable review requires a recorded launch tier; use --tier"
-        )
-    if tier is not None and tier not in {"low", "medium", "high", "critical"}:
-        raise WorkflowError(f"unsupported launch tier: {tier!r}")
-    executor_interactive = worker_mode == "external" and bool(interactive) and not structured
-
     preflight_snapshot = None
     try:
         preflight_snapshot = snapshot(workdir)
@@ -974,8 +1155,9 @@ def _prepare(
         and not allow_dirty
     ):
         raise WorkflowError(
-            f"worktree is dirty: {preflight_snapshot.root}; "
-            "commit/stash changes or pass --allow-dirty"
+            f"worktree is dirty: {preflight_snapshot.root}; source cleanliness is enforced "
+            "even for pre-existing changes; commit/stash them or pass --allow-dirty to "
+            "preserve and baseline the existing drift"
         )
 
     state_dir = run_dir(settings, agent_run_id)
@@ -986,6 +1168,61 @@ def _prepare(
             )
     else:
         state_dir.mkdir(parents=True)
+
+    requested_agent_name = agent_name
+    unavailable_names: set[str] = set()
+    while True:
+        identity = resolve_agent_identity(
+            settings,
+            requested_name=requested_agent_name,
+            requested_role=role,
+            requested_class=agent_class,
+            executor=executor,
+            model=model,
+            allow_no_go_model=allow_no_go_model,
+            explicit_command=explicit_command,
+            interactive=interactive,
+            reasoning_effort=reasoning_effort,
+            allow_active_name=allow_active_agent_name,
+            unavailable_names=unavailable_names,
+        )
+        try:
+            claim_agent_name(
+                settings,
+                agent_name=identity.agent_name,
+                agent_run_id=agent_run_id,
+                interactive=(worker_mode == "external"),
+            )
+        except AgentNameInUseError:
+            if requested_agent_name is not None:
+                raise
+            unavailable_names.add(identity.agent_name)
+            continue
+        break
+
+    agent_name = identity.agent_name
+    agent_class = identity.agent_class
+    role_id = identity.role_id
+    role_digest = identity.role_digest
+    role_instructions = identity.role_instructions
+    command_profile = identity.command_profile
+    runtime_alias = identity.runtime_alias
+    executor = identity.executor
+    model = identity.model
+    reasoning_effort = identity.reasoning_effort
+    allow_no_go_model = identity.allow_no_go_model
+    interactive = identity.interactive
+    # Review runs may be sent through the host acceptance gate. Bind their
+    # risk tier before child-controlled runtime state is created.
+    if agent_class == "review" and tier is None:
+        raise WorkflowError(
+            "acceptance-capable review requires a recorded launch tier; use --tier"
+        )
+    if tier is not None and tier not in {"low", "medium", "high", "critical"}:
+        raise WorkflowError(f"unsupported launch tier: {tier!r}")
+    executor_interactive = (
+        worker_mode == "external" and bool(interactive) and not structured
+    )
 
     paths = AgentRunPaths(state_dir)
 
@@ -1038,11 +1275,6 @@ def _prepare(
         prompt_copy,
         native_job.prompt_bytes if native_job is not None else prompt_read.data,
         mode=0o444,
-    )
-    prompt_pack_root = (
-        prompt_pack_root_override
-        if prompt_pack_root_override is not None
-        else _discover_prompt_pack_root(prompt_source)
     )
     (paths.output_log).touch()
     atomic_write_json(
@@ -1101,6 +1333,9 @@ def _prepare(
         detached_interactive=not interactive and executor_interactive,
         command_artifacts=command_artifacts,
         steering_adapter=steering_adapter,
+        dirty_at_launch=bool(preflight_snapshot and preflight_snapshot.dirty),
+        dirty_authorized=bool(allow_dirty),
+        retry_context=retry_context,
     )
 
     git_info = _write_source_baseline(
@@ -1303,12 +1538,6 @@ def _prepare(
         git_info=git_info,
     )
     status = prepared.initial_status()
-    claim_agent_name(
-        settings,
-        agent_name=agent_name,
-        agent_run_id=agent_run_id,
-        interactive=(worker_mode == "external"),
-    )
     initialize_execution(settings, agent_run_id, status)
     initialize_agent_context(
         state_dir,
@@ -1626,8 +1855,18 @@ def restart(
     settings: Settings,
     agent_run_id: str,
     new_agent_run_id: str | None = None,
+    *,
+    start_immediately: bool = False,
+    retry_context_path: Path | None = None,
 ) -> dict[str, Any]:
-    """Create a new Agent Run from the immutable contract of a prior run."""
+    """Prepare a lineage-preserving retry from a prior immutable contract.
+
+    Headless retries are intentionally left prepared by default so an operator
+    can inspect the reconstructed launch contract before execution.  Optional
+    corrective context is copied into the immutable launch prompt and is
+    therefore sealed with the retry's evidence without mutating the original
+    ticket prompt.
+    """
     child_control = _child_lifecycle_control(agent_run_id)
     if child_control is not None:
         return child_control
@@ -1659,6 +1898,16 @@ def restart(
     if prompt_read.sha256 != prompt["sha256"]:
         raise WorkflowError("cannot restart: prompt source changed")
     no_go_authorized = bool(contract["runtime_policy"].get("no_go_authorized", False))
+
+    retry_context = None
+    if retry_context_path is not None:
+        retry_context_read = read_regular_file(absolute_path(retry_context_path))
+        try:
+            retry_context = retry_context_read.data.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise WorkflowError("retry context must be UTF-8 text") from exc
+        if not retry_context.strip():
+            raise WorkflowError("retry context must not be empty")
 
     job_path = None
     binding_path = paths.job_binding
@@ -1699,7 +1948,8 @@ def restart(
         job_path=job_path,
         allow_active_agent_name=True,
         worker_mode=str(worker_plan.get("mode", "headless")),
+        retry_context=retry_context,
     )
-    if prepared.get("worker_mode") == "headless":
+    if prepared.get("worker_mode") == "headless" and start_immediately:
         return start(settings, new_id)
     return prepared

@@ -10,6 +10,7 @@ from __future__ import annotations
 import fcntl
 import json
 import os
+import time
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -36,6 +37,8 @@ from .util import atomic_write_json, sha256_file, utc_now
 from .contracts import read_contract
 
 RECOVERY_FINALIZATION_SCHEMA = "agent-workflow/recovery-finalization/v1"
+RUNNER_CONVERGENCE_SECONDS = 2.0
+RUNNER_CONVERGENCE_POLL_SECONDS = 0.05
 
 
 @contextmanager
@@ -160,9 +163,41 @@ def finalize_run(
         worker_alive = observed.get("worker_alive")
         observed_state = observed.get("observed_state")
 
-        if runner_sample.get("alive") is True:
+        if runner_sample.get("alive") is True and process_result:
+            # ``process-result.json`` is written only after the executor has
+            # exited and stream collection has completed.  At that point the
+            # still-live runner normally owns a short final collection/seal
+            # window.  Give it bounded time to converge instead of turning a
+            # normal monitor race into an operator-visible failure.
+            deadline = time.monotonic() + RUNNER_CONVERGENCE_SECONDS
+            while time.monotonic() < deadline:
+                existing = _already_finalized(
+                    run,
+                    synchronize_projection(
+                        run / "status.json", source="recovery-finalization-convergence"
+                    ),
+                )
+                if existing is not None:
+                    return existing
+                runner_sample = process_sample(runner_pid)
+                if runner_sample.get("alive") is not True:
+                    break
+                time.sleep(RUNNER_CONVERGENCE_POLL_SECONDS)
+            if runner_sample.get("alive") is True:
+                return {
+                    "schema": RECOVERY_FINALIZATION_SCHEMA,
+                    "agent_run_id": agent_run_id,
+                    "outcome": "runner_converging",
+                    "status": authoritative_execution_status(run),
+                    "process_result_present": True,
+                    "runner": runner_sample,
+                    "next_action": f"agent-workflow agent-run finalize {agent_run_id}",
+                }
+        elif runner_sample.get("alive") is True:
             raise WorkflowError("cannot recovery-finalize while the runner process is alive")
-        if executor_sample.get("alive") is True:
+        # A durable process result is stronger evidence of executor exit than a
+        # later PID liveness sample, which can race PID reuse.
+        if executor_sample.get("alive") is True and not process_result:
             raise WorkflowError("cannot recovery-finalize while the executor process is alive")
         if not process_result and external_exit is None and not (
             observed_state == "orphaned" and worker_alive is False

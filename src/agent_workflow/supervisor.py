@@ -299,7 +299,10 @@ def _apply_remediation(
         rule = "OPT-IN-RESTART-ORPHAN-v1"
         if remediation_count(run, rule) < options.max_remediation_attempts:
             try:
-                result = restart(settings, agent_run_id)
+                # This remediation path is already an explicit operator opt-in
+                # to restart orphaned headless work. Preserve that automation
+                # even though the public CLI restart is prepare-first.
+                result = restart(settings, agent_run_id, start_immediately=True)
             except WorkflowError as exc:
                 outcome = record_remediation(
                     run,

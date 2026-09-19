@@ -77,6 +77,29 @@ def administrative_dir(path: Path) -> Path:
     return Path(result.stdout.strip()).resolve()
 
 
+def common_administrative_dir(path: Path) -> Path:
+    """Return the shared Git administrative directory for ``path``.
+
+    A linked worktree has a per-worktree administrative directory under
+    ``.git/worktrees/`` but stores objects and refs in the repository's common
+    ``.git`` directory. Sandboxed workers that are allowed to commit therefore
+    need both directories, not only ``--absolute-git-dir``.
+    """
+    path = expand_path(path)
+    result = run(["git", "-C", str(path), "rev-parse", "--git-common-dir"])
+    common = Path(result.stdout.strip())
+    if not common.is_absolute():
+        common = path / common
+    return common.resolve()
+
+
+def administrative_dirs(path: Path) -> tuple[Path, ...]:
+    """Return every Git administrative directory required for normal writes."""
+    primary = administrative_dir(path)
+    common = common_administrative_dir(path)
+    return (primary,) if primary == common else (primary, common)
+
+
 def assert_administrative_dir_writable(path: Path) -> Path:
     """Prove Git administrative storage is writable before launching a worker."""
     git_dir = administrative_dir(path)

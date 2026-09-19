@@ -8,17 +8,31 @@ from typing import Any, Literal
 from .config import Settings
 from .errors import WorkflowError
 from .lifecycle import lifecycle_receipts
-from .receipts import verify_seal_details
+from .receipts import read_sealed_contract, verify_seal_details
 from .state import run_dir
 
 PreflightStatus = Literal["accepted", "rejected", "missing", "stale"]
 
 
-def resolve_prerequisites(settings: Settings, prerequisite_ids: list[str]) -> dict[str, Any]:
+def resolve_prerequisites(
+    settings: Settings,
+    prerequisite_ids: list[str],
+    *,
+    requirement: Literal["accepted", "sealed_completed"] = "accepted",
+) -> dict[str, Any]:
     """Resolve prerequisites without consulting mutable status projections."""
     if not prerequisite_ids:
-        return {"schema": "agent-workflow/preflight/v1", "status": "accepted", "reason": "no prerequisites required", "prerequisites": []}
-    results = [_resolve_single(settings, agent_run_id) for agent_run_id in prerequisite_ids]
+        return {
+            "schema": "agent-workflow/preflight/v1",
+            "status": "accepted",
+            "reason": "no prerequisites required",
+            "requirement": requirement,
+            "prerequisites": [],
+        }
+    results = [
+        _resolve_single(settings, agent_run_id, requirement=requirement)
+        for agent_run_id in prerequisite_ids
+    ]
     statuses = {item["status"] for item in results}
     if statuses == {"accepted"}:
         status: PreflightStatus = "accepted"
@@ -32,10 +46,21 @@ def resolve_prerequisites(settings: Settings, prerequisite_ids: list[str]) -> di
     else:
         status = "rejected"
         reason = "; ".join(item["reason"] for item in results if item["status"] != "accepted")
-    return {"schema": "agent-workflow/preflight/v1", "status": status, "reason": reason, "prerequisites": results}
+    return {
+        "schema": "agent-workflow/preflight/v1",
+        "status": status,
+        "reason": reason,
+        "requirement": requirement,
+        "prerequisites": results,
+    }
 
 
-def _resolve_single(settings: Settings, agent_run_id: str) -> dict[str, Any]:
+def _resolve_single(
+    settings: Settings,
+    agent_run_id: str,
+    *,
+    requirement: Literal["accepted", "sealed_completed"],
+) -> dict[str, Any]:
     run = run_dir(settings, agent_run_id)
     base = {"agent_run_id": agent_run_id}
     if not run.exists():
@@ -43,10 +68,72 @@ def _resolve_single(settings: Settings, agent_run_id: str) -> dict[str, Any]:
     if not (run / "final-receipt.json").exists():
         return {**base, "status": "missing", "reason": f"prerequisite has no sealed final receipt: {agent_run_id}"}
     try:
-        _final_receipt, final_digest = verify_seal_details(run)
+        final_receipt, final_digest = verify_seal_details(run)
         receipts = lifecycle_receipts(run, expected_final_receipt_sha256=final_digest)
     except WorkflowError as exc:
         return {**base, "status": "stale", "reason": f"prerequisite immutable evidence is stale: {exc}"}
+
+    if requirement == "sealed_completed":
+        try:
+            final_status, _ = read_sealed_contract(
+                run,
+                final_receipt,
+                "final-status.json",
+                "agent-workflow/agent-run-status/v1",
+            )
+            completion, _ = read_sealed_contract(
+                run,
+                final_receipt,
+                "completion.json",
+                "agent-workflow/completion/v1",
+            )
+            collection, _ = read_sealed_contract(
+                run,
+                final_receipt,
+                "collections/completion.json",
+                "agent-workflow/completion-collection/v1",
+            )
+        except WorkflowError as exc:
+            return {
+                **base,
+                "status": "stale",
+                "reason": f"prerequisite sealed completion evidence is stale: {exc}",
+            }
+        if not (
+            final_status.get("status") == "completed"
+            and completion.get("result") == "completed"
+            and collection.get("validation_status") == "valid"
+        ):
+            return {
+                **base,
+                "status": "rejected",
+                "reason": "prerequisite is sealed but not successfully completed",
+                "final_receipt_sha256": final_digest,
+            }
+        if receipts and receipts[-1]["receipt"].get("action") == "rejected":
+            latest = receipts[-1]
+            return {
+                **base,
+                "status": "rejected",
+                "reason": f"prerequisite rejected: {latest['receipt'].get('reason', 'no reason provided')}",
+                "receipt_sequence": latest["sequence"],
+                "receipt_sha256": latest["sha256"],
+                "final_receipt_sha256": final_digest,
+            }
+        evidence: dict[str, Any] = {"final_receipt_sha256": final_digest}
+        if receipts:
+            latest = receipts[-1]
+            evidence.update(
+                receipt_sequence=latest["sequence"],
+                receipt_sha256=latest["sha256"],
+            )
+        return {
+            **base,
+            "status": "accepted",
+            "reason": "prerequisite has verified sealed-completed evidence and is reviewable",
+            **evidence,
+        }
+
     if not receipts:
         return {**base, "status": "missing", "reason": f"prerequisite has no lifecycle receipts: {agent_run_id}"}
     latest = receipts[-1]

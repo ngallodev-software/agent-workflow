@@ -37,6 +37,51 @@ class ResolvedAgentIdentity:
     interactive: bool
 
 
+class AgentNameInUseError(WorkflowError):
+    """Raised when an Agent Run cannot reserve a logical worker name."""
+
+    def __init__(self, agent_name: str, owner_run_id: str | None = None):
+        detail = f"agent name is already active: {agent_name}"
+        if owner_run_id:
+            detail += f" (owned by agent run {owner_run_id})"
+        detail += "; inspect the owning run or omit --agent-name to allocate a free name"
+        super().__init__(detail)
+        self.agent_name = agent_name
+        self.owner_run_id = owner_run_id
+
+
+def _active_name_owners(settings: Settings, *, exclude_run_id: str | None = None) -> dict[str, str | None]:
+    owners: dict[str, str | None] = {}
+    for item in list_statuses(settings):
+        name = item.get("agent_name")
+        run_id = item.get("agent_run_id")
+        if not isinstance(name, str) or not name:
+            continue
+        if exclude_run_id is not None and run_id == exclude_run_id:
+            continue
+        if status_agent_active(settings, item):
+            owners[name] = str(run_id) if isinstance(run_id, str) and run_id else None
+    return owners
+
+
+def _pid_is_alive(value: Any) -> bool:
+    try:
+        pid = int(value)
+    except (TypeError, ValueError):
+        return False
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
 def status_agent_active(settings: Settings, item: dict[str, Any]) -> bool:
     """Return whether an Agent Run still owns or awaits a worker."""
     agent_run_id = item.get("agent_run_id")
@@ -211,6 +256,7 @@ def resolve_agent_identity(
     interactive: bool | None,
     reasoning_effort: str | None = None,
     allow_active_name: bool = False,
+    unavailable_names: set[str] | None = None,
 ) -> ResolvedAgentIdentity:
     """Resolve logical identity first, then private runtime selection.
 
@@ -220,11 +266,9 @@ def resolve_agent_identity(
     compatibility without becoming normal orchestration vocabulary.
     """
     interactive_explicit = interactive is not None
-    active_names = {
-        str(item["agent_name"])
-        for item in list_statuses(settings)
-        if item.get("agent_name") and status_agent_active(settings, item)
-    }
+    active_owners = _active_name_owners(settings)
+    active_names = set(active_owners)
+    active_names.update(unavailable_names or ())
     if requested_name is not None:
         validate_id(requested_name, "agent name")
         generated_name = requested_name.startswith(f"{settings.generated_agent_prefix}-")
@@ -233,7 +277,7 @@ def resolve_agent_identity(
                 f"agent name {requested_name!r} is not listed in [agents].preferred_names"
             )
         if requested_name in active_names and not allow_active_name:
-            raise WorkflowError(f"agent name is already active: {requested_name}")
+            raise AgentNameInUseError(requested_name, active_owners.get(requested_name))
         agent_name = requested_name
     else:
         agent_name = next(
@@ -368,13 +412,7 @@ def claim_agent_name(
     lock_path = lease_root / ".lock"
     with lock_path.open("a+b") as lock:
         fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
-        active_names = {
-            str(item["agent_name"])
-            for item in list_statuses(settings)
-            if item.get("agent_name")
-            and item.get("agent_run_id") != agent_run_id
-            and status_agent_active(settings, item)
-        }
+        active_owners = _active_name_owners(settings, exclude_run_id=agent_run_id)
         lease_path = lease_root / f"{agent_name}.json"
         if lease_path.is_file():
             try:
@@ -389,11 +427,14 @@ def claim_agent_name(
                     leased_status = None
                 if leased_status is not None:
                     if status_agent_active(settings, leased_status):
-                        active_names.add(agent_name)
-                elif lease.get("pid") == os.getpid():
-                    active_names.add(agent_name)
-        if agent_name in active_names:
-            raise WorkflowError(f"agent name is already active: {agent_name}")
+                        active_owners[agent_name] = str(leased_agent_run_id)
+                elif _pid_is_alive(lease.get("pid")):
+                    # A concurrently preparing process may have claimed the lease
+                    # before it has durable status. Treat the live lease as active
+                    # so two prepares cannot publish the same logical worker name.
+                    active_owners[agent_name] = str(leased_agent_run_id)
+        if agent_name in active_owners:
+            raise AgentNameInUseError(agent_name, active_owners.get(agent_name))
         atomic_write_json(
             lease_path,
             {

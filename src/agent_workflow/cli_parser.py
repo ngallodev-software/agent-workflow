@@ -202,9 +202,22 @@ def build_parser(
     delegate.add_argument("--base-ref", default="HEAD")
     delegate.add_argument("--dest", type=Path, help="destination for a newly created worktree")
     delegate.add_argument("--branch", help="branch for a newly created worktree")
-    delegate.add_argument("--role", default="implementation", help="logical role; defaults to implementation")
-    delegate.add_argument("--pack")
-    delegate.add_argument("--job", type=Path)
+    delegate.add_argument(
+        "--role",
+        help=(
+            "logical role; defaults to the configured role unless a low-level "
+            "executor/model override is supplied"
+        ),
+    )
+    delegate.add_argument(
+        "--pack",
+        help="prompt-pack ID or path to a prompt-pack root containing pack.yaml",
+    )
+    delegate.add_argument(
+        "--job",
+        type=Path,
+        help="native JSON job path or task ID from the selected prompt pack",
+    )
     delegate.add_argument("--prerequisite", action="append", dest="prerequisites")
     delegate.add_argument("--evaluation", type=Path)
     delegate.add_argument("--tier", choices=("low", "medium", "high", "critical"))
@@ -213,7 +226,11 @@ def build_parser(
         "--interactive", action=argparse.BooleanOptionalAction, default=None,
         help="prepare an interactive provider command for an external worker",
     )
-    delegate.add_argument("--allow-dirty", action="store_true")
+    delegate.add_argument(
+        "--allow-dirty",
+        action="store_true",
+        help="explicitly preserve and baseline pre-existing uncommitted worktree changes",
+    )
     delegate.add_argument(
         "--worker-mode", choices=("headless", "external"), default="headless",
         help="headless starts immediately; external prepares only",
@@ -278,8 +295,15 @@ def build_parser(
     launch.add_argument("prompt", type=Path)
     launch.add_argument("--ticket")
     launch.add_argument("--tier", choices=("low", "medium", "high", "critical"))
-    launch.add_argument("--pack")
-    launch.add_argument("--job", type=Path, help="validated native JSON job in the prompt pack")
+    launch.add_argument(
+        "--pack",
+        help="prompt-pack ID or path to a prompt-pack root containing pack.yaml",
+    )
+    launch.add_argument(
+        "--job",
+        type=Path,
+        help="native JSON job path or task ID from the selected prompt pack",
+    )
     launch.add_argument("--prerequisite", action="append", dest="prerequisites", help="required prerequisite agent run ID; repeatable")
     launch.add_argument("--role", help="logical agent role; runtime/provider resolution remains private")
     launch.add_argument("--executor", help="operator compatibility override; prefer --role")
@@ -359,6 +383,14 @@ def build_parser(
 
     status = agent_run_commands.add_parser("status", help="inspect a delegation")
     status.add_argument("agent_run_id")
+    status.add_argument(
+        "--json",
+        "--structured",
+        dest="json",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="machine-readable JSON status output; --structured is a compatibility alias",
+    )
 
     public_messages = agent_run_commands.add_parser(
         "message-state", help="show bounded durable message and acknowledgement state"
@@ -596,10 +628,20 @@ def build_parser(
     retire.add_argument("--reason", required=True)
 
     restart = agent_run_commands.add_parser(
-        "restart", help="create a new Agent Run from a completed prior run"
+        "restart", help="prepare a lineage-preserving retry from a terminal prior run"
     )
     restart.add_argument("agent_run_id")
     restart.add_argument("--new-agent-run-id")
+    restart.add_argument(
+        "--context-file",
+        type=Path,
+        help="UTF-8 corrective context appended immutably to the retry launch prompt",
+    )
+    restart.add_argument(
+        "--start",
+        action="store_true",
+        help="start a prepared headless retry immediately; default is prepare-only",
+    )
 
     agent = commands.add_parser("agent", help="Agent Run worker context and completion")
     agent_commands = agent.add_subparsers(dest="agent_command", required=True)

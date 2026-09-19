@@ -166,6 +166,20 @@ def complete_task(
     if execution_status not in {"running", "interruption_requested"}:
         raise WorkflowError("task completion requires a running Agent Run")
     if context.get("worker_mode") != "external" or not context.get("interactive"):
+        # Headless workers complete by writing the handoff and exiting; the
+        # runner owns collection and lifecycle transition.  A host-side
+        # task-complete attempt should therefore be a read-only validation
+        # convenience rather than an authority error.
+        if context.get("worker_mode") == "headless":
+            from .completion import validate_completion_handoff
+
+            receipt = validate_completion_handoff(run_dir(settings, agent_run_id))
+            return {
+                "agent_run_id": agent_run_id,
+                "outcome": "not_required",
+                "reason": "headless workers complete by validated handoff plus process exit",
+                "completion_validation_status": receipt["validation_status"],
+            }
         raise WorkflowError("task-complete is only available to an interactive external worker")
     if context.get("state") != "busy":
         raise WorkflowError(f"agent is not busy: {context.get('state')}")
@@ -261,7 +275,9 @@ def apply_bridged_completion(
         ):
             raise WorkflowError("closed assignment evidence does not match task completion")
         return context
-    if context.get("worker_mode") != "external" or not context.get("interactive"):
+    if context.get("worker_mode") not in {"external", "headless"}:
+        raise WorkflowError("unsupported worker mode for bridged task completion")
+    if context.get("worker_mode") == "external" and not context.get("interactive"):
         raise WorkflowError("task-complete is only available to an interactive external worker")
     if context.get("state") != "busy" or not isinstance(context.get("current_assignment"), dict):
         raise WorkflowError("agent is not busy")

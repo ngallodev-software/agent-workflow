@@ -41,12 +41,38 @@ agent-workflow delegate RUN-001 prompt.md --repo /path/to/repo \
   --ticket TICKET-001 --base-ref HEAD --role implementation --tier medium
 ```
 
+`--pack` accepts either the stable `pack_id` or the path to the pack root containing `pack.yaml`. `--job` accepts either a native JSON job path or a task ID declared in `pack.yaml` (for example `P0-00` in a v1 Markdown prompt pack). When `--job` supplies the ticket identity, `delegate` does not invent a conflicting ticket ID from the Agent Run ID.
+
+Dirty worktrees remain fail-closed by default. If pre-existing changes are intentionally part of reconciliation work, pass `--allow-dirty`; Agent-Workflow records that dirty launch baseline rather than silently discarding or normalizing it.
+
+When `--allow-dirty` is used, that approval is also injected into the immutable worker launch context: pre-existing overlapping changes are treated as baseline drift rather than an automatic blocker. Workers must still preserve unrelated drift and stay within the assigned scope.
+
+Lineage retries are prepare-first:
+
+```bash
+agent-workflow agent-run restart RUN-001 --context-file corrective.md
+agent-workflow agent-run start RUN-001-retry1
+```
+
+`--context-file` is bound into the retry launch prompt without changing the original ticket prompt. Add `--start` only when immediate execution is explicitly desired.
+
+Independent review prerequisites use sealed completion evidence rather than
+requiring acceptance first: a verified, sealed, successfully completed run can
+be reviewed before host acceptance, while implementation-to-implementation
+dependencies still require acceptance. Explicitly rejected prerequisites remain
+blocked.
+
+For Codex linked worktrees, Agent-Workflow grants the worker both the linked
+worktree Git administrative directory and the repository's shared Git common
+directory so normal commits can write the shared object database and refs.
+
 The lower-level `worktree create`, `agent-run prepare`, and `agent-run start` commands remain available for recovery, diagnostics, and explicit operator control. `delegate` uses those same authorities and produces the same durable Agent Run evidence; it does not introduce a parallel lifecycle.
 
 Observe and communicate durably:
 
 ```bash
 agent-workflow agent-run status RUN-001
+agent-workflow agent-run status RUN-001 --json
 agent-workflow agent-run progress RUN-001 "implemented parser changes" --actor worker
 agent-workflow agent-run steer RUN-001 "also run the integration tests" --actor parent
 agent-workflow agent-run ack RUN-001 MESSAGE_ID "applied" --actor worker

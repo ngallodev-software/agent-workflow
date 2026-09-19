@@ -18,6 +18,22 @@ Apply `docs/references/WORKTREE_PREFLIGHT.md` to the exact worktree. Optional di
 
 Tasks with no dependency edge may run concurrently in separate worktrees. Never place two workers in the same writable worktree.
 
+Review dependencies are deliberately different from implementation dependencies. A normal implementation prerequisite must be host-accepted. An independent `review` run may start from a cryptographically verified, sealed, successfully completed prerequisite before host acceptance; otherwise review-before-acceptance would be circular. A prior explicit rejection still blocks that prerequisite.
+
+`agent-run restart` is prepare-first. Use `--context-file corrective.md` to add immutable operator correction/context to the lineage retry and inspect the prepared run before `agent-run start RETRY`. Use `--start` only when no pre-start intervention is needed.
+
+For Codex in a linked worktree, Agent-Workflow grants the sandbox both the per-worktree Git administrative directory and the repository common Git directory. This is required for commits because linked worktrees share objects and refs with the main repository; it does not grant unrelated repository paths.
+
+Completion criterion results are exact schema enums: `pass`, `fail`, or `not_verified`. Every worker should run `agent completion-validate` after writing `completion.json` and before exit. A dirty launch accepted with `--allow-dirty` is an operator-approved baseline; overlapping pre-existing drift alone is not a blocker, but unrelated drift must be preserved.
+
+Controlled workers do not inherit the host's authenticated GitHub/service
+credentials. Tickets that require privileged external mutation should produce
+the exact requested mutation and local evidence, then let the authenticated
+host perform the scoped action and record before/after evidence. Do not solve
+this by mounting or copying host credential stores into the worker sandbox.
+
+`--pack` may be the pack root path or its stable `pack_id`. `--job` may be a native JSON job path or a task ID from root `pack.yaml`; v1 Markdown packs should use the task ID form when they need an explicit job selector. A dirty checkout is never inferred to be safe: use `--allow-dirty` when pre-existing drift is deliberately part of the work and must be captured in the launch baseline.
+
 For an Agent-Workflow-owned headless worker:
 
 ```bash
@@ -84,9 +100,13 @@ Only the workflow authority should issue semantic lifecycle controls:
 agent-workflow agent-run interrupt AGENT-RUN-ID
 agent-workflow agent-run terminate AGENT-RUN-ID --grace-seconds 8
 agent-workflow agent-run restart AGENT-RUN-ID
+agent-workflow agent-run start AGENT-RUN-ID-retry1
 ```
 
 For headless workers, Agent-Workflow signals its owned process group. For externally hosted workers, Agent-Workflow records the requested semantic action for the host to reconcile. Controls preserve durable evidence.
+The packaged `restart-delegation.sh` helper intentionally passes `--start` to
+retain its historical one-shot remediation behavior; direct CLI restarts remain
+prepare-first.
 
 ## Completion, integration, and review
 

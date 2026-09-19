@@ -245,7 +245,16 @@ def handle_agent_run_command(
             settings, agent_run_id=args.agent_run_id, reason=args.reason
         ), False
     if command == "restart":
-        return restart_agent_run(settings, args.agent_run_id, args.new_agent_run_id), False
+        return (
+            restart_agent_run(
+                settings,
+                args.agent_run_id,
+                args.new_agent_run_id,
+                start_immediately=args.start,
+                retry_context_path=args.context_file,
+            ),
+            False,
+        )
     if command in {"review", "accept", "reject"}:
         action = (
             "reviewed"

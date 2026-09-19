@@ -13,9 +13,10 @@ head_revision: ""
 
 ## Required machine completion sidecar
 
-Before `agent task-complete`, write
-`$AGENT_WORKFLOW_HANDOFF_DIR/completion.json`. The Markdown report is not a
-substitute. Its command and criterion records must use the authoritative shape:
+Write `$AGENT_WORKFLOW_HANDOFF_DIR/completion.json` before exit (and before
+`agent task-complete` for an interactive external worker). The Markdown report
+is not a substitute. Its command and criterion records must use the
+authoritative shape:
 
 ```json
 {
@@ -36,8 +37,11 @@ substitute. Its command and criterion records must use the authoritative shape:
 }
 ```
 
-`task-complete` rejects an absent, schema-invalid, or non-substantive sidecar
-and leaves the assignment busy so it can be corrected.
+Run `agent completion-validate` after writing the sidecar and correct every
+reported error before exit. Interactive external workers then use
+`agent task-complete`; headless workers normally exit and let the runner collect
+the validated handoff. A bridged headless `task-complete` is tolerated, but is
+not required.
 
 For `result: completed`, list only final verification commands that passed. Do
 not include exploratory, setup, staging, or unrelated failed commands in the
@@ -48,8 +52,16 @@ Implementation agents must commit source, test, and documentation changes before
 writing a completed sidecar. Set `base_revision` to the launch source revision
 and `head_revision` to the exact post-commit `git rev-parse HEAD`; collection
 rejects completed evidence that does not bind to those revisions. Every command
-must use an absolute `cwd`, every criterion result must be `pass`, `fail`, or
-`not_verified`, and `result: completed` requires `unresolved: []`.
+must use an absolute `cwd`, every criterion result must be exactly `pass`,
+`fail`, or `not_verified` (never `verified` or `passed`), and
+`result: completed` requires `unresolved: []`.
+
+If a verification command cannot be completed because dependencies, network,
+credentials, or host-only authority are unavailable, use `not_verified` for
+the affected criterion. Do not claim `result: completed` while also recording a
+nonzero verification command in the machine sidecar; preserve that attempted
+command in this Markdown report and leave final verification to the authorized
+follow-on gate.
 
 `.agent-workflow-handoff/` is runtime-only and worktree-locally Git-excluded.
 Never stage, commit, or force-add a completion sidecar. Write it only after the
@@ -125,7 +137,7 @@ Describe only what was actually changed.
 
 | Criterion | Result | Evidence |
 |---|---|---|
-| | pass/fail/not verified | command/file |
+| | pass/fail/not_verified | command/file |
 
 ## Tests and validation
 

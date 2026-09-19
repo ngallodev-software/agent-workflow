@@ -73,7 +73,7 @@ def delegate(
     base_ref: str = "HEAD",
     destination: Path | None = None,
     branch: str | None = None,
-    role: str | None = "implementation",
+    role: str | None = None,
     executor: str | None = None,
     agent_name: str | None = None,
     agent_class: str | None = None,
@@ -92,8 +92,15 @@ def delegate(
 ) -> dict[str, Any]:
     """Compose worktree creation and Agent Run launch without adding new authority."""
     validate_id(agent_run_id, "agent run ID")
-    ticket_id = ticket_id or agent_run_id
-    validate_id(ticket_id, "ticket ID")
+    launch_ticket_id = (
+        ticket_id
+        if ticket_id is not None
+        else (None if job_path is not None else agent_run_id)
+    )
+    worktree_ticket_id = ticket_id or agent_run_id
+    if launch_ticket_id is not None:
+        validate_id(launch_ticket_id, "ticket ID")
+    validate_id(worktree_ticket_id, "worktree ticket ID")
     if (repo is None) == (workdir is None):
         raise WorkflowError("delegate requires exactly one of --repo or --workdir")
 
@@ -118,7 +125,7 @@ def delegate(
             worktree_result = create_worktree(
                 settings,
                 repo=repo,  # type: ignore[arg-type]
-                ticket_id=ticket_id,
+                ticket_id=worktree_ticket_id,
                 base_ref=base_ref,
                 destination=destination,
                 branch=branch,
@@ -153,7 +160,7 @@ def delegate(
             settings=settings,
             agent_run_id=agent_run_id,
             worktree=selected_workdir,
-            role=str(existing.get("role") or role or "implementation"),
+            role=str(existing.get("role") or role or settings.default_agent_role),
             worker_mode=worker_mode,
             state=state,
             reused_existing_run=True,
@@ -173,7 +180,7 @@ def delegate(
             model=model,
             reasoning_effort=reasoning_effort,
             allow_no_go_model=allow_no_go_model,
-            ticket_id=ticket_id,
+            ticket_id=launch_ticket_id,
             pack_id=pack_id,
             allow_dirty=allow_dirty,
             structured=structured,
@@ -199,7 +206,7 @@ def delegate(
         settings=settings,
         agent_run_id=agent_run_id,
         worktree=selected_workdir,
-        role=str(result.get("role") or role or "implementation"),
+        role=str(result.get("role") or role or settings.default_agent_role),
         worker_mode=worker_mode,
         state=state,
         reused_existing_run=False,
