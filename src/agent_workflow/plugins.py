@@ -83,6 +83,14 @@ class PluginRegistry:
         compare=False,
     )
 
+    def __post_init__(self) -> None:
+        modes = [mode.name for plugin in self.loaded for mode in plugin.descriptor.decision_modes]
+        duplicates = sorted({name for name in modes if modes.count(name) > 1})
+        if duplicates:
+            raise WorkflowError(
+                "duplicate plugin decision mode registration: " + ", ".join(duplicates)
+            )
+
     @property
     def commands(self) -> tuple[tuple[LoadedPlugin, PluginCommand], ...]:
         return tuple(
@@ -411,7 +419,6 @@ def _stage_registry(
         ],
         "resource": [value for item in staged for value in item.descriptor.resources],
         "decision provider": [provider.name for item in staged for provider in item.descriptor.decision_providers],
-        "decision mode": [mode.name for item in staged for mode in item.descriptor.decision_modes],
     }.items():
         duplicates = sorted({value for value in values if values.count(value) > 1})
         if duplicates:

@@ -15,10 +15,11 @@ from agent_workflow.config import defaults
 from agent_workflow.errors import WorkflowError
 from agent_workflow.plugin_api import (
     PluginCommand,
+    PluginDecisionMode,
     PluginDescriptor,
     PluginPackageResource,
 )
-from agent_workflow.plugins import load_plugin_registry
+from agent_workflow.plugins import LoadedPlugin, PluginCandidate, PluginRegistry, load_plugin_registry
 
 
 def _configure(parser) -> None:
@@ -83,6 +84,20 @@ def test_duplicate_registration_rolls_back_atomically(monkeypatch: pytest.Monkey
     # No global registry was mutated by the failed transaction.
     registry = load_plugin_registry(("first",))
     assert [command.name for _, command in registry.commands] == ["shared"]
+
+
+def test_direct_registry_rejects_duplicate_decision_modes() -> None:
+    def loaded(name: str) -> LoadedPlugin:
+        descriptor = PluginDescriptor(
+            name=name,
+            version="1.0",
+            decision_modes=(PluginDecisionMode("comparative", "comparison", "unused", "shadow"),),
+        )
+        candidate = PluginCandidate(name, f"{name}:plugin", None, None, object())
+        return LoadedPlugin(descriptor, candidate)
+
+    with pytest.raises(WorkflowError, match="duplicate plugin decision mode registration: comparative"):
+        PluginRegistry((loaded("first"), loaded("second")), (), ("first", "second"))
 
 
 def test_plugin_command_cannot_shadow_core_command(monkeypatch: pytest.MonkeyPatch) -> None:
