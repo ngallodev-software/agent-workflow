@@ -118,10 +118,14 @@ def test_deployment_jenkins_does_not_install_into_jenkins_home() -> None:
     assert "sudo" not in jenkinsfile
 
 
-def test_jenkins_runs_only_the_deterministic_benchmark_contract_smoke() -> None:
+def test_jenkins_does_not_run_extracted_benchmark_contracts() -> None:
     jenkinsfile = (REPO_ROOT / "Jenkinsfile").read_text(encoding="utf-8")
-    assert "stage('Benchmark contract smoke')" in jenkinsfile
-    assert "test_benchmark_target_and_tool_mode.py" in jenkinsfile
+    assert "Benchmark contract smoke" not in jenkinsfile
+    assert "test_benchmark_target_and_tool_mode.py" not in jenkinsfile
+    assert "stage('Plugin and contract compatibility')" in jenkinsfile
+    assert "stage('Benchmark plugin')" in jenkinsfile
+    assert "stage('TypeSafe plugin')" in jenkinsfile
+    assert "stage('Shared contract bundle')" in jenkinsfile
     assert "codebase-memory-cli" not in jenkinsfile
     assert "jenkins-artifacts" not in jenkinsfile
     assert "./scripts/ci-release-build.sh" in jenkinsfile

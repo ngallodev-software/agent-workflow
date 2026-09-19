@@ -74,7 +74,11 @@ def test_documented_commands_match_the_installed_public_surface(
                 flags=re.MULTILINE,
             ):
                 documented.add(match.group(1))
-    assert documented <= public_commands, f"unknown documented commands: {sorted(documented - public_commands)}"
+    optional_plugin_commands = {"benchmark"}
+    assert documented - optional_plugin_commands <= public_commands, (
+        f"unknown documented commands: {sorted(documented - optional_plugin_commands - public_commands)}"
+    )
+    assert "agent-workflow-benchmark" in (REPO_ROOT / "README.md").read_text(encoding="utf-8")
 
     catalog = installed_product.run("commands", "--format", "markdown", env=product_env, check=True).stdout
     assert "agent-workflow eval compare --output OUTPUT baseline candidate" in catalog

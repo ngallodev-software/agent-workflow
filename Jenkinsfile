@@ -37,11 +37,6 @@ pipeline {
                 }
             }
         }
-        stage('Benchmark contract smoke') {
-            steps {
-                sh 'python -m pytest -q tests/invariants/test_benchmark_target_and_tool_mode.py'
-            }
-        }
         stage('Build') {
             steps {
                 sh '''
@@ -53,6 +48,63 @@ pipeline {
                     }
                     echo "Linux installer: $linux_installer"
                 '''
+            }
+        }
+        stage('Plugin and contract compatibility') {
+            parallel {
+                stage('Benchmark plugin') {
+                    steps {
+                        sh '''
+                            compat="$WORKSPACE@tmp/benchmark-compat"
+                            wheel="$WORKSPACE/dist/agent_workflow-$(tr -d '\n' < "$WORKSPACE/VERSION")-py3-none-any.whl"
+                            rm -rf "$compat"
+                            python3 -m venv "$compat/venv"
+                            test -s "$wheel"
+                            "$compat/venv/bin/pip" install --disable-pip-version-check "$wheel"
+                            git clone --depth 1 https://github.com/ngallodev-software/agent-workflow-benchmark.git "$compat/source"
+                            git -C "$compat/source" checkout --detach 7619465ba8c0d205d101dd5ea0db8b73c4b2748e
+                            "$compat/venv/bin/pip" install --disable-pip-version-check "$compat/source[test]"
+                            printf '%s\n' 'schema_version = 1' '' '[plugins]' 'enabled = ["agent-workflow-benchmark"]' > "$compat/config.toml"
+                            "$compat/venv/bin/agent-workflow" --config "$compat/config.toml" benchmark --help
+                            "$compat/venv/bin/python" -m pytest -q "$compat/source/tests/test_plugin.py"
+                        '''
+                    }
+                }
+                stage('TypeSafe plugin') {
+                    steps {
+                        sh '''
+                            compat="$WORKSPACE@tmp/typesafe-compat"
+                            wheel="$WORKSPACE/dist/agent_workflow-$(tr -d '\n' < "$WORKSPACE/VERSION")-py3-none-any.whl"
+                            rm -rf "$compat"
+                            python3 -m venv "$compat/venv"
+                            test -s "$wheel"
+                            "$compat/venv/bin/pip" install --disable-pip-version-check "$wheel"
+                            git clone --depth 1 https://github.com/ngallodev-software/agent-workflow-typesafe-ai.git "$compat/source"
+                            git -C "$compat/source" checkout --detach fe2543fad569cd366dacfd56a8e8be207f2c205b
+                            "$compat/venv/bin/pip" install --disable-pip-version-check "$compat/source[test]"
+                            printf '%s\n' 'schema_version = 1' '' '[plugins]' 'enabled = ["agent-workflow-typesafe"]' > "$compat/config.toml"
+                            "$compat/venv/bin/agent-workflow" --config "$compat/config.toml" typesafe doctor
+                            "$compat/venv/bin/agent-workflow" --config "$compat/config.toml" decision modes
+                            "$compat/venv/bin/python" -m pytest -q "$compat/source/tests/test_plugin.py"
+                        '''
+                    }
+                }
+                stage('Shared contract bundle') {
+                    steps {
+                        sh '''
+                            compat="$WORKSPACE@tmp/contracts-compat"
+                            wheel="$WORKSPACE/dist/agent_workflow-$(tr -d '\n' < "$WORKSPACE/VERSION")-py3-none-any.whl"
+                            rm -rf "$compat"
+                            python3 -m venv "$compat/venv"
+                            test -s "$wheel"
+                            "$compat/venv/bin/pip" install --disable-pip-version-check "$wheel"
+                            git clone --depth 1 --branch v0.2.1 https://github.com/ngallodev-software/agent-workflow-spec-contracts.git "$compat/source"
+                            "$compat/venv/bin/pip" install --disable-pip-version-check "$compat/source" "pytest>=8,<10"
+                            "$compat/venv/bin/python" -m pytest -q "$compat/source/tests"
+                            "$compat/venv/bin/python" -c 'from agent_workflow.shared_contracts import negotiate_bundle; from specgen_contracts.bundle import BUNDLE_VERSION, schema_digest; assert negotiate_bundle({"bundle_version":BUNDLE_VERSION,"schema_id":"agent-workflow/prompt-pack/v2","schema_digest":schema_digest("agent-workflow/prompt-pack/v2")})["schema_id"] == "agent-workflow/prompt-pack/v2"'
+                        '''
+                    }
+                }
             }
         }
     }
