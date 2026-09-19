@@ -121,3 +121,21 @@ pytest
 ```
 
 A high-risk implementer must not be the only reviewer. Actor labels alone do not prove reviewer independence.
+
+## Deterministic worker completion
+
+Normal implementation and review workers do not write protocol JSON. The worker
+records semantic judgments and verification intent through constrained commands:
+
+```bash
+agent criterion RUN CRITERION pass --evidence "evidence"
+agent verify RUN -- pytest -q
+agent complete RUN --result completed
+```
+
+The executable owns enum validation, observed command exit status, identity,
+Git revisions, changed-file derivation, schema construction, and terminal
+handoff validation. The runner—not the worker—owns final collection and sealing.
+Legacy manual `completion.json`, `completion-validate`, and `task-complete`
+remain compatibility surfaces only and are not advertised in implementation or
+review command catalogs.

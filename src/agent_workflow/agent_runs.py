@@ -389,25 +389,18 @@ def _write_launch_prompt(
             context.append("- Interactive steering is durable; acknowledge a steer message ID before treating it as applied.")
         else:
             context.append("- No evidence-capable steering adapter is available; never wait for approval/input. Report blocked/partial completion when authorization is required.")
-        context.extend(
-            [
-                "- Before finishing, run `agent completion-validate`; then use `agent task-complete ...`. The host seals/terminates the run.",
-            ]
-        )
-    elif detached_interactive:
-        context.append("- Headless worker: never wait for terminal/user input; write the durable completion handoff, emit concise progress when useful, then exit. Do not call `agent task-complete`.")
     else:
-        context.append("- Structured non-interactive worker: write the durable completion handoff and exit. Do not call `agent task-complete`.")
+        context.append("- Non-interactive worker: never wait for terminal/user input; record evidence through Agent-Workflow and exit normally after `agent complete`.")
     context.extend(
         [
-            f"- handoff: `{handoff_dir}`; template: `{handoff_dir / 'completion-template.json'}` (read-only)",
-            "- Copy the template to atomic `completion.json` and satisfy `agent-workflow/completion/v1`. Runtime completion paths outside the handoff directory are collector-owned.",
-            "- Only an assigned independent reviewer sets `review_disposition`; implementation workers omit it. Completion is never acceptance.",
-            "- Criterion `result` is an exact enum: use only `pass`, `fail`, or `not_verified` (never `verified`, `passed`, or free-form text).",
-            "- `result: completed` normally requires no unresolved items and only final passing verification commands; completed reviews may cite a failed target gate only with `changes_requested`.",
-            "- If a verification command cannot run (for example missing dependencies), record the affected criterion as `not_verified`; do not claim `completed` while also recording that command with a nonzero exit code.",
-            "- `.agent-workflow-handoff/` is runtime-only and locally Git-excluded: never stage, commit, or force-add it. Commit source first, then write the sidecar with `head_revision` equal to the current `git rev-parse HEAD`.",
-            "- After writing `completion.json`, run `agent completion-validate` before exiting. Correct any schema, enum, revision, command, or substantive-evidence error first.",
+            f"- handoff: `{handoff_dir}`; Agent-Workflow owns completion protocol JSON in this directory.",
+            "- Do not author `completion.json` manually. Record each acceptance criterion with `agent criterion AGENT_RUN_ID CRITERION_ID pass|fail|not_verified --evidence ...`.",
+            "- Run final verification through `agent verify AGENT_RUN_ID -- <argv...>` so Agent-Workflow records the observed argv, cwd, and exit code. Re-running the same command replaces its final receipt.",
+            "- Finish exactly once with `agent complete AGENT_RUN_ID --result completed|partial|failed|blocked` and, for review runs only, optional `--review-disposition approved|changes_requested|blocked`.",
+            "- Agent-Workflow derives Agent Run/ticket/pack identity, base/head revisions, changed files, repository-closeout binding, and schema-valid JSON. The worker must not supply those administrative fields.",
+            "- `completed` implementation evidence requires all recorded criteria to pass, no unresolved items, and final recorded verification commands to succeed. If verification cannot run, use `not_verified` plus a non-completed terminal result when substantive work remains unverified.",
+            "- Completion is not acceptance. Review/accept/reject and evidence sealing remain host/runner-owned lifecycle authority.",
+            "- `.agent-workflow-handoff/` is runtime-only and locally Git-excluded: never stage, commit, or force-add it. Commit source before `agent complete`; the command derives current HEAD itself.",
             "- Durable progress/steering uses the scoped `progress`, `steer`, and `ack` commands; acknowledge steering before applying it and never expose secrets.",
             "- Authenticated external-service credentials are intentionally not inherited into controlled workers. If a ticket needs privileged GitHub or other host-authenticated mutation, leave exact proposed actions/evidence for the host rather than weakening credential isolation.",
             "",

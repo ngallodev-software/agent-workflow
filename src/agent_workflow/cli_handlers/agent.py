@@ -24,6 +24,34 @@ def handle_agent_command(settings: Settings, args: argparse.Namespace) -> Any:
         if not matches:
             raise ValueError(f"unknown agent role: {args.role_id}")
         return matches[0]
+    if args.agent_command == "criterion":
+        from ..worker_completion import record_criterion
+
+        return record_criterion(
+            settings, args.agent_run_id, criterion_id=args.criterion_id,
+            result=args.result, evidence=args.evidence,
+        )
+    if args.agent_command == "verify":
+        from ..worker_completion import verify_command
+
+        argv = list(args.argv)
+        if argv and argv[0] == "--":
+            argv = argv[1:]
+        return verify_command(
+            settings, args.agent_run_id, argv=argv, cwd=args.cwd,
+            timeout_seconds=args.timeout,
+        )
+    if args.agent_command == "complete":
+        from ..worker_completion import complete
+
+        return complete(
+            settings, args.agent_run_id, result=args.result,
+            unresolved=args.unresolved, review_disposition=args.review_disposition,
+        )
+    if args.agent_command == "completion-status":
+        from ..worker_completion import status
+
+        return status(settings, args.agent_run_id)
     if args.agent_command == "completion-validate":
         from ..completion import validate_completion_handoff
         from ..state import run_dir

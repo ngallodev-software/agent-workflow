@@ -219,8 +219,8 @@ def test_launch_prompt_records_dirty_authorization_retry_context_and_completion_
     assert "Operator-approved source drift" in text
     assert "do not mark the task blocked merely because the baseline is dirty" in text
     assert "## Operator retry context" in text
-    assert "pass`, `fail`, or `not_verified`" in text
-    assert "agent completion-validate" in text
+    assert "pass|fail|not_verified" in text
+    assert "agent complete AGENT_RUN_ID" in text
 
 
 def test_review_prerequisite_accepts_verified_sealed_completion_without_lifecycle_receipt(
@@ -461,3 +461,121 @@ def test_bridged_headless_task_complete_is_allowed(
     )
     assert result["state"] == "closed"
     assert result["completed_assignment"]["summary"] == "completed"
+
+
+def test_worker_criterion_parser_rejects_free_form_enum() -> None:
+    parser = build_parser(command_scope="agent")
+    with pytest.raises(SystemExit):
+        parser.parse_args(
+            ["agent", "criterion", "run-1", "criterion-1", "verified", "--evidence", "ok"]
+        )
+    args = parser.parse_args(
+        ["agent", "criterion", "run-1", "criterion-1", "pass", "--evidence", "ok"]
+    )
+    assert args.result == "pass"
+
+
+def test_worker_command_catalog_prefers_deterministic_completion_api() -> None:
+    from agent_workflow.command_catalog import _PROFILE_COMMANDS
+
+    allowed = _PROFILE_COMMANDS["implementation"]
+    assert {"agent criterion", "agent verify", "agent complete", "agent completion-status"} <= allowed
+    assert "agent completion-validate" not in allowed
+    assert "agent task-complete" not in allowed
+
+
+def test_worker_complete_derives_protocol_fields_and_schema_validates(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import json
+    import subprocess
+
+    from agent_workflow import worker_completion as worker_module
+
+    repo = tmp_path / "repo"
+    handoff = repo / ".agent-workflow-handoff" / "run-1"
+    handoff.mkdir(parents=True)
+    subprocess.run(["git", "init", str(repo)], check=True, stdout=subprocess.DEVNULL)
+    subprocess.run(["git", "-C", str(repo), "config", "user.email", "test@example.com"], check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.name", "Test"], check=True)
+    (repo / "a.txt").write_text("one\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "a.txt"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-m", "base"], check=True, stdout=subprocess.DEVNULL)
+    base = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+    (repo / "a.txt").write_text("two\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "commit", "-am", "change"], check=True, stdout=subprocess.DEVNULL)
+    head = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+
+    contract = {
+        "agent_run": {"id": "run-1"},
+        "ticket": "P0-00",
+        "ticket_identity": {"mode": "explicit", "value": "P0-00"},
+        "pack": {"id": "pack-1"},
+        "worktree": {"path": str(repo), "source_revision": base},
+        "paths": {"handoff_dir": str(handoff)},
+    }
+    draft = {
+        "schema": worker_module.DRAFT_SCHEMA,
+        "agent_run_id": "run-1",
+        "state": "open",
+        "criteria": [{"id": "criterion-1", "result": "pass", "evidence": ["verified by test"]}],
+        "commands": [{"argv": ["true"], "cwd": str(repo), "exit_code": 0, "receipt": "exit=0"}],
+        "created_at": "2026-09-19T00:00:00+00:00",
+        "updated_at": "2026-09-19T00:00:00+00:00",
+    }
+    (handoff / worker_module.DRAFT_NAME).write_text(json.dumps(draft), encoding="utf-8")
+    settings = replace(defaults(tmp_path / "config.toml"), state_root=tmp_path / "state")
+    monkeypatch.setattr(
+        worker_module,
+        "_context",
+        lambda *_args, **_kwargs: (tmp_path / "state" / "runs" / "run-1", contract, repo, handoff),
+    )
+
+    result = worker_module.complete(settings, "run-1", result="completed")
+    value = json.loads((handoff / "completion.json").read_text(encoding="utf-8"))
+    assert result["state"] == "finalized"
+    assert value["agent_run_id"] == "run-1"
+    assert value["ticket_id"] == "P0-00"
+    assert value["pack_id"] == "pack-1"
+    assert value["base_revision"] == base
+    assert value["head_revision"] == head
+    assert value["changed_files"] == ["a.txt"]
+    assert value["criteria"][0]["result"] == "pass"
+
+
+def test_worker_complete_refuses_completed_with_failed_observed_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import json
+    import subprocess
+
+    from agent_workflow import worker_completion as worker_module
+
+    repo = tmp_path / "repo"
+    handoff = repo / ".agent-workflow-handoff" / "run-1"
+    handoff.mkdir(parents=True)
+    subprocess.run(["git", "init", str(repo)], check=True, stdout=subprocess.DEVNULL)
+    subprocess.run(["git", "-C", str(repo), "config", "user.email", "test@example.com"], check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.name", "Test"], check=True)
+    (repo / "a.txt").write_text("one\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "a.txt"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-m", "base"], check=True, stdout=subprocess.DEVNULL)
+    head = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+    contract = {
+        "agent_run": {"id": "run-1"}, "ticket": None,
+        "ticket_identity": {"mode": "omitted", "value": None}, "pack": {"id": None},
+        "worktree": {"path": str(repo), "source_revision": head},
+        "paths": {"handoff_dir": str(handoff)},
+    }
+    draft = {
+        "schema": worker_module.DRAFT_SCHEMA, "agent_run_id": "run-1", "state": "open",
+        "criteria": [{"id": "criterion-1", "result": "pass", "evidence": ["inspection"]}],
+        "commands": [{"argv": ["npm", "run", "build"], "cwd": str(repo), "exit_code": 127, "receipt": "exit=127"}],
+        "created_at": "2026-09-19T00:00:00+00:00", "updated_at": "2026-09-19T00:00:00+00:00",
+    }
+    (handoff / worker_module.DRAFT_NAME).write_text(json.dumps(draft), encoding="utf-8")
+    settings = replace(defaults(tmp_path / "config.toml"), state_root=tmp_path / "state")
+    monkeypatch.setattr(worker_module, "_context", lambda *_a, **_k: (tmp_path / "state", contract, repo, handoff))
+    with pytest.raises(Exception, match="cannot hide commands\\[0\\] exit_code 127"):
+        worker_module.complete(settings, "run-1", result="completed")
+    assert not (handoff / "completion.json").exists()

@@ -19,6 +19,7 @@ from .cli_contract import (
     EVALUATION_TEMPLATE_KINDS,
 )
 from .errors import WorkflowError
+from .protocol_values import COMPLETION_RESULTS, CRITERION_RESULTS, REVIEW_DISPOSITIONS
 
 if TYPE_CHECKING:
     from .plugins import PluginRegistry
@@ -649,16 +650,45 @@ def build_parser(
     agent_context.add_argument("agent_run_id")
     agent_roles = agent_commands.add_parser("roles", help="show public logical agent roles")
     agent_roles.add_argument("role_id", nargs="?", help="optional logical role ID")
+    agent_criterion = agent_commands.add_parser(
+        "criterion", help="record one constrained acceptance-criterion outcome"
+    )
+    agent_criterion.add_argument("agent_run_id")
+    agent_criterion.add_argument("criterion_id")
+    agent_criterion.add_argument("result", choices=CRITERION_RESULTS)
+    agent_criterion.add_argument("--evidence", action="append", required=True)
+
+    agent_verify = agent_commands.add_parser(
+        "verify", help="execute and record one verification command"
+    )
+    agent_verify.add_argument("agent_run_id")
+    agent_verify.add_argument("--cwd", type=Path)
+    agent_verify.add_argument("--timeout", type=float)
+    agent_verify.add_argument("argv", nargs=argparse.REMAINDER)
+
     agent_complete = agent_commands.add_parser(
-        "task-complete", help="publish structured completion for the current Agent Run"
+        "complete", help="generate the terminal completion handoff from recorded evidence"
     )
     agent_complete.add_argument("agent_run_id")
-    agent_complete.add_argument("--actor", required=True)
-    agent_complete.add_argument("--summary", required=True)
-    agent_complete.add_argument("--tag", action="append", default=[])
-    agent_complete.add_argument("--file", action="append", default=[])
+    agent_complete.add_argument("--result", required=True, choices=COMPLETION_RESULTS)
+    agent_complete.add_argument("--review-disposition", choices=REVIEW_DISPOSITIONS)
+    agent_complete.add_argument("--unresolved", action="append", default=[])
+
+    agent_completion_status = agent_commands.add_parser(
+        "completion-status", help="show generated worker-completion protocol state"
+    )
+    agent_completion_status.add_argument("agent_run_id")
+
+    agent_legacy_complete = agent_commands.add_parser(
+        "task-complete", help="legacy external-worker completion notification"
+    )
+    agent_legacy_complete.add_argument("agent_run_id")
+    agent_legacy_complete.add_argument("--actor", required=True)
+    agent_legacy_complete.add_argument("--summary", required=True)
+    agent_legacy_complete.add_argument("--tag", action="append", default=[])
+    agent_legacy_complete.add_argument("--file", action="append", default=[])
     agent_validate = agent_commands.add_parser(
-        "completion-validate", help="validate the current completion handoff before exit"
+        "completion-validate", help="legacy validation for a manually authored completion handoff"
     )
     agent_validate.add_argument("agent_run_id")
 

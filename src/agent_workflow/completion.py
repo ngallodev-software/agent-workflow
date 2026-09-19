@@ -15,6 +15,7 @@ from .contracts import read_agent_run_contract, validate_instance
 from .errors import WorkflowError
 from .path import read_regular_file
 from .process import run
+from .protocol_values import CRITERION_RESULTS, REVIEW_DISPOSITIONS
 from .repository_closeout import (
     repository_closeout_summary,
     validate_repository_closeout_payload,
@@ -56,7 +57,7 @@ def substantive_completion_errors(
 
     result = value.get("result")
     disposition = value.get("review_disposition")
-    is_review = disposition in {"approved", "changes_requested", "blocked"}
+    is_review = disposition in REVIEW_DISPOSITIONS
 
     if disposition == "approved" and result != "completed":
         errors.append("approved review disposition requires result completed")
