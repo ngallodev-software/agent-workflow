@@ -1,0 +1,39 @@
+{
+  "compatibility": {
+    "canonical_module": "agent_workflow.comparative_eval",
+    "canonical_runtime_module": "agent_workflow.comparative_eval_runtime",
+    "legacy_module": "agent_workflow.typesafe_eval",
+    "legacy_runtime_module": "agent_workflow.typesafe_eval_runtime",
+    "legacy_schema_readable": true
+  },
+  "limitations": [
+    "shared library 0.1.0 is an external prerequisite and is not bundled",
+    "attached sdist omits the repository-level deterministic skill behavior corpus",
+    "skill static control therefore requires original control_patterns from a canonical fixture"
+  ],
+  "ownership": {
+    "agent_workflow": [
+      "deterministic control execution",
+      "host policy composition",
+      "shadow scheduling and sampling",
+      "SQLite evidence persistence",
+      "lifecycle outcome joins"
+    ],
+    "shared_library": [
+      "neutral comparison contracts",
+      "canonical hashing and observation semantics",
+      "candidate-neutral metrics/statistics",
+      "frozen comparative datasets"
+    ]
+  },
+  "schema": "agent-workflow/comparative-eval-adoption/v1",
+  "shared_library": {
+    "dependency_mode": "optional-extra",
+    "distribution": "agent-workflow-comparative-eval",
+    "extra": "comparative-eval",
+    "import_package": "agent_workflow_comparative_eval",
+    "version": "0.1.0"
+  },
+  "source_kind": "python-sdist",
+  "source_version": "0.10.1"
+}

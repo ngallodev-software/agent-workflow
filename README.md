@@ -28,7 +28,7 @@ The core intentionally does not own workspace, pane, window, or interactive term
 - persist-first steering, progress, acknowledgement, replay, and correlation;
 - controlled process execution and bounded supervision;
 - completion handoffs, sealed evidence, receipts, review, and acceptance;
-- evaluation plans, scoring, comparative benchmarks, and usage/cost evidence;
+- evaluation plans, scoring, review/acceptance evidence, and optional plugin-provided comparative benchmarks;
 - rebuildable SQLite projections and read-only MCP access;
 - prompt-pack validation and trusted semantic plugins.
 
@@ -102,7 +102,7 @@ See [docs/TESTING.md](docs/TESTING.md).
 - [Operations and recovery](docs/OPERATIONS.md)
 - [Testing strategy](docs/TESTING.md)
 - [Prompt packs](docs/PROMPT_PACKS.md)
-- [Comparative benchmarks](docs/BENCHMARKS.md)
+- [Benchmark plugin migration](BENCHMARK_PLUGIN_MIGRATION.md)
 - [MCP server](docs/MCP_SERVER.md)
 - [Plugin API](docs/PLUGIN_API.md)
 - [Backlog](docs/BACKLOG.md)
@@ -121,7 +121,7 @@ The core is deliberately host-independent. A future plugin may project Agent Run
 
 ## Version
 
-Version `0.10.1` builds on the breaking 0.8 headless-core rewrite and the skill-first product-surface simplification. Older terminal-host-era runtime and schema compatibility is intentionally not carried forward. See the [0.9 skill-first simplification plan](docs/SKILL_FIRST_SIMPLIFICATION_PLAN.md).
+Version `0.10.2` builds on the breaking 0.8 headless-core rewrite and the skill-first product-surface simplification. Older terminal-host-era runtime and schema compatibility is intentionally not carried forward. See the [0.9 skill-first simplification plan](docs/SKILL_FIRST_SIMPLIFICATION_PLAN.md).
 
 ## Repository-only CI assets
 
@@ -131,3 +131,41 @@ Jenkins CI and local server-job files remain in the source repository for mainta
 ## Phase 2 simplification notes
 
 Normal `agent-workflow delegate` output is intentionally compact: run ID, logical role, worker mode, worktree, state, idempotency/worktree indicators, and next actions. Use `agent-workflow agent-run status RUN` or `agent-workflow agent context RUN` when detailed durable state is actually needed rather than paying that context cost on every delegation.
+
+## Decision modes
+
+Agent-Workflow has one built-in decision mode: `deterministic`. Optional plugins may advertise additional semantic decision providers and modes through the public plugin API. Inspect the effective capabilities with:
+
+```bash
+agent-workflow decision modes
+agent-workflow decision providers
+agent-workflow decision check
+```
+
+Select a mode/profile in configuration or for one invocation with `--decision-mode` / `--decision-profile`. Plugin-dependent modes are unavailable unless their plugin is installed and enabled. `--no-plugins` is the deterministic recovery path.
+
+Modes that advertise comparative capture also require the neutral shared library:
+
+```bash
+pip install 'agent-workflow[comparative-eval]'
+```
+
+Agent-Workflow persists the already-computed control/candidate pair in the workflow coordinator's `comparative-eval.sqlite` without issuing a second semantic-provider call. Inspect persisted cohorts with `agent-workflow decision report PATH`.
+
+See `DECISION_MODES.md` and `TYPESAFE_ARCHITECTURE_ALIGNMENT.md` for the policy boundary and receipt semantics.
+
+### Live CLI discovery
+
+CLI commands contributed by **enabled** plugins are attached to the live argparse tree dynamically. As a result, top-level help, the parser-derived command catalog, and shell completion reflect the plugins enabled in the selected configuration:
+
+```bash
+agent-workflow --help
+agent-workflow commands --format markdown
+agent-workflow completion bash
+```
+
+Use `agent-workflow --no-plugins --help` for the core-only recovery surface. The parser-derived command catalog is the command-reference source of truth; Agent-Workflow does not maintain a separate static Unix man page that could drift from enabled plugin capabilities.
+
+## Optional benchmark capability
+
+The historical comparative benchmark subsystem is no longer part of Agent-Workflow core. Install and enable the separate `agent-workflow-benchmark` plugin to restore the top-level `agent-workflow benchmark ...` command. Core still owns generic sealed-run evaluation, review, acceptance, and lifecycle authority.

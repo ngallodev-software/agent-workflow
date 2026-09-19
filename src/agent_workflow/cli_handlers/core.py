@@ -30,6 +30,19 @@ def handle_core_command(
     The boolean result is true when the handler has emitted the complete user
     response and the shared CLI renderer must not run.
     """
+    if args.command == "decision":
+        from ..decisions import mode_inventory, provider_inventory, validate_decision_configuration
+        if args.decision_command == "modes":
+            return {"modes": mode_inventory(plugin_registry), "effective_mode": settings.decision_mode}, False
+        if args.decision_command == "providers":
+            return {"providers": provider_inventory(plugin_registry)}, False
+        if args.decision_command == "report":
+            from ..comparative_eval_runtime import EvidenceStore
+            store=EvidenceStore(args.evidence)
+            try:return {"evidence":str(args.evidence),"reports":store.reports()}, False
+            finally:store.close()
+        return validate_decision_configuration(settings, plugin_registry), False
+
     if args.command == "commands":
         catalog = build_command_catalog(
             parser,

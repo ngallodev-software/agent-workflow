@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..cli_output import print_json
 from ..config import Settings
@@ -14,10 +14,15 @@ from ..workflow import snapshot_sha256
 from ..workflow_service import WorkflowService
 from ..workflow_templates import expand_workflow_template
 
+if TYPE_CHECKING:
+    from ..plugins import PluginRegistry
+
 
 def handle_workflow_command(
     settings: Settings,
     args: argparse.Namespace,
+    *,
+    plugin_registry: "PluginRegistry | None" = None,
 ) -> tuple[Any, bool]:
     """Return ``(data, output_complete)`` for one parsed workflow command."""
     if args.workflow_command == "template":
@@ -44,6 +49,7 @@ def handle_workflow_command(
             settings=settings,
             run_dir=run_dir,
             workdir=run_dir,
+            plugin_registry=plugin_registry,
         )
     )
     if args.workflow_command == "validate":

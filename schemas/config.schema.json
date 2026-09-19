@@ -45,8 +45,46 @@
           "additionalProperties": {
             "$ref": "#/$defs/profile"
           },
-          "type": "object",
-          "description": "Legacy operator compatibility only; normal role-first launches ignore named profiles unless a low-level compatibility override is explicit."
+          "description": "Legacy operator compatibility only; normal role-first launches ignore named profiles unless a low-level compatibility override is explicit.",
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "decision_policy": {
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "profile": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "decision_profile": {
+      "additionalProperties": {
+        "$ref": "#/$defs/decision_rule"
+      },
+      "type": "object"
+    },
+    "decision_rule": {
+      "additionalProperties": false,
+      "properties": {
+        "disposition": {
+          "enum": [
+            "shadow",
+            "advisory",
+            "automated"
+          ]
+        },
+        "minimum_confidence": {
+          "maximum": 1.0,
+          "minimum": 0.5,
+          "type": "number"
         }
       },
       "type": "object"
@@ -153,6 +191,7 @@
     },
     "profile": {
       "additionalProperties": false,
+      "description": "Legacy operator compatibility profile. Normal orchestration uses logical roles and private runtime aliases; profiles do not implicitly select a runtime.",
       "properties": {
         "allow_no_go_model": {
           "type": "boolean"
@@ -174,8 +213,7 @@
         "executor",
         "model"
       ],
-      "type": "object",
-      "description": "Legacy operator compatibility profile. Normal orchestration uses logical roles and private runtime aliases; profiles do not implicitly select a runtime."
+      "type": "object"
     },
     "roles": {
       "additionalProperties": false,
@@ -295,6 +333,15 @@
     },
     "agents": {
       "$ref": "#/$defs/agents"
+    },
+    "decision_policy": {
+      "$ref": "#/$defs/decision_policy"
+    },
+    "decision_profiles": {
+      "additionalProperties": {
+        "$ref": "#/$defs/decision_profile"
+      },
+      "type": "object"
     },
     "executors": {
       "additionalProperties": {

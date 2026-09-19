@@ -1,1 +1,0 @@
-Inspect the starter repository and public tests. Produce `BENCHMARK_PLAN.md` containing a concise requirements map, intended file changes, verification commands, visual/accessibility checks, risks, and explicit non-targets. Do not implement the application in this phase.

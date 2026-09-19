@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/decision-execution-receipt/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "decision_id", "decision_version", "classification", "consequence", "mode", "profile", "control_result", "candidate_result", "disposition", "applied_result", "fallback", "provider", "semantic"],
+  "properties": {
+    "schema": {"const": "agent-workflow/decision-execution-receipt/v1"},
+    "decision_id": {"type": "string", "minLength": 1},
+    "decision_version": {"type": "integer", "minimum": 1},
+    "classification": {"enum": ["DETERMINISTIC", "SEMANTIC_BOUNDED", "GENERATIVE_REASONING", "AUTHORITY_BEARING"]},
+    "consequence": {"enum": ["low", "medium", "high", "authority-bearing"]},
+    "mode": {"type": "string", "minLength": 1},
+    "profile": {"type": "string", "minLength": 1},
+    "control_result": {},
+    "candidate_result": {},
+    "disposition": {"enum": ["deterministic", "shadow", "advisory", "automated"]},
+    "applied_result": {},
+    "fallback": {
+      "type": "object", "additionalProperties": false,
+      "required": ["used", "reason"],
+      "properties": {"used": {"type": "boolean"}, "reason": {"type": ["string", "null"]}}
+    },
+    "provider": {
+      "type": "object", "additionalProperties": false,
+      "required": ["plugin", "name", "elapsed_seconds"],
+      "properties": {
+        "plugin": {"type": ["string", "null"]},
+        "name": {"type": ["string", "null"]},
+        "elapsed_seconds": {"type": ["number", "null"], "minimum": 0}
+      }
+    },
+    "semantic": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["status", "semantic_type", "confidence", "probability", "distribution", "model", "question_set_version", "request_sha256", "source_refs", "error_class"],
+      "properties": {
+        "status": {"type": "string"}, "semantic_type": {"type": "string"},
+        "confidence": {"type": ["number", "null"]}, "probability": {"type": ["number", "null"]},
+        "distribution": {"type": "object"}, "model": {"type": ["string", "null"]},
+        "question_set_version": {"type": ["string", "null"]}, "request_sha256": {"type": ["string", "null"]},
+        "source_refs": {"type": "array", "items": {"type": "string"}}, "error_class": {"type": ["string", "null"]}
+      }
+    }
+  }
+}

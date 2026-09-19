@@ -4,7 +4,7 @@
   "hypothesis": "The candidate preserves pass rate while reducing median elapsed time.",
   "identity": {
     "ticket_id": "EVAL-TEMPLATE-001",
-    "pack_id": "chatgpt-eval-benchmark-templating",
+    "pack_id": "chatgpt-eval-templating",
     "source_revision": null
   },
   "execution": {

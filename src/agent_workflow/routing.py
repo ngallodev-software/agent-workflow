@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import fnmatch
+import time
 from typing import Any, Mapping
 
 from .config import Settings
@@ -87,3 +88,77 @@ def advise_routing(
         "enforced_selection": enforced,
         "policy_disagreements": disagreements,
     }
+
+
+def advise_routing_with_policy(
+    metadata: Mapping[str, Any] | None,
+    settings: Settings,
+    *,
+    plugin_registry: object | None = None,
+    enforced_selection: Mapping[str, Any] | None = None,
+    task_text: str | None = None,
+    source_ref: str | None = None,
+) -> dict[str, Any]:
+    """Compose deterministic routing with the configured plugin-discovered decision mode.
+
+    TypeSafe or any future semantic plugin supplies evidence only. This function remains
+    the application-owned policy boundary that recomputes the final route through the
+    same deterministic router used by the control arm.
+    """
+    from .decisions import execute_decision_set
+
+    source = dict(metadata or {})
+    control_started=time.perf_counter()
+    control = advise_routing(source, settings, enforced_selection=enforced_selection)
+    control_elapsed=time.perf_counter()-control_started
+    risk_text = str(source.get("risk", "normal")).strip().lower()
+    control_risk = 2 if risk_text in {"high", "critical"} else 0 if risk_text in {"low", "minimal"} else 1
+    state = {
+        "task": task_text or str(source.get("task") or source.get("text") or "workflow task"),
+        "metadata": source,
+        "source_refs": [source_ref] if source_ref else [],
+    }
+    receipts = execute_decision_set(
+        settings=settings,
+        registry=plugin_registry,  # type: ignore[arg-type]
+        decision_ids=("routing.task_class", "routing.interaction_required", "routing.semantic_risk"),
+        state=state,
+        control_values={
+            "routing.task_class": control["recommendation"]["agent_class"],
+            "routing.interaction_required": control["recommendation"]["interactive"],
+            "routing.semantic_risk": control_risk,
+        },
+    )
+
+    def compose(task_class: object | None, interaction: object | None) -> dict[str, Any]:
+        composed = dict(source)
+        if task_class is not None:
+            composed["task_type"] = {
+                "exploratory": "research",
+                "review": "review",
+                "implementation": "implementation",
+            }.get(str(task_class), "implementation")
+        if interaction is not None:
+            composed["requires_interaction"] = bool(interaction)
+        return advise_routing(composed, settings, enforced_selection=enforced_selection)
+
+    applied_started=time.perf_counter()
+    applied = compose(
+        receipts["routing.task_class"]["applied_result"],
+        receipts["routing.interaction_required"]["applied_result"],
+    )
+    applied_policy_elapsed=time.perf_counter()-applied_started
+    applied["decision_mode"] = settings.decision_mode
+    applied["decision_profile"] = settings.decision_profile
+    applied["decision_receipts"] = receipts
+    applied["deterministic_control"] = control
+    provider_elapsed=next((r.get("provider",{}).get("elapsed_seconds") for r in receipts.values() if r.get("provider",{}).get("elapsed_seconds") is not None),None)
+    applied["decision_timing"]={"control_seconds":control_elapsed,"applied_policy_seconds":applied_policy_elapsed,"provider_elapsed_seconds":provider_elapsed}
+    if settings.decision_mode != "deterministic":
+        candidate_started=time.perf_counter()
+        applied["counterfactual_candidate"] = compose(
+            receipts["routing.task_class"].get("candidate_result"),
+            receipts["routing.interaction_required"].get("candidate_result"),
+        )
+        applied["decision_timing"]["candidate_policy_seconds"]=time.perf_counter()-candidate_started
+    return applied

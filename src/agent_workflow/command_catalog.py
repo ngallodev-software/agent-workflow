@@ -46,7 +46,6 @@ _PROFILE_COMMANDS: dict[str, frozenset[str]] = {
             "assess-sealed-runs",
             "ledger",
             "eval report",
-            "eval benchmark-report",
         }
     ),
     "orchestrator": frozenset(

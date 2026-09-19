@@ -18,6 +18,8 @@ from .plugin_api import (
     PLUGIN_ENTRY_POINT_GROUP,
     PluginCommand,
     PluginDescriptor,
+    PluginDecisionMode,
+    PluginDecisionProvider,
     PluginPackageResource,
     PluginResourceKind,
     ResolvedPluginPackageResource,
@@ -62,6 +64,8 @@ class LoadedPlugin:
             "assets": list(self.descriptor.assets),
             "resources": list(self.descriptor.resources),
             "package_resources": [item.as_dict() for item in self.package_resources],
+            "decision_providers": [provider.name for provider in self.descriptor.decision_providers],
+            "decision_modes": [mode.name for mode in self.descriptor.decision_modes],
         }
 
 
@@ -90,6 +94,26 @@ class PluginRegistry:
     @property
     def package_resources(self) -> tuple[ResolvedPluginPackageResource, ...]:
         return tuple(item for plugin in self.loaded for item in plugin.package_resources)
+
+    @property
+    def decision_providers(self) -> tuple[tuple[LoadedPlugin, PluginDecisionProvider], ...]:
+        return tuple((plugin, provider) for plugin in self.loaded for provider in plugin.descriptor.decision_providers)
+
+    @property
+    def decision_modes(self) -> tuple[tuple[LoadedPlugin, PluginDecisionMode], ...]:
+        return tuple((plugin, mode) for plugin in self.loaded for mode in plugin.descriptor.decision_modes)
+
+    def decision_provider(self, name: str) -> tuple[LoadedPlugin, PluginDecisionProvider]:
+        matches = [(plugin, provider) for plugin, provider in self.decision_providers if provider.name == name]
+        if len(matches) != 1:
+            raise WorkflowError(f"decision provider is not uniquely registered: {name}")
+        return matches[0]
+
+    def decision_mode(self, name: str) -> tuple[LoadedPlugin, PluginDecisionMode]:
+        matches = [(plugin, mode) for plugin, mode in self.decision_modes if mode.name == name]
+        if len(matches) != 1:
+            raise WorkflowError(f"decision mode is not uniquely registered: {name}")
+        return matches[0]
 
     def read_package_resource(self, kind: PluginResourceKind, identifier: str) -> bytes:
         """Return validated immutable resource bytes by exact logical identifier."""
@@ -321,6 +345,29 @@ def _stage_registry(
             _validate_name(command.name, label="plugin command")
             if not command.summary or not callable(command.configure) or not callable(command.execute):
                 raise WorkflowError(f"plugin {name!r} command {command.name!r} is incomplete")
+        provider_names: set[str] = set()
+        for provider in descriptor.decision_providers:
+            if not isinstance(provider, PluginDecisionProvider):
+                raise WorkflowError(f"plugin {name!r} contains an invalid decision provider declaration")
+            _validate_name(provider.name, label="decision provider")
+            if provider.name in provider_names or not provider.decisions or not callable(provider.evaluate):
+                raise WorkflowError(f"plugin {name!r} decision provider {provider.name!r} is incomplete or duplicated")
+            provider_names.add(provider.name)
+            _validate_identifiers(provider.decisions, label="decision")
+        mode_names: set[str] = set()
+        for mode in descriptor.decision_modes:
+            if not isinstance(mode, PluginDecisionMode):
+                raise WorkflowError(f"plugin {name!r} contains an invalid decision mode declaration")
+            _validate_name(mode.name, label="decision mode")
+            if mode.name == "deterministic":
+                raise WorkflowError("plugins may not replace the built-in deterministic decision mode")
+            if mode.name in mode_names or not mode.summary or mode.provider not in provider_names:
+                raise WorkflowError(f"plugin {name!r} decision mode {mode.name!r} is incomplete or references an unknown provider")
+            if mode.disposition not in {"shadow", "advisory", "automated"}:
+                raise WorkflowError(f"plugin {name!r} decision mode {mode.name!r} has invalid disposition")
+            if not isinstance(mode.capture_comparison, bool):
+                raise WorkflowError(f"plugin {name!r} decision mode {mode.name!r} capture_comparison must be boolean")
+            mode_names.add(mode.name)
         _validate_identifiers(descriptor.schemas, label="schema")
         _validate_identifiers(descriptor.assets, label="asset")
         _validate_identifiers(descriptor.resources, label="resource")
@@ -363,6 +410,8 @@ def _stage_registry(
             ],
         ],
         "resource": [value for item in staged for value in item.descriptor.resources],
+        "decision provider": [provider.name for item in staged for provider in item.descriptor.decision_providers],
+        "decision mode": [mode.name for item in staged for mode in item.descriptor.decision_modes],
     }.items():
         duplicates = sorted({value for value in values if values.count(value) > 1})
         if duplicates:

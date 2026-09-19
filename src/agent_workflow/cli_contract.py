@@ -16,6 +16,7 @@ BUILTIN_TOP_LEVEL_COMMANDS = frozenset(
         "completion",
         "config",
         "plugins",
+        "decision",
         "orchestrator",
         "delegate",
         "worktree",
@@ -26,12 +27,11 @@ BUILTIN_TOP_LEVEL_COMMANDS = frozenset(
         "index",
         "agent",
         "eval",
-        "benchmark",
         "pack",
     }
 )
 
-CORE_COMMANDS = frozenset({"commands", "plugins", "doctor", "completion", "config"})
+CORE_COMMANDS = frozenset({"commands", "plugins", "decision", "doctor", "completion", "config"})
 REPORTING_COMMANDS = frozenset({"assess-sealed-runs", "ledger"})
 
 # Role-scoped command-profile names are parser/catalog metadata, not capability code.
@@ -41,9 +41,7 @@ COMMAND_PROFILES = ("orchestrator", "implementation", "review")
 
 EVALUATION_TEMPLATE_KINDS = (
     "evaluation-plan",
-    "benchmark-manifest",
     "sealed-run-assessment",
-    "benchmark-report",
     "ledger-row",
     "lifecycle-archive",
 )

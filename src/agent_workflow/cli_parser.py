@@ -95,6 +95,8 @@ def build_parser(
         action="store_true",
         help="suppress configured plugins for recovery and core-only operation",
     )
+    parser.add_argument("--decision-mode", help="override the configured decision execution mode")
+    parser.add_argument("--decision-profile", help="override the configured decision policy profile")
     command_action = parser.add_subparsers(dest="command", required=True)
     commands = _ScopedSubparsers(command_action, selected_scopes)
 
@@ -139,6 +141,13 @@ def build_parser(
     plugins = commands.add_parser("plugins", help="trusted plugin inventory")
     plugin_commands = plugins.add_subparsers(dest="plugins_command", required=True)
     plugin_commands.add_parser("list", help="list discovered and enabled plugins")
+    decision = commands.add_parser("decision", help="decision modes, providers, and policy diagnostics")
+    decision_commands = decision.add_subparsers(dest="decision_command", required=True)
+    decision_commands.add_parser("modes", help="list built-in and enabled plugin decision modes")
+    decision_commands.add_parser("providers", help="list enabled plugin semantic decision providers")
+    decision_commands.add_parser("check", help="validate the effective decision mode/profile against enabled plugins")
+    decision_report=decision_commands.add_parser("report", help="report persisted comparative decision evidence")
+    decision_report.add_argument("evidence", type=Path, help="comparative-eval SQLite evidence path")
 
     orchestrator = commands.add_parser("orchestrator", help="orchestrator registry and inbox commands")
     orchestrator_commands = orchestrator.add_subparsers(dest="orchestrator_command", required=True)
@@ -638,23 +647,10 @@ def build_parser(
     eval_validate.add_argument("source", type=Path)
     eval_validate.add_argument("--pack", type=Path)
     eval_template = evaluation_commands.add_parser(
-        "template", help="write a deterministic evaluation or benchmark template"
+        "template", help="write a deterministic evaluation template"
     )
     eval_template.add_argument("kind", choices=EVALUATION_TEMPLATE_KINDS)
     eval_template.add_argument("--output", type=Path, required=True)
-    eval_validate_benchmark = evaluation_commands.add_parser(
-        "validate-benchmark", help="validate a benchmark/cohort manifest"
-    )
-    eval_validate_benchmark.add_argument("source", type=Path)
-    eval_validate_benchmark.add_argument("--pack", type=Path)
-    eval_benchmark_report = evaluation_commands.add_parser(
-        "benchmark-report", help="render a deterministic matched-cohort benchmark report"
-    )
-    eval_benchmark_report.add_argument("manifest", type=Path)
-    eval_benchmark_report.add_argument("baseline", type=Path)
-    eval_benchmark_report.add_argument("candidate", type=Path)
-    eval_benchmark_report.add_argument("--output", type=Path, required=True)
-    eval_benchmark_report.add_argument("--markdown", type=Path)
     eval_ledger_row = evaluation_commands.add_parser(
         "ledger-row", help="render one evidence-first evaluation ledger row"
     )
@@ -709,72 +705,6 @@ def build_parser(
     eval_compare.add_argument("candidate", type=Path)
     eval_compare.add_argument("--output", type=Path, required=True)
 
-
-    benchmark = commands.add_parser("benchmark", help="paired comparative benchmark commands")
-    benchmark_commands = benchmark.add_subparsers(dest="benchmark_command", required=True)
-    benchmark_validate = benchmark_commands.add_parser("validate", help="validate a comparative benchmark suite")
-    benchmark_validate.add_argument("spec", type=Path)
-    benchmark_validate.add_argument("--executor", type=Path)
-    benchmark_auth = benchmark_commands.add_parser("auth-check", help="verify a subscription session or optional API credential without exposing secrets")
-    benchmark_auth.add_argument("executor", type=Path)
-    benchmark_ready = benchmark_commands.add_parser("readiness", help="validate policy, authentication, repetition thresholds, and visual runtime without creating worktrees")
-    benchmark_ready.add_argument("spec", type=Path)
-    benchmark_ready.add_argument("--executor", type=Path, required=True)
-    benchmark_ready.add_argument("--policy", type=Path)
-    benchmark_ready.add_argument("--runtime-lock", type=Path)
-    benchmark_runtime = benchmark_commands.add_parser("runtime-attest", help="attest browser, Playwright, font, and container runtime identity")
-    benchmark_runtime.add_argument("runtime_lock", type=Path)
-    benchmark_runtime.add_argument("--claim-level", choices=("development", "internal", "publication"), default="development")
-    benchmark_runtime_seal = benchmark_commands.add_parser("runtime-seal", help="seal a publication runtime lock inside a content-addressed browser container")
-    benchmark_runtime_seal.add_argument("base_lock", type=Path)
-    benchmark_runtime_seal.add_argument("output", type=Path)
-    benchmark_runtime_seal.add_argument("--container-image", required=True)
-    benchmark_export = benchmark_commands.add_parser("suite-export", help="export a packaged comparative benchmark suite")
-    benchmark_export.add_argument("destination", type=Path)
-    benchmark_export.add_argument("--benchmark-id", default="priority-picker-v1")
-    benchmark_export.add_argument("--force", action="store_true")
-    benchmark_fixture = benchmark_commands.add_parser("fixture-create", help="materialize the benchmark starter fixture as a Git repository")
-    benchmark_fixture.add_argument("spec", type=Path)
-    benchmark_fixture.add_argument("destination", type=Path)
-    benchmark_fixture.add_argument("--force", action="store_true")
-    benchmark_target = benchmark_commands.add_parser("target-prepare", help="clone or refresh a manifest-pinned external benchmark target")
-    benchmark_target.add_argument("manifest", type=Path)
-    benchmark_target.add_argument("destination", type=Path)
-    benchmark_plan = benchmark_commands.add_parser("plan", help="create coordinator and paired arm worktrees and seal a run plan")
-    benchmark_plan.add_argument("spec", type=Path)
-    benchmark_plan.add_argument("--executor", type=Path, required=True)
-    benchmark_plan.add_argument("--repo", type=Path, required=True)
-    benchmark_plan.add_argument("--base-ref", default="HEAD")
-    benchmark_plan.add_argument("--run-id")
-    benchmark_plan.add_argument("--repetitions", type=int)
-    benchmark_plan.add_argument("--worktree-root", type=Path)
-    benchmark_plan.add_argument("--allow-dirty", action="store_true")
-    benchmark_plan.add_argument("--assistance-cohort", choices=("unassisted", "assisted"))
-    benchmark_plan.add_argument("--policy", type=Path)
-    benchmark_plan.add_argument("--runtime-lock", type=Path)
-    benchmark_plan.add_argument("--codebase-memory-mode", choices=("none", "mcp", "cli"), default="none")
-    for name, help_text in (
-        ("run", "execute, capture, score, consolidate, and report a benchmark run"),
-        ("resume", "resume an idempotent benchmark pipeline"),
-        ("status", "show benchmark state, evidence, and live review URLs"),
-        ("live-start", "start or restore preserved live applications for human review"),
-        ("live-stop", "stop preserved live applications without deleting evidence"),
-        ("visual-capture", "capture pinned visual evidence for all arms"),
-        ("score", "run deterministic machine scorers"),
-        ("consolidate", "copy and digest-verify arm evidence into the coordinator"),
-        ("report", "render JSON and Markdown comparative reports"),
-        ("verify", "verify the consolidated evidence manifest and receipt"),
-        ("cleanup", "retain benchmark arms by default; optionally remove verified arm worktrees"),
-    ):
-        command = benchmark_commands.add_parser(name, help=help_text)
-        command.add_argument("run")
-        if name == "cleanup":
-            command.add_argument("--remove-worktrees", action="store_true")
-            command.add_argument("--stop-live-apps", action="store_true")
-    benchmark_human = benchmark_commands.add_parser("review", help="create a blinded review assignment or submit a completed review")
-    benchmark_human.add_argument("run")
-    benchmark_human.add_argument("--reviewer", required=True)
-    benchmark_human.add_argument("--input", type=Path)
 
     pack = commands.add_parser("pack", help="prompt-pack commands")
     pack_commands = pack.add_subparsers(dest="pack_command", required=True)

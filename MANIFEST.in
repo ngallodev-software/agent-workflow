@@ -1,3 +1,4 @@
+include COMPARATIVE_EVAL_ADOPTION.json
 include LICENSE
 exclude Jenkinsfile
 exclude scripts/jenkins-local-job.sh

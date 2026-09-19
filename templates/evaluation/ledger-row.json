@@ -4,7 +4,7 @@
   "ticket_id": "EVAL-TEMPLATE-001",
   "case_id": "case-001",
   "source_revision": null,
-  "pack_id": "chatgpt-eval-benchmark-templating",
+  "pack_id": "chatgpt-eval-templating",
   "pack_checksum_reference": null,
   "run_receipt_sha256": null,
   "receipt_verification": "unavailable",

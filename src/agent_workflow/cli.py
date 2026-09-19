@@ -19,8 +19,14 @@ def main(argv: list[str] | None = None) -> int:
     args: argparse.Namespace | None = None
     try:
         requested_command = top_level_command(argv)
-        load_plugins = plugins_required_for_command(argv, set(BUILTIN_TOP_LEVEL_COMMANDS))
-        settings, plugin_registry = bootstrap_plugins(argv, load_plugins=load_plugins)
+        settings, _ = bootstrap_plugins(argv, load_plugins=False)
+        load_plugins = plugins_required_for_command(argv, set(BUILTIN_TOP_LEVEL_COMMANDS)) or settings.decision_mode != "deterministic"
+        plugin_registry = None
+        if load_plugins:
+            from .plugins import load_plugin_registry
+            plugin_registry = load_plugin_registry(settings.plugins_enabled, suppress="--no-plugins" in (argv or sys.argv[1:]))
+        from .decisions import validate_decision_configuration
+        validate_decision_configuration(settings, plugin_registry)
         # Plugin-aware surfaces need the complete tree. Normal built-in commands
         # materialize only their own top-level branch from the same parser source.
         parser = (
@@ -78,7 +84,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "workflow":
             from .cli_handlers.workflow import handle_workflow_command
 
-            data, output_complete = handle_workflow_command(settings, args)
+            data, output_complete = handle_workflow_command(settings, args, plugin_registry=plugin_registry)
             if output_complete:
                 return 0
         elif args.command in REPORTING_COMMANDS:
@@ -107,10 +113,6 @@ def main(argv: list[str] | None = None) -> int:
             data, output_complete = handle_eval_command(settings, args)
             if output_complete:
                 return 0
-        elif args.command == "benchmark":
-            from .cli_handlers.benchmark import handle_benchmark_command
-
-            data = handle_benchmark_command(settings, args)
         elif args.command == "pack":
             from .cli_handlers.pack import handle_pack_command
 

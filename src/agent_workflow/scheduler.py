@@ -3,7 +3,7 @@ from __future__ import annotations
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import TYPE_CHECKING, Any, Callable, Mapping
 
 from .config import Settings
 from .approval import lifecycle_disposition
@@ -16,7 +16,10 @@ from .receipts import (
     verify_seal,
     verify_seal_details,
 )
-from .routing import advise_routing
+from .routing import advise_routing, advise_routing_with_policy
+
+if TYPE_CHECKING:
+    from .plugins import PluginRegistry
 from .agent_runs import prepare as prepare_agent_run
 from .agent_runs import start as start_agent_run
 from .agent_runs import public_agent_run_view
@@ -102,6 +105,7 @@ class SchedulerService:
         max_parallelism: int = 1,
         launch_fn: LaunchFunction | None = None,
         actor: str = "scheduler",
+        plugin_registry: "PluginRegistry | None" = None,
     ) -> None:
         if isinstance(max_parallelism, bool) or max_parallelism < 1:
             raise WorkflowError("max_parallelism must be a positive integer")
@@ -111,6 +115,54 @@ class SchedulerService:
         self.max_parallelism = max_parallelism
         self.launch_fn = launch_fn or self._launch
         self.actor = actor
+        self.plugin_registry = plugin_registry
+
+    def _comparative_store_path(self) -> Path:
+        return self.run_dir / "comparative-eval.sqlite"
+
+    def _capture_routing_comparison(self, node: Mapping[str, Any], agent_run_id: str, source: Mapping[str, Any], task_text: str, advice: Mapping[str, Any]) -> dict[str, Any] | None:
+        if self.settings.decision_mode == "deterministic" or self.plugin_registry is None:
+            return None
+        try:
+            _plugin, mode=self.plugin_registry.decision_mode(self.settings.decision_mode)
+        except WorkflowError:
+            return None
+        if not mode.capture_comparison:
+            return None
+        candidate=advice.get("counterfactual_candidate")
+        control=advice.get("deterministic_control")
+        if not isinstance(candidate,Mapping) or not isinstance(control,Mapping):
+            raise WorkflowError("comparative decision mode produced no control/candidate routing pair")
+        from . import __version__
+        from .comparative_eval_runtime import EvidenceStore, make_precomputed_observation
+        receipts=advice.get("decision_receipts",{})
+        semantic=[]
+        if isinstance(receipts,Mapping):
+            for decision_id,receipt in sorted(receipts.items()):
+                sem=receipt.get("semantic") if isinstance(receipt,Mapping) else None
+                if isinstance(sem,Mapping): semantic.append({"decision_id":decision_id,"model":sem.get("model"),"question_set_version":sem.get("question_set_version")})
+        timing=advice.get("decision_timing",{}) if isinstance(advice.get("decision_timing"),Mapping) else {}
+        provider_elapsed=timing.get("provider_elapsed_seconds")
+        candidate_policy=timing.get("candidate_policy_seconds")
+        candidate_duration=(float(provider_elapsed or 0)+float(candidate_policy or 0)) if provider_elapsed is not None or candidate_policy is not None else None
+        identity={"agent_workflow_version":__version__,"decision_mode":self.settings.decision_mode,"decision_profile":self.settings.decision_profile,"plugin":_plugin.descriptor.name,"provider":mode.provider,"semantic":semantic}
+        observation_key=f"{node.get('workflow_id')}:{node.get('node_id')}:{node.get('workflow_attempt')}:routing-advice/v1"
+        import hashlib
+        observation_id="routing-"+hashlib.sha256(observation_key.encode()).hexdigest()[:32]
+        store=EvidenceStore(self._comparative_store_path())
+        try:
+            existing=store.observation(observation_id)
+            if existing is not None:return existing
+            record=make_precomputed_observation(feature_id="routing-advice/v1",identity=identity,source_input={"task":task_text,"metadata":dict(source)},projected_input={"metadata":dict(source),"source_ref":str(node.get("ticket_id") or node.get("node_id"))},control_result={"recommendation":control.get("recommendation"),"enforced_selection":control.get("enforced_selection")},candidate_result={"recommendation":candidate.get("recommendation"),"enforced_selection":candidate.get("enforced_selection")},control_duration_seconds=timing.get("control_seconds"),candidate_duration_seconds=candidate_duration,provider_elapsed_seconds=provider_elapsed,case_id=agent_run_id,observation_id=observation_id)
+            return store.put_observation(record)
+        finally:store.close()
+
+    def _join_comparative_outcome(self, observation_id: str, details: Mapping[str, Any]) -> None:
+        from .comparative_eval_runtime import EvidenceStore, join_agent_run_outcome
+        store=EvidenceStore(self._comparative_store_path())
+        try:
+            join_agent_run_outcome(store,observation_id,{"agent_run_result":details.get("child_completion_result"),"completion_validation":details.get("child_completion_validation_status"),"executor_status":details.get("child_status")})
+        finally:store.close()
 
     def _launch(self, node: Mapping[str, Any], agent_run_id: str) -> Any:
         prompt = Path(str(node["prompt_path"]))
@@ -149,12 +201,21 @@ class SchedulerService:
                 for key in ("agent_class", "executor", "model", "interactive")
                 if node.get(key) is not None
             }
-            advice = advise_routing(
-                node.get("routing") if isinstance(node.get("routing"), Mapping) else {},
+            routing_metadata = node.get("routing") if isinstance(node.get("routing"), Mapping) else {}
+            routing_task_text=str(routing_metadata.get("task") or routing_metadata.get("text") or node.get("ticket_id") or node.get("node_id") or "workflow task")
+            advice = advise_routing_with_policy(
+                routing_metadata,
                 self.settings,
+                plugin_registry=self.plugin_registry,
                 enforced_selection=explicit,
+                task_text=routing_task_text,
+                source_ref=str(node.get("ticket_id") or node.get("node_id")),
             )
-            validate_instance(advice, advice["schema"], artifact="workflow routing advice")
+            comparison=self._capture_routing_comparison(node,agent_run_id,routing_metadata,routing_task_text,advice)
+            if comparison is not None:
+                advice["comparative_observation_id"]=comparison["observation_id"]
+                advice["comparative_evidence_path"]="comparative-eval.sqlite"
+            validate_instance({k: advice[k] for k in ("schema","recommendation","explanation_codes","enforced_selection","policy_disagreements")}, advice["schema"], artifact="workflow routing advice")
             selected = advice["enforced_selection"]
             prepared = prepare_agent_run(
                 self.settings,
@@ -300,6 +361,8 @@ class SchedulerService:
             and completion.get("result") == "completed"
             and collection.get("validation_status") == "valid"
         )
+        provenance=read_contract(child / "run-provenance.json", "agent-workflow/run-provenance/v1")
+        routing=((provenance.get("workflow") or {}).get("routing") or {}) if isinstance(provenance.get("workflow"),Mapping) else {}
         details = {
             "child_agent_run_id": agent_run_id,
             "child_final_receipt_sha256": receipt_digest,
@@ -307,6 +370,7 @@ class SchedulerService:
             "child_status": final_status.get("status"),
             "child_completion_result": completion.get("result"),
             "child_completion_validation_status": collection.get("validation_status"),
+            "comparative_observation_id": routing.get("comparative_observation_id") if isinstance(routing,Mapping) else None,
         }
         if completed:
             return "completed", "sealed child Agent Run completed successfully", details
@@ -362,6 +426,9 @@ class SchedulerService:
                     next_state=next_state,
                     details=details,
                 )
+                observation_id=details.get("comparative_observation_id")
+                if isinstance(observation_id,str) and observation_id:
+                    self._join_comparative_outcome(observation_id,details)
             elif not self._child_run_exists(agent_run_id):
                 record_workflow_transition(
                     self.run_dir,

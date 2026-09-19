@@ -20,6 +20,7 @@ PLUGIN_ENTRY_POINT_GROUP = "agent_workflow.plugins"
 PluginConfigure = Callable[[argparse.ArgumentParser], None]
 PluginExecute = Callable[[argparse.Namespace, "PluginExecutionContext"], Any]
 PluginResourceKind = Literal["schema", "asset"]
+DecisionDisposition = Literal["shadow", "advisory", "automated"]
 
 
 @dataclass(frozen=True)
@@ -73,6 +74,69 @@ class ResolvedPluginPackageResource:
 
 
 @dataclass(frozen=True)
+class PluginDecisionRequest:
+    """One bounded application-owned semantic decision set request."""
+
+    decision_ids: tuple[str, ...]
+    state: Mapping[str, object]
+    control_values: Mapping[str, object]
+
+
+@dataclass(frozen=True)
+class PluginDecisionEvidence:
+    """Provider-neutral semantic evidence returned by a decision provider."""
+
+    decision_id: str
+    status: str
+    semantic_type: str
+    value: object | None = None
+    confidence: float | None = None
+    probability: float | None = None
+    distribution: Mapping[str, float] = field(default_factory=dict)
+    model: str | None = None
+    question_set_version: str | None = None
+    request_sha256: str | None = None
+    source_refs: tuple[str, ...] = ()
+    error_class: str | None = None
+
+
+@dataclass(frozen=True)
+class PluginDecisionContext:
+    """Host context supplied to a plugin semantic decision provider."""
+
+    settings: "Settings"
+    host_version: str
+
+
+PluginDecisionEvaluate = Callable[[PluginDecisionRequest, PluginDecisionContext], Mapping[str, PluginDecisionEvidence]]
+
+
+@dataclass(frozen=True)
+class PluginDecisionProvider:
+    """A plugin-owned semantic evidence provider for stable host decision IDs."""
+
+    name: str
+    decisions: tuple[str, ...]
+    evaluate: PluginDecisionEvaluate
+
+
+@dataclass(frozen=True)
+class PluginDecisionMode:
+    """A plugin-advertised execution mode backed by one semantic provider.
+
+    ``capture_comparison`` asks the host to record control/candidate evidence using
+    the provider-neutral comparative-eval capability. The host, not the plugin,
+    owns persistence and lifecycle outcome joining.
+    """
+
+    name: str
+    summary: str
+    provider: str
+    disposition: DecisionDisposition
+    capture_comparison: bool = False
+
+
+@dataclass(frozen=True)
 class PluginDescriptor:
     """Versioned, side-effect-free declaration returned by a plugin entry point.
 
@@ -89,6 +153,8 @@ class PluginDescriptor:
     assets: tuple[str, ...] = ()
     resources: tuple[str, ...] = ()
     package_resources: tuple[PluginPackageResource, ...] = ()
+    decision_providers: tuple[PluginDecisionProvider, ...] = ()
+    decision_modes: tuple[PluginDecisionMode, ...] = ()
     metadata: Mapping[str, str] = field(default_factory=dict)
 
 

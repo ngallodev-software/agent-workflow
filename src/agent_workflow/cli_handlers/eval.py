@@ -17,11 +17,8 @@ from ..eval.oracles import resolve_oracle
 from ..eval.reporting import build_report, render_markdown
 from ..eval.scoring import evaluation_policy_for_run, score_trial
 from ..eval.templating import (
-    build_benchmark_report,
     build_ledger_row,
     build_lifecycle_archive,
-    render_benchmark_markdown,
-    validate_benchmark_manifest,
     write_template,
 )
 from ..eval.trials import collect_trials, load_trials
@@ -63,56 +60,6 @@ def handle_eval_command(
 
     if args.eval_command == "template":
         return write_template(args.kind, expand_path(args.output)), False
-
-    if args.eval_command == "validate-benchmark":
-        source = expand_path(args.source)
-        pack_root = expand_path(args.pack) if args.pack else None
-        manifest = validate_benchmark_manifest(source, pack_root=pack_root)
-        if pack_root is not None:
-            report = validate_pack(pack_root, verify_checksums=False)
-            if not report.ok:
-                raise WorkflowError(
-                    "benchmark pack validation failed: " + "; ".join(report.errors)
-                )
-        return {
-            "path": str(source),
-            "schema": manifest["schema"],
-            "benchmark_id": manifest["benchmark_id"],
-            "case_ids": [case["case_id"] for case in manifest["cases"]],
-        }, False
-
-    if args.eval_command == "benchmark-report":
-        output = expand_path(args.output)
-        markdown_output = expand_path(args.markdown) if args.markdown else None
-        inputs = {
-            expand_path(args.manifest),
-            expand_path(args.baseline),
-            expand_path(args.candidate),
-        }
-        if output in inputs or markdown_output in inputs:
-            raise WorkflowError("benchmark report output must not overwrite an input")
-        if markdown_output is not None and markdown_output == output:
-            raise WorkflowError(
-                "benchmark JSON and Markdown outputs must be different paths"
-            )
-        report = build_benchmark_report(
-            expand_path(args.manifest),
-            expand_path(args.baseline),
-            expand_path(args.candidate),
-        )
-        atomic_write_json(output, report)
-        if markdown_output is not None:
-            atomic_write_bytes(
-                markdown_output,
-                render_benchmark_markdown(report).encode("utf-8"),
-            )
-        return {
-            "output": str(output),
-            "markdown": str(markdown_output) if markdown_output else None,
-            "benchmark_id": report["benchmark_id"],
-            "paired_n": report["aggregate_metrics"]["paired_n"],
-            "regressions": len(report["regressions"]),
-        }, False
 
     if args.eval_command == "ledger-row":
         output = expand_path(args.output)

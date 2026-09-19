@@ -52,6 +52,12 @@ class AgentClassPolicy:
     allowed_models: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
 
+
+@dataclass(frozen=True)
+class DecisionPolicyRule:
+    disposition: str | None = None
+    minimum_confidence: float = 0.8
+
 @dataclass(frozen=True)
 class SecurityPolicy:
     mode: str = "local"
@@ -91,6 +97,9 @@ class Settings:
     config_schema_version: int = CONFIG_SCHEMA_VERSION
     security: SecurityPolicy = field(default_factory=SecurityPolicy)
     plugins_enabled: tuple[str, ...] = ()
+    decision_mode: str = "deterministic"
+    decision_profile: str = "default"
+    decision_profiles: dict[str, dict[str, DecisionPolicyRule]] = field(default_factory=dict)
     repository_allowlist: tuple[Path, ...] = ()
     supervisor_interval_seconds: int = 10
     supervisor_probe_stalled: bool = True
@@ -194,7 +203,7 @@ def _reject_unknown(table: object, allowed: set[str], label: str) -> None:
 def _validate_shape(data: dict[str, Any]) -> None:
     _reject_unknown(
         data,
-        {"schema_version", "paths", "git", "pack", "agents", "agent_classes", "executors", "roles", "runtime_aliases", "security", "supervisor", "plugins"},
+        {"schema_version", "paths", "git", "pack", "agents", "agent_classes", "executors", "roles", "runtime_aliases", "security", "supervisor", "plugins", "decision_policy", "decision_profiles"},
         "root",
     )
     sections = {
@@ -205,6 +214,7 @@ def _validate_shape(data: dict[str, Any]) -> None:
         "roles": {"paths", "default", "bindings"},
         "security": {"mode", "executable_digest", "policy_files"},
         "plugins": {"enabled"},
+        "decision_policy": {"mode", "profile"},
         "supervisor": {
             "interval_seconds",
             "probe_stalled",
@@ -242,6 +252,14 @@ def _validate_shape(data: dict[str, Any]) -> None:
         raise WorkflowError("[agents.profiles] must contain profile tables")
     for name, entry in profiles.items():
         _reject_unknown(entry, {"executor", "model", "allow_no_go_model", "interactive", "class"}, f"agents.profiles.{name}")
+    decision_profiles = data.get("decision_profiles", {})
+    if not isinstance(decision_profiles, dict):
+        raise WorkflowError("[decision_profiles] must contain profile tables")
+    for profile_name, profile in decision_profiles.items():
+        if not isinstance(profile, dict):
+            raise WorkflowError(f"decision profile {profile_name!r} must be a table")
+        for decision_id, rule in profile.items():
+            _reject_unknown(rule, {"disposition", "minimum_confidence"}, f"decision_profiles.{profile_name}.{decision_id}")
 
 
 def _nested(data: dict[str, Any], section: str, key: str, default: Any) -> Any:
@@ -546,6 +564,36 @@ def load_settings(path: Path | None = None) -> Settings:
         raise WorkflowError("config value [plugins].enabled must be a string list")
     if len(plugins_enabled) != len(set(plugins_enabled)):
         raise WorkflowError("config value [plugins].enabled must not contain duplicates")
+    decision_policy = data.get("decision_policy", {})
+    if not isinstance(decision_policy, dict):
+        raise WorkflowError("[decision_policy] must be a table")
+    decision_mode = decision_policy.get("mode", base.decision_mode)
+    decision_profile = decision_policy.get("profile", base.decision_profile)
+    if not isinstance(decision_mode, str) or not decision_mode:
+        raise WorkflowError("[decision_policy].mode must be a non-empty string")
+    if not isinstance(decision_profile, str) or not decision_profile:
+        raise WorkflowError("[decision_policy].profile must be a non-empty string")
+    raw_decision_profiles = data.get("decision_profiles", {})
+    if not isinstance(raw_decision_profiles, dict):
+        raise WorkflowError("[decision_profiles] must contain profile tables")
+    decision_profiles: dict[str, dict[str, DecisionPolicyRule]] = {}
+    for profile_name, profile_data in raw_decision_profiles.items():
+        if not isinstance(profile_name, str) or not profile_name or not isinstance(profile_data, dict):
+            raise WorkflowError("decision profile names and values must be tables")
+        rules: dict[str, DecisionPolicyRule] = {}
+        for decision_id, rule_data in profile_data.items():
+            if not isinstance(decision_id, str) or not decision_id or not isinstance(rule_data, dict):
+                raise WorkflowError(f"decision profile {profile_name!r} contains an invalid decision rule")
+            disposition = rule_data.get("disposition")
+            if disposition is not None and disposition not in {"shadow", "advisory", "automated"}:
+                raise WorkflowError(f"decision rule {decision_id!r} disposition must be shadow, advisory, or automated")
+            threshold = rule_data.get("minimum_confidence", 0.8)
+            if isinstance(threshold, bool) or not isinstance(threshold, (int, float)) or not 0.5 <= float(threshold) <= 1.0:
+                raise WorkflowError(f"decision rule {decision_id!r} minimum_confidence must be between 0.5 and 1.0")
+            rules[decision_id] = DecisionPolicyRule(disposition, float(threshold))
+        decision_profiles[profile_name] = rules
+    if decision_profile != "default" and decision_profile not in decision_profiles:
+        raise WorkflowError(f"decision profile is not configured: {decision_profile}")
     settings = Settings(
         config_path=path,
         worktree_root=absolute_path(
@@ -583,6 +631,9 @@ def load_settings(path: Path | None = None) -> Settings:
             policy_files=tuple(absolute_path(Path(os.path.expandvars(value))) for value in policy_files),
         ),
         plugins_enabled=tuple(plugins_enabled),
+        decision_mode=decision_mode,
+        decision_profile=decision_profile,
+        decision_profiles=decision_profiles,
         repository_allowlist=tuple(absolute_path(Path(os.path.expandvars(value))) for value in repository_allowlist),
         supervisor_interval_seconds=supervisor_interval,
         supervisor_probe_stalled=_boolean(
@@ -647,6 +698,8 @@ def as_dict(s: Settings) -> dict[str, Any]:
             "policy_files": [str(path) for path in s.security.policy_files],
         },
         "plugins": {"enabled": list(s.plugins_enabled)},
+        "decision_policy": {"mode": s.decision_mode, "profile": s.decision_profile},
+        "decision_profiles": {name: {decision_id: {"disposition": rule.disposition, "minimum_confidence": rule.minimum_confidence} for decision_id, rule in sorted(rules.items())} for name, rules in sorted(s.decision_profiles.items())},
         "pack": {
             "archive_level": s.archive_level,
             "write_sha256": s.write_sha256,

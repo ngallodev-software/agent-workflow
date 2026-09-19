@@ -160,6 +160,22 @@
             },
             "type": "array"
           },
+          "decision_modes": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": true
+          },
+          "decision_providers": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": true
+          },
           "distribution": {
             "type": [
               "string",
@@ -177,10 +193,6 @@
             "type": "string"
           },
           "name": {
-            "minLength": 1,
-            "type": "string"
-          },
-          "plugin_version": {
             "minLength": 1,
             "type": "string"
           },
@@ -232,6 +244,10 @@
             },
             "type": "array"
           },
+          "plugin_version": {
+            "minLength": 1,
+            "type": "string"
+          },
           "resources": {
             "items": {
               "minLength": 1,
@@ -257,7 +273,9 @@
           "commands",
           "schemas",
           "assets",
-          "resources"
+          "resources",
+          "decision_providers",
+          "decision_modes"
         ],
         "type": "object"
       },
