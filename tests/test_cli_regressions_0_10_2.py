@@ -579,3 +579,217 @@ def test_worker_complete_refuses_completed_with_failed_observed_command(
     with pytest.raises(Exception, match="cannot hide commands\\[0\\] exit_code 127"):
         worker_module.complete(settings, "run-1", result="completed")
     assert not (handoff / "completion.json").exists()
+
+
+def test_repo_local_execution_config_is_auto_discovered_and_merged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from agent_workflow.cli_runtime import bootstrap_plugins
+
+    xdg_config = tmp_path / "config"
+    global_config = xdg_config / "agent-workflow" / "config.toml"
+    global_config.parent.mkdir(parents=True)
+    state_root = tmp_path / "state"
+    global_config.write_text(
+        "schema_version = 1\n[paths]\nstate_root = " + repr(str(state_root)) + "\n",
+        encoding="utf-8",
+    )
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    prompt = repo / "ticket.md"
+    prompt.write_text("review\n", encoding="utf-8")
+    local = repo / ".agent-workflow-execution.toml"
+    local.write_text(
+        "schema_version = 1\n[agents]\npreferred_names = ['terra-p4']\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg_config))
+
+    settings, _ = bootstrap_plugins(
+        ["agent-run", "prepare", "p4-review", str(repo), str(prompt)],
+        load_plugins=False,
+    )
+    assert settings.state_root == state_root.resolve()
+    assert settings.preferred_agent_names == ("terra-p4",)
+    assert settings.config_path == local.resolve()
+    assert settings.config_sources == (global_config.resolve(), local.resolve())
+
+
+def test_repo_local_execution_config_cannot_override_security_policy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from agent_workflow.cli_runtime import bootstrap_plugins
+    from agent_workflow.errors import WorkflowError
+
+    xdg_config = tmp_path / "config"
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg_config))
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    prompt = repo / "ticket.md"
+    prompt.write_text("review\n", encoding="utf-8")
+    (repo / ".agent-workflow-execution.toml").write_text(
+        "schema_version = 1\n[security]\nmode = 'local'\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(WorkflowError, match="non-execution section"):
+        bootstrap_plugins(
+            ["agent-run", "prepare", "p4-review", str(repo), str(prompt)],
+            load_plugins=False,
+        )
+
+
+def test_worker_criterion_can_bind_host_receipt_by_digest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import hashlib
+
+    from agent_workflow import worker_completion as worker_module
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    handoff = tmp_path / "state" / "runs" / "run-1" / "handoff"
+    handoff.mkdir(parents=True)
+    receipt = repo / "GITHUB_PROMOTION_RECEIPT.md"
+    receipt.write_text("before -> after\n", encoding="utf-8")
+    contract = {
+        "agent_run": {"id": "run-1"},
+        "worktree": {"path": str(repo)},
+        "paths": {"handoff_dir": str(handoff)},
+    }
+    settings = replace(defaults(tmp_path / "config.toml"), state_root=tmp_path / "state")
+    monkeypatch.setattr(
+        worker_module,
+        "_context",
+        lambda *_a, **_k: (tmp_path / "state" / "runs" / "run-1", contract, repo, handoff),
+    )
+    result = worker_module.record_criterion(
+        settings,
+        "run-1",
+        criterion_id="github-metadata-receipt",
+        result="pass",
+        evidence=[],
+        evidence_files=[Path("GITHUB_PROMOTION_RECEIPT.md")],
+    )
+    digest = hashlib.sha256(receipt.read_bytes()).hexdigest()
+    assert result["criterion"]["evidence"] == [
+        f"file:GITHUB_PROMOTION_RECEIPT.md#sha256={digest};bytes={receipt.stat().st_size}"
+    ]
+
+
+def test_review_limitation_is_non_gating_for_receipt_based_approval(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import json
+    import subprocess
+
+    from agent_workflow import worker_completion as worker_module
+
+    repo = tmp_path / "repo"
+    handoff = tmp_path / "state" / "runs" / "review-1" / "handoff"
+    handoff.mkdir(parents=True)
+    subprocess.run(["git", "init", str(repo)], check=True, stdout=subprocess.DEVNULL)
+    subprocess.run(["git", "-C", str(repo), "config", "user.email", "test@example.com"], check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.name", "Test"], check=True)
+    (repo / "a.txt").write_text("one\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "a.txt"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-m", "base"], check=True, stdout=subprocess.DEVNULL)
+    head = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+    contract = {
+        "agent_run": {"id": "review-1"},
+        "ticket": "P4-01",
+        "ticket_identity": {"mode": "explicit", "value": "P4-01"},
+        "pack": {"id": "portfolio"},
+        "worktree": {"path": str(repo), "source_revision": head},
+        "paths": {"handoff_dir": str(handoff)},
+    }
+    draft = {
+        "schema": worker_module.DRAFT_SCHEMA,
+        "agent_run_id": "review-1",
+        "state": "open",
+        "criteria": [{"id": "host-receipt", "result": "pass", "evidence": ["receipt digest verified"]}],
+        "limitations": [{"id": "live-github-fetch", "result": "not_verified", "evidence": ["controlled DNS unavailable"]}],
+        "commands": [{"argv": ["true"], "cwd": str(repo), "exit_code": 0, "receipt": "exit=0"}],
+        "created_at": "2026-09-19T00:00:00+00:00",
+        "updated_at": "2026-09-19T00:00:00+00:00",
+    }
+    (handoff / worker_module.DRAFT_NAME).write_text(json.dumps(draft), encoding="utf-8")
+    settings = replace(defaults(tmp_path / "config.toml"), state_root=tmp_path / "state")
+    monkeypatch.setattr(
+        worker_module,
+        "_context",
+        lambda *_a, **_k: (tmp_path / "state" / "runs" / "review-1", contract, repo, handoff),
+    )
+    result = worker_module.complete(
+        settings,
+        "review-1",
+        result="completed",
+        review_disposition="approved",
+    )
+    completion = json.loads((handoff / "completion.json").read_text(encoding="utf-8"))
+    assert result["review_disposition"] == "approved"
+    assert completion["limitations"][0]["result"] == "not_verified"
+
+
+def test_limitation_command_has_no_free_form_result_enum() -> None:
+    parser = build_parser(command_scope="agent")
+    args = parser.parse_args(
+        ["agent", "limitation", "run-1", "browser-launch", "--evidence", "EPERM"]
+    )
+    assert args.agent_command == "limitation"
+    assert not hasattr(args, "result")
+
+
+def test_accept_revision_is_derived_and_cli_assertion_is_optional() -> None:
+    from agent_workflow.lifecycle import _acceptance_revision
+
+    parser = build_parser(command_scope="agent-run")
+    args = parser.parse_args(
+        ["agent-run", "accept", "run-1", "--actor", "host", "--reason", "reviewed"]
+    )
+    assert args.revision is None
+    assert _acceptance_revision({"head_revision": "abc123"}, None) == "abc123"
+    with pytest.raises(Exception, match="accepted revision mismatch"):
+        _acceptance_revision({"head_revision": "abc123"}, "def456")
+
+
+def test_prerequisite_policy_names_are_closed() -> None:
+    from agent_workflow.errors import WorkflowError
+    from agent_workflow.preflight import prerequisite_policy
+
+    assert prerequisite_policy("accepted").name == "accepted"
+    assert prerequisite_policy("sealed_completed").name == "sealed_completed"
+    with pytest.raises(WorkflowError, match="prerequisite requirement must be one of"):
+        prerequisite_policy("reviewed-ish")
+
+
+def test_new_handoff_boundary_is_outside_source_checkout(tmp_path: Path) -> None:
+    from agent_workflow.agent_run_artifacts import _create_handoff_dir
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    state_dir = tmp_path / "state" / "runs" / "run-1"
+    state_dir.mkdir(parents=True)
+    handoff = _create_handoff_dir(state_dir, "run-1")
+    assert handoff == (state_dir / "handoff").resolve()
+    assert not (repo / ".agent-workflow-handoff").exists()
+
+
+def test_assignment_transition_table_rejects_out_of_order_completion() -> None:
+    from agent_workflow import agent_context as context_module
+    from agent_workflow.errors import WorkflowError
+
+    assert context_module._assignment_next_state("busy", "task_completed") == "closed"
+    with pytest.raises(WorkflowError, match="not allowed"):
+        context_module._assignment_next_state("closed", "task_completed")
+
+
+def test_agent_verify_separator_reaches_verification_argv() -> None:
+    from agent_workflow.cli_runtime import parse_args
+
+    parser = build_parser(command_scope="agent")
+    args = parse_args(
+        parser,
+        ["agent", "verify", "run-1", "--", "npm", "ci", "--ignore-scripts"],
+    )
+    assert args.argv == ["npm", "ci", "--ignore-scripts"]
+    assert args.explicit_command is None

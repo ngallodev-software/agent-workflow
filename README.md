@@ -82,8 +82,44 @@ Review and disposition remain separate from worker completion:
 
 ```bash
 agent-workflow agent-run review RUN-001 --actor reviewer --reason "evidence inspected"
-agent-workflow agent-run accept RUN-001 --actor maintainer --reason "accepted" --revision HEAD_SHA
+agent-workflow agent-run accept RUN-001 --actor maintainer --reason "accepted"
 ```
+
+
+### Deterministic worker protocol
+
+Implementation and review workers do not author Agent-Workflow protocol JSON.
+They record bounded semantic intent through parser-constrained operations:
+
+```bash
+agent-workflow agent criterion RUN-001 criterion-id pass --evidence "test receipt"
+agent-workflow agent criterion RUN-001 metadata-receipt pass --evidence-file GITHUB_PROMOTION_RECEIPT.md
+agent-workflow agent limitation RUN-001 live-fetch --evidence "controlled DNS unavailable"
+agent-workflow agent verify RUN-001 -- npm test
+agent-workflow agent complete RUN-001 --result completed
+```
+
+Agent-Workflow derives identity, Git revisions, changed files, observed command
+exit status, schema-valid completion JSON, and acceptance revision. A
+`limitation` is always `not_verified` and is non-gating; it records a controlled
+environment constraint separately from source correctness. The runner owns
+collection and sealing.
+
+New run handoffs are stored under the Agent-Workflow run-state directory rather
+than inside the source checkout, preventing runtime evidence from entering
+Docker/build contexts. Existing worktree-local handoffs remain readable for
+compatibility.
+
+When `--config` is omitted, `agent-run prepare` and `delegate` auto-discover an
+exact-root `.agent-workflow-execution.toml`. This repository-local file may
+override execution identity (`agents`, `agent_classes`, `executors`, `roles`,
+`runtime_aliases`) but cannot override host security, state paths, plugins, or
+other administrative policy.
+
+Canonical review/accept/reject operations and prerequisite requirements are
+closed, deterministic operation/policy sets. Acceptance derives the revision
+from sealed completion evidence; `--revision` is now only an optional
+compatibility assertion.
 
 ## External worker preparation
 

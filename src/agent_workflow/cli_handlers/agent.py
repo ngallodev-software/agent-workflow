@@ -29,7 +29,17 @@ def handle_agent_command(settings: Settings, args: argparse.Namespace) -> Any:
 
         return record_criterion(
             settings, args.agent_run_id, criterion_id=args.criterion_id,
-            result=args.result, evidence=args.evidence,
+            result=args.result, evidence=args.evidence, evidence_files=args.evidence_file,
+        )
+    if args.agent_command == "limitation":
+        from ..worker_completion import record_limitation
+
+        return record_limitation(
+            settings,
+            args.agent_run_id,
+            limitation_id=args.limitation_id,
+            evidence=args.evidence,
+            evidence_files=args.evidence_file,
         )
     if args.agent_command == "verify":
         from ..worker_completion import verify_command

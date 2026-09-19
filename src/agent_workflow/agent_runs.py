@@ -394,13 +394,14 @@ def _write_launch_prompt(
     context.extend(
         [
             f"- handoff: `{handoff_dir}`; Agent-Workflow owns completion protocol JSON in this directory.",
-            "- Do not author `completion.json` manually. Record each acceptance criterion with `agent criterion AGENT_RUN_ID CRITERION_ID pass|fail|not_verified --evidence ...`.",
+            "- Do not author `completion.json` manually. Record each acceptance criterion with `agent criterion AGENT_RUN_ID CRITERION_ID pass|fail|not_verified --evidence ...`; use `--evidence-file PATH` to bind a worktree-local host/tool receipt by SHA-256.",
+            "- Controlled-environment limitations are not source failures. Record DNS/network/browser/listener/sandbox constraints with `agent limitation AGENT_RUN_ID LIMITATION_ID --evidence ...`; limitation outcome is always `not_verified` and does not masquerade as a gating criterion.",
             "- Run final verification through `agent verify AGENT_RUN_ID -- <argv...>` so Agent-Workflow records the observed argv, cwd, and exit code. Re-running the same command replaces its final receipt.",
             "- Finish exactly once with `agent complete AGENT_RUN_ID --result completed|partial|failed|blocked` and, for review runs only, optional `--review-disposition approved|changes_requested|blocked`.",
             "- Agent-Workflow derives Agent Run/ticket/pack identity, base/head revisions, changed files, repository-closeout binding, and schema-valid JSON. The worker must not supply those administrative fields.",
-            "- `completed` implementation evidence requires all recorded criteria to pass, no unresolved items, and final recorded verification commands to succeed. If verification cannot run, use `not_verified` plus a non-completed terminal result when substantive work remains unverified.",
+            "- `completed` implementation evidence requires all recorded criteria to pass, no unresolved items, and final recorded verification commands to succeed. For review runs, a host receipt may satisfy a criterion while a separate `agent limitation` preserves an unavailable live-fetch/browser gate; do not convert harness limits into source failures.",
             "- Completion is not acceptance. Review/accept/reject and evidence sealing remain host/runner-owned lifecycle authority.",
-            "- `.agent-workflow-handoff/` is runtime-only and locally Git-excluded: never stage, commit, or force-add it. Commit source before `agent complete`; the command derives current HEAD itself.",
+            "- The handoff directory is run-state outside the source checkout. Never copy protocol artifacts into the repository. Commit source before `agent complete`; the command derives current HEAD itself.",
             "- Durable progress/steering uses the scoped `progress`, `steer`, and `ack` commands; acknowledge steering before applying it and never expose secrets.",
             "- Authenticated external-service credentials are intentionally not inherited into controlled workers. If a ticket needs privileged GitHub or other host-authenticated mutation, leave exact proposed actions/evidence for the host rather than weakening credential isolation.",
             "",
@@ -984,7 +985,7 @@ def prepare(
 ) -> dict[str, Any]:
     """Prepare an Agent Run transactionally, preserving preflight evidence."""
     state_dir = run_dir(settings, agent_run_id)
-    handoff_dir = absolute_path(workdir) / ".agent-workflow-handoff" / agent_run_id
+    handoff_dir = state_dir / "handoff"
     state_existed = state_dir.exists()
     handoff_existed = handoff_dir.exists() or handoff_dir.is_symlink()
     try:
@@ -1224,7 +1225,7 @@ def _prepare(
         if native_job is not None
         else None
     )
-    handoff_dir = _create_handoff_dir(workdir, agent_run_id)
+    handoff_dir = _create_handoff_dir(state_dir, agent_run_id)
     (handoff_dir / "control-intents").mkdir(mode=0o700)
     (handoff_dir / "steering-inbox").mkdir(mode=0o700)
     prepared_worker = _prepare_worker(
@@ -1362,10 +1363,16 @@ def _prepare(
     stderr_path = paths.executor_stderr
     events_path.touch()
     stderr_path.touch()
+    config_source_paths = settings.config_sources or (
+        (settings.config_path,) if settings.config_path else ()
+    )
+    config_sources = [
+        {"path": str(path), "sha256": sha256_file(path)}
+        for path in config_source_paths
+        if path.is_file()
+    ]
     config_sha256 = (
-        sha256_file(settings.config_path)
-        if settings.config_path and settings.config_path.is_file()
-        else None
+        config_sources[-1]["sha256"] if config_sources else None
     )
     pack_manifest = prompt_pack_root / "MANIFEST.sha256" if prompt_pack_root else None
     provenance_path = paths.provenance
@@ -1397,6 +1404,7 @@ def _prepare(
             prompt_sha256=sha256_file(prompt_copy),
             launch_prompt_sha256=sha256_file(launch_prompt),
             config_sha256=config_sha256,
+            config_sources=config_sources,
             pack_manifest_sha256=(
                 sha256_file(pack_manifest)
                 if pack_manifest is not None and pack_manifest.is_file()

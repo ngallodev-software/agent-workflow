@@ -6,6 +6,7 @@ import os
 import re
 import stat
 from pathlib import Path
+from dataclasses import dataclass
 from typing import Any, Literal
 
 from .config import Settings
@@ -17,6 +18,7 @@ from .receipts import read_sealed_contract, verify_seal_details
 from .state import run_dir, update_projection
 from .util import fsync_directory, utc_now
 from .path_security import open_relative, validate_directory
+from .protocol_values import LIFECYCLE_ACTIONS
 
 Action = Literal["reviewed", "accepted", "rejected"]
 _RECEIPT_NAME = re.compile(r"^(?P<sequence>[0-9]{6})-(?P<action>reviewed|accepted|rejected)\.json$")
@@ -182,6 +184,113 @@ def _append_receipt(run: Path, value: dict[str, Any]) -> Path:
     return path
 
 
+
+@dataclass(frozen=True)
+class LifecycleOperationSpec:
+    """Declarative policy for one canonical review/acceptance operation."""
+
+    action: Action
+    allowed_prior: frozenset[str | None]
+    projection_disposition: str
+
+
+_LIFECYCLE_OPERATIONS: dict[str, LifecycleOperationSpec] = {
+    "reviewed": LifecycleOperationSpec(
+        action="reviewed",
+        allowed_prior=frozenset({None, "rejected"}),
+        projection_disposition="reviewed",
+    ),
+    "accepted": LifecycleOperationSpec(
+        action="accepted",
+        allowed_prior=frozenset({"reviewed"}),
+        projection_disposition="accepted",
+    ),
+    "rejected": LifecycleOperationSpec(
+        action="rejected",
+        allowed_prior=frozenset({None, "reviewed", "rejected"}),
+        projection_disposition="rejected",
+    ),
+}
+
+
+def _operation(action: str) -> LifecycleOperationSpec:
+    if action not in LIFECYCLE_ACTIONS or action not in _LIFECYCLE_OPERATIONS:
+        raise WorkflowError(
+            "lifecycle action must be one of: " + ", ".join(LIFECYCLE_ACTIONS)
+        )
+    return _LIFECYCLE_OPERATIONS[action]
+
+
+def _require_allowed_prior(
+    spec: LifecycleOperationSpec,
+    prior: str | None,
+) -> None:
+    if prior in spec.allowed_prior:
+        return
+    if prior == "accepted":
+        raise WorkflowError("lifecycle disposition is already terminal")
+    if spec.action == "accepted":
+        raise WorkflowError("acceptance requires a prior reviewed disposition")
+    if spec.action == "reviewed" and prior == "reviewed":
+        raise WorkflowError("run is already reviewed")
+    raise WorkflowError(
+        f"cannot record lifecycle action {spec.action!r} after {prior!r}"
+    )
+
+
+def _acceptance_revision(
+    completion: dict[str, Any],
+    requested_revision: str | None,
+) -> str:
+    """Derive canonical acceptance revision from sealed completion evidence.
+
+    ``requested_revision`` is a compatibility assertion only. Callers no longer
+    need to copy the revision out of completion evidence merely to feed it back
+    into Agent-Workflow.
+    """
+    expected_revision = completion.get("head_revision")
+    if not isinstance(expected_revision, str) or not expected_revision:
+        raise WorkflowError("acceptance requires a completion head revision")
+    if requested_revision is not None and requested_revision != expected_revision:
+        raise WorkflowError(
+            f"accepted revision mismatch: {requested_revision}; expected {expected_revision}"
+        )
+    return expected_revision
+
+
+def _check_acceptance_gates(
+    *,
+    final_status: dict[str, Any],
+    completion: dict[str, Any],
+    collection: dict[str, Any],
+    score: dict[str, Any] | None,
+    score_hash: str | None,
+    reviewed: dict[str, Any],
+    independent: bool,
+) -> None:
+    """Execute the fixed ordered acceptance gate sequence."""
+    if score is not None and score.get("verdict") != "pass":
+        raise WorkflowError("acceptance requires a passing deterministic score set")
+    if reviewed.get("score_receipt_sha256") != score_hash:
+        raise WorkflowError("score set changed after review")
+    if final_status.get("tier") in {"high", "critical"} and not reviewed.get(
+        "reviewer_independent"
+    ):
+        raise WorkflowError("high-risk acceptance requires an independent prior review")
+    if completion.get("result") != "completed":
+        raise WorkflowError("acceptance requires completion result 'completed'")
+    if collection.get("validation_status") != "valid":
+        raise WorkflowError("acceptance requires a valid collected completion")
+    if final_status.get("policy_result") == "failed":
+        raise WorkflowError("acceptance requires passing execution policy")
+    if final_status.get("tier") not in {"low", "medium", "high", "critical"}:
+        raise WorkflowError(
+            "acceptance requires a recorded task tier; relaunch with --tier"
+        )
+    if final_status.get("tier") in {"high", "critical"} and not independent:
+        raise WorkflowError("high-risk acceptance requires an independent reviewer")
+
+
 def record(
     settings: Settings,
     agent_run_id: str,
@@ -191,8 +300,14 @@ def record(
     reason: str,
     revision: str | None = None,
 ) -> dict[str, Any]:
+    """Execute one schema-governed lifecycle operation.
+
+    The caller selects only an operation and semantic actor/reason. Agent-Workflow
+    derives immutable evidence references and, for acceptance, the exact revision.
+    """
     if not actor.strip() or not reason.strip():
         raise WorkflowError("lifecycle actor and reason must be non-empty")
+    spec = _operation(action)
     run = run_dir(settings, agent_run_id)
     final_receipt, expected = verify_seal_details(run)
     final_status, _ = read_sealed_contract(
@@ -205,6 +320,7 @@ def record(
         raise WorkflowError("final status belongs to another run")
     if final_status.get("status") != "completed":
         raise WorkflowError("only a completed execution can be reviewed")
+
     sealed_paths = {
         item.get("path")
         for item in final_receipt.get("artifacts", [])
@@ -238,72 +354,54 @@ def record(
         )
         if task_result.get("validation_status") != "valid":
             raise WorkflowError("acceptance requires a valid collected task result")
+
     chain = lifecycle_receipts(run, expected_final_receipt_sha256=expected)
-    if chain and chain[-1]["receipt"].get("action") == "accepted":
-        raise WorkflowError("lifecycle disposition is already terminal")
+    prior = chain[-1]["receipt"].get("action") if chain else None
+    _require_allowed_prior(spec, prior)
+
     independent = actor != final_status.get("executor")
-    if action == "accepted":
-        if not chain or chain[-1]["receipt"].get("action") != "reviewed":
-            raise WorkflowError("acceptance requires a prior reviewed disposition")
+    effective_revision: str | None = None
+    if spec.action == "accepted":
         reviewed = chain[-1]["receipt"]
-        if score is not None and score.get("verdict") != "pass":
-            raise WorkflowError("acceptance requires a passing deterministic score set")
-        if reviewed.get("score_receipt_sha256") != score_hash:
-            raise WorkflowError("score set changed after review")
-        if final_status.get("tier") in {"high", "critical"} and not reviewed.get(
-            "reviewer_independent"
-        ):
-            raise WorkflowError(
-                "high-risk acceptance requires an independent prior review"
-            )
-        if completion.get("result") != "completed":
-            raise WorkflowError("acceptance requires completion result 'completed'")
-        if collection.get("validation_status") != "valid":
-            raise WorkflowError("acceptance requires a valid collected completion")
-        if final_status.get("policy_result") == "failed":
-            raise WorkflowError("acceptance requires passing execution policy")
-        if final_status.get("tier") not in {"low", "medium", "high", "critical"}:
-            raise WorkflowError(
-                "acceptance requires a recorded task tier; relaunch with --tier"
-            )
-        expected_revision = completion.get("head_revision")
-        if not revision or revision != expected_revision:
-            raise WorkflowError(
-                f"accepted revision mismatch: {revision}; expected {expected_revision}"
-            )
-        if final_status.get("tier") in {"high", "critical"} and not independent:
-            raise WorkflowError("high-risk acceptance requires an independent reviewer")
-    elif action == "reviewed" and chain and chain[-1]["receipt"].get("action") == "reviewed":
-        raise WorkflowError("run is already reviewed")
+        _check_acceptance_gates(
+            final_status=final_status,
+            completion=completion,
+            collection=collection,
+            score=score,
+            score_hash=score_hash,
+            reviewed=reviewed,
+            independent=independent,
+        )
+        effective_revision = _acceptance_revision(completion, revision)
+    elif revision is not None:
+        raise WorkflowError("revision is only valid for acceptance")
+
     value = {
         "schema": "agent-workflow/lifecycle-receipt/v1",
         "agent_run_id": agent_run_id,
-        "action": action,
+        "action": spec.action,
         "actor": actor,
         "reason": reason,
         "created_at": utc_now(),
         "final_receipt_sha256": expected,
         "score_receipt_sha256": score_hash,
-        "revision": revision,
+        "revision": effective_revision,
         "reviewer_independent": independent,
     }
     path = _append_receipt(run, value)
     projection_updates: dict[str, Any] = {
-        "disposition": action,
+        "disposition": spec.projection_disposition,
         "disposition_at": value["created_at"],
         "disposition_actor": actor,
         "lifecycle_receipt_path": str(path),
     }
-    if action == "accepted":
-        projection_updates["accepted_revision"] = revision
-    prior_disposition = (
-        chain[-1]["receipt"].get("action") if chain else None
-    )
+    if spec.action == "accepted":
+        projection_updates["accepted_revision"] = effective_revision
     append_lifecycle_event(
         run,
         dimension="review",
-        prior=prior_disposition,
-        new=action,
+        prior=prior,
+        new=spec.action,
         actor=actor,
         reason=reason,
         receipt_refs=(str(path),),
@@ -314,4 +412,9 @@ def record(
         **projection_updates,
         projection_source="review-lifecycle",
     )
-    return {**result, "lifecycle_receipt": str(path)}
+    return {
+        **result,
+        "lifecycle_receipt": str(path),
+        "operation": spec.action,
+        "revision": effective_revision,
+    }

@@ -44,10 +44,10 @@ def _context(settings: Settings, agent_run_id: str) -> tuple[Path, dict[str, Any
         )
     workdir = Path(str(contract["worktree"]["path"])).resolve()
     handoff = Path(str(contract["paths"]["handoff_dir"])).resolve()
-    try:
-        handoff.relative_to(workdir)
-    except ValueError as exc:
-        raise WorkflowError("launch handoff escapes launch worktree") from exc
+    current_handoff = (state_dir / "handoff").resolve()
+    legacy_handoff = (workdir / ".agent-workflow-handoff" / agent_run_id).resolve()
+    if handoff not in {current_handoff, legacy_handoff}:
+        raise WorkflowError("launch handoff is outside the authorized runtime boundary")
     return state_dir, contract, workdir, handoff
 
 
@@ -64,6 +64,7 @@ def _new_draft(contract: dict[str, Any]) -> dict[str, Any]:
         "agent_run_id": str(contract["agent_run"]["id"]),
         "state": "open",
         "criteria": [],
+        "limitations": [],
         "commands": [],
         "created_at": utc_now(),
         "updated_at": utc_now(),
@@ -80,6 +81,9 @@ def _load_draft(handoff: Path, contract: dict[str, Any]) -> dict[str, Any]:
         raise WorkflowError(f"cannot read worker completion draft: {exc}") from exc
     if not isinstance(value, dict) or value.get("schema") != DRAFT_SCHEMA:
         raise WorkflowError("invalid worker completion draft")
+    # Compatibility with drafts created by the first deterministic-protocol
+    # overlay before non-gating limitation records were introduced.
+    value.setdefault("limitations", [])
     validate_instance(value, DRAFT_SCHEMA, artifact=str(path))
     if value.get("agent_run_id") != contract["agent_run"]["id"]:
         raise WorkflowError("worker completion draft Agent Run identity mismatch")
@@ -98,6 +102,36 @@ def _require_open(draft: dict[str, Any]) -> None:
         raise WorkflowError("worker completion is already finalized for this run")
 
 
+def _evidence_items(
+    workdir: Path,
+    evidence: Iterable[str],
+    evidence_files: Iterable[Path],
+    *,
+    label: str,
+) -> list[str]:
+    items = [_clean_text(item, label) for item in evidence]
+    for source in evidence_files:
+        selected = Path(source)
+        if not selected.is_absolute():
+            selected = workdir / selected
+        selected = selected.resolve()
+        try:
+            relative = selected.relative_to(workdir).as_posix()
+        except ValueError as exc:
+            raise WorkflowError(
+                "evidence files must stay inside the Agent Run worktree"
+            ) from exc
+        read = read_regular_file(selected, max_bytes=16 * 1024 * 1024)
+        items.append(
+            f"file:{relative}#sha256={read.sha256};bytes={len(read.data)}"
+        )
+    if not items or len(items) > MAX_EVIDENCE_ITEMS:
+        raise WorkflowError(
+            f"{label} must contain 1-{MAX_EVIDENCE_ITEMS} text/file items"
+        )
+    return items
+
+
 def record_criterion(
     settings: Settings,
     agent_run_id: str,
@@ -105,17 +139,19 @@ def record_criterion(
     criterion_id: str,
     result: str,
     evidence: Iterable[str],
+    evidence_files: Iterable[Path] = (),
 ) -> dict[str, Any]:
     """Record one criterion using only protocol-valid result values."""
     if result not in CRITERION_RESULTS:
         raise WorkflowError(f"criterion result must be one of: {', '.join(CRITERION_RESULTS)}")
     criterion_id = _clean_text(criterion_id, "criterion ID")
-    evidence_items = [_clean_text(item, "criterion evidence") for item in evidence]
-    if not evidence_items or len(evidence_items) > MAX_EVIDENCE_ITEMS:
-        raise WorkflowError(
-            f"criterion evidence must contain 1-{MAX_EVIDENCE_ITEMS} non-empty items"
-        )
-    _, contract, _, handoff = _context(settings, agent_run_id)
+    _, contract, workdir, handoff = _context(settings, agent_run_id)
+    evidence_items = _evidence_items(
+        workdir,
+        evidence,
+        evidence_files,
+        label="criterion evidence",
+    )
     draft = _load_draft(handoff, contract)
     _require_open(draft)
     record = {"id": criterion_id, "result": result, "evidence": evidence_items}
@@ -124,6 +160,48 @@ def record_criterion(
     draft["criteria"] = criteria
     _save_draft(handoff, draft)
     return {"agent_run_id": agent_run_id, "criterion": record, "criterion_count": len(criteria)}
+
+
+def record_limitation(
+    settings: Settings,
+    agent_run_id: str,
+    *,
+    limitation_id: str,
+    evidence: Iterable[str],
+    evidence_files: Iterable[Path] = (),
+) -> dict[str, Any]:
+    """Record a non-gating controlled-environment limitation.
+
+    Limitations are always ``not_verified`` by construction. They preserve
+    network/browser/sandbox constraints without converting them into source
+    failures or allowing an LLM to choose a lifecycle-affecting enum.
+    """
+    limitation_id = _clean_text(limitation_id, "limitation ID")
+    _, contract, workdir, handoff = _context(settings, agent_run_id)
+    draft = _load_draft(handoff, contract)
+    _require_open(draft)
+    record = {
+        "id": limitation_id,
+        "result": "not_verified",
+        "evidence": _evidence_items(
+            workdir,
+            evidence,
+            evidence_files,
+            label="limitation evidence",
+        ),
+    }
+    limitations = [
+        item for item in draft.get("limitations", [])
+        if item.get("id") != limitation_id
+    ]
+    limitations.append(record)
+    draft["limitations"] = limitations
+    _save_draft(handoff, draft)
+    return {
+        "agent_run_id": agent_run_id,
+        "limitation": record,
+        "limitation_count": len(limitations),
+    }
 
 
 def _digest_text(value: str) -> str:
@@ -257,6 +335,7 @@ def complete(
         "head_revision": snap.head,
         "changed_files": _changed_files(workdir, base_revision, snap.head),
         "criteria": list(draft.get("criteria", [])),
+        "limitations": list(draft.get("limitations", [])),
         "commands": list(draft.get("commands", [])),
         "unresolved": unresolved_items,
         "usage": None,
@@ -286,6 +365,7 @@ def complete(
         "completion_path": str(handoff / FINAL_NAME),
         "completion_sha256": draft["final_sha256"],
         "criterion_count": len(value["criteria"]),
+        "limitation_count": len(value["limitations"]),
         "command_count": len(value["commands"]),
         "changed_files": value["changed_files"],
         "next_action": "exit the worker normally; Agent-Workflow runner will collect and seal evidence",
@@ -301,6 +381,7 @@ def status(settings: Settings, agent_run_id: str) -> dict[str, Any]:
         "agent_run_id": agent_run_id,
         "state": draft.get("state"),
         "criteria": draft.get("criteria", []),
+        "limitations": draft.get("limitations", []),
         "commands": draft.get("commands", []),
         "completion_path": str(final) if final.is_file() else None,
         "completion_sha256": sha256_file(final) if final.is_file() else None,

@@ -17,6 +17,7 @@ from .messages import append_message, bridge_available, bridge_required, write_c
 from .path import read_regular_file
 from .state import list_statuses, read_status, run_dir
 from .run_lifecycle import authoritative_execution_status
+from .protocol_values import ASSIGNMENT_EVENTS, ASSIGNMENT_STATES
 from .util import atomic_write_json, expand_path, sha256_file, utc_now, validate_id
 
 CONTEXT_SCHEMA = "agent-workflow/agent-context/v1"
@@ -25,6 +26,89 @@ CONTEXT_NAME = "agent-context.json"
 LEDGER_NAME = "assignments.jsonl"
 MAX_SUMMARY_CHARS = 4096
 MAX_ITEMS = 64
+
+_ASSIGNMENT_TRANSITIONS: dict[tuple[str, str], str] = {
+    ("busy", "task_completed"): "closed",
+}
+
+
+def _assignment_next_state(current: str, event: str) -> str:
+    if current not in ASSIGNMENT_STATES:
+        raise WorkflowError(f"unsupported assignment state: {current!r}")
+    if event not in ASSIGNMENT_EVENTS:
+        raise WorkflowError(f"unsupported assignment event: {event!r}")
+    try:
+        return _ASSIGNMENT_TRANSITIONS[(current, event)]
+    except KeyError as exc:
+        raise WorkflowError(
+            f"assignment event {event!r} is not allowed from state {current!r}"
+        ) from exc
+
+
+def _close_assignment(
+    state_dir: Path,
+    context: dict[str, Any],
+    *,
+    agent_run_id: str,
+    actor: str,
+    summary: str,
+    tags: list[str],
+    files: list[str],
+    lifecycle_reason: str,
+    emit_message: bool,
+) -> dict[str, Any]:
+    """Execute the fixed busy -> closed assignment transition sequence."""
+    current_state = str(context.get("state"))
+    next_state = _assignment_next_state(current_state, "task_completed")
+    assignment = context.get("current_assignment")
+    if not isinstance(assignment, dict):
+        raise WorkflowError("agent has no current assignment")
+    completed = {
+        **dict(assignment),
+        "completed_at": utc_now(),
+        "summary": summary,
+        "tags": tags,
+        "files": files,
+    }
+    event = _append_event(
+        state_dir,
+        {
+            "event": "task_completed",
+            "agent_run_id": agent_run_id,
+            "assignment_id": completed["assignment_id"],
+            "actor": actor,
+            "ticket_id": completed.get("ticket_id"),
+            "pack_id": completed.get("pack_id"),
+            "correlation_id": None,
+            "summary": summary,
+            "tags": tags,
+            "files": files,
+        },
+    )
+    context["completed_assignment"] = completed
+    context["current_assignment"] = None
+    context["state"] = next_state
+    context["updated_at"] = event["timestamp"]
+    atomic_write_json(state_dir / CONTEXT_NAME, context)
+    append_lifecycle_event(
+        state_dir,
+        dimension="assignment",
+        prior=current_state,
+        new=next_state,
+        actor=actor,
+        reason=lifecycle_reason,
+        receipt_refs=[LEDGER_NAME, CONTEXT_NAME],
+    )
+    if emit_message:
+        append_message(
+            state_dir,
+            agent_run_id=agent_run_id,
+            direction="child_to_parent",
+            kind="task_complete",
+            actor=actor,
+            content=summary,
+        )
+    return context
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -195,43 +279,17 @@ def complete_task(
     if receipt["validation_status"] != "valid":
         details = "; ".join(receipt.get("validation_errors", []))
         raise WorkflowError(f"task completion handoff is invalid: {details}")
-    completed = {
-        **dict(context["current_assignment"]),
-        "completed_at": utc_now(),
-        "summary": summary,
-        "tags": _items(tags, "tags"),
-        "files": _items(files, "files"),
-    }
-    event = _append_event(state_dir, {
-        "event": "task_completed",
-        "agent_run_id": agent_run_id,
-        "assignment_id": completed["assignment_id"],
-        "actor": actor,
-        "ticket_id": completed.get("ticket_id"),
-        "pack_id": completed.get("pack_id"),
-        "correlation_id": None,
-        "summary": summary,
-        "tags": completed["tags"],
-        "files": completed["files"],
-    })
-    context["completed_assignment"] = completed
-    context["current_assignment"] = None
-    next_state = "closed"
-    context["state"] = next_state
-    context["updated_at"] = event["timestamp"]
-    atomic_write_json(state_dir / CONTEXT_NAME, context)
-    append_lifecycle_event(
-        state_dir, dimension="assignment", prior="busy", new=next_state,
-        actor=actor, reason=(
-            "child emitted structured task completion"
-        ),
-        receipt_refs=[LEDGER_NAME, CONTEXT_NAME],
+    return _close_assignment(
+        state_dir,
+        context,
+        agent_run_id=agent_run_id,
+        actor=actor,
+        summary=summary,
+        tags=_items(tags, "tags"),
+        files=_items(files, "files"),
+        lifecycle_reason="child emitted structured task completion",
+        emit_message=True,
     )
-    append_message(
-        state_dir, agent_run_id=agent_run_id, direction="child_to_parent",
-        kind="task_complete", actor=actor, content=summary,
-    )
-    return context
 
 
 def apply_bridged_completion(
@@ -281,37 +339,15 @@ def apply_bridged_completion(
         raise WorkflowError("task-complete is only available to an interactive external worker")
     if context.get("state") != "busy" or not isinstance(context.get("current_assignment"), dict):
         raise WorkflowError("agent is not busy")
-    completed = {
-        **dict(context["current_assignment"]),
-        "completed_at": utc_now(),
-        "summary": summary,
-        "tags": [],
-        "files": [],
-    }
-    event = _append_event(state_dir, {
-        "event": "task_completed",
-        "agent_run_id": agent_run_id,
-        "assignment_id": completed["assignment_id"],
-        "actor": actor,
-        "ticket_id": completed.get("ticket_id"),
-        "pack_id": completed.get("pack_id"),
-        "correlation_id": None,
-        "summary": summary,
-        "tags": [],
-        "files": [],
-    })
-    context["completed_assignment"] = completed
-    context["current_assignment"] = None
-    next_state = "closed"
-    context["state"] = next_state
-    context["updated_at"] = event["timestamp"]
-    atomic_write_json(state_dir / CONTEXT_NAME, context)
-    append_lifecycle_event(
-        state_dir, dimension="assignment", prior="busy", new=next_state,
-        actor=actor, reason=(
-            "host applied bridged task completion"
-        ),
-        receipt_refs=[LEDGER_NAME, CONTEXT_NAME],
+    return _close_assignment(
+        state_dir,
+        context,
+        agent_run_id=agent_run_id,
+        actor=actor,
+        summary=summary,
+        tags=[],
+        files=[],
+        lifecycle_reason="host applied bridged task completion",
+        emit_message=False,
     )
-    return context
 

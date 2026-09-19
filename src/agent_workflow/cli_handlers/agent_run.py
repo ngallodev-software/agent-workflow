@@ -255,20 +255,20 @@ def handle_agent_run_command(
             ),
             False,
         )
-    if command in {"review", "accept", "reject"}:
-        action = (
-            "reviewed"
-            if command == "review"
-            else ("accepted" if command == "accept" else "rejected")
-        )
+    lifecycle_actions = {
+        "review": "reviewed",
+        "accept": "accepted",
+        "reject": "rejected",
+    }
+    if command in lifecycle_actions:
         return (
             record_lifecycle(
                 settings,
                 args.agent_run_id,
-                action=action,
+                action=lifecycle_actions[command],
                 actor=args.actor,
                 reason=args.reason,
-                revision=args.revision if command == "accept" else None,
+                revision=getattr(args, "revision", None),
             ),
             False,
         )

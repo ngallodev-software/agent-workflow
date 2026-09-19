@@ -76,6 +76,7 @@ class Settings:
     config_path: Path
     worktree_root: Path
     state_root: Path
+    config_sources: tuple[Path, ...] = ()
     stall_minutes: int = 10
     branch_prefix: str = "impl/"
     require_clean_source: bool = True
@@ -122,6 +123,7 @@ def defaults(path: Path | None = None) -> Settings:
         / "agent-workflow"
         / "worktrees",
         state_root=_xdg("XDG_STATE_HOME", "~/.local/state") / "agent-workflow",
+        config_sources=(),
         executors={
             "codex": [
                 "codex",
@@ -292,11 +294,16 @@ def _choice(data: dict[str, Any], section: str, key: str, default: str, choices:
     return value
 
 
-def load_settings(path: Path | None = None) -> Settings:
+def load_settings(
+    path: Path | None = None,
+    *,
+    base_settings: Settings | None = None,
+    allowed_root_sections: frozenset[str] | None = None,
+) -> Settings:
     # Preserve lexical components until read_regular_file performs its
     # descriptor-safe, no-follow traversal.
     path = absolute_path(Path(path or default_config_path()))
-    base = defaults(path)
+    base = base_settings or defaults(path)
     if path.is_symlink():
         raise WorkflowError(f"cannot read config {path}: symlink config is not trusted")
     if not path.exists():
@@ -307,6 +314,14 @@ def load_settings(path: Path | None = None) -> Settings:
         raise WorkflowError(f"cannot read config {path}: {exc}") from exc
     if not isinstance(data, dict):
         raise WorkflowError("config must be a TOML table")
+    if allowed_root_sections is not None:
+        allowed = {"schema_version", *allowed_root_sections}
+        forbidden = sorted(set(data) - allowed)
+        if forbidden:
+            raise WorkflowError(
+                "repository-local execution config contains non-execution section(s): "
+                + ", ".join(forbidden)
+            )
     _validate_shape(data)
     schema_version = data.get("schema_version", CONFIG_SCHEMA_VERSION)
     if isinstance(schema_version, bool) or not isinstance(schema_version, int) or schema_version != CONFIG_SCHEMA_VERSION:
@@ -434,7 +449,7 @@ def load_settings(path: Path | None = None) -> Settings:
     raw_profiles = agents.get("profiles", {})
     if not isinstance(raw_profiles, dict):
         raise WorkflowError("[agents.profiles] must contain profile tables")
-    profiles: dict[str, AgentProfile] = {}
+    profiles: dict[str, AgentProfile] = dict(base.agent_profiles)
     for agent_name, profile in raw_profiles.items():
         if not isinstance(profile, dict):
             raise WorkflowError(f"agent profile {agent_name!r} must be a table")
@@ -537,7 +552,9 @@ def load_settings(path: Path | None = None) -> Settings:
     ):
         raise WorkflowError("invalid stall_minutes, supervisor values, or archive_level")
     git = data.get("git", {})
-    repository_allowlist = git.get("repository_allowlist", [])
+    repository_allowlist = git.get(
+        "repository_allowlist", [str(value) for value in base.repository_allowlist]
+    )
     if not isinstance(repository_allowlist, list) or not all(
         isinstance(value, str) and value for value in repository_allowlist
     ):
@@ -551,7 +568,9 @@ def load_settings(path: Path | None = None) -> Settings:
     executable_digest = security.get("executable_digest", base.security.executable_digest)
     if not isinstance(executable_digest, bool):
         raise WorkflowError("config value [security].executable_digest must be a boolean")
-    policy_files = security.get("policy_files", [])
+    policy_files = security.get(
+        "policy_files", [str(value) for value in base.security.policy_files]
+    )
     if not isinstance(policy_files, list) or not all(isinstance(value, str) and value for value in policy_files):
         raise WorkflowError("config value [security].policy_files must be a string list")
     plugins = data.get("plugins", {})
@@ -576,7 +595,9 @@ def load_settings(path: Path | None = None) -> Settings:
     raw_decision_profiles = data.get("decision_profiles", {})
     if not isinstance(raw_decision_profiles, dict):
         raise WorkflowError("[decision_profiles] must contain profile tables")
-    decision_profiles: dict[str, dict[str, DecisionPolicyRule]] = {}
+    decision_profiles: dict[str, dict[str, DecisionPolicyRule]] = {
+        name: dict(rules) for name, rules in base.decision_profiles.items()
+    }
     for profile_name, profile_data in raw_decision_profiles.items():
         if not isinstance(profile_name, str) or not profile_name or not isinstance(profile_data, dict):
             raise WorkflowError("decision profile names and values must be tables")
@@ -602,6 +623,7 @@ def load_settings(path: Path | None = None) -> Settings:
         state_root=absolute_path(
             Path(os.path.expandvars(os.path.expanduser(str(_nested(data, "paths", "state_root", base.state_root)))))
         ),
+        config_sources=tuple(dict.fromkeys((*base.config_sources, path))),
         stall_minutes=stall,
         branch_prefix=str(_nested(data, "git", "branch_prefix", base.branch_prefix)),
         require_clean_source=_boolean(
@@ -683,6 +705,7 @@ def as_dict(s: Settings) -> dict[str, Any]:
     return {
         "schema_version": s.config_schema_version,
         "config_path": str(s.config_path),
+        "config_sources": [str(path) for path in s.config_sources],
         "paths": {
             "worktree_root": str(s.worktree_root),
             "state_root": str(s.state_root),
@@ -783,7 +806,11 @@ def as_dict(s: Settings) -> dict[str, Any]:
 
 def trust_report(s: Settings) -> dict[str, Any]:
     """Return redaction-free filesystem policy diagnostics for doctor output."""
-    reports = [inspect_path(s.config_path, label="configuration file", allow_missing=False)]
+    config_sources = s.config_sources or ((s.config_path,) if s.config_path else ())
+    reports = [
+        inspect_path(path, label="configuration file", allow_missing=False)
+        for path in config_sources
+    ]
     reports.append(inspect_path(s.state_root, label="state root"))
     reports.extend(
         inspect_path(path, label="repository allowlist entry", allow_missing=False)

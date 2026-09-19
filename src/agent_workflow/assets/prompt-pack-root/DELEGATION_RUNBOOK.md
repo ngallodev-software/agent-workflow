@@ -24,7 +24,11 @@ Review dependencies are deliberately different from implementation dependencies.
 
 For Codex in a linked worktree, Agent-Workflow grants the sandbox both the per-worktree Git administrative directory and the repository common Git directory. This is required for commits because linked worktrees share objects and refs with the main repository; it does not grant unrelated repository paths.
 
-Completion criterion results are exact schema enums: `pass`, `fail`, or `not_verified`. Every worker should run `agent completion-validate` after writing `completion.json` and before exit. A dirty launch accepted with `--allow-dirty` is an operator-approved baseline; overlapping pre-existing drift alone is not a blocker, but unrelated drift must be preserved.
+Completion criterion results are exact parser choices: `pass`, `fail`, or `not_verified`. Workers do not write `completion.json`; they use `agent criterion`, `agent verify`, optional `agent limitation`, and `agent complete`, and Agent-Workflow atomically generates the schema-valid handoff. A dirty launch accepted with `--allow-dirty` is an operator-approved baseline; overlapping pre-existing drift alone is not a blocker, but unrelated drift must be preserved.
+
+If an exact launch root contains `.agent-workflow-execution.toml`, Agent-Workflow auto-discovers it for `agent-run prepare` and `delegate` when `--config` is not supplied. The repo-local file is an execution overlay only: it may define agents/classes/executors/roles/runtime aliases, but cannot override host security, state paths, plugins, or other administrative policy.
+
+New run handoffs live under Agent-Workflow state rather than inside the source checkout. This keeps `0700` runtime evidence out of Docker/build contexts and removes the need for repository-specific `.dockerignore` exclusions. Existing runs with legacy worktree-local handoffs remain readable.
 
 Controlled workers do not inherit the host's authenticated GitHub/service
 credentials. Tickets that require privileged external mutation should produce
@@ -129,6 +133,8 @@ records semantic judgments and verification intent through constrained commands:
 
 ```bash
 agent criterion RUN CRITERION pass --evidence "evidence"
+agent criterion RUN HOST-RECEIPT pass --evidence-file GITHUB_PROMOTION_RECEIPT.md
+agent limitation RUN live-github-fetch --evidence "controlled DNS unavailable"
 agent verify RUN -- pytest -q
 agent complete RUN --result completed
 ```
@@ -136,6 +142,6 @@ agent complete RUN --result completed
 The executable owns enum validation, observed command exit status, identity,
 Git revisions, changed-file derivation, schema construction, and terminal
 handoff validation. The runner—not the worker—owns final collection and sealing.
-Legacy manual `completion.json`, `completion-validate`, and `task-complete`
-remain compatibility surfaces only and are not advertised in implementation or
-review command catalogs.
+A limitation is always recorded as `not_verified` and is non-gating; use it only for environment/harness constraints, never to hide a failed acceptance criterion. A reviewer may therefore approve receipt-backed evidence while separately preserving that a controlled live fetch, browser, listener, or sandbox command was unavailable.
+
+Legacy manual `completion.json`, `completion-validate`, and `task-complete` remain compatibility surfaces only and are not advertised in implementation or review command catalogs.

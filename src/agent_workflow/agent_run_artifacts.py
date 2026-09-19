@@ -37,10 +37,14 @@ def _add_git_exclude(workdir: Path, entry: str) -> None:
             stream.write(entry + "\n")
 
 
-def _create_handoff_dir(workdir: Path, agent_run_id: str) -> Path:
-    """Create the executor-writable completion boundary in the worktree."""
-    _add_git_exclude(workdir, ".agent-workflow-handoff/")
-    handoff = workdir / ".agent-workflow-handoff" / agent_run_id
+def _create_handoff_dir(state_dir: Path, agent_run_id: str) -> Path:
+    """Create the executor-writable boundary outside the source checkout.
+
+    Runtime protocol artifacts must not enter Docker/build contexts or source
+    inventories merely because a worker is active. The worker receives explicit
+    access to this exact run-local directory through its executor contract.
+    """
+    handoff = state_dir / "handoff"
     if handoff.exists() or handoff.is_symlink():
         raise WorkflowError(f"completion handoff already exists: {handoff}")
     handoff.mkdir(parents=True, mode=0o700)

@@ -134,6 +134,21 @@
       ],
       "pattern": "^[0-9a-f]{64}$"
     },
+    "config_sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "sha256"],
+        "properties": {
+          "path": {"type": "string"},
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
     "pack_manifest_sha256": {
       "type": [
         "string",

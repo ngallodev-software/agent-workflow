@@ -8,8 +8,68 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from .config import defaults, load_settings
+from .config import defaults, enforce_trust, load_settings
 from .errors import WorkflowError
+
+REPOSITORY_EXECUTION_CONFIG = ".agent-workflow-execution.toml"
+_REPOSITORY_EXECUTION_SECTIONS = frozenset(
+    {"agents", "agent_classes", "executors", "roles", "runtime_aliases"}
+)
+
+
+def _command_tokens(raw: list[str]) -> list[str]:
+    """Return command tokens with global options removed deterministically."""
+    result: list[str] = []
+    index = 0
+    while index < len(raw):
+        token = raw[index]
+        if token == "--":
+            break
+        if token in {"--json", "--no-plugins"}:
+            index += 1
+            continue
+        if token in {"--config", "--decision-mode", "--decision-profile"}:
+            index += 2
+            continue
+        if token.startswith(("--config=", "--decision-mode=", "--decision-profile=")):
+            index += 1
+            continue
+        result.append(token)
+        index += 1
+    return result
+
+
+def _option_path(tokens: list[str], name: str) -> Path | None:
+    for index, token in enumerate(tokens):
+        if token == name and index + 1 < len(tokens):
+            return Path(tokens[index + 1])
+        prefix = name + "="
+        if token.startswith(prefix):
+            return Path(token[len(prefix):])
+    return None
+
+
+def repository_execution_config(argv: list[str] | None) -> tuple[Path, Path] | None:
+    """Discover the exact repo-local execution overlay for launch commands.
+
+    Discovery is deliberately narrow: only commands that explicitly identify a
+    launch repository/workdir participate, and only the exact repository root
+    receives the well-known execution config. No parent-directory walking occurs.
+    """
+    raw = list(sys.argv[1:] if argv is None else argv)
+    tokens = _command_tokens(raw)
+    root: Path | None = None
+    if len(tokens) >= 4 and tokens[:2] == ["agent-run", "prepare"]:
+        root = Path(tokens[3])
+    elif tokens and tokens[0] == "delegate":
+        root = _option_path(tokens, "--workdir") or _option_path(tokens, "--repo")
+    if root is None:
+        return None
+    root = root.expanduser().resolve()
+    candidate = root / REPOSITORY_EXECUTION_CONFIG
+    if not candidate.is_file():
+        return None
+    return root, candidate
 
 
 def parse_args(
@@ -21,10 +81,19 @@ def parse_args(
     explicit_command: list[str] | None = None
     if "--" in raw:
         separator = raw.index("--")
-        explicit_command = raw[separator + 1 :]
-        raw = raw[:separator]
-        if not explicit_command:
-            parser.error("missing explicit command after --")
+        trailing_command = raw[separator + 1 :]
+        leading = raw[:separator]
+        if not trailing_command:
+            parser.error("missing command after --")
+        command_tokens = _command_tokens(leading)
+        if command_tokens[:2] == ["agent", "verify"]:
+            # ``agent verify`` owns a REMAINDER argv contract. Preserve the
+            # conventional separator without confusing it with the legacy
+            # explicit executor override used by ``agent-run prepare``.
+            raw = leading + trailing_command
+        else:
+            explicit_command = trailing_command
+            raw = leading
 
     normalized_globals: list[str] = []
     normalized_rest: list[str] = []
@@ -49,7 +118,7 @@ def parse_args(
         index += 1
 
     if explicit_command is not None and normalized_rest[:2] != ["agent-run", "prepare"]:
-        parser.error("-- COMMAND is only supported by agent-run prepare")
+        parser.error("-- COMMAND is only supported by agent-run prepare or agent verify")
 
     args = parser.parse_args(normalized_globals + normalized_rest)
     setattr(args, "explicit_command", explicit_command)
@@ -128,6 +197,19 @@ def bootstrap_plugins(
     if "--version" in raw:
         return defaults(known.config), None
     settings = load_settings(known.config)
+    if known.config is None:
+        discovered = repository_execution_config(argv)
+        if discovered is not None:
+            repository_root, local_config = discovered
+            # Auto-discovery is convenience, not a trust bypass. The host/base
+            # policy still decides whether the targeted repository is allowed,
+            # and repo-local config may override execution identity only.
+            enforce_trust(settings, workdir=repository_root)
+            settings = load_settings(
+                local_config,
+                base_settings=settings,
+                allowed_root_sections=_REPOSITORY_EXECUTION_SECTIONS,
+            )
     if known.decision_mode:
         settings = replace(settings, decision_mode=known.decision_mode)
     if known.decision_profile:

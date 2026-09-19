@@ -132,24 +132,24 @@ The schema registry and immutable receipt verification are also aligned with
 this direction: schemas remain the persisted contract while operations become
 the only normal mutation path.
 
+## Implemented in the continuation overlay
+
+- **Review/acceptance operation table** — review, accept, and reject now resolve through named operation specs; acceptance revision is derived from sealed completion evidence rather than copied in by the operator.
+- **Prerequisite policy table** — dependency requirements resolve through the closed `accepted` / `sealed_completed` policy set.
+- **Assignment transition executor** — busy-to-closed completion uses one fixed transition function for direct and bridged paths.
+- **Repository-local execution overlay discovery** — exact launch roots may provide `.agent-workflow-execution.toml`; only execution identity sections are accepted and host policy remains authoritative.
+- **Non-gating environment limitations** — reviewers can persist sandbox/network/browser/listener constraints separately from acceptance criteria and bind host receipts by SHA-256.
+- **Out-of-tree handoff storage** — new run protocol artifacts live under run state, eliminating Docker/build-context contamination while retaining read compatibility for legacy handoffs.
+
 ## Next simplification candidates
 
-These should be separate changes after the worker protocol proves stable:
-
-1. **Review/acceptance operation table** — encode review disposition transitions
-   and prerequisites as declarative operation specifications rather than
-   duplicating condition trees across approval paths.
-2. **Prerequisite policy table** — represent `accepted`, `sealed_completed`, and
-   future dependency requirements as named policies with fixed evidence gates.
-3. **Finalization operation pipeline** — express collect -> evaluate -> status ->
+1. **Finalization operation pipeline** — express collect -> evaluate -> status ->
    seal -> projection as an explicit ordered pipeline whose steps are reusable
    by normal and recovery finalization.
-4. **Assignment state transitions** — move assignment `busy -> closed` semantics
-   to a small transition table parallel to execution lifecycle.
-5. **Generated command/schema bindings** — add machine-readable criterion IDs to
+2. **Generated command/schema bindings** — add machine-readable criterion IDs to
    prompt-pack manifests/native jobs. Once available, `agent criterion` can
    reject unknown criterion IDs instead of validating only the result enum.
-6. **Deprecate manual completion JSON** — after one compatibility window, remove
+3. **Deprecate manual completion JSON** — after one compatibility window, remove
    manual worker authorship entirely and reserve sidecar writing to the
    deterministic builder.
 

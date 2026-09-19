@@ -103,6 +103,22 @@ def substantive_completion_errors(
                     f"criteria[{index}].evidence[{evidence_index}] is empty or placeholder-only"
                 )
 
+    limitations = value.get("limitations", [])
+    for index, limitation in enumerate(limitations):
+        limitation_id = limitation.get("id")
+        evidence = limitation.get("evidence", [])
+        if _empty_or_placeholder(limitation_id):
+            errors.append(f"limitations[{index}].id is empty or placeholder-only")
+        if limitation.get("result") != "not_verified":
+            errors.append(f"limitations[{index}].result must be not_verified")
+        if not evidence:
+            errors.append(f"limitations[{index}] requires substantive evidence")
+        for evidence_index, item in enumerate(evidence):
+            if _empty_or_placeholder(item):
+                errors.append(
+                    f"limitations[{index}].evidence[{evidence_index}] is empty or placeholder-only"
+                )
+
     commands = value.get("commands", [])
     if result == "completed" and not commands:
         errors.append("completed result requires at least one command receipt")

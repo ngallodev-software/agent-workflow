@@ -21,11 +21,19 @@ Record criterion outcomes with exact parser-enforced values:
 
 ```bash
 agent criterion AGENT-RUN-ID CRITERION-ID pass --evidence "what proves it"
-agent criterion AGENT-RUN-ID OTHER-ID not_verified --evidence "why it could not be verified"
+agent criterion AGENT-RUN-ID RECEIPT-ID pass --evidence-file path/to/host-receipt.md
 ```
 
-Run final verification through Agent-Workflow so command identity and exit code
-are observed rather than reported by the model:
+Record controlled-environment limitations separately from gating criteria:
+
+```bash
+agent limitation AGENT-RUN-ID live-fetch --evidence "controlled DNS unavailable"
+agent limitation AGENT-RUN-ID browser-launch --evidence "Chromium spawn denied by sandbox"
+```
+
+Limitations are always `not_verified` and are non-gating. They preserve harness/network constraints without mislabeling them as source failures.
+
+Run final verification through Agent-Workflow so command identity and exit code are observed rather than reported by the model:
 
 ```bash
 agent verify AGENT-RUN-ID -- pytest -q

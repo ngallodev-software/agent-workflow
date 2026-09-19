@@ -73,12 +73,21 @@ def _read_handoff_completion(path: Path) -> bytes:
         os.close(descriptor)
 
 
-def _require_real_handoff_dir(handoff: Path, workdir: Path) -> None:
-    try:
-        relative = handoff.relative_to(workdir)
-    except ValueError as exc:
-        raise WorkflowError("completion handoff escapes worktree") from exc
-    current = workdir
+def _require_real_handoff_dir(handoff: Path, workdir: Path, run_root: Path) -> None:
+    roots = (workdir.resolve(), run_root.resolve())
+    selected_root: Path | None = None
+    relative: Path | None = None
+    for root in roots:
+        try:
+            candidate = handoff.resolve().relative_to(root)
+        except ValueError:
+            continue
+        selected_root = root
+        relative = candidate
+        break
+    if selected_root is None or relative is None:
+        raise WorkflowError("completion handoff escapes authorized runtime roots")
+    current = selected_root
     for component in relative.parts:
         current = current / component
         try:
@@ -139,7 +148,7 @@ def collect_completion(
     try:
         if handoff is None:
             raise FileNotFoundError("launch has no completion handoff")
-        _require_real_handoff_dir(handoff, contract_workdir)
+        _require_real_handoff_dir(handoff, contract_workdir, run_dir)
         assert source is not None
         source_data = _read_handoff_completion(source)
         if (
@@ -263,7 +272,7 @@ def collect_task_result(
     try:
         if handoff is None:
             raise FileNotFoundError("launch has no completion handoff")
-        _require_real_handoff_dir(handoff, contract_workdir)
+        _require_real_handoff_dir(handoff, contract_workdir, run_dir)
         if not isinstance(schema_rel, str) or not schema_rel:
             raise WorkflowError("result contract schema path is missing")
         if not isinstance(pack_root_value, str):

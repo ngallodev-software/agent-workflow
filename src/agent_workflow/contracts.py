@@ -168,11 +168,13 @@ def read_agent_run_contract(path: Path) -> dict[str, Any]:
                     f"launch contract schema digest changed: {descriptor_schema_id}"
                 )
     worktree = require_directory(Path(value["worktree"]["path"]), label="launch worktree")
-    handoff = Path(value["paths"]["handoff_dir"])
-    try:
-        handoff.relative_to(worktree)
-    except ValueError as exc:
-        raise WorkflowError("launch handoff escapes launch worktree") from exc
+    run_root = path.parent.resolve()
+    handoff = Path(value["paths"]["handoff_dir"]).resolve()
+    agent_run_id = str(value["agent_run"]["id"])
+    current_handoff = run_root / "handoff"
+    legacy_handoff = worktree / ".agent-workflow-handoff" / agent_run_id
+    if handoff not in {current_handoff.resolve(), legacy_handoff.resolve()}:
+        raise WorkflowError("launch handoff is outside the authorized runtime boundary")
     require_directory(handoff, label="launch handoff")
     if value["paths"]["workdir"] != value["worktree"]["path"]:
         raise WorkflowError("launch contract has conflicting worktree paths")

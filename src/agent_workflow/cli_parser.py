@@ -656,7 +656,22 @@ def build_parser(
     agent_criterion.add_argument("agent_run_id")
     agent_criterion.add_argument("criterion_id")
     agent_criterion.add_argument("result", choices=CRITERION_RESULTS)
-    agent_criterion.add_argument("--evidence", action="append", required=True)
+    agent_criterion.add_argument("--evidence", action="append", default=[])
+    agent_criterion.add_argument(
+        "--evidence-file", type=Path, action="append", default=[],
+        help="bind a worktree-local evidence file by relative path and SHA-256",
+    )
+
+    agent_limitation = agent_commands.add_parser(
+        "limitation", help="record one non-gating controlled-environment limitation"
+    )
+    agent_limitation.add_argument("agent_run_id")
+    agent_limitation.add_argument("limitation_id")
+    agent_limitation.add_argument("--evidence", action="append", default=[])
+    agent_limitation.add_argument(
+        "--evidence-file", type=Path, action="append", default=[],
+        help="bind a worktree-local evidence file by relative path and SHA-256",
+    )
 
     agent_verify = agent_commands.add_parser(
         "verify", help="execute and record one verification command"
@@ -698,7 +713,10 @@ def build_parser(
         lifecycle.add_argument("--actor", required=True)
         lifecycle.add_argument("--reason", required=True)
         if name == "accept":
-            lifecycle.add_argument("--revision", required=True)
+            lifecycle.add_argument(
+                "--revision",
+                help="optional compatibility assertion; canonical revision is derived from sealed completion",
+            )
 
     force = agent_run_commands.add_parser(
         "force-accept", help="record an explicit local operator acceptance override"
