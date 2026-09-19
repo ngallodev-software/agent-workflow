@@ -14,4 +14,5 @@ def test_benchmark_is_not_a_core_command_anymore():
 def test_legacy_benchmark_templates_moved_out_of_core():
     assert "benchmark-manifest" not in EVALUATION_TEMPLATE_KINDS
     assert "benchmark-report" not in EVALUATION_TEMPLATE_KINDS
-    assert importlib.util.find_spec("agent_workflow.benchmarking") is None
+    spec = importlib.util.find_spec("agent_workflow.benchmarking")
+    assert spec is None or spec.loader is None

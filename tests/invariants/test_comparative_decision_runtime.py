@@ -12,6 +12,7 @@ from agent_workflow.scheduler import SchedulerService
 
 def _shared_library() -> ModuleType:
     module = ModuleType("agent_workflow_comparative_eval")
+    module.__version__ = "0.1.0"
     module.make_observation = lambda **kwargs: make_observation(
         **{key: value for key, value in kwargs.items() if key not in {"candidate_applied", "authoritative_arm"}}
     )
