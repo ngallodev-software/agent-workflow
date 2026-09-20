@@ -127,6 +127,56 @@ def test_pack_path_and_v1_task_id_resolve_to_manifest_identity(tmp_path: Path) -
     assert pack_id == "portfolio-site"
 
 
+def test_explicit_agent_name_is_logical_identity_not_preferred_name_allowlist(
+    tmp_path: Path,
+) -> None:
+    settings = replace(
+        defaults(tmp_path / "config.toml"),
+        state_root=tmp_path / "state",
+        preferred_agent_names=("luna-01", "luna-02"),
+    )
+    identity = resolve_agent_identity(
+        settings,
+        requested_name="terra",
+        requested_role=None,
+        requested_class="review",
+        executor="codex",
+        model=LUNA_MODEL,
+        reasoning_effort="medium",
+        allow_no_go_model=False,
+        explicit_command=None,
+        interactive=False,
+    )
+    assert identity.agent_name == "terra"
+    assert identity.agent_class == "review"
+    assert identity.model == LUNA_MODEL
+
+
+def test_role_runtime_override_error_points_to_operator_compatibility_path(
+    tmp_path: Path,
+) -> None:
+    settings = replace(
+        defaults(tmp_path / "config.toml"),
+        state_root=tmp_path / "state",
+    )
+    with pytest.raises(
+        Exception,
+        match="omit --role and use the matching --agent-class",
+    ):
+        resolve_agent_identity(
+            settings,
+            requested_name=None,
+            requested_role="review",
+            requested_class=None,
+            executor="codex",
+            model=LUNA_MODEL,
+            reasoning_effort="medium",
+            allow_no_go_model=False,
+            explicit_command=None,
+            interactive=False,
+        )
+
+
 def test_live_unpublished_name_lease_can_be_skipped_for_implicit_allocation(
     tmp_path: Path,
 ) -> None:
