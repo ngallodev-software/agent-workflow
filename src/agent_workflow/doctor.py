@@ -14,7 +14,12 @@ from .config import trust_report
 from .errors import WorkflowError
 
 
-def _executor_capability(name: str, command: list[str]) -> dict[str, Any]:
+def _executor_capability(
+    name: str,
+    command: list[str],
+    *,
+    steering_adapter: str = "unsupported",
+) -> dict[str, Any]:
     binary = shutil.which(command[0]) if command else None
     value: dict[str, Any] = {
         "configured_argv": list(
@@ -24,6 +29,8 @@ def _executor_capability(name: str, command: list[str]) -> dict[str, Any]:
         "installed": bool(binary),
         "version": None,
         "structured_output": False,
+        "steering_adapter": steering_adapter,
+        "late_steering_supported": steering_adapter != "unsupported",
         "probe_error": None,
     }
     if not binary:
@@ -117,7 +124,15 @@ def run_doctor(settings: Settings) -> dict[str, Any]:
     security = trust_report(settings)
     plugins = _plugin_diagnostics(settings)
     executors = {
-        name: _executor_capability(name, command)
+        name: _executor_capability(
+            name,
+            command,
+            steering_adapter=(
+                settings.executor_policies[name].steering_adapter
+                if name in settings.executor_policies
+                else "unsupported"
+            ),
+        )
         for name, command in sorted(settings.executors.items())
     }
     compatibility_ok = settings.security.mode == "local" or all(
