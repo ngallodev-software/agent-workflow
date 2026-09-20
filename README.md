@@ -193,7 +193,7 @@ The core is deliberately host-independent. A future plugin may project Agent Run
 
 ## Version
 
-Version `0.11.0` completes the deterministic worker/admin protocol migration: workers submit constrained semantic operations, Agent-Workflow constructs schema-valid administrative evidence, normal and recovery completion share one terminal pipeline, and legacy worker-authored completion commands are removed. See `ARCHITECTURE_SIMPLIFICATION_PLAN.md` for the migration boundary.
+Version `0.11.0` builds on the deterministic worker/admin protocol migration: workers submit constrained semantic operations, Agent-Workflow constructs schema-valid administrative evidence, normal and recovery completion share one terminal pipeline, and legacy worker-authored completion commands are removed. See `ARCHITECTURE_SIMPLIFICATION_PLAN.md` for the migration boundary.
 
 ## Repository-only CI assets
 

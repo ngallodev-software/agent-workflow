@@ -91,11 +91,11 @@ For external-plugin rollback, disable the affected plugin in `[plugins].enabled`
 
 ## Tagged bootstrap install
 
-For a published release, pin the release explicitly. For version `0.10.2`:
+For a published release, pin the release explicitly. For version `0.11.0`:
 
 ```bash
-curl -fsSL https://github.com/ngallodev-software/agent-workflow/releases/download/v0.10.2/install.sh | \
-  sh -s -- --version v0.10.2
+curl -fsSL https://github.com/ngallodev-software/agent-workflow/releases/download/v0.11.0/install.sh | \
+  sh -s -- --version v0.11.0
 ```
 
 The version is intentional: the 0.9 line builds on the breaking Agent Run/headless-core rewrite and does not carry terminal-host compatibility.
