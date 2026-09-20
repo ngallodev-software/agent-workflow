@@ -76,12 +76,19 @@ def test_substantive_completion_rejects_empty_schema_valid_success() -> None:
 
 
 def test_completion_revision_rejects_uncommitted_changed_files() -> None:
+    completion = _completion(base_revision="a" * 40, head_revision="a" * 40)
     errors = completion_revision_errors(
-        _completion(base_revision="a" * 40, head_revision="a" * 40),
+        completion,
         expected_base_revision="a" * 40,
         actual_head_revision="a" * 40,
     )
     assert "completed changed_files require a committed revision distinct from base_revision" in errors
+    completion["head_revision"] = "b" * 40
+    assert completion_revision_errors(
+        completion,
+        expected_base_revision="a" * 40,
+        actual_head_revision="b" * 40,
+    ) == []
 
 
 def test_dirty_source_diagnostic_explains_allow_dirty_base_worktree(tmp_path: Path) -> None:
