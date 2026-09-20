@@ -66,7 +66,17 @@ agent-workflow agent-run steer RUN "new instruction" --actor parent
 agent-workflow agent-run ack RUN MESSAGE_ID "applied" --actor worker
 ```
 
-Workers publish structured completion with `agent task-complete`. Required evaluation, independent review, and authorized acceptance/rejection remain separate gates. Do not infer success from worker exit or self-accept because implementation/tests finished.
+Workers publish structured completion through the deterministic worker protocol: record declared criteria with `agent criterion`, record a final observed command with `agent verify`, then finish with `agent complete`. Required evaluation, independent review, and authorized acceptance/rejection remain separate gates. Do not infer success from worker exit or self-accept because implementation/tests finished.
+
+## Launch friction and operator overrides
+
+`--agent-name` is only a logical worker identity. An explicit valid name does not need to appear in `[agents].preferred_names`; that list controls automatic allocation order. A name such as `terra` never selects a model by itself.
+
+Normal orchestration uses `--role`, whose configured private runtime binding owns executor/model/reasoning selection. Do not combine `--role` with explicit runtime overrides. When an operator intentionally needs a specific runtime, omit `--role` and use the matching `--agent-class` together with explicit `--executor`, `--model`, and optional `--reasoning-effort`.
+
+A dirty source tree remains fail-closed. Use `--allow-dirty` only when pre-existing changes are intentionally part of the launch baseline. Agent-Workflow records that drift; workers must preserve unrelated pre-existing changes and must not reinterpret the flag as permission to rewrite them.
+
+Before relying on late steering, inspect the `steering` block returned by `delegate` or the `steering_supported`, `steering_adapter`, and `steering_reason` fields from `agent-run status`. A steering request is persisted even when delivery is `unsupported`; persistence is not application. Treat the request as unapplied until correlated acknowledgement evidence exists.
 
 ## Continuous improvement
 
