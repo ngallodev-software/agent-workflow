@@ -265,7 +265,7 @@ def test_external_exit_completes_only_after_task_completion_and_rebuilds_receipt
     )
     assert criterion["criterion"]["result"] == "pass"
     verification = installed_product.json(
-        "agent", "verify", "external-success", "--cwd", repo, "--",
+        "agent", "verify", "--cwd", repo, "external-success", "--",
         installed_product.python, "-c", "raise SystemExit(0)", env=env,
     )
     assert verification["ok"] is True
