@@ -125,6 +125,16 @@
       "source_requirements": [
         "agent-workflow-comparative-eval==0.1.0"
       ]
+    },
+    {
+      "name": "typesafe-sdk",
+      "version": "0.6.0",
+      "groups": [
+        "typesafe"
+      ],
+      "source_requirements": [
+        "typesafe-sdk==0.6.0"
+      ]
     }
   ]
 }
