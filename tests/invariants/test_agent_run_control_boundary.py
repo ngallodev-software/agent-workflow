@@ -30,7 +30,11 @@ def _settings(tmp_path: Path):
 def test_steer_persists_before_delivery_and_preserves_delivery_evidence(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     message = {"event_id": "msg-1", "sequence": 1}
-    delivery = {"event_id": "delivery-1", "outcome": "queued"}
+    delivery = {
+        "event_id": "delivery-1",
+        "outcome": "queued",
+        "reason": "durable steer request queued for adapter delivery",
+    }
     with (
         patch("agent_workflow.agent_run_control._active_run"),
         patch("agent_workflow.agent_run_control._append_control_message", return_value=message) as append,
@@ -43,8 +47,11 @@ def test_steer_persists_before_delivery_and_preserves_delivery_evidence(tmp_path
     assert result == {
         "event_id": "msg-1",
         "sequence": 1,
+        "message_persisted": True,
         "delivery_outcome": "queued",
         "delivery_event_id": "delivery-1",
+        "delivery_reason": "durable steer request queued for adapter delivery",
+        "acknowledgement_required": True,
     }
 
 
