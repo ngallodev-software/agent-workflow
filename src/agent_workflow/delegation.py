@@ -165,6 +165,21 @@ def delegate(
             state=state,
             reused_existing_run=True,
             worktree_created=False,
+            steering_adapter=(
+                str(existing.get("steering_adapter"))
+                if existing.get("steering_adapter") is not None
+                else None
+            ),
+            steering_supported=(
+                bool(existing.get("steering_supported"))
+                if existing.get("steering_supported") is not None
+                else None
+            ),
+            steering_reason=(
+                str(existing.get("steering_reason"))
+                if existing.get("steering_reason") is not None
+                else None
+            ),
         )
 
     try:
@@ -211,6 +226,21 @@ def delegate(
         state=state,
         reused_existing_run=False,
         worktree_created=worktree_result is not None,
+        steering_adapter=(
+            str(result.get("steering_adapter"))
+            if result.get("steering_adapter") is not None
+            else None
+        ),
+        steering_supported=(
+            bool(result.get("steering_supported"))
+            if result.get("steering_supported") is not None
+            else None
+        ),
+        steering_reason=(
+            str(result.get("steering_reason"))
+            if result.get("steering_reason") is not None
+            else None
+        ),
     )
 
 
@@ -224,6 +254,9 @@ def _delegation_result(
     state: str,
     reused_existing_run: bool,
     worktree_created: bool,
+    steering_adapter: str | None = None,
+    steering_supported: bool | None = None,
+    steering_reason: str | None = None,
 ) -> dict[str, Any]:
     """Return the compact common-path delegation contract.
 
@@ -241,6 +274,13 @@ def _delegation_result(
         "worktree_created": worktree_created,
         "next_actions": _next_actions(agent_run_id, worker_mode, state),
     }
+    if steering_supported is not None:
+        result["steering"] = {
+            "supported": steering_supported,
+            "adapter": steering_adapter,
+            "reason": steering_reason,
+            "acknowledgement_required": True,
+        }
     if worker_mode == "external" and state == "prepared":
         state_dir = run_dir(settings, agent_run_id)
         runner = state_dir / "run.sh"
