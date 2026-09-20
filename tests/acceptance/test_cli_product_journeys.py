@@ -11,7 +11,7 @@ import pytest
 
 from tests.conftest import InstalledProduct, git_repo, wait_for_status, write_config
 from agent_workflow.run_lifecycle import transition_execution_path
-from agent_workflow.receipts import completion_template, verify_seal_details
+from agent_workflow.receipts import verify_seal_details
 
 
 def _run_dir(env: dict[str, str], agent_run_id: str) -> Path:
@@ -45,7 +45,16 @@ def test_installed_cli_exposes_headless_agent_run_surface(
 
     catalog = installed_product.json("commands", "--format", "json", env=product_env)
     represented = {item["command"] for item in catalog["commands"]}
-    assert {"agent-run prepare", "agent-run start", "agent-run status", "agent task-complete", "worktree closeout"} <= represented
+    assert {
+        "agent-run prepare",
+        "agent-run start",
+        "agent-run status",
+        "agent criterion",
+        "agent verify",
+        "agent complete",
+        "worktree closeout",
+    } <= represented
+    assert "agent task-complete" not in represented
     assert "launch" not in represented
 
 
@@ -250,22 +259,20 @@ def test_external_exit_completes_only_after_task_completion_and_rebuilds_receipt
         "agent-run", "start-external", "external-success", "host", "worker-host",
         "--generation", "1", env=env,
     )
-    handoff = repo / ".agent-workflow-handoff" / "external-success" / "completion.json"
-    completion = completion_template(
-        agent_run_id="external-success", ticket_id="EXT-HOST-002", pack_id=None,
-        base_revision=json.loads((run / "source-baseline.json").read_text())["components"]["primary"]["head"],
+    criterion = installed_product.json(
+        "agent", "criterion", "external-success", "external-exit", "pass",
+        "--evidence", "ordered integration journey", env=env,
     )
-    completion.update({
-        "head_revision": completion["base_revision"],
-        "changed_files": [],
-        "criteria": [{"id": "external-exit", "result": "pass", "evidence": ["ordered integration journey"]}],
-        "commands": [{"argv": ["true"], "cwd": str(repo), "exit_code": 0, "receipt": "success"}],
-    })
-    handoff.write_text(json.dumps(completion), encoding="utf-8")
+    assert criterion["criterion"]["result"] == "pass"
+    verification = installed_product.json(
+        "agent", "verify", "external-success", "--cwd", repo, "--",
+        "git", "rev-parse", "--verify", "HEAD", env=env,
+    )
+    assert verification["ok"] is True
     completed = installed_product.json(
-        "agent", "task-complete", "external-success", "--actor", "worker", "--summary", "handoff reported", env=env,
+        "agent", "complete", "external-success", "--result", "completed", env=env,
     )
-    assert completed["state"] == "closed"
+    assert completed["state"] == "finalized"
     assert not (run / "final-receipt.json").exists()
     exit_observation = installed_product.json(
         "agent-run", "external-exit", "external-success", "--generation", "1",
