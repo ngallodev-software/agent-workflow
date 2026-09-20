@@ -1,33 +1,29 @@
 # TypeSafe architecture alignment
 
-This implementation follows the attached `typesafe-impl-internal` skill boundary:
+Agent-Workflow owns its bounded semantic decision seams directly. TypeSafe is an optional built-in provider, not an Agent-Workflow plugin and not a lifecycle authority.
 
 ```text
 projected application state
-        -> plugin semantic provider
-        -> raw typed semantic evidence
+        -> built-in optional TypeSafe provider
+        -> raw Choice / Noul / Score evidence
         -> Agent-Workflow DecisionPolicy
         -> existing deterministic application behavior
 ```
 
-## Host authority
+## Authority
 
-Agent-Workflow owns stable decision IDs, deterministic control values, thresholds, fallback, application-policy composition, lifecycle/review/acceptance authority, and `agent-workflow/decision-execution-receipt/v1`.
+Agent-Workflow owns stable decision IDs, deterministic control values, thresholds, fallback, policy composition, lifecycle/review/acceptance authority, and `agent-workflow/decision-execution-receipt/v1`. TypeSafe cannot bypass executor/model allowlists, lifecycle state, evidence checks, review, or acceptance.
 
-`deterministic` is the only built-in decision mode. Optional plugins may advertise additional modes and semantic providers, but cannot replace deterministic recovery or bypass host policy.
+## Provider
 
-## TypeSafe provider
+The provider lives under `agent_workflow.semantic` and lazy-imports `typesafe-sdk`. It lowers versioned application question specifications to the official SDK `Choice`, `Noul`, and `Score` primitives. Missing SDK/credentials, transport failure, no-match, uncertainty, and policy rejection remain explicit fallback evidence.
 
-`agent-workflow-typesafe-ai` advertises the `typesafe` and `comparative` modes plus a `typesafe` semantic provider. The comparative mode also advertises the generic `capture_comparison` capability, which causes the host to persist shared-library observations without a second TypeSafe call. The provider batches the routing questions in one TypeSafe request and returns provider-neutral evidence. It does not own automation thresholds or final routing.
+The SDK is optional (`agent-workflow[typesafe]`). `TYPESAFE_API_KEY` is the credential boundary; credentials are never accepted in `config.toml`, receipts, or logs.
 
-## Mode semantics
+## Modes
 
 - `deterministic`: no semantic provider invocation.
-- `typesafe`: semantic evidence may be consumed by the Agent-Workflow policy on explicitly automatable seams. Failures/uncertainty/no-match fall back to deterministic control.
-- `comparative`: semantic evidence is evaluated but the deterministic control result remains authoritative; the same host routing policy computes the counterfactual candidate route.
+- `typesafe`: TypeSafe evidence may affect only explicitly automatable decisions after Agent-Workflow policy and confidence checks.
+- `comparative`: TypeSafe is evaluated, deterministic control remains applied, and the counterfactual candidate is captured through the neutral comparative-eval capability.
 
-Per-decision profiles may tighten thresholds or downgrade disposition to `shadow` / `advisory`. High-consequence `routing.semantic_risk` remains non-automatable in the current registry.
-
-## Benchmarking
-
-The historical comparative benchmark subsystem is optional product capability rather than host authority. It has therefore moved to the `agent-workflow-benchmark` plugin. Core retains generic sealed-run evaluation, deterministic scoring/review/lifecycle authority, and generic evaluation primitives.
+Current live semantic decisions are only `routing.task_class`, `routing.interaction_required`, and `routing.semantic_risk`. Skill evaluation is not a runtime routing decision and is not reintroduced by this integration.

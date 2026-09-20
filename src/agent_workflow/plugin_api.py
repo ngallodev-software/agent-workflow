@@ -74,7 +74,7 @@ class ResolvedPluginPackageResource:
 
 
 @dataclass(frozen=True)
-class PluginDecisionRequest:
+class DecisionRequest:
     """One bounded application-owned semantic decision set request."""
 
     decision_ids: tuple[str, ...]
@@ -83,7 +83,7 @@ class PluginDecisionRequest:
 
 
 @dataclass(frozen=True)
-class PluginDecisionEvidence:
+class DecisionEvidence:
     """Provider-neutral semantic evidence returned by a decision provider."""
 
     decision_id: str
@@ -101,14 +101,21 @@ class PluginDecisionEvidence:
 
 
 @dataclass(frozen=True)
-class PluginDecisionContext:
+class DecisionContext:
     """Host context supplied to a plugin semantic decision provider."""
 
     settings: "Settings"
     host_version: str
 
 
-PluginDecisionEvaluate = Callable[[PluginDecisionRequest, PluginDecisionContext], Mapping[str, PluginDecisionEvidence]]
+DecisionEvaluate = Callable[[DecisionRequest, DecisionContext], Mapping[str, DecisionEvidence]]
+
+
+# Backward-compatible public aliases for third-party semantic plugins.
+PluginDecisionRequest = DecisionRequest
+PluginDecisionEvidence = DecisionEvidence
+PluginDecisionContext = DecisionContext
+PluginDecisionEvaluate = DecisionEvaluate
 
 
 @dataclass(frozen=True)
@@ -117,7 +124,7 @@ class PluginDecisionProvider:
 
     name: str
     decisions: tuple[str, ...]
-    evaluate: PluginDecisionEvaluate
+    evaluate: DecisionEvaluate
 
 
 @dataclass(frozen=True)

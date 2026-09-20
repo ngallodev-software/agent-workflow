@@ -144,9 +144,10 @@ def build_parser(
     plugin_commands.add_parser("list", help="list discovered and enabled plugins")
     decision = commands.add_parser("decision", help="decision modes, providers, and policy diagnostics")
     decision_commands = decision.add_subparsers(dest="decision_command", required=True)
-    decision_commands.add_parser("modes", help="list built-in and enabled plugin decision modes")
-    decision_commands.add_parser("providers", help="list enabled plugin semantic decision providers")
-    decision_commands.add_parser("check", help="validate the effective decision mode/profile against enabled plugins")
+    decision_commands.add_parser("modes", help="list built-in decision modes")
+    decision_commands.add_parser("providers", help="list built-in semantic decision providers")
+    decision_commands.add_parser("check", help="validate the effective decision mode/profile")
+    decision_commands.add_parser("typesafe", help="report built-in TypeSafe SDK/key/question-set capability")
     decision_report=decision_commands.add_parser("report", help="report persisted comparative decision evidence")
     decision_report.add_argument("evidence", type=Path, help="comparative-eval SQLite evidence path")
 

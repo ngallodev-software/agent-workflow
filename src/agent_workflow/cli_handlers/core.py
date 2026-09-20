@@ -35,7 +35,10 @@ def handle_core_command(
         if args.decision_command == "modes":
             return {"modes": mode_inventory(plugin_registry), "effective_mode": settings.decision_mode}, False
         if args.decision_command == "providers":
-            return {"providers": provider_inventory(plugin_registry)}, False
+            return {"providers": provider_inventory(plugin_registry, settings)}, False
+        if args.decision_command == "typesafe":
+            from ..semantic.typesafe import capability
+            return capability(settings), False
         if args.decision_command == "report":
             from ..comparative_eval_runtime import EvidenceStore
             store=EvidenceStore(args.evidence)

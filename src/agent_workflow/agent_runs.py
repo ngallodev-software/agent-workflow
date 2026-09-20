@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-from importlib.metadata import PackageNotFoundError, version as distribution_version
 import json
 import os
 import platform
@@ -78,29 +77,6 @@ from .util import (
     validate_id,
 )
 from .path import absolute_path, read_regular_file, require_directory
-
-
-def _require_typesafe_environment(settings: Settings) -> None:
-    """Require the operator to load TypeSafe credentials before a run."""
-    if "agent-workflow-typesafe" not in settings.plugins_enabled:
-        return
-    try:
-        distribution_version("agent-workflow-typesafe")
-    except PackageNotFoundError:
-        return
-    if os.environ.get("TYPESAFE_API_KEY"):
-        return
-    if settings.typesafe_env_file is None:
-        raise WorkflowError(
-            "TypeSafe plugin is installed and enabled but TYPESAFE_API_KEY is not loaded; "
-            "configure [plugins].typesafe_env_file with the environment file path, "
-            "then source that file before starting this Agent Run"
-        )
-    raise WorkflowError(
-        "TypeSafe plugin is installed and enabled but TYPESAFE_API_KEY is not loaded; "
-        f"before starting this Agent Run, run: source {settings.typesafe_env_file}"
-    )
-
 
 
 
@@ -1089,7 +1065,6 @@ def _prepare(
     retry_context: str | None = None,
 ) -> dict[str, Any]:
     validate_id(agent_run_id, "agent run ID")
-    _require_typesafe_environment(settings)
     if ticket_id:
         validate_id(ticket_id, "ticket ID")
     workdir = require_directory(absolute_path(workdir), label="workdir")

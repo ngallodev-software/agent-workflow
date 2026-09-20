@@ -185,12 +185,6 @@
       "properties": {
         "enabled": {
           "$ref": "#/$defs/strings"
-        },
-        "typesafe_api_call_log": {
-          "type": ["string", "null"]
-        },
-        "typesafe_env_file": {
-          "type": ["string", "null"]
         }
       },
       "type": "object"
@@ -365,7 +359,13 @@
       "$ref": "#/$defs/paths"
     },
     "plugins": {
-      "$ref": "#/$defs/plugins"
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "$ref": "#/$defs/strings"
+        }
+      },
+      "type": "object"
     },
     "roles": {
       "$ref": "#/$defs/roles"
@@ -384,6 +384,36 @@
     },
     "supervisor": {
       "$ref": "#/$defs/supervisor"
+    },
+    "semantic": {
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "const": "typesafe",
+          "type": "string"
+        },
+        "typesafe": {
+          "additionalProperties": false,
+          "properties": {
+            "model": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1
+            },
+            "api_call_log": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
     }
   },
   "title": "agent-workflow user policy",

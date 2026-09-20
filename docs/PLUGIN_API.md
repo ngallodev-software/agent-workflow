@@ -8,10 +8,10 @@ Plugins are Python distributions advertising the `agent_workflow.plugins` entry-
 
 ```toml
 [plugins]
-enabled = ["agent-workflow-typesafe"]
+enabled = ["example-plugin"]
 ```
 
-`agent-workflow-typesafe` is an example external plugin name; it is enabled
+`example-plugin` is an illustrative external plugin name; it is enabled
 only when that plugin's release artifact is installed in the same Python
 environment as the host. The host does not download plugin source dynamically.
 

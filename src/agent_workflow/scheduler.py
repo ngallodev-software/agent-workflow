@@ -121,12 +121,8 @@ class SchedulerService:
         return self.run_dir / "comparative-eval.sqlite"
 
     def _capture_routing_comparison(self, node: Mapping[str, Any], agent_run_id: str, source: Mapping[str, Any], task_text: str, advice: Mapping[str, Any]) -> dict[str, Any] | None:
-        if self.settings.decision_mode == "deterministic" or self.plugin_registry is None:
-            return None
-        try:
-            _plugin, mode=self.plugin_registry.decision_mode(self.settings.decision_mode)
-        except WorkflowError:
-            return None
+        from .decisions import decision_mode
+        mode = decision_mode(self.settings.decision_mode)
         if not mode.capture_comparison:
             return None
         candidate=advice.get("counterfactual_candidate")
@@ -145,7 +141,7 @@ class SchedulerService:
         provider_elapsed=timing.get("provider_elapsed_seconds")
         candidate_policy=timing.get("candidate_policy_seconds")
         candidate_duration=(float(provider_elapsed or 0)+float(candidate_policy or 0)) if provider_elapsed is not None or candidate_policy is not None else None
-        identity={"agent_workflow_version":__version__,"decision_mode":self.settings.decision_mode,"decision_profile":self.settings.decision_profile,"plugin":_plugin.descriptor.name,"provider":mode.provider,"semantic":semantic}
+        identity={"agent_workflow_version":__version__,"decision_mode":self.settings.decision_mode,"decision_profile":self.settings.decision_profile,"plugin":None,"provider":mode.provider,"semantic":semantic}
         observation_key=f"{node.get('workflow_id')}:{node.get('node_id')}:{node.get('workflow_attempt')}:routing-advice/v1"
         import hashlib
         observation_id="routing-"+hashlib.sha256(observation_key.encode()).hexdigest()[:32]

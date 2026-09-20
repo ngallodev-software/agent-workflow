@@ -22,7 +22,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         requested_command = top_level_command(argv)
         settings, _ = bootstrap_plugins(argv, load_plugins=False)
-        load_plugins = plugins_required_for_command(argv, set(BUILTIN_TOP_LEVEL_COMMANDS)) or settings.decision_mode != "deterministic"
+        load_plugins = plugins_required_for_command(argv, set(BUILTIN_TOP_LEVEL_COMMANDS))
         plugin_registry = None
         if load_plugins:
             from .plugins import load_plugin_registry

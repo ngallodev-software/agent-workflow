@@ -70,7 +70,7 @@ pipeline {
                         '''
                     }
                 }
-                stage('TypeSafe plugin') {
+                stage('Built-in TypeSafe provider') {
                     steps {
                         sh '''
                             compat="$WORKSPACE@tmp/typesafe-compat"
@@ -78,14 +78,9 @@ pipeline {
                             rm -rf "$compat"
                             python3 -m venv "$compat/venv"
                             test -s "$wheel"
-                            "$compat/venv/bin/pip" install --disable-pip-version-check "$wheel"
-                            git clone --depth 1 https://github.com/ngallodev-software/agent-workflow-typesafe-ai.git "$compat/source"
-                            git -C "$compat/source" checkout --detach fe2543fad569cd366dacfd56a8e8be207f2c205b
-                            "$compat/venv/bin/pip" install --disable-pip-version-check "$compat/source[test]"
-                            printf '%s\n' 'schema_version = 1' '' '[plugins]' 'enabled = ["agent-workflow-typesafe"]' > "$compat/config.toml"
-                            "$compat/venv/bin/agent-workflow" --config "$compat/config.toml" typesafe doctor
-                            "$compat/venv/bin/agent-workflow" --config "$compat/config.toml" decision modes
-                            "$compat/venv/bin/python" -m pytest -q "$compat/source/tests/test_plugin.py"
+                            "$compat/venv/bin/pip" install --disable-pip-version-check "$wheel[typesafe]"
+                            "$compat/venv/bin/agent-workflow" decision typesafe
+                            "$compat/venv/bin/agent-workflow" decision modes
                         '''
                     }
                 }

@@ -334,10 +334,12 @@ independent rebuild/test evidence.
 
 ### TYPE-001 — Expand TypeSafe only at proven semantic seams
 
-**Status:** future / evidence-gated
+**Status:** built-in routing provider integrated; future seams remain evidence-gated
 
 Current comparative coverage is intentionally limited to registered runtime semantic decisions with deterministic authority preserved. Future candidates are evidence-support assessment, bounded failure classification when deterministic categories are insufficient, remediation-strategy advice over an allowed finite set, and planner/decomposition selection where a deterministic fallback and real consumer exist.
 
 Treat additive semantic evidence separately from comparative replacement: a useful TypeSafe question does not need a fake equivalent deterministic score, but it does need an existing deterministic authority/fallback path, bounded projected state, an explicit consumer, uncertainty handling, and a receipt explaining provider failure or policy rejection. Keep lifecycle ownership, leases, duplicate prevention, executor/process facts, authorization, state transitions, evidence existence, and acceptance authority deterministic-only.
 
 **Done when:** each promoted seam has a versioned question set, reachable production boundary, deterministic fallback/authority path, shadow evaluation evidence, explicit policy, and regression coverage preventing silent bypass.
+
+TypeSafe packaging simplification completed in the integrated 0.11.x source: the Agent-Workflow-specific external plugin is retired in favor of a lazy optional built-in provider using official SDK primitives. Historical comparative schema namespaces remain readable only for compatibility.

@@ -37,7 +37,7 @@ harness roots explicitly, for example `bash scripts/install-source.sh
 --harnesses codex,claude,generic`; omitted legacy harnesses have only
 Agent-Workflow-owned links removed.
 
-Optional feature groups are declared in `pyproject.toml` for evaluation, statistics, completion generation, benchmark visuals, and MCP. The default source installer does not install or register MCP. To opt in explicitly from a checkout or release bundle:
+Optional feature groups are declared in `pyproject.toml` for evaluation, statistics, completion generation, TypeSafe semantic decisions, benchmark visuals, and MCP. Enable bounded TypeSafe decisions with `python -m pip install 'agent-workflow[typesafe]'`; credentials remain external in `TYPESAFE_API_KEY`. The default source installer does not install or register MCP. To opt in explicitly from a checkout or release bundle:
 
 ```bash
 bash scripts/install-mcp.sh
@@ -69,25 +69,7 @@ second configuration validator.
 
 Install an external plugin into the same Python environment as
 `agent-workflow`, using the immutable release wheel supplied by the plugin
-publisher. For example, after verifying the release handoff's filename and
-lowercase SHA-256:
-
-```bash
-python -m pip install /path/to/agent_workflow_typesafe-<version>-py3-none-any.whl
-```
-
-This host-side flow consumes a local release artifact; it does not fetch a
-mutable GitHub checkout or use a `git+https` requirement. The plugin's own
-release notes and integration handoff define its product and SDK compatibility
-matrix. Agent-Workflow only enforces the installed plugin's declared API
-compatibility at plugin-aware command boundaries.
-
-Enable the plugin explicitly in the host configuration:
-
-```toml
-[plugins]
-enabled = ["agent-workflow-typesafe"]
-```
+publisher. This host-side flow consumes a verified local release artifact; external plugins remain for independent extensions. TypeSafe is no longer one of them; it is an optional built-in semantic provider.
 
 Check the installed distribution, plugin version, configured enablement, and
 load/API result before using plugin commands:
@@ -105,11 +87,7 @@ agent-workflow --no-plugins plugins list
 agent-workflow --no-plugins doctor
 ```
 
-For rollback, disable `agent-workflow-typesafe` in `[plugins].enabled` (or
-keep using `--no-plugins`), then install the previously qualified plugin wheel
-into the same environment and re-run the diagnostics. Do not replace a failed
-artifact with an unpinned source checkout, and do not add provider credentials
-or provider SDK dependencies to the Agent-Workflow host.
+For external-plugin rollback, disable the affected plugin in `[plugins].enabled` (or use `--no-plugins`) and restore the previously qualified plugin wheel. TypeSafe rollback is simply `decision_policy.mode = "deterministic"`; the SDK remains optional and credentials remain outside configuration.
 
 ## Tagged bootstrap install
 

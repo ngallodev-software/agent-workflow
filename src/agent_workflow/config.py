@@ -99,7 +99,7 @@ class Settings:
     security: SecurityPolicy = field(default_factory=SecurityPolicy)
     plugins_enabled: tuple[str, ...] = ()
     typesafe_api_call_log: Path | None = None
-    typesafe_env_file: Path | None = None
+    typesafe_model: str | None = None
     decision_mode: str = "deterministic"
     decision_profile: str = "default"
     decision_profiles: dict[str, dict[str, DecisionPolicyRule]] = field(default_factory=dict)
@@ -207,7 +207,7 @@ def _reject_unknown(table: object, allowed: set[str], label: str) -> None:
 def _validate_shape(data: dict[str, Any]) -> None:
     _reject_unknown(
         data,
-        {"schema_version", "paths", "git", "pack", "agents", "agent_classes", "executors", "roles", "runtime_aliases", "security", "supervisor", "plugins", "decision_policy", "decision_profiles"},
+        {"schema_version", "paths", "git", "pack", "agents", "agent_classes", "executors", "roles", "runtime_aliases", "security", "supervisor", "plugins", "decision_policy", "decision_profiles", "semantic"},
         "root",
     )
     sections = {
@@ -217,7 +217,8 @@ def _validate_shape(data: dict[str, Any]) -> None:
         "agents": {"preferred_names", "generated_prefix", "default_executor", "profiles", "default_class"},
         "roles": {"paths", "default", "bindings"},
         "security": {"mode", "executable_digest", "policy_files"},
-        "plugins": {"enabled", "typesafe_api_call_log", "typesafe_env_file"},
+        "plugins": {"enabled"},
+        "semantic": {"provider", "typesafe"},
         "decision_policy": {"mode", "profile"},
         "supervisor": {
             "interval_seconds",
@@ -231,7 +232,16 @@ def _validate_shape(data: dict[str, Any]) -> None:
     }
     for name, allowed in sections.items():
         if name in data:
+            if not isinstance(data[name], dict):
+                raise WorkflowError(f"[{name}] must be a table")
             _reject_unknown(data[name], allowed, name)
+    semantic = data.get("semantic", {})
+    if not isinstance(semantic, dict):
+        raise WorkflowError("[semantic] must be a table")
+    if "typesafe" in semantic:
+        if not isinstance(semantic["typesafe"], dict):
+            raise WorkflowError("[semantic.typesafe] must be a table")
+        _reject_unknown(semantic["typesafe"], {"model", "api_call_log"}, "semantic.typesafe")
     executors = data.get("executors", {})
     if not isinstance(executors, dict):
         raise WorkflowError("[executors] must contain executor tables")
@@ -585,12 +595,17 @@ def load_settings(
         raise WorkflowError("config value [plugins].enabled must be a string list")
     if len(plugins_enabled) != len(set(plugins_enabled)):
         raise WorkflowError("config value [plugins].enabled must not contain duplicates")
-    typesafe_api_call_log = plugins.get("typesafe_api_call_log", None)
+    semantic = data.get("semantic", {})
+    semantic_provider = semantic.get("provider", "typesafe")
+    if semantic_provider != "typesafe":
+        raise WorkflowError("config value [semantic].provider currently supports only 'typesafe'")
+    typesafe = semantic.get("typesafe", {})
+    typesafe_model = typesafe.get("model", None)
+    if typesafe_model is not None and (not isinstance(typesafe_model, str) or not typesafe_model.strip()):
+        raise WorkflowError("config value [semantic.typesafe].model must be a non-empty string")
+    typesafe_api_call_log = typesafe.get("api_call_log", None)
     if typesafe_api_call_log is not None and (not isinstance(typesafe_api_call_log, str) or not typesafe_api_call_log.strip()):
-        raise WorkflowError("config value [plugins].typesafe_api_call_log must be a non-empty string")
-    typesafe_env_file = plugins.get("typesafe_env_file", None)
-    if typesafe_env_file is not None and (not isinstance(typesafe_env_file, str) or not typesafe_env_file.strip()):
-        raise WorkflowError("config value [plugins].typesafe_env_file must be a non-empty string")
+        raise WorkflowError("config value [semantic.typesafe].api_call_log must be a non-empty string")
     decision_policy = data.get("decision_policy", {})
     if not isinstance(decision_policy, dict):
         raise WorkflowError("[decision_policy] must be a table")
@@ -665,10 +680,7 @@ def load_settings(
             absolute_path(Path(os.path.expandvars(os.path.expanduser(typesafe_api_call_log))))
             if typesafe_api_call_log else None
         ),
-        typesafe_env_file=(
-            absolute_path(Path(os.path.expandvars(os.path.expanduser(typesafe_env_file))))
-            if typesafe_env_file else None
-        ),
+        typesafe_model=typesafe_model.strip() if isinstance(typesafe_model, str) else None,
         decision_mode=decision_mode,
         decision_profile=decision_profile,
         decision_profiles=decision_profiles,
@@ -736,10 +748,13 @@ def as_dict(s: Settings) -> dict[str, Any]:
             "executable_digest": s.security.executable_digest,
             "policy_files": [str(path) for path in s.security.policy_files],
         },
-        "plugins": {
-            "enabled": list(s.plugins_enabled),
-            "typesafe_api_call_log": str(s.typesafe_api_call_log) if s.typesafe_api_call_log else None,
-            "typesafe_env_file": str(s.typesafe_env_file) if s.typesafe_env_file else None,
+        "plugins": {"enabled": list(s.plugins_enabled)},
+        "semantic": {
+            "provider": "typesafe",
+            "typesafe": {
+                "model": s.typesafe_model,
+                "api_call_log": str(s.typesafe_api_call_log) if s.typesafe_api_call_log else None,
+            },
         },
         "decision_policy": {"mode": s.decision_mode, "profile": s.decision_profile},
         "decision_profiles": {name: {decision_id: {"disposition": rule.disposition, "minimum_confidence": rule.minimum_confidence} for decision_id, rule in sorted(rules.items())} for name, rules in sorted(s.decision_profiles.items())},

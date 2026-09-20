@@ -35,6 +35,7 @@ eval = [
   "inspect-swe==0.2.66",
 ]
 stats = ["scipy>=1.11,<2"]
+typesafe = ["typesafe-sdk==0.6.0"]
 comparative-eval = ["agent-workflow-comparative-eval==0.1.0"]
 completion = ["shtab>=1.7,<2"]
 mcp = ["mcp==1.28.1"]

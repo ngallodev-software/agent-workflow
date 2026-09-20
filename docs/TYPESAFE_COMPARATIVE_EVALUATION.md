@@ -5,14 +5,12 @@ the candidate is never applied to routing, execution, completion, review, or
 acceptance.
 
 ```python
-from agent_workflow.typesafe_eval_runtime import EvidenceStore, ShadowCapture
+from agent_workflow.comparative_eval_runtime import EvidenceStore
 
-store = EvidenceStore("comparison.sqlite3")
-capture = ShadowCapture(store, enabled=True, sample_rate=0.1)
-capture.capture(feature_id="routing-advice/v1", identity={"feature_version": "v1"},
-               source_input=bounded_input, projected_input=projection,
-               control=run_control, candidate=run_candidate)
-report = store.report()
+# Comparative routing capture is performed by SchedulerService when
+# decision_policy.mode = "comparative"; it reuses the already-computed candidate.
+
+# Inspect persisted observations through EvidenceStore or `agent-workflow decision report`.
 ```
 
 Static cases must use a frozen dataset and an independent oracle. Normal-usage

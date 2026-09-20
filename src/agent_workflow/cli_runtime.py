@@ -216,10 +216,6 @@ def bootstrap_plugins(
         if known.decision_profile != "default" and known.decision_profile not in settings.decision_profiles:
             raise WorkflowError(f"decision profile is not configured: {known.decision_profile}")
         settings = replace(settings, decision_profile=known.decision_profile)
-    if known.no_plugins and settings.decision_mode != "deterministic":
-        if known.decision_mode:
-            raise WorkflowError("--no-plugins cannot be combined with a plugin decision mode")
-        settings = replace(settings, decision_mode="deterministic")
     if not load_plugins:
         return settings, None
     from .plugins import load_plugin_registry

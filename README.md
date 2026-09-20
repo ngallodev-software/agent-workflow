@@ -241,3 +241,7 @@ Use `agent-workflow --no-plugins --help` for the core-only recovery surface. The
 ## Optional benchmark capability
 
 The historical comparative benchmark subsystem is no longer part of Agent-Workflow core. Install and enable the separate `agent-workflow-benchmark` plugin to restore the top-level `agent-workflow benchmark ...` command. Core still owns generic sealed-run evaluation, review, acceptance, and lifecycle authority.
+
+## Optional bounded semantic decisions
+
+Agent-Workflow includes an optional built-in TypeSafe provider for the three registered routing judgments. Install `agent-workflow[typesafe]`, provide `TYPESAFE_API_KEY` through the runtime environment, and select `decision_policy.mode = "typesafe"` or `"comparative"`. The provider uses the official SDK `Choice`, `Noul`, and `Score` primitives; deterministic control, fallback, lifecycle, review, and acceptance remain Agent-Workflow-owned. See `DECISION_MODES.md` and `TYPESAFE_ARCHITECTURE_ALIGNMENT.md`.

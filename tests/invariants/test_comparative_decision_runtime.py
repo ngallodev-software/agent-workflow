@@ -29,10 +29,7 @@ def _shared_library() -> ModuleType:
 def test_scheduler_persists_precomputed_comparative_routing_without_raw_text(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setitem(sys.modules, "agent_workflow_comparative_eval", _shared_library())
     settings=replace(defaults(tmp_path / "missing.toml"),decision_mode="comparative")
-    plugin=SimpleNamespace(descriptor=SimpleNamespace(name="semantic-plugin"))
-    mode=SimpleNamespace(name="shadow-mode",provider="semantic",capture_comparison=True)
-    registry=SimpleNamespace(decision_mode=lambda name:(plugin,mode))
-    service=SchedulerService(settings=settings,run_dir=tmp_path / "workflow",workdir=tmp_path,plugin_registry=registry)
+    service=SchedulerService(settings=settings,run_dir=tmp_path / "workflow",workdir=tmp_path)
     control={"recommendation":{"agent_class":"implementation","executor":"codex","model":"gpt-5.6-luna","interactive":True},"enforced_selection":{"agent_class":"implementation","executor":"codex","model":"gpt-5.6-luna","interactive":True}}
     candidate={"recommendation":{"agent_class":"review","executor":"codex","model":"gpt-5.6-luna","interactive":False},"enforced_selection":{"agent_class":"review","executor":"codex","model":"gpt-5.6-luna","interactive":False}}
     advice={
@@ -46,7 +43,8 @@ def test_scheduler_persists_precomputed_comparative_routing_without_raw_text(tmp
     assert observation is not None
     assert observation["comparison"]["candidate_applied"] is False
     assert observation["comparison"]["authoritative_arm"] == "control"
-    assert observation["identity"]["plugin"] == "semantic-plugin"
+    assert observation["identity"]["plugin"] is None
+    assert observation["identity"]["provider"] == "typesafe"
     assert observation["candidate"]["provider_elapsed_seconds"] == 0.02
     db=(tmp_path / "workflow" / "comparative-eval.sqlite")
     assert db.is_file()

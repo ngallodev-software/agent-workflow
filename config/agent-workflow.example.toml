@@ -30,9 +30,21 @@ validate_before_archive = true
 
 [plugins]
 enabled = []
-# Optional bounded TypeSafe API call JSONL audit log.
-# typesafe_api_call_log = "~/.local/state/agent-workflow/typesafe-api-calls.jsonl"
-# typesafe_env_file = "~/.config/agent-workflow/typesafe.env"
+
+# Built-in semantic provider. The TypeSafe SDK remains an optional install extra;
+# credentials come only from TYPESAFE_API_KEY in the runtime environment.
+[semantic]
+provider = "typesafe"
+
+[semantic.typesafe]
+# model = "jev-latest"
+# api_call_log = "~/.local/state/agent-workflow/typesafe-api-calls.jsonl"
+
+[decision_policy]
+# deterministic makes no semantic network calls. Other built-in modes are
+# typesafe (policy-governed) and comparative (shadow/control-authoritative).
+mode = "deterministic"
+profile = "default"
 
 [agents]
 preferred_names = ["larry", "moe", "curly"]
