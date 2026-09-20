@@ -145,10 +145,10 @@ agent complete RUN --result completed
 A read-only assignment still needs at least one successful recorded verification before terminal completion. Record a known-safe, zero-exit repository check rather than inventing a test command:
 
 ```bash
-agent-workflow agent verify RUN --cwd /path/to/worktree -- git rev-parse --verify HEAD
+agent-workflow agent verify --cwd /path/to/worktree RUN -- git rev-parse --verify HEAD
 ```
 
-Place `--cwd` and `--timeout` before the verification-command separator. A failed `agent verify` receipt is intentionally preserved and cannot be hidden by a later successful verification, so use ordinary shell exploration first and record only a command whose result is meant to become durable completion evidence.
+Use the parser-native ordering shown above: put `--cwd` and `--timeout` before `RUN`, then put the verification command after `--`. The CLI also normalizes the common `RUN --cwd ... -- COMMAND` form, but the parser-native form is the copy-safe canonical example. A failed `agent verify` receipt is intentionally preserved and cannot be hidden by a later successful verification, so use ordinary shell exploration first and record only a command whose result is meant to become durable completion evidence.
 
 The executable owns enum validation, observed command exit status, identity,
 Git revisions, changed-file derivation, schema construction, and terminal
