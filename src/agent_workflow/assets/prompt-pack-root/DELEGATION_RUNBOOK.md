@@ -24,7 +24,7 @@ Review dependencies are deliberately different from implementation dependencies.
 
 For Codex in a linked worktree, Agent-Workflow grants the sandbox both the per-worktree Git administrative directory and the repository common Git directory. This is required for commits because linked worktrees share objects and refs with the main repository; it does not grant unrelated repository paths.
 
-Completion criterion results are exact parser choices: `pass`, `fail`, or `not_verified`. Workers do not write `completion.json`; they use `agent criterion`, `agent verify`, optional `agent limitation`, and `agent complete`, and Agent-Workflow atomically generates the schema-valid handoff. A dirty launch accepted with `--allow-dirty` is an operator-approved baseline; overlapping pre-existing drift alone is not a blocker, but unrelated drift must be preserved.
+Completion criterion results are exact parser choices: `pass`, `fail`, or `not_verified`. Prefer declaring every ticket criterion in root `pack.yaml` as `criteria: [{id, description}]` (or in a native job). Agent-Workflow freezes that catalog into the launch contract, rejects undeclared criterion IDs, and refuses terminal completion until every declared ID has an outcome. Workers do not write `completion.json`; they use `agent criterion`, `agent verify`, optional `agent limitation`, and `agent complete`, and Agent-Workflow atomically generates the schema-valid handoff. A dirty launch accepted with `--allow-dirty` is an operator-approved baseline; overlapping pre-existing drift alone is not a blocker, but unrelated drift must be preserved.
 
 If an exact launch root contains `.agent-workflow-execution.toml`, Agent-Workflow auto-discovers it for `agent-run prepare` and `delegate` when `--config` is not supplied. The repo-local file is an execution overlay only: it may define agents/classes/executors/roles/runtime aliases, but cannot override host security, state paths, plugins, or other administrative policy.
 
@@ -142,6 +142,8 @@ agent complete RUN --result completed
 The executable owns enum validation, observed command exit status, identity,
 Git revisions, changed-file derivation, schema construction, and terminal
 handoff validation. The runner—not the worker—owns final collection and sealing.
+Normal runner and recovery finalization invoke the same fixed terminal pipeline,
+so recovery cannot reinterpret exit/completion/policy evidence differently.
 A limitation is always recorded as `not_verified` and is non-gating; use it only for environment/harness constraints, never to hide a failed acceptance criterion. A reviewer may therefore approve receipt-backed evidence while separately preserving that a controlled live fetch, browser, listener, or sandbox command was unavailable.
 
-Legacy manual `completion.json`, `completion-validate`, and `task-complete` remain compatibility surfaces only and are not advertised in implementation or review command catalogs.
+Agent-Workflow 0.11 removes the legacy worker-facing `completion-validate` and `task-complete` commands. Workers use only `criterion`, `limitation`, `verify`, `complete`, and `completion-status`; `completion.json` is generated atomically by Agent-Workflow.

@@ -6,14 +6,12 @@ an empty or placeholder-shaped object that accidentally satisfies the schema.
 
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
 from typing import Any
 
 from .contracts import read_agent_run_contract, validate_instance
 from .errors import WorkflowError
-from .path import read_regular_file
 from .process import run
 from .protocol_values import CRITERION_RESULTS, REVIEW_DISPOSITIONS
 from .repository_closeout import (
@@ -227,107 +225,3 @@ def validate_completion_repository_closeout(
     summary["source_path"] = str(source)
     summary["source_sha256"] = read.sha256
     return summary
-
-
-def validate_completion_handoff(run_dir: Path) -> dict[str, Any]:
-    """Validate the executor-writable completion handoff without collecting it.
-
-    This command is intentionally read-only.  It uses the immutable launch
-    contract for identity, worktree, and schema bindings, allowing an agent to
-    detect field-level errors before it exits or emits ``task-complete``.
-    """
-    launch = read_agent_run_contract(run_dir / "agent-run-contract.json")
-    agent_run_id = str(launch["agent_run"]["id"])
-    handoff = Path(str(launch["paths"]["handoff_dir"]))
-    source = handoff / "completion.json"
-    read = read_regular_file(source, max_bytes=1024 * 1024)
-    try:
-        value = json.loads(read.data.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise WorkflowError(f"invalid completion handoff JSON: {exc}") from exc
-    if not isinstance(value, dict):
-        raise WorkflowError("completion handoff must be a JSON object")
-    validate_instance(value, "agent-workflow/completion/v1", artifact=str(source))
-    ticket_identity = launch.get("ticket_identity")
-    expected_ticket = launch.get("ticket")
-    if isinstance(ticket_identity, dict):
-        expected_ticket = ticket_identity.get("value")
-    semantic = substantive_completion_errors(
-        value,
-        agent_run_id=agent_run_id,
-        ticket_id=expected_ticket,
-        pack_id=(
-            launch.get("pack", {}).get("id")
-            if isinstance(launch.get("pack"), dict)
-            else None
-        ),
-    )
-    workdir = Path(str(launch["worktree"]["path"]))
-    head_result = run(
-        ["git", "-C", str(workdir), "rev-parse", "--verify", "HEAD"],
-        check=False,
-        max_stdout_bytes=128,
-        max_stderr_bytes=1024,
-    )
-    actual_head = head_result.stdout.strip() if head_result.returncode == 0 else None
-    revisions = completion_revision_errors(
-        value,
-        expected_base_revision=launch["worktree"].get("source_revision"),
-        actual_head_revision=actual_head,
-        repository=workdir,
-    )
-    repository_closeout = None
-    repository_error = None
-    try:
-        repository_closeout = validate_completion_repository_closeout(
-            value,
-            handoff=handoff,
-            expected_worktree=workdir,
-        )
-    except WorkflowError as exc:
-        repository_error = str(exc)
-    errors = [*semantic, *revisions]
-    if repository_error:
-        errors.append(repository_error)
-    if errors:
-        raise WorkflowError("invalid completion handoff: " + "; ".join(errors))
-    return {
-        "schema": "agent-workflow/completion-validation/v1",
-        "agent_run_id": agent_run_id,
-        "source_path": str(source),
-        "source_sha256": read.sha256,
-        "validation_status": "valid",
-        "result": value.get("result"),
-        "review_disposition": value.get("review_disposition"),
-        "repository_closeout": repository_closeout,
-        "command_count": len(value.get("commands", [])),
-        "criterion_count": len(value.get("criteria", [])),
-    }
-
-
-def validate_completion_sidecar(handoff_path: Path) -> dict[str, Any]:
-    """Validate a completion sidecar before submission.
-
-    This worker-facing preflight intentionally performs only JSON and schema
-    validation.  Launch-bound identity, Git, and substantive completion
-    checks belong to :func:`validate_completion_handoff` and collection.
-    Invalid schema errors retain JSON Schema's field path and allowed values.
-    """
-    source = Path(handoff_path)
-    read = read_regular_file(source, max_bytes=1024 * 1024)
-    try:
-        value = json.loads(read.data.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise WorkflowError(f"invalid completion sidecar JSON: {exc}") from exc
-    if not isinstance(value, dict):
-        raise WorkflowError("completion sidecar must be a JSON object")
-    validate_instance(value, "agent-workflow/completion/v1", artifact=str(source))
-    return {
-        "schema": "agent-workflow/completion-validation/v1",
-        "source_path": str(source),
-        "source_sha256": read.sha256,
-        "validation_status": "valid",
-        "result": value.get("result"),
-        "criterion_count": len(value.get("criteria", [])),
-        "command_count": len(value.get("commands", [])),
-    }

@@ -185,6 +185,12 @@
       "properties": {
         "enabled": {
           "$ref": "#/$defs/strings"
+        },
+        "typesafe_api_call_log": {
+          "type": ["string", "null"]
+        },
+        "typesafe_env_file": {
+          "type": ["string", "null"]
         }
       },
       "type": "object"

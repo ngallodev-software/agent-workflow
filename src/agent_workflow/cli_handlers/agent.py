@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 from typing import Any
 
-from ..agent_context import complete_task as complete_agent_task
 from ..agent_context import read as read_agent_context
 from ..config import Settings
 
@@ -62,19 +61,4 @@ def handle_agent_command(settings: Settings, args: argparse.Namespace) -> Any:
         from ..worker_completion import status
 
         return status(settings, args.agent_run_id)
-    if args.agent_command == "completion-validate":
-        from ..completion import validate_completion_handoff
-        from ..state import run_dir
-
-        return validate_completion_handoff(run_dir(settings, args.agent_run_id))
-    if args.agent_command == "task-complete":
-        return complete_agent_task(
-            settings,
-            args.agent_run_id,
-            actor=args.actor,
-            summary=args.summary,
-            tags=args.tag,
-            files=args.file,
-            terminal=True,
-        )
     raise ValueError(f"unsupported agent command: {args.agent_command}")

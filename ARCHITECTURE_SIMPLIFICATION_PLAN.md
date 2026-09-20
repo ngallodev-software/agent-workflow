@@ -74,9 +74,9 @@ agent completion-status RUN
 
 Reviewers may additionally provide the finite `--review-disposition` choice.
 
-The normal worker command catalog no longer advertises manual
-`completion-validate` or `task-complete` flows. Those remain compatibility
-surfaces for older/external integrations.
+Agent-Workflow 0.11 removes the legacy worker-facing `completion-validate`
+and `task-complete` commands entirely. Generated completion evidence is now
+the only worker terminal protocol surface.
 
 ### 2. Agent-Workflow-generated completion JSON
 
@@ -141,17 +141,15 @@ the only normal mutation path.
 - **Non-gating environment limitations** — reviewers can persist sandbox/network/browser/listener constraints separately from acceptance criteria and bind host receipts by SHA-256.
 - **Out-of-tree handoff storage** — new run protocol artifacts live under run state, eliminating Docker/build-context contamination while retaining read compatibility for legacy handoffs.
 
-## Next simplification candidates
+## Implemented in the final simplification slice
 
-1. **Finalization operation pipeline** — express collect -> evaluate -> status ->
-   seal -> projection as an explicit ordered pipeline whose steps are reusable
-   by normal and recovery finalization.
-2. **Generated command/schema bindings** — add machine-readable criterion IDs to
-   prompt-pack manifests/native jobs. Once available, `agent criterion` can
-   reject unknown criterion IDs instead of validating only the result enum.
-3. **Deprecate manual completion JSON** — after one compatibility window, remove
-   manual worker authorship entirely and reserve sidecar writing to the
-   deterministic builder.
+- **Shared terminal finalization pipeline** — normal runner completion and recovery now use one ordered executor for completion/task collection, post-run scope/command collection, provider evidence, budget policy, terminal outcome derivation, provenance, final status, sealing, projection, and evaluation artifacts. Exit-0 plus invalid/missing completion is deterministically failed in both paths.
+- **Machine-readable criterion catalogs** — prompt-pack v1 tasks and native jobs may declare `criteria: [{id, description}]`. The catalog is validated for duplicate IDs, frozen into the immutable Agent Run contract, surfaced in the launch prompt/status, enforced by `agent criterion`, and required in full by `agent complete`. Newly scaffolded v1 packs emit IDs for their baseline acceptance criteria.
+- **Out-of-tree handoff follow-through** — external delegation responses now derive the handoff directory from the immutable launch contract instead of reconstructing the retired worktree-local path; native-job disposable scope no longer authorizes an unused `.agent-workflow-handoff/` tree.
+
+## Remaining compatibility retirement
+
+Agent-Workflow 0.11 retires the worker-facing manual `completion.json`, `completion-validate`, and `task-complete` compatibility surfaces. Internal collection and external-host reconciliation still consume generated completion evidence, but workers no longer have a second protocol-authoring path.
 
 ## Non-goals
 
@@ -167,3 +165,18 @@ stale revision, invented exit code, skipped lifecycle phase, or premature seal
 cannot be expressed through the normal worker interface. The remaining worker
 errors should increasingly be semantic mistakes in the work itself, not mistakes
 in Agent-Workflow's administrative protocol.
+## 0.11 closeout
+
+The 0.11 boundary completes the compatibility retirement and failure-diagnostic
+work that was intentionally deferred from 0.10.2:
+
+- legacy worker-facing `completion-validate` and `task-complete` commands are removed;
+- child control intents are reduced to `progress` and `ack`; terminal assignment closure
+  is performed by the shared host-owned terminal pipeline after valid completion evidence
+  is collected;
+- unexpected CLI exceptions are persisted as `agent-workflow/unexpected-failure/v1`
+  diagnostics under the local state root. The terminal receives the correlation ID and
+  diagnostic path, while the local record contains bounded/redacted argv, exception
+  type/message/chain, traceback paths/lines/functions, and safe subprocess/OSError details;
+- the stale comparative-eval adoption test is aligned to the current dependency-neutral
+  runtime API instead of restoring retired TypeSafe compatibility shims.

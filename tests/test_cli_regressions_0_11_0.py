@@ -81,6 +81,11 @@ def test_delegate_defers_ticket_default_when_job_selector_is_present(
 
     monkeypatch.setattr(delegation_module, "prepare_agent_run", fake_prepare)
     monkeypatch.setattr(delegation_module, "public_agent_run_view", lambda value: value)
+    monkeypatch.setattr(
+        delegation_module,
+        "_delegation_result",
+        lambda **kwargs: {"state": kwargs["state"], "agent_run_id": kwargs["agent_run_id"]},
+    )
 
     result = delegation_module.delegate(
         settings,
@@ -210,6 +215,10 @@ def test_launch_prompt_records_dirty_authorization_retry_context_and_completion_
         prompt_source=tmp_path / "ticket.md",
         prompt_pack_root=None,
         handoff_dir=handoff,
+        criteria=(
+            {"id": "P0-AC-01", "description": "The deterministic protocol is used."},
+            {"id": "P0-AC-02", "description": None},
+        ),
         command_artifacts={"role": "implementation"},
         dirty_at_launch=True,
         dirty_authorized=True,
@@ -221,6 +230,9 @@ def test_launch_prompt_records_dirty_authorization_retry_context_and_completion_
     assert "## Operator retry context" in text
     assert "pass|fail|not_verified" in text
     assert "agent complete AGENT_RUN_ID" in text
+    assert "## Machine-readable acceptance criteria" in text
+    assert "`P0-AC-01`" in text
+    assert "rejects unknown IDs" in text
 
 
 def test_review_prerequisite_accepts_verified_sealed_completion_without_lifecycle_receipt(
@@ -286,42 +298,6 @@ def test_linked_worktree_exposes_both_git_admin_roots(tmp_path: Path) -> None:
     assert len(roots) == 2
     assert any("worktrees" in str(path) for path in roots)
     assert repo.joinpath(".git").resolve() in roots
-
-
-def test_headless_host_task_complete_is_validation_only(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from agent_workflow import agent_context as context_module
-    from agent_workflow import completion as completion_module
-
-    settings = replace(defaults(tmp_path / "config.toml"), state_root=tmp_path / "state")
-    monkeypatch.setattr(context_module, "bridge_available", lambda *_args, **_kwargs: False)
-    monkeypatch.setattr(context_module, "bridge_required", lambda *_args, **_kwargs: False)
-    monkeypatch.setattr(
-        context_module,
-        "read",
-        lambda *_args, **_kwargs: {"worker_mode": "headless", "state": "busy"},
-    )
-    monkeypatch.setattr(
-        context_module,
-        "read_status",
-        lambda *_args, **_kwargs: {"workdir": str(tmp_path)},
-    )
-    monkeypatch.setattr(context_module, "authoritative_execution_status", lambda *_args: "running")
-    monkeypatch.setattr(
-        completion_module,
-        "validate_completion_handoff",
-        lambda *_args, **_kwargs: {"validation_status": "valid"},
-    )
-
-    result = context_module.complete_task(
-        settings,
-        "run-1",
-        actor="worker",
-        summary="done",
-    )
-    assert result["outcome"] == "not_required"
-    assert result["completion_validation_status"] == "valid"
 
 
 def test_finalize_treats_process_result_plus_live_runner_as_convergence(
@@ -428,39 +404,113 @@ def test_restart_prepares_headless_retry_without_start_and_binds_context(
     assert captured["retry_context"] == "correct the prior completion evidence\n"
 
 
-def test_bridged_headless_task_complete_is_allowed(
+def test_legacy_worker_completion_commands_are_removed() -> None:
+    parser = build_parser(command_scope="agent")
+    subcommands = next(
+        action.choices for action in parser._actions if hasattr(action, "choices") and action.choices
+        if "agent" in action.choices
+    )["agent"]
+    command_action = next(action for action in subcommands._actions if hasattr(action, "choices") and action.choices)
+    assert "task-complete" not in command_action.choices
+    assert "completion-validate" not in command_action.choices
+
+
+def test_terminal_assignment_close_is_host_owned_and_idempotent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from agent_workflow import agent_context as context_module
 
     context = {
         "agent_run_id": "run-1",
-        "worker_mode": "headless",
-        "interactive": False,
         "state": "busy",
         "current_assignment": {
             "assignment_id": "assignment-1",
             "ticket_id": "P1-00",
             "pack_id": "pack",
         },
+        "completed_assignment": None,
     }
-    monkeypatch.setattr(context_module, "_read_json", lambda _path: dict(context))
+    stored = dict(context)
+    monkeypatch.setattr(context_module, "_read_json", lambda _path: dict(stored))
     monkeypatch.setattr(
         context_module,
         "_append_event",
         lambda *_args, **_kwargs: {"timestamp": "2026-09-19T00:00:00+00:00"},
     )
-    monkeypatch.setattr(context_module, "atomic_write_json", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(context_module, "append_lifecycle_event", lambda *_args, **_kwargs: None)
-
-    result = context_module.apply_bridged_completion(
-        tmp_path,
-        "run-1",
-        actor="worker",
-        summary="completed",
+    monkeypatch.setattr(
+        context_module,
+        "atomic_write_json",
+        lambda _path, value, **_kwargs: stored.update(value),
     )
-    assert result["state"] == "closed"
-    assert result["completed_assignment"]["summary"] == "completed"
+    monkeypatch.setattr(context_module, "append_lifecycle_event", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(context_module, "append_message", lambda *_args, **_kwargs: None)
+
+    first = context_module.close_terminal_assignment(tmp_path, "run-1")
+    assert first["state"] == "closed"
+    assert first["completed_assignment"]["summary"] == "terminal completion evidence collected"
+    second = context_module.close_terminal_assignment(tmp_path, "run-1")
+    assert second["state"] == "closed"
+
+
+def test_unexpected_failure_diagnostic_is_schema_shaped_and_redacted(tmp_path: Path) -> None:
+    import json
+    import subprocess
+
+    from agent_workflow.contracts import validate_instance
+    from agent_workflow.unexpected_failures import record_unexpected_failure
+
+    settings = replace(defaults(tmp_path / "config.toml"), state_root=tmp_path / "state")
+    try:
+        raise subprocess.CalledProcessError(
+            7,
+            ["tool", "--token", "secret-token"],
+            output="authorization=secret-token output",
+            stderr="token=secret-token failure at /tmp/example",
+        )
+    except subprocess.CalledProcessError as exc:
+        result = record_unexpected_failure(
+            exc,
+            settings=settings,
+            argv=["agent-run", "start", "run-1", "--token", "secret-token"],
+            top_level="agent-run",
+        )
+    value = json.loads(Path(result["path"]).read_text(encoding="utf-8"))
+    validate_instance(value, "agent-workflow/unexpected-failure/v1", artifact=result["path"])
+    serialized = json.dumps(value)
+    assert "secret-token" not in serialized
+    assert value["exception"]["type"] == "CalledProcessError"
+    assert value["exception"]["details"]["returncode"] == 7
+    assert value["traceback"]
+    assert value["traceback"][-1]["path"].endswith("test_cli_regressions_0_11_0.py")
+
+
+def test_cli_unexpected_failure_prints_locator_and_persists_details(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import json
+    from agent_workflow import cli as cli_module
+
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state-home"))
+    monkeypatch.setattr(
+        cli_module,
+        "bootstrap_plugins",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("diagnostic boom")),
+    )
+    assert cli_module.main(["doctor"]) == 1
+    error = capsys.readouterr().err
+    assert "correlation ID" in error
+    assert "diagnostic:" in error
+    diagnostics = list((tmp_path / "state-home" / "agent-workflow" / "diagnostics" / "unexpected").glob("*.json"))
+    assert len(diagnostics) == 1
+    value = json.loads(diagnostics[0].read_text(encoding="utf-8"))
+    assert value["exception"]["type"] == "RuntimeError"
+    assert value["exception"]["message"] == "diagnostic boom"
+
+
+def test_version_boundary_is_0_11_0() -> None:
+    from agent_workflow import __version__
+
+    assert __version__ == "0.11.0"
 
 
 def test_worker_criterion_parser_rejects_free_form_enum() -> None:
@@ -793,3 +843,181 @@ def test_agent_verify_separator_reaches_verification_argv() -> None:
     )
     assert args.argv == ["npm", "ci", "--ignore-scripts"]
     assert args.explicit_command is None
+
+
+
+def test_prompt_pack_task_criteria_are_machine_readable_and_duplicate_safe(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from agent_workflow import manifests as manifests_module
+
+    monkeypatch.setattr(
+        manifests_module,
+        "load_pack_manifest",
+        lambda _root: {
+            "phases": [
+                {
+                    "tasks": [
+                        {
+                            "id": "P0-00",
+                            "criteria": [
+                                {"id": "AC-01", "description": "First"},
+                                {"id": "AC-02"},
+                            ],
+                        }
+                    ]
+                }
+            ]
+        },
+    )
+    assert manifests_module.task_criteria(tmp_path, "P0-00") == (
+        {"id": "AC-01", "description": "First"},
+        {"id": "AC-02", "description": None},
+    )
+
+    monkeypatch.setattr(
+        manifests_module,
+        "load_pack_manifest",
+        lambda _root: {
+            "phases": [
+                {"tasks": [{"id": "P0-00", "criteria": [{"id": "AC-01"}, {"id": "AC-01"}]}]}
+            ]
+        },
+    )
+    with pytest.raises(Exception, match="duplicate criterion ID"):
+        manifests_module.task_criteria(tmp_path, "P0-00")
+
+
+def test_worker_criterion_rejects_id_outside_launch_catalog(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from agent_workflow import worker_completion as worker_module
+    from agent_workflow.errors import WorkflowError
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    handoff = tmp_path / "handoff"
+    handoff.mkdir()
+    state_dir = tmp_path / "state" / "runs" / "run-1"
+    state_dir.mkdir(parents=True)
+    contract = {
+        "agent_run": {"id": "run-1"},
+        "criteria": [{"id": "AC-01", "description": "Only criterion"}],
+    }
+    settings = replace(defaults(tmp_path / "config.toml"), state_root=tmp_path / "state")
+    monkeypatch.setattr(
+        worker_module,
+        "_context",
+        lambda *_a, **_k: (state_dir, contract, repo, handoff),
+    )
+
+    with pytest.raises(WorkflowError, match="not declared by this ticket"):
+        worker_module.record_criterion(
+            settings,
+            "run-1",
+            criterion_id="made-up",
+            result="pass",
+            evidence=["looks good"],
+        )
+
+    recorded = worker_module.record_criterion(
+        settings,
+        "run-1",
+        criterion_id="AC-01",
+        result="pass",
+        evidence=["verified"],
+    )
+    assert recorded["criterion"]["id"] == "AC-01"
+
+
+def test_worker_complete_rejects_omitted_declared_criteria(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from agent_workflow import worker_completion as worker_module
+    from agent_workflow.errors import WorkflowError
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    handoff = tmp_path / "handoff"
+    handoff.mkdir()
+    state_dir = tmp_path / "state" / "runs" / "run-1"
+    state_dir.mkdir(parents=True)
+    contract = {
+        "agent_run": {"id": "run-1"},
+        "criteria": [
+            {"id": "AC-01", "description": None},
+            {"id": "AC-02", "description": None},
+        ],
+    }
+    settings = replace(defaults(tmp_path / "config.toml"), state_root=tmp_path / "state")
+    monkeypatch.setattr(
+        worker_module,
+        "_context",
+        lambda *_a, **_k: (state_dir, contract, repo, handoff),
+    )
+    worker_module.record_criterion(
+        settings,
+        "run-1",
+        criterion_id="AC-01",
+        result="pass",
+        evidence=["done"],
+    )
+    with pytest.raises(WorkflowError, match="AC-02"):
+        worker_module.complete(settings, "run-1", result="completed")
+
+    state = worker_module.status(settings, "run-1")
+    assert state["missing_criteria"] == ["AC-02"]
+    assert [item["id"] for item in state["expected_criteria"]] == ["AC-01", "AC-02"]
+
+
+def test_launch_contract_criterion_catalog_rejects_duplicates() -> None:
+    from agent_workflow.contracts import validate_criteria_catalog
+    from agent_workflow.errors import WorkflowError
+
+    validate_criteria_catalog({"criteria": [{"id": "AC-01"}, {"id": "AC-02"}]})
+    with pytest.raises(WorkflowError, match="duplicate criterion ID"):
+        validate_criteria_catalog({"criteria": [{"id": "AC-01"}, {"id": "AC-01"}]})
+
+
+def test_terminal_outcome_rules_are_shared_and_fail_invalid_completion() -> None:
+    from agent_workflow.terminal_pipeline import TerminalObservation, derive_terminal_outcome
+
+    exit_zero_invalid = derive_terminal_outcome(
+        TerminalObservation(executor_result="completed", exit_code=0),
+        completion_result="invalid",
+        policy_result="passed",
+    )
+    assert exit_zero_invalid.status == "failed"
+    assert exit_zero_invalid.exit_code == 1
+    assert exit_zero_invalid.failure_category == "completion_invalid"
+    assert exit_zero_invalid.acceptance_eligible is False
+
+    valid_but_budget_failed = derive_terminal_outcome(
+        TerminalObservation(executor_result="completed", exit_code=0),
+        completion_result="valid",
+        policy_result="failed",
+    )
+    assert valid_but_budget_failed.status == "completed"
+    assert valid_but_budget_failed.acceptance_eligible is False
+
+    interrupted = derive_terminal_outcome(
+        TerminalObservation(executor_result="interrupted", exit_code=143),
+        completion_result="valid",
+        policy_result="passed",
+    )
+    assert interrupted.status == "interrupted"
+    assert interrupted.exit_code == 143
+
+
+def test_terminal_outcome_collection_failure_is_not_process_success() -> None:
+    from agent_workflow.terminal_pipeline import TerminalObservation, derive_terminal_outcome
+
+    outcome = derive_terminal_outcome(
+        TerminalObservation(executor_result="completed", exit_code=0),
+        completion_result="valid",
+        policy_result="passed",
+        evidence_errors=["collectors: scope read failed"],
+    )
+    assert outcome.status == "failed"
+    assert outcome.exit_code == 1
+    assert outcome.failure_category == "terminal_collection_failed"

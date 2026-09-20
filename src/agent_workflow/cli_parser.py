@@ -694,19 +694,6 @@ def build_parser(
     )
     agent_completion_status.add_argument("agent_run_id")
 
-    agent_legacy_complete = agent_commands.add_parser(
-        "task-complete", help="legacy external-worker completion notification"
-    )
-    agent_legacy_complete.add_argument("agent_run_id")
-    agent_legacy_complete.add_argument("--actor", required=True)
-    agent_legacy_complete.add_argument("--summary", required=True)
-    agent_legacy_complete.add_argument("--tag", action="append", default=[])
-    agent_legacy_complete.add_argument("--file", action="append", default=[])
-    agent_validate = agent_commands.add_parser(
-        "completion-validate", help="legacy validation for a manually authored completion handoff"
-    )
-    agent_validate.add_argument("agent_run_id")
-
     for name in ("review", "accept", "reject"):
         lifecycle = agent_run_commands.add_parser(name, help=f"record {name} disposition")
         lifecycle.add_argument("agent_run_id")

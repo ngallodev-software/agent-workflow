@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/unexpected-failure/v1",
+  "type": "object",
+  "required": [
+    "schema",
+    "correlation_id",
+    "recorded_at",
+    "host_version",
+    "command",
+    "exception",
+    "traceback"
+  ],
+  "properties": {
+    "schema": {
+      "const": "agent-workflow/unexpected-failure/v1"
+    },
+    "correlation_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "recorded_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "host_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "command": {
+      "type": "object",
+      "required": [
+        "argv",
+        "cwd",
+        "top_level"
+      ],
+      "properties": {
+        "argv": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "maxLength": 4096
+          }
+        },
+        "cwd": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "top_level": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        }
+      },
+      "additionalProperties": false
+    },
+    "exception": {
+      "type": "object",
+      "required": [
+        "type",
+        "module",
+        "message",
+        "chain"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "module": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "chain": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "required": [
+              "type",
+              "module",
+              "message"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "module": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "message": {
+                "type": "string",
+                "maxLength": 8192
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "details": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "string",
+              "integer",
+              "number",
+              "boolean",
+              "null"
+            ]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "traceback": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "line",
+          "function"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "function": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

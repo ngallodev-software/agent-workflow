@@ -116,7 +116,6 @@ def collect_completion(
     workdir: Path,
     *,
     secret_values: tuple[str, ...] = (),
-    expected_source_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Collect native executor completion evidence before sealing."""
     paths = AgentRunPaths(run_dir)
@@ -151,11 +150,6 @@ def collect_completion(
         _require_real_handoff_dir(handoff, contract_workdir, run_dir)
         assert source is not None
         source_data = _read_handoff_completion(source)
-        if (
-            expected_source_sha256 is not None
-            and hashlib.sha256(source_data).hexdigest() != expected_source_sha256
-        ):
-            raise WorkflowError("task completion handoff changed after task-complete intent")
         data = redact_bytes(source_data, secret_values)
     except FileNotFoundError as exc:
         receipt["validation_errors"] = [str(exc)]

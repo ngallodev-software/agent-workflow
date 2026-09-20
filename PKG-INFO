@@ -1,3 +1,37 @@
+Metadata-Version: 2.4
+Name: agent-workflow
+Version: 0.11.0
+Summary: Headless, observable workflow for durable coding-agent delegation
+License-Expression: Apache-2.0
+Classifier: Development Status :: 3 - Alpha
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Operating System :: POSIX
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: jsonschema<5,>=4.18
+Requires-Dist: PyYAML<7,>=6.0.3
+Requires-Dist: specgen-agent-workflow-contracts @ https://github.com/ngallodev-software/agent-workflow-spec-contracts/releases/download/v0.2.1/specgen_agent_workflow_contracts-0.2.1-py3-none-any.whl#sha256=d254a0b13f2fd1de732dab2abd33da35db9ea365b50b3214e92308fea79d85c2
+Provides-Extra: dev
+Requires-Dist: pytest<10,>=8; extra == "dev"
+Requires-Dist: build<2,>=1.2; extra == "dev"
+Requires-Dist: setuptools>=61; extra == "dev"
+Provides-Extra: eval
+Requires-Dist: inspect-ai==0.3.247; extra == "eval"
+Requires-Dist: inspect-swe==0.2.66; extra == "eval"
+Provides-Extra: stats
+Requires-Dist: scipy<2,>=1.11; extra == "stats"
+Provides-Extra: comparative-eval
+Requires-Dist: agent-workflow-comparative-eval==0.1.0; extra == "comparative-eval"
+Provides-Extra: completion
+Requires-Dist: shtab<2,>=1.7; extra == "completion"
+Provides-Extra: mcp
+Requires-Dist: mcp==1.28.1; extra == "mcp"
+Dynamic: license-file
+
 # agent-workflow
 
 `agent-workflow` is a headless workflow, evidence, evaluation, and delegation engine for coding-agent work.
@@ -41,38 +75,12 @@ agent-workflow delegate RUN-001 prompt.md --repo /path/to/repo \
   --ticket TICKET-001 --base-ref HEAD --role implementation --tier medium
 ```
 
-`--pack` accepts either the stable `pack_id` or the path to the pack root containing `pack.yaml`. `--job` accepts either a native JSON job path or a task ID declared in `pack.yaml` (for example `P0-00` in a v1 Markdown prompt pack). When `--job` supplies the ticket identity, `delegate` does not invent a conflicting ticket ID from the Agent Run ID.
-
-Dirty worktrees remain fail-closed by default. If pre-existing changes are intentionally part of reconciliation work, pass `--allow-dirty`; Agent-Workflow records that dirty launch baseline rather than silently discarding or normalizing it.
-
-When `--allow-dirty` is used, that approval is also injected into the immutable worker launch context: pre-existing overlapping changes are treated as baseline drift rather than an automatic blocker. Workers must still preserve unrelated drift and stay within the assigned scope.
-
-Lineage retries are prepare-first:
-
-```bash
-agent-workflow agent-run restart RUN-001 --context-file corrective.md
-agent-workflow agent-run start RUN-001-retry1
-```
-
-`--context-file` is bound into the retry launch prompt without changing the original ticket prompt. Add `--start` only when immediate execution is explicitly desired.
-
-Independent review prerequisites use sealed completion evidence rather than
-requiring acceptance first: a verified, sealed, successfully completed run can
-be reviewed before host acceptance, while implementation-to-implementation
-dependencies still require acceptance. Explicitly rejected prerequisites remain
-blocked.
-
-For Codex linked worktrees, Agent-Workflow grants the worker both the linked
-worktree Git administrative directory and the repository's shared Git common
-directory so normal commits can write the shared object database and refs.
-
 The lower-level `worktree create`, `agent-run prepare`, and `agent-run start` commands remain available for recovery, diagnostics, and explicit operator control. `delegate` uses those same authorities and produces the same durable Agent Run evidence; it does not introduce a parallel lifecycle.
 
 Observe and communicate durably:
 
 ```bash
 agent-workflow agent-run status RUN-001
-agent-workflow agent-run status RUN-001 --json
 agent-workflow agent-run progress RUN-001 "implemented parser changes" --actor worker
 agent-workflow agent-run steer RUN-001 "also run the integration tests" --actor parent
 agent-workflow agent-run ack RUN-001 MESSAGE_ID "applied" --actor worker
@@ -82,54 +90,8 @@ Review and disposition remain separate from worker completion:
 
 ```bash
 agent-workflow agent-run review RUN-001 --actor reviewer --reason "evidence inspected"
-agent-workflow agent-run accept RUN-001 --actor maintainer --reason "accepted"
+agent-workflow agent-run accept RUN-001 --actor maintainer --reason "accepted" --revision HEAD_SHA
 ```
-
-
-### Deterministic worker protocol
-
-Implementation and review workers do not author Agent-Workflow protocol JSON.
-They record bounded semantic intent through parser-constrained operations:
-
-```bash
-agent-workflow agent criterion RUN-001 criterion-id pass --evidence "test receipt"
-agent-workflow agent criterion RUN-001 metadata-receipt pass --evidence-file GITHUB_PROMOTION_RECEIPT.md
-agent-workflow agent limitation RUN-001 live-fetch --evidence "controlled DNS unavailable"
-agent-workflow agent verify RUN-001 -- npm test
-agent-workflow agent complete RUN-001 --result completed
-```
-
-Agent-Workflow derives identity, Git revisions, changed files, observed command
-exit status, schema-valid completion JSON, and acceptance revision. When a
-prompt-pack task or native job declares a machine-readable `criteria` catalog,
-that catalog is frozen into the Agent Run contract: `agent criterion` rejects
-unknown IDs and `agent complete` rejects omitted declared criteria. Newly
-scaffolded v1 packs include criterion IDs by default. A `limitation` is always
-`not_verified` and is non-gating; it records a controlled environment constraint
-separately from source correctness.
-
-Normal runner completion and recovery finalization use the same terminal
-pipeline: collect completion/task evidence, collect post-run scope/commands,
-write provider evidence, evaluate policy, derive terminal status, update
-provenance, write final status, seal, and refresh the projection. An exit code 0
-can no longer be interpreted differently by recovery than by the normal runner
-when completion evidence is missing or invalid.
-
-New run handoffs are stored under the Agent-Workflow run-state directory rather
-than inside the source checkout, preventing runtime evidence from entering
-Docker/build contexts. Existing worktree-local handoffs remain readable for
-compatibility.
-
-When `--config` is omitted, `agent-run prepare` and `delegate` auto-discover an
-exact-root `.agent-workflow-execution.toml`. This repository-local file may
-override execution identity (`agents`, `agent_classes`, `executors`, `roles`,
-`runtime_aliases`) but cannot override host security, state paths, plugins, or
-other administrative policy.
-
-Canonical review/accept/reject operations and prerequisite requirements are
-closed, deterministic operation/policy sets. Acceptance derives the revision
-from sealed completion evidence; `--revision` is now only an optional
-compatibility assertion.
 
 ## External worker preparation
 
@@ -193,7 +155,7 @@ The core is deliberately host-independent. A future plugin may project Agent Run
 
 ## Version
 
-Version `0.11.0` completes the deterministic worker/admin protocol migration: workers submit constrained semantic operations, Agent-Workflow constructs schema-valid administrative evidence, normal and recovery completion share one terminal pipeline, and legacy worker-authored completion commands are removed. See `ARCHITECTURE_SIMPLIFICATION_PLAN.md` for the migration boundary.
+Version `0.11.0` builds on the breaking 0.8 headless-core rewrite and the skill-first product-surface simplification. Older terminal-host-era runtime and schema compatibility is intentionally not carried forward. See the [0.9 skill-first simplification plan](docs/SKILL_FIRST_SIMPLIFICATION_PLAN.md).
 
 ## Repository-only CI assets
 

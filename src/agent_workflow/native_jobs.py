@@ -35,6 +35,12 @@ class ReviewRequirement:
 
 
 @dataclass(frozen=True)
+class CriterionRequirement:
+    id: str
+    description: str | None = None
+
+
+@dataclass(frozen=True)
 class ValidatedNativeJob:
     """A native job whose schema and pack-relative paths have been checked."""
 
@@ -52,6 +58,7 @@ class ValidatedNativeJob:
     worktree_target: str
     path_policy: PathPolicy
     acceptance_commands: tuple[CommandSpec, ...]
+    criteria: tuple[CriterionRequirement, ...]
     review_requirement: ReviewRequirement
 
 
@@ -141,6 +148,18 @@ def validate_native_job(job_path: Path, *, pack_root: Path) -> ValidatedNativeJo
     command_ids = [command.id for command in commands]
     if len(command_ids) != len(set(command_ids)):
         raise WorkflowError("acceptance_commands contains duplicate command IDs")
+    raw_criteria = value.get("criteria", [])
+    criteria = tuple(
+        CriterionRequirement(
+            id=str(item["id"]),
+            description=(str(item["description"]) if item.get("description") is not None else None),
+        )
+        for item in raw_criteria
+        if isinstance(item, dict)
+    )
+    criterion_ids = [item.id for item in criteria]
+    if len(criterion_ids) != len(set(criterion_ids)):
+        raise WorkflowError("criteria contains duplicate criterion IDs")
     review_data = value["review_requirement"]
     return ValidatedNativeJob(
         schema=NATIVE_JOB_SCHEMA,
@@ -157,6 +176,7 @@ def validate_native_job(job_path: Path, *, pack_root: Path) -> ValidatedNativeJo
         worktree_target=worktree_target,
         path_policy=PathPolicy(allowed_paths=allowed, forbidden_paths=forbidden),
         acceptance_commands=commands,
+        criteria=criteria,
         review_requirement=ReviewRequirement(
             required=bool(review_data["required"]),
             independent=bool(review_data.get("independent", False)),

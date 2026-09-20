@@ -17,6 +17,8 @@ from .errors import WorkflowError
 
 def main(argv: list[str] | None = None) -> int:
     args: argparse.Namespace | None = None
+    settings = None
+    requested_command: str | None = None
     try:
         requested_command = top_level_command(argv)
         settings, _ = bootstrap_plugins(argv, load_plugins=False)
@@ -136,6 +138,32 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         print("interrupted", file=sys.stderr)
         return 130
+    except Exception as exc:
+        from .unexpected_failures import record_unexpected_failure
+
+        effective_argv = list(sys.argv[1:] if argv is None else argv)
+        try:
+            diagnostic = record_unexpected_failure(
+                exc, settings=settings, argv=effective_argv,
+                top_level=(getattr(args, "command", None) if args is not None else requested_command),
+            )
+            print(
+                "unexpected internal error "
+                f"(correlation ID {diagnostic['correlation_id']}); "
+                f"diagnostic: {diagnostic['path']}",
+                file=sys.stderr,
+            )
+        except Exception:
+            # Do not recurse if the diagnostic path itself is damaged.
+            import uuid
+
+            correlation_id = uuid.uuid4().hex
+            print(
+                f"unexpected internal error (correlation ID {correlation_id}); "
+                "diagnostic capture failed",
+                file=sys.stderr,
+            )
+        return 1
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from importlib.metadata import PackageNotFoundError, version as distribution_version
 import json
 import os
 import platform
@@ -41,7 +42,7 @@ from .health import last_event as last_health_event
 from .health import semantic_progress
 from .native_jobs import ValidatedNativeJob, validate_native_job
 from .preflight import preflight_error, preflight_run_record, resolve_prerequisites
-from .manifests import load_pack_manifest, task_result_contract
+from .manifests import load_pack_manifest, task_criteria, task_result_contract
 from .process import ProcessRequest, redact_argv, require_command, run, secret_values_from_argv, spawn_detached
 from .receipts import completion_template, initial_completion, initial_provenance, update_provenance
 from .agent_run_control import (
@@ -77,6 +78,28 @@ from .util import (
     validate_id,
 )
 from .path import absolute_path, read_regular_file, require_directory
+
+
+def _require_typesafe_environment(settings: Settings) -> None:
+    """Require the operator to load TypeSafe credentials before a run."""
+    if "agent-workflow-typesafe" not in settings.plugins_enabled:
+        return
+    try:
+        distribution_version("agent-workflow-typesafe")
+    except PackageNotFoundError:
+        return
+    if os.environ.get("TYPESAFE_API_KEY"):
+        return
+    if settings.typesafe_env_file is None:
+        raise WorkflowError(
+            "TypeSafe plugin is installed and enabled but TYPESAFE_API_KEY is not loaded; "
+            "configure [plugins].typesafe_env_file with the environment file path, "
+            "then source that file before starting this Agent Run"
+        )
+    raise WorkflowError(
+        "TypeSafe plugin is installed and enabled but TYPESAFE_API_KEY is not loaded; "
+        f"before starting this Agent Run, run: source {settings.typesafe_env_file}"
+    )
 
 
 
@@ -305,6 +328,10 @@ def _write_job_binding(state_dir: Path, job: ValidatedNativeJob, *, agent_run_id
             "allowed_paths": list(job.path_policy.allowed_paths),
             "forbidden_paths": list(job.path_policy.forbidden_paths),
         },
+        "criteria": [
+            {"id": item.id, "description": item.description}
+            for item in job.criteria
+        ],
         "acceptance_commands": [
             {
                 "id": command.id,
@@ -342,6 +369,7 @@ def _write_launch_prompt(
     prompt_pack_root: Path | None,
     handoff_dir: Path,
     result_contract: dict[str, Any] | None = None,
+    criteria: tuple[dict[str, str | None], ...] = (),
     interactive: bool = False,
     detached_interactive: bool = False,
     command_artifacts: dict[str, Any],
@@ -367,6 +395,15 @@ def _write_launch_prompt(
     if result_contract is not None:
         context.append(
             f"- task_result: write atomic `AGENT_WORKFLOW_HANDOFF_DIR/result.json` satisfying `{result_contract['schema']}`."
+        )
+    if criteria:
+        context.extend(["", "## Machine-readable acceptance criteria"])
+        for item in criteria:
+            description = item.get("description")
+            suffix = f": {description}" if description else ""
+            context.append(f"- `{item['id']}`{suffix}")
+        context.append(
+            "- These IDs are immutable for this run. `agent criterion` rejects unknown IDs and `agent complete` rejects omitted IDs."
         )
     if dirty_at_launch and dirty_authorized:
         context.append(
@@ -452,6 +489,7 @@ def _write_agent_run_contract(
     environment_allowlist: list[str],
     handoff_dir: Path,
     result_contract: dict[str, Any] | None,
+    criteria: tuple[dict[str, str | None], ...],
     runtime_policy: dict[str, Any],
     evaluation_policy: dict[str, Any],
     source_baseline_sha256: str,
@@ -502,6 +540,7 @@ def _write_agent_run_contract(
             "mode": "explicit" if ticket_id is not None else "omitted",
             "value": ticket_id,
         },
+        "criteria": [dict(item) for item in criteria],
         "pack": {
             "id": pack_id,
             "root": str(pack_root) if pack_root is not None else None,
@@ -904,7 +943,7 @@ def _prepare_evaluation(
     scope_data = (
         {
             "writable_paths": list(native_job.path_policy.allowed_paths),
-            "disposable_trees": [".agent-workflow-handoff/", ".delegations/"],
+            "disposable_trees": [".delegations/"],
         }
         if native_job is not None
         else evaluation_data.get("scope", {})
@@ -1050,6 +1089,7 @@ def _prepare(
     retry_context: str | None = None,
 ) -> dict[str, Any]:
     validate_id(agent_run_id, "agent run ID")
+    _require_typesafe_environment(settings)
     if ticket_id:
         validate_id(ticket_id, "ticket ID")
     workdir = require_directory(absolute_path(workdir), label="workdir")
@@ -1301,6 +1341,15 @@ def _prepare(
         if prompt_pack_root is not None
         else None
     )
+    if native_job is not None:
+        criteria = tuple(
+            {"id": item.id, "description": item.description}
+            for item in native_job.criteria
+        )
+    elif prompt_pack_root is not None:
+        criteria = task_criteria(prompt_pack_root, ticket_id)
+    else:
+        criteria = ()
     created_at = utc_now()
     command_artifacts = write_launch_command_artifacts(
         state_dir,
@@ -1323,6 +1372,7 @@ def _prepare(
         prompt_pack_root=prompt_pack_root,
         handoff_dir=handoff_dir,
         result_contract=result_contract,
+        criteria=criteria,
         interactive=interactive,
         detached_interactive=not interactive and executor_interactive,
         command_artifacts=command_artifacts,
@@ -1501,6 +1551,7 @@ def _prepare(
         environment_allowlist=environment_allowlist,
         handoff_dir=handoff_dir,
         result_contract=result_contract,
+        criteria=criteria,
         runtime_policy=runtime_policy,
         evaluation_policy=evaluation_policy,
         source_baseline_sha256=sha256_file(baseline_path),

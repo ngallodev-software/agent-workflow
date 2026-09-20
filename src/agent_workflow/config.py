@@ -99,6 +99,7 @@ class Settings:
     security: SecurityPolicy = field(default_factory=SecurityPolicy)
     plugins_enabled: tuple[str, ...] = ()
     typesafe_api_call_log: Path | None = None
+    typesafe_env_file: Path | None = None
     decision_mode: str = "deterministic"
     decision_profile: str = "default"
     decision_profiles: dict[str, dict[str, DecisionPolicyRule]] = field(default_factory=dict)
@@ -216,7 +217,7 @@ def _validate_shape(data: dict[str, Any]) -> None:
         "agents": {"preferred_names", "generated_prefix", "default_executor", "profiles", "default_class"},
         "roles": {"paths", "default", "bindings"},
         "security": {"mode", "executable_digest", "policy_files"},
-        "plugins": {"enabled", "typesafe_api_call_log"},
+        "plugins": {"enabled", "typesafe_api_call_log", "typesafe_env_file"},
         "decision_policy": {"mode", "profile"},
         "supervisor": {
             "interval_seconds",
@@ -587,6 +588,9 @@ def load_settings(
     typesafe_api_call_log = plugins.get("typesafe_api_call_log", None)
     if typesafe_api_call_log is not None and (not isinstance(typesafe_api_call_log, str) or not typesafe_api_call_log.strip()):
         raise WorkflowError("config value [plugins].typesafe_api_call_log must be a non-empty string")
+    typesafe_env_file = plugins.get("typesafe_env_file", None)
+    if typesafe_env_file is not None and (not isinstance(typesafe_env_file, str) or not typesafe_env_file.strip()):
+        raise WorkflowError("config value [plugins].typesafe_env_file must be a non-empty string")
     decision_policy = data.get("decision_policy", {})
     if not isinstance(decision_policy, dict):
         raise WorkflowError("[decision_policy] must be a table")
@@ -659,8 +663,11 @@ def load_settings(
         plugins_enabled=tuple(plugins_enabled),
         typesafe_api_call_log=(
             absolute_path(Path(os.path.expandvars(os.path.expanduser(typesafe_api_call_log))))
-            if typesafe_api_call_log
-            else None
+            if typesafe_api_call_log else None
+        ),
+        typesafe_env_file=(
+            absolute_path(Path(os.path.expandvars(os.path.expanduser(typesafe_env_file))))
+            if typesafe_env_file else None
         ),
         decision_mode=decision_mode,
         decision_profile=decision_profile,
@@ -732,6 +739,7 @@ def as_dict(s: Settings) -> dict[str, Any]:
         "plugins": {
             "enabled": list(s.plugins_enabled),
             "typesafe_api_call_log": str(s.typesafe_api_call_log) if s.typesafe_api_call_log else None,
+            "typesafe_env_file": str(s.typesafe_env_file) if s.typesafe_env_file else None,
         },
         "decision_policy": {"mode": s.decision_mode, "profile": s.decision_profile},
         "decision_profiles": {name: {decision_id: {"disposition": rule.disposition, "minimum_confidence": rule.minimum_confidence} for decision_id, rule in sorted(rules.items())} for name, rules in sorted(s.decision_profiles.items())},

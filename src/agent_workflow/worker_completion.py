@@ -58,6 +58,24 @@ def _clean_text(value: str, label: str) -> str:
     return value
 
 
+
+
+def _expected_criteria(contract: dict[str, Any]) -> tuple[dict[str, Any], ...]:
+    raw = contract.get("criteria", [])
+    if not isinstance(raw, list):
+        return ()
+    result: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in raw:
+        if not isinstance(item, dict):
+            raise WorkflowError("launch contract contains an invalid criterion catalog")
+        criterion_id = str(item.get("id", "")).strip()
+        if not criterion_id or criterion_id in seen:
+            raise WorkflowError("launch contract contains duplicate or empty criterion IDs")
+        seen.add(criterion_id)
+        result.append(item)
+    return tuple(result)
+
 def _new_draft(contract: dict[str, Any]) -> dict[str, Any]:
     return {
         "schema": DRAFT_SCHEMA,
@@ -146,6 +164,12 @@ def record_criterion(
         raise WorkflowError(f"criterion result must be one of: {', '.join(CRITERION_RESULTS)}")
     criterion_id = _clean_text(criterion_id, "criterion ID")
     _, contract, workdir, handoff = _context(settings, agent_run_id)
+    expected = _expected_criteria(contract)
+    if expected and criterion_id not in {str(item["id"]) for item in expected}:
+        allowed = ", ".join(str(item["id"]) for item in expected)
+        raise WorkflowError(
+            f"criterion ID is not declared by this ticket: {criterion_id}; expected one of: {allowed}"
+        )
     evidence_items = _evidence_items(
         workdir,
         evidence,
@@ -317,6 +341,15 @@ def complete(
     state_dir, contract, workdir, handoff = _context(settings, agent_run_id)
     draft = _load_draft(handoff, contract)
     _require_open(draft)
+    expected = _expected_criteria(contract)
+    if expected:
+        recorded = {str(item.get("id")) for item in draft.get("criteria", [])}
+        missing = [str(item["id"]) for item in expected if str(item["id"]) not in recorded]
+        if missing:
+            raise WorkflowError(
+                "cannot complete before every declared criterion has a recorded outcome: "
+                + ", ".join(missing)
+            )
     snap = snapshot(workdir)
     base_revision = contract["worktree"].get("source_revision")
     ticket_identity = contract.get("ticket_identity")
@@ -377,9 +410,15 @@ def status(settings: Settings, agent_run_id: str) -> dict[str, Any]:
     _, contract, _, handoff = _context(settings, agent_run_id)
     draft = _load_draft(handoff, contract)
     final = handoff / FINAL_NAME
+    expected = _expected_criteria(contract)
+    recorded = {str(item.get("id")) for item in draft.get("criteria", [])}
     return {
         "agent_run_id": agent_run_id,
         "state": draft.get("state"),
+        "expected_criteria": list(expected),
+        "missing_criteria": [
+            str(item["id"]) for item in expected if str(item["id"]) not in recorded
+        ],
         "criteria": draft.get("criteria", []),
         "limitations": draft.get("limitations", []),
         "commands": draft.get("commands", []),

@@ -96,7 +96,6 @@ def write_control_intent(
     *, agent_run_id: str, kind: str, actor: str, content: str,
     correlation_id: str | None = None,
     outcome: str | None = None,
-    terminal: bool | None = None,
 ) -> dict[str, Any]:
     """Write one bounded child intent without touching external host state."""
     bridge = _bridge_path()
@@ -110,7 +109,7 @@ def write_control_intent(
         raise WorkflowError("control bridge must be a real directory")
     validate_id(agent_run_id, "agent run ID")
     validate_id(actor, "actor ID")
-    if kind not in {"progress", "ack", "task_complete"}:
+    if kind not in {"progress", "ack"}:
         raise WorkflowError("unsupported bridged control kind")
     if kind == "ack" and correlation_id is None:
         raise WorkflowError("ack messages require correlation_id")
@@ -120,32 +119,6 @@ def write_control_intent(
         raise WorkflowError("ack control intents require applied or rejected outcome")
     if kind != "ack" and outcome is not None:
         raise WorkflowError("only ack control intents may include outcome")
-    if terminal is not None and not isinstance(terminal, bool):
-        raise WorkflowError("terminal control intent flag must be boolean")
-    if kind == "task_complete":
-        terminal = True if terminal is None else terminal
-    elif terminal is not None:
-        raise WorkflowError("only task completion intents may include terminal")
-    if correlation_id is not None:
-        _uuid(correlation_id, "correlation_id")
-    if not isinstance(content, str) or not content or len(content) > MAX_CONTENT_CHARS:
-        raise WorkflowError("invalid control intent content")
-    completion_sha256: str | None = None
-    if kind == "task_complete":
-        handoff_value = os.environ.get("AGENT_WORKFLOW_HANDOFF_DIR")
-        if not handoff_value:
-            raise WorkflowError("task completion requires a completion handoff directory")
-        completion_path = Path(handoff_value) / "completion.json"
-        try:
-            mode = completion_path.lstat().st_mode
-        except OSError as exc:
-            raise WorkflowError("task completion requires a completion handoff") from exc
-        if stat.S_ISLNK(mode) or not stat.S_ISREG(mode):
-            raise WorkflowError("task completion handoff must be a regular non-symlink file")
-        try:
-            completion_sha256 = hashlib.sha256(completion_path.read_bytes()).hexdigest()
-        except OSError as exc:
-            raise WorkflowError("cannot read task completion handoff") from exc
     sequence = 1
     for candidate in bridge.glob("intent-*.json"):
         try:
@@ -162,8 +135,6 @@ def write_control_intent(
         "content": content,
         "correlation_id": correlation_id,
         "outcome": outcome,
-        "completion_sha256": completion_sha256,
-        "terminal": terminal,
     }
     intent["digest"] = "sha256:" + hashlib.sha256(
         json.dumps(intent, sort_keys=True, separators=(",", ":")).encode("utf-8")

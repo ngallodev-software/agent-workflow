@@ -242,8 +242,10 @@ def _delegation_result(
         "next_actions": _next_actions(agent_run_id, worker_mode, state),
     }
     if worker_mode == "external" and state == "prepared":
-        runner = run_dir(settings, agent_run_id) / "run.sh"
-        handoff = worktree / ".agent-workflow-handoff" / agent_run_id
+        state_dir = run_dir(settings, agent_run_id)
+        runner = state_dir / "run.sh"
+        contract = read_agent_run_contract(AgentRunPaths(state_dir).contract)
+        handoff = Path(str(contract["paths"]["handoff_dir"]))
         result["launch_contract"] = {
             "agent_run_id": agent_run_id,
             "worker_mode": "external",

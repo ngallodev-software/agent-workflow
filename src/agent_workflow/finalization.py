@@ -12,29 +12,18 @@ import json
 import os
 import time
 from contextlib import contextmanager
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterator
 
 from .config import Settings
 from .contracts import read_agent_run_contract
 from .errors import WorkflowError
-from .eval.attempts import emit_attempt_artifacts
-from .health import process_sample, record_incident
-from .policy import evaluate_budgets
-from .provider_evidence import write_provider_evidence
-from .receipts import (
-    final_receipt_sha256,
-    make_read_only,
-    seal_run,
-    update_provenance,
-    verify_seal_details,
-)
-from .state import run_dir, update_projection
-from .run_lifecycle import authoritative_execution_status, synchronize_projection, transition_execution
-from .run_collections import capture_patch, collect_completion, collect_task_result
-from .util import atomic_write_json, sha256_file, utc_now
+from .health import process_sample
+from .receipts import verify_seal_details
+from .state import run_dir
+from .run_lifecycle import authoritative_execution_status, synchronize_projection
 from .contracts import read_contract
+from .terminal_pipeline import RecoveryContext, TerminalObservation, finalize_terminal_run
 
 RECOVERY_FINALIZATION_SCHEMA = "agent-workflow/recovery-finalization/v1"
 RUNNER_CONVERGENCE_SECONDS = 2.0
@@ -79,27 +68,13 @@ def _heartbeat_pids(run: Path) -> tuple[int | None, int | None]:
     )
 
 
-def _duration_seconds(provenance: dict[str, Any], finished_at: str) -> float | None:
-    started = provenance.get("started_at")
-    if not isinstance(started, str):
-        return None
-    try:
-        return max(
-            0.0,
-            datetime.fromisoformat(finished_at).timestamp()
-            - datetime.fromisoformat(started).timestamp(),
-        )
-    except ValueError:
-        return None
-
-
-def _executor_result(process_result: dict[str, Any]) -> tuple[str, int | None, str]:
+def _executor_result(process_result: dict[str, Any]) -> tuple[str, int | None, str | None]:
     if not process_result:
         return "lost", None, "executor_lost"
     returncode = process_result.get("returncode")
     exit_code = process_result.get("exit_code")
     if returncode == 0:
-        return "completed", exit_code if isinstance(exit_code, int) else 0, "completion_missing"
+        return "completed", exit_code if isinstance(exit_code, int) else 0, None
     if returncode in {130, 143}:
         return "interrupted", exit_code if isinstance(exit_code, int) else int(returncode), "interrupted"
     category = process_result.get("error_category")
@@ -206,176 +181,42 @@ def finalize_run(
                 "recovery finalization requires a durable process result or a confirmed dead orphan observation"
             )
 
-        workdir = Path(str(launch["worktree"]["path"]))
-        finished_at = utc_now()
-        completion = collect_completion(run, workdir)
-        completion_result = str(completion["validation_status"])
-        if external_exit is not None and completion_result != "valid":
-            raise WorkflowError(
-                "external Worker exit requires a schema-valid completion handoff"
-            )
-        collect_task_result(run, workdir)
-        capture_patch(workdir, run, run / "patch.diff")
-
-        provider = write_provider_evidence(
-            run,
-            stream_format=str(launch["worker_plan"]["stream_format"]),
-            executor=(
-                str(launch["worker_plan"].get("executor"))
-                if launch["worker_plan"].get("executor")
-                else None
-            ),
-        )
-        provenance = _json_object(run / "run-provenance.json")
-        wall_seconds = _duration_seconds(provenance, finished_at)
-        policy = evaluate_budgets(
-            provider.get("aggregate") if isinstance(provider.get("aggregate"), dict) else None,
-            provenance.get("budgets") if isinstance(provenance.get("budgets"), dict) else None,
-            wall_seconds=wall_seconds,
-        )
         if external_exit is not None:
-            executor_result, exit_code, failure_category = "completed", None, "external_exit_observed"
+            executor_result, exit_code, failure_category = (
+                "completed",
+                None,
+                "external_exit_observed",
+            )
         else:
             executor_result, exit_code, failure_category = _executor_result(process_result)
-        if completion_result == "invalid":
-            failure_category = "completion_invalid"
-        elif completion_result == "missing" and executor_result == "completed":
-            failure_category = "completion_missing"
 
-        terminal_status = "completed" if executor_result == "completed" else (
-            "interrupted" if executor_result == "interrupted" else "failed"
-        )
-        recovery = {
-            "schema": RECOVERY_FINALIZATION_SCHEMA,
-            "agent_run_id": agent_run_id,
-            "triggered_at": finished_at,
-            "actor": actor,
-            "reason": reason,
-            "source_status": status.get("status"),
-            "observed_state": observed_state,
-            "worker_alive": worker_alive,
-            "runner": runner_sample,
-            "executor": executor_sample,
-            "process_result_present": bool(process_result),
-            "executor_result": executor_result,
-            "completion_result": completion_result,
-            "terminal_status": terminal_status,
-            "failure_category": failure_category,
-        }
-        from .contracts import validate_instance
-
-        validate_instance(recovery, RECOVERY_FINALIZATION_SCHEMA, artifact=str(run / "recovery-finalization.json"))
-        atomic_write_json(run / "recovery-finalization.json", recovery)
-
-        provenance_changes: dict[str, Any] = {
-            "finished_at": finished_at,
-            "usage": provider.get("aggregate"),
-            "provider_evidence": {
-                "path": "provider-evidence.json",
-                "sha256": sha256_file(run / "provider-evidence.json"),
-                "usage_complete": provider.get("usage_complete"),
-                "capture_complete": provider.get("capture_complete"),
-            },
-        }
-        if exit_code is not None:
-            provenance_changes["exit_code"] = exit_code
-        update_provenance(run, **provenance_changes)
-
-        final_status = {
-            **synchronize_projection(run / "status.json", source="recovery-finalization"),
-            "status": terminal_status,
-            "executor_result": executor_result,
-            "completion_result": completion_result,
-            "policy_result": policy["policy_result"],
-            "policy_failures": policy["policy_failures"],
-            "policy_failure_category": policy["policy_failure_category"],
-            "acceptance_eligible": False,
-            "finished_at": finished_at,
-            "exit_code": exit_code,
-            "failure_category": failure_category,
-            "recovery_finalization_path": str(run / "recovery-finalization.json"),
-            "updated_at": finished_at,
-        }
-        atomic_write_json(run / "final-status.json", final_status)
-        record_incident(
+        finalized = finalize_terminal_run(
             run,
-            agent_run_id=agent_run_id,
-            category=failure_category,
-            severity="high",
-            summary="Agent Run required recovery finalization after worker/executor loss",
-            evidence={
-                "executor_result": executor_result,
-                "completion_result": completion_result,
-                "process_result_present": bool(process_result),
-                "runner_pid": runner_pid,
-                "executor_pid": executor_pid,
-            },
-        )
-        try:
-            receipt = seal_run(run, agent_run_id=agent_run_id)
-            digest = final_receipt_sha256(run)
-        except Exception as exc:
-            transition_execution(
-                settings,
-                agent_run_id,
-                "failed",
-                actor=actor,
-                reason="recovery finalization could not seal evidence",
-                projection_source="recovery-finalization",
-                failure_category="seal_failed",
-                seal_error=str(exc),
-            )
-            raise WorkflowError(f"recovery finalization failed to seal run: {exc}") from exc
-
-        # The immutable final receipt owns terminal execution state from here.
-        # Synchronize the mutable projection without adding a post-seal
-        # execution transition to the lifecycle journal.
-        transition_execution(
-            settings,
-            agent_run_id,
-            terminal_status,
+            launch,
+            TerminalObservation(
+                executor_result=executor_result,
+                exit_code=exit_code,
+                failure_category=failure_category,
+            ),
             actor=actor,
             reason=reason,
             projection_source="recovery-finalization",
-            **{
-                key: value
-                for key, value in final_status.items()
-                if key not in {
-                    "agent_run_id",
-                    "status",
-                    "projection_source",
-                    "final_receipt_path",
-                    "final_receipt_sha256",
-                    "sealed_artifact_count",
-                }
-            },
-            final_receipt_path=str(run / "final-receipt.json"),
-            final_receipt_sha256=digest,
-            sealed_artifact_count=len(receipt["artifacts"]),
+            seal_failure_reason="recovery finalization could not seal evidence",
+            recovery=RecoveryContext(
+                actor=actor,
+                reason=reason,
+                source_status=(str(status.get("status")) if status.get("status") is not None else None),
+                observed_state=(str(observed_state) if observed_state is not None else None),
+                worker_alive=(worker_alive if isinstance(worker_alive, bool) else None),
+                runner=runner_sample,
+                executor=executor_sample,
+                process_result_present=bool(process_result),
+            ),
         )
-        make_read_only(run)
-        try:
-            attempt = emit_attempt_artifacts(run)
-            update_projection(
-                settings,
-                agent_run_id,
-                **attempt,
-                projection_source="recovery-finalization",
-            )
-        except Exception as eval_exc:
-            update_projection(
-                settings,
-                agent_run_id,
-                evaluation_state="not_verified",
-                evaluation_error=str(eval_exc),
-                projection_source="recovery-finalization",
-            )
-
+        recovery_value = finalized.pop("recovery", None)
         return {
-            **recovery,
-            "outcome": "finalized",
-            "final_receipt_path": str(run / "final-receipt.json"),
-            "final_receipt_sha256": digest,
-            "sealed_artifact_count": len(receipt["artifacts"]),
+            **(recovery_value if isinstance(recovery_value, dict) else {}),
+            **finalized,
+            "schema": RECOVERY_FINALIZATION_SCHEMA,
             "next_action": f"agent-workflow agent-run restart {agent_run_id}",
         }

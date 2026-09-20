@@ -15,26 +15,17 @@ from pathlib import Path
 from typing import Any, BinaryIO
 
 from .agent_run_paths import AgentRunPaths
-from .run_collections import capture_patch, collect_completion, collect_task_result
+from .run_collections import collect_completion
 from .errors import WorkflowError
-from .run_lifecycle import transition_execution_path
-from .state import read_status_path, update_projection_path
 from .contracts import read_agent_run_contract
 from .diagnostics import classify_failure
 from .health import (
     PROCESS_RESULT_SCHEMA,
     last_event,
     record_health_sample,
-    record_incident,
     write_process_result,
 )
-from .eval.commands import collect_commands, specs_from_data
-from .eval.scope import ScopePolicy, collect_scope
 from .executors import accumulate_usage, event_text, parse_event, usage_update
-from .receipts import final_receipt_sha256, make_read_only, seal_run, update_provenance
-from .eval.attempts import emit_attempt_artifacts
-from .metrics import write_execution_evidence
-from .agent_context import apply_bridged_completion
 from .messages import (
     CONTROL_BRIDGE_ENV,
     CONTROL_BRIDGE_MAX_BYTES,
@@ -48,7 +39,7 @@ from .steering import (
     deliver_pending,
     record_acknowledgement,
 )
-from .provider_evidence import MAX_PROVIDER_EVENT_BYTES, write_provider_evidence
+from .provider_evidence import MAX_PROVIDER_EVENT_BYTES
 from .process import (
     EnvironmentPolicy,
     ProcessRequest,
@@ -57,9 +48,10 @@ from .process import (
     secret_values_from_argv,
     spawn,
 )
-from .util import atomic_write_json, sha256_file, utc_now
+from .util import atomic_write_json, utc_now
+from .terminal_pipeline import TerminalObservation, finalize_terminal_run
+from .run_lifecycle import transition_execution_path
 from .path import read_regular_file
-from .policy import evaluate_budgets
 
 
 MAX_EXECUTOR_STDOUT_BYTES = 16 * 1024 * 1024
@@ -88,9 +80,7 @@ _RUNTIME_ENVIRONMENT = (
 )
 
 
-def _drain_control_bridge(
-    run_dir: Path, *, active: bool, allow_terminal_at_exit: bool = False
-) -> bool:
+def _drain_control_bridge(run_dir: Path, *, active: bool) -> None:
     """Consume bounded child intents using host-owned durable state."""
     paths = AgentRunPaths(run_dir)
     launch = read_agent_run_contract(paths.contract)
@@ -98,7 +88,7 @@ def _drain_control_bridge(
     handoff = Path(str(launch["paths"].get("handoff_dir", ""))).resolve()
     bridge = handoff / "control-intents"
     if bridge.parent != handoff or bridge.is_symlink() or not bridge.is_dir():
-        return False
+        return None
     evidence_path = paths.control_intents
     processed: set[str] = set()
     processed_requests: set[str] = set()
@@ -131,14 +121,12 @@ def _drain_control_bridge(
         except (ValueError, IndexError):
             return 2**31
 
-    terminal_completion = False
     for source in sorted(bridge.glob("intent-*.json"), key=source_sequence):
         if source.name in processed:
             continue
         intent: dict[str, Any] | None = None
         request_id: str | None = None
         outcome, reason = "rejected", "malformed control intent"
-        completion_message_retry = False
         try:
             mode = source.lstat().st_mode
             if stat.S_ISLNK(mode) or not stat.S_ISREG(mode) or source.stat().st_size > CONTROL_BRIDGE_MAX_BYTES:
@@ -164,42 +152,15 @@ def _drain_control_bridge(
             if value.get("agent_run_id") != agent_run_id or value.get("digest") != digest:
                 raise WorkflowError("control intent identity or digest mismatch")
             intent_kind = str(value["kind"])
-            if intent_kind not in {"progress", "ack", "task_complete"}:
+            if intent_kind not in {"progress", "ack"}:
                 raise WorkflowError("unsupported control intent kind")
-            if not active and not (allow_terminal_at_exit and intent_kind == "task_complete"):
+            if not active:
                 raise WorkflowError("request arrived after executor exit")
             acknowledgement_outcome = value.get("outcome", "applied")
             if intent_kind == "ack" and acknowledgement_outcome not in {"applied", "rejected"}:
                 raise WorkflowError("invalid acknowledgement outcome")
             if intent_kind != "ack" and value.get("outcome") is not None:
                 raise WorkflowError("only acknowledgement intents may include outcome")
-            if intent_kind == "task_complete":
-                terminal = value.get("terminal", False)
-                if not isinstance(terminal, bool):
-                    raise WorkflowError("task completion terminal flag must be boolean")
-                completion_sha256 = value.get("completion_sha256")
-                if (
-                    not isinstance(completion_sha256, str)
-                    or len(completion_sha256) != 64
-                    or any(character not in "0123456789abcdef" for character in completion_sha256)
-                ):
-                    raise WorkflowError("task completion intent requires a completion handoff digest")
-                completion = collect_completion(
-                    run_dir,
-                    Path(str(launch["worktree"]["path"])),
-                    expected_source_sha256=completion_sha256,
-                )
-                if completion["validation_status"] != "valid":
-                    details = "; ".join(completion.get("validation_errors", []))
-                    raise WorkflowError(f"task completion handoff is invalid: {details}")
-                apply_bridged_completion(
-                    run_dir,
-                    agent_run_id,
-                    actor=str(value["actor"]),
-                    summary=str(value["content"]),
-                    terminal=terminal,
-                )
-                terminal_completion = terminal
             if intent_kind == "ack":
                 correlation_id = str(value["correlation_id"])
                 existing_delivery = current_delivery(run_dir, correlation_id)
@@ -232,36 +193,14 @@ def _drain_control_bridge(
                     )
                     outcome, reason = "applied", "authoritative host append"
             else:
-                if intent_kind == "task_complete":
-                    existing = replay_messages(run_dir)
-                    matching = [
-                        item for item in existing
-                        if item["kind"] == "task_complete"
-                        and item["actor"] == str(value["actor"])
-                        and item["content"] == str(value["content"])
-                    ]
-                    if not matching:
-                        completion_message_retry = True
-                        append_message(
-                            run_dir, agent_run_id=agent_run_id, direction="child_to_parent",
-                            kind=intent_kind, actor=str(value["actor"]),
-                            content=str(value["content"]),
-                        )
-                    elif len(matching) > 1:
-                        raise WorkflowError("duplicate task completion messages")
-                else:
-                    append_message(
-                        run_dir, agent_run_id=agent_run_id, direction="child_to_parent",
-                        kind=intent_kind, actor=str(value["actor"]),
-                        content=str(value["content"]),
-                        correlation_id=value.get("correlation_id"),
-                    )
+                append_message(
+                    run_dir, agent_run_id=agent_run_id, direction="child_to_parent",
+                    kind=intent_kind, actor=str(value["actor"]),
+                    content=str(value["content"]),
+                    correlation_id=value.get("correlation_id"),
+                )
                 outcome, reason = "applied", "authoritative host append"
         except (OSError, UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError, ValueError, WorkflowError) as exc:
-            if completion_message_retry:
-                # Assignment/lifecycle evidence is durable, but the intent remains
-                # replayable until its parent-facing message is durably appended.
-                continue
             reason = str(exc)
             correlation_id = intent.get("correlation_id") if intent else None
             try:
@@ -279,84 +218,7 @@ def _drain_control_bridge(
             processed_requests.add(request_id)
         if intent and isinstance(intent.get("sequence"), int):
             processed_sequences.add(intent["sequence"])
-    return terminal_completion
-
-
-def _authoritative_projection(
-    launch: dict[str, Any], run_dir: Path, current: dict[str, Any]
-) -> dict[str, Any]:
-    """Overlay only launch-bound identity and paths onto the status projection."""
-    paths_obj = AgentRunPaths(run_dir)
-    agent_run = launch["agent_run"]
-    worktree = launch["worktree"]
-    command = launch["worker_plan"]
-    pack = launch["pack"]
-    paths = launch["paths"]
-    evaluation = launch["evaluation_policy"]
-    # Preserve execution observations collected by the runner, but never carry
-    # mutable review/receipt selectors into the sealed final-status authority.
-    projected = {
-        key: value
-        for key, value in current.items()
-        if key
-        not in {
-            "disposition",
-            "disposition_at",
-            "disposition_actor",
-            "accepted_revision",
-            "lifecycle_receipt_path",
-            "final_receipt_path",
-            "final_receipt_sha256",
-            "sealed_artifact_count",
-            # Projection metadata describes the mutable status cache, not the
-            # immutable terminal authority. Carrying it into final-status.json
-            # also collides with the explicit projection metadata supplied
-            # when the sealed result is projected back to status.json.
-            "projection_generated_at",
-            "projection_source",
-            "projection_freshness",
-            "projection_authority",
-        }
-    }
-    projected.update(
-        {
-            "schema": "agent-workflow/agent-run-status/v1",
-            "agent_run_id": agent_run["id"],
-            "ticket_id": launch.get("ticket"),
-            "agent_name": agent_run.get("agent_name"),
-            "agent_class": agent_run.get("agent_class"),
-            "role": (launch.get("role") or {}).get("id"),
-            "role_digest": (launch.get("role") or {}).get("digest"),
-            "tier": agent_run.get("tier"),
-            "retry_of": agent_run.get("retry_of_agent_run_id"),
-            "created_at": agent_run["created_at"],
-            "workdir": worktree["path"],
-            "source_revision": worktree.get("source_revision"),
-            "branch": worktree.get("branch"),
-            "dirty_at_launch": worktree.get("dirty_at_launch"),
-            "prompt_path": str(run_dir / launch["prompt"]["stored"]),
-            "prompt_source": launch["prompt"]["source"],
-            "prompt_sha256": launch["prompt"]["sha256"],
-            "prompt_pack_root": pack.get("root"),
-            "pack_id": pack.get("id"),
-            "result_contract": paths.get("result_contract"),
-            "launch_prompt_path": str(run_dir / launch["prompt"]["launch_stored"]),
-            "launch_prompt_sha256": launch["prompt"]["launch_sha256"],
-            "log_path": str(run_dir / launch["expected_outputs"]["output_log"]),
-            "command_path": str(paths_obj.command),
-            "handoff_dir": paths["handoff_dir"],
-            "provenance_path": str(paths_obj.provenance),
-            "events_path": str(paths_obj.executor_events),
-            "stderr_path": str(paths_obj.executor_stderr),
-            "source_baseline_path": str(run_dir / launch["source_baseline"]["path"]),
-            "launch_contract_path": str(paths_obj.contract),
-            "worker_mode": command["mode"],
-            "interactive_stdio": command["interactive_stdio"],
-            "evaluation_path": evaluation.get("path"),
-            "disposition": None,
-        }
-    )
-    return projected
+    return None
 
 
 def _write_bytes(stream: BinaryIO, data: bytes) -> None:
@@ -401,61 +263,6 @@ def _child_environment(
     )
 
 
-
-def _seal_terminal_run(
-    run_dir: Path,
-    launch: dict[str, Any],
-    final_status: dict[str, Any],
-    *,
-    elapsed_seconds: float,
-    seal_failure_reason: str,
-    terminal_reason: str,
-    seal_failure_exit: int,
-) -> int | None:
-    """Seal one terminal result and synchronize its mutable projection."""
-    paths = AgentRunPaths(run_dir)
-    atomic_write_json(paths.final_status, final_status)
-    write_execution_evidence(run_dir, elapsed_seconds=elapsed_seconds)
-    try:
-        receipt = seal_run(run_dir, agent_run_id=str(launch["agent_run"]["id"]))
-        receipt_hash = final_receipt_sha256(run_dir)
-    except Exception as exc:
-        transition_execution_path(
-            paths.status,
-            "failed",
-            actor="runner",
-            reason=seal_failure_reason,
-            projection_source="runner-final",
-            finished_at=utc_now(),
-            exit_code=seal_failure_exit,
-            failure_category="seal_failed",
-            seal_error=str(exc),
-        )
-        return seal_failure_exit
-
-    transition_execution_path(
-        paths.status,
-        str(final_status["status"]),
-        actor="runner",
-        reason=terminal_reason,
-        projection_source="runner-final",
-        **{key: value for key, value in final_status.items() if key != "status"},
-        final_receipt_path=str(paths.final_receipt),
-        final_receipt_sha256=receipt_hash,
-        sealed_artifact_count=len(receipt["artifacts"]),
-    )
-    make_read_only(run_dir)
-    try:
-        attempt = emit_attempt_artifacts(run_dir)
-        update_projection_path(paths.status, projection_source="evaluation", **attempt)
-    except Exception as eval_exc:
-        update_projection_path(
-            paths.status,
-            projection_source="evaluation",
-            evaluation_state="not_verified",
-            evaluation_error=str(eval_exc),
-        )
-    return None
 
 def execute(
     run_dir: Path,
@@ -528,9 +335,6 @@ def execute(
             if isinstance(runtime, dict):
                 merged_runtime.update(runtime)
             runtime = merged_runtime
-    provenance_initial = json.loads(
-        (paths.provenance).read_text(encoding="utf-8")
-    )
     initial_budgets = runtime.get("budgets", {}) if isinstance(runtime, dict) else {}
     plan_timeout = (
         float(runtime.get("timeout_seconds"))
@@ -608,54 +412,23 @@ def execute(
                 "recorded_at": finished_at,
             },
         )
-        record_incident(
-            run_dir,
-            agent_run_id=str(launch["agent_run"]["id"]),
-            category=category or "spawn_error",
-            severity="high",
-            summary="executor could not be started",
-            evidence={"exit_code": 127, "error": str(exc)},
-        )
-        update_provenance(
-            run_dir,
-            finished_at=finished_at,
-            exit_code=127,
-        )
-        capture_patch(workdir, run_dir, paths.patch)
-        collect_completion(run_dir, workdir, secret_values=secret_values)
-        collect_task_result(run_dir, workdir, secret_values=secret_values)
-        current = read_status_path(status_path)
-        final_status = {
-            **_authoritative_projection(launch, run_dir, current),
-            "status": "failed",
-            "finished_at": finished_at,
-            "exit_code": 127,
-            "failure_category": category,
-            "updated_at": finished_at,
-        }
-        provider = write_provider_evidence(
-            run_dir, stream_format=stream_format, executor=provenance_initial.get("executor")
-        )
-        update_provenance(
-            run_dir,
-            provider_evidence={
-                "path": "provider-evidence.json",
-                "sha256": sha256_file(paths.provider_evidence),
-                "usage_complete": provider["usage_complete"],
-                "capture_complete": provider["capture_complete"],
-            },
-            usage=provider["aggregate"],
-        )
-        seal_failure = _seal_terminal_run(
+        finalized = finalize_terminal_run(
             run_dir,
             launch,
-            final_status,
-            elapsed_seconds=time.monotonic() - wall_started,
+            TerminalObservation(
+                executor_result="failed",
+                exit_code=127,
+                failure_category=category or "spawn_error",
+                errors=(f"executor spawn: {exc}",),
+                wall_seconds=time.monotonic() - wall_started,
+            ),
+            secret_values=secret_values,
+            actor="runner",
+            reason="executor failed to start and terminal evidence sealed",
+            projection_source="runner-final",
             seal_failure_reason="executor spawn evidence could not be sealed",
-            terminal_reason="executor failed to start and terminal evidence sealed",
-            seal_failure_exit=127,
         )
-        return seal_failure or 127
+        return int(finalized.get("exit_code") or 127)
     if not interactive:
         assert process.process.stdin is not None
         assert process.stdout is not None
@@ -733,7 +506,6 @@ def execute(
         thread.start()
     deadline = time.monotonic() + timeout_seconds if timeout_seconds else None
     timed_out = False
-    completed_by_child = False
     last_health_at: float | None = None
     while True:
         now = time.monotonic()
@@ -761,18 +533,7 @@ def execute(
         # completed while durable assignment state incorrectly remains busy.
         # The later active=False drain still rejects intents that arrive only
         # after this exit boundary has been observed.
-        if _drain_control_bridge(
-            run_dir, active=active, allow_terminal_at_exit=not active
-        ):
-            # A valid terminal handoff is authoritative completion, not an
-            # operator cancellation. Close the live interactive executor when
-            # it is still present so the runner can seal the run and retire
-            # the worker cleanly.
-            completed_by_child = True
-            if active:
-                process.close_after_completion()
-            return_code = 0
-            break
+        _drain_control_bridge(run_dir, active=active)
         if not active:
             return_code = process.returncode
             if return_code is None:
@@ -794,22 +555,11 @@ def execute(
             wait_seconds = min(wait_seconds, remaining)
         waited = process.wait_for(wait_seconds)
         if waited is not None:
-            # The child may emit its final control intent immediately before
-            # exiting. Consume any intent already present at the observed exit
-            # boundary before treating the process return code as completion.
-            if _drain_control_bridge(
-                run_dir, active=False, allow_terminal_at_exit=True
-            ):
-                completed_by_child = True
-                return_code = 0
-            else:
-                return_code = waited
+            return_code = waited
             break
     for thread in threads:
         thread.join(timeout=5)
-    # The child may write its final intent immediately before exiting. Drain it
-    # once while completion is still being finalized; later arrivals are never
-    # consumed after the terminal receipt is sealed.
+    # Reject any late child control intents after the executor exit boundary.
     _drain_control_bridge(run_dir, active=False)
     deliver_pending(run_dir, active=False)
     if any(thread.is_alive() for thread in threads):
@@ -829,7 +579,7 @@ def execute(
         {
             "schema": PROCESS_RESULT_SCHEMA,
             **process_result.as_dict(include_output=False),
-            "completion_terminated": completed_by_child,
+            "completion_terminated": False,
             "runner_pid": os.getpid(),
             "executor_pid": process.pid,
             "recorded_at": utc_now(),
@@ -839,97 +589,16 @@ def execute(
         capture_warnings.append("stdout capture limit exceeded; output truncated")
     if process_result.stderr_truncated:
         capture_warnings.append("stderr capture limit exceeded; output truncated")
-    if completed_by_child:
-        return_code = 0
-    if pump_errors:
-        return_code = return_code or 1
-
-    completion_collection = collect_completion(
-        run_dir, workdir, secret_values=secret_values
-    )
-    if completion_collection["validation_status"] != "valid":
-        pump_errors.append(
-            "completion: "
-            + "; ".join(completion_collection.get("validation_errors", []))
-        )
-        return_code = return_code or 1
-    collect_task_result(run_dir, workdir, secret_values=secret_values)
-
-    if isinstance(runtime, dict):
-        try:
-            scope_data = runtime.get("scope", {})
-            policy = ScopePolicy(
-                authorized_root=workdir,
-                writable_paths=tuple(scope_data.get("writable_paths", ())),
-                writable_trees=tuple(scope_data.get("writable_trees", ())),
-                disposable_trees=tuple(scope_data.get("disposable_trees", ())),
-            )
-            collect_scope(
-                workdir,
-                phase="post",
-                policy=policy,
-                receipt_dir=paths.scope,
-            )
-            commands = runtime.get("acceptance_commands", [])
-            if commands or runtime.get("native_job_binding_sha256"):
-                collect_commands(
-                    workdir,
-                    specs_from_data(commands),
-                    phase="post",
-                    receipt_dir=paths.collections,
-                )
-        except Exception as exc:
-            pump_errors.append(f"collectors: {exc}")
-            return_code = return_code or 1
-
-    provider = write_provider_evidence(
-        run_dir,
-        capture_exceeded=provider_capture_exceeded,
-        stream_format=stream_format,
-        executor=(
-            str(provenance_initial["executor"])
-            if provenance_initial.get("executor")
-            else None
-        ),
-    )
-    usage = provider["aggregate"]
-    if provider_capture_exceeded:
-        pump_errors.append("provider evidence capture limit exceeded")
-        return_code = return_code or 1
-
-    executor_status = (
+    executor_result = (
         "completed"
         if return_code == 0
         else "interrupted"
         if return_code in {130, 143, -2, -15}
         else "failed"
     )
-    wall_seconds = time.monotonic() - wall_started
-    policy = evaluate_budgets(
-        usage if isinstance(usage, dict) else None,
-        provenance_initial.get("budgets")
-        if isinstance(provenance_initial.get("budgets"), dict)
-        else None,
-        wall_seconds=wall_seconds,
-    )
     if timed_out:
-        executor_status = "failed"
+        executor_result = "failed"
         return_code = 124
-    finished_at = utc_now()
-    update_provenance(
-        run_dir,
-        first_output_at=first_output_at,
-        finished_at=finished_at,
-        exit_code=return_code,
-        usage=usage,
-        provider_evidence={
-            "path": "provider-evidence.json",
-            "sha256": sha256_file(paths.provider_evidence),
-            "usage_complete": provider["usage_complete"],
-            "capture_complete": provider["capture_complete"],
-        },
-    )
-    current = read_status_path(status_path)
     diagnostic_stderr = stderr_path.read_text(
         encoding="utf-8", errors="replace"
     )[-8192:]
@@ -942,73 +611,37 @@ def execute(
             errors=pump_errors,
         )
     )
-    final_status = {
-        **_authoritative_projection(launch, run_dir, current),
-        "status": executor_status,
-        "executor_result": executor_status,
-        "completion_result": current.get("completion_validation_status"),
-        "policy_result": policy["policy_result"],
-        "policy_failures": policy["policy_failures"],
-        "policy_failure_category": policy["policy_failure_category"],
-        "acceptance_eligible": bool(
-            executor_status == "completed"
-            and current.get("completion_validation_status") == "valid"
-            and policy["policy_result"] != "failed"
-        ),
-        "finished_at": finished_at,
-        "exit_code": return_code,
-        "pump_errors": [*pump_errors, *capture_warnings],
-        "failure_category": failure_category,
-        "stdout_bytes": process_result.stdout_bytes,
-        "stderr_bytes": process_result.stderr_bytes,
-        "stdout_truncated": process_result.stdout_truncated,
-        "stderr_truncated": process_result.stderr_truncated,
-        "wall_seconds": round(wall_seconds, 6),
-        "updated_at": finished_at,
-    }
-    capture_patch(workdir, run_dir, paths.patch)
     record_health_sample(
         run_dir,
         agent_run_id=str(launch["agent_run"]["id"]),
         runner_pid=os.getpid(),
         executor_pid=process.pid,
     )
-    if failure_category:
-        record_incident(
-            run_dir,
-            agent_run_id=str(launch["agent_run"]["id"]),
-            category=failure_category,
-            severity="high",
-            summary="executor finished with a classified failure",
-            evidence={
-                "exit_code": return_code,
-                "pump_errors": pump_errors,
-                "stdout_truncated": process_result.stdout_truncated,
-                "stderr_truncated": process_result.stderr_truncated,
-            },
-        )
-    if policy["policy_result"] == "failed":
-        record_incident(
-            run_dir,
-            agent_run_id=str(launch["agent_run"]["id"]),
-            category="budget_policy_failed",
-            severity="medium",
-            summary="executor completed with one or more budget-policy violations",
-            evidence={
-                "executor_result": executor_status,
-                "policy_failures": policy["policy_failures"],
-            },
-        )
-    seal_failure = _seal_terminal_run(
+    finalized = finalize_terminal_run(
         run_dir,
         launch,
-        final_status,
-        elapsed_seconds=wall_seconds,
+        TerminalObservation(
+            executor_result=executor_result,
+            exit_code=return_code,
+            failure_category=failure_category,
+            timed_out=timed_out,
+            errors=tuple(pump_errors),
+            warnings=tuple(capture_warnings),
+            stdout_bytes=process_result.stdout_bytes,
+            stderr_bytes=process_result.stderr_bytes,
+            stdout_truncated=process_result.stdout_truncated,
+            stderr_truncated=process_result.stderr_truncated,
+            wall_seconds=time.monotonic() - wall_started,
+            first_output_at=first_output_at,
+            provider_capture_exceeded=provider_capture_exceeded,
+        ),
+        secret_values=secret_values,
+        actor="runner",
+        reason="executor terminal evidence sealed",
+        projection_source="runner-final",
         seal_failure_reason="terminal evidence sealing failed",
-        terminal_reason="executor terminal evidence sealed",
-        seal_failure_exit=return_code or 1,
     )
-    return seal_failure if seal_failure is not None else return_code
+    return int(finalized.get("exit_code") or 0)
 
 
 def main(argv: list[str] | None = None) -> int:

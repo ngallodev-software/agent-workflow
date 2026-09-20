@@ -13,10 +13,9 @@ from .config import Settings
 from .errors import WorkflowError
 from .journal import JournalTransactionResult, transact_jsonl
 from .events import append_lifecycle_event
-from .messages import append_message, bridge_available, bridge_required, write_control_intent
+from .messages import append_message
 from .path import read_regular_file
-from .state import list_statuses, read_status, run_dir
-from .run_lifecycle import authoritative_execution_status
+from .state import list_statuses, run_dir
 from .protocol_values import ASSIGNMENT_EVENTS, ASSIGNMENT_STATES
 from .util import atomic_write_json, expand_path, sha256_file, utc_now, validate_id
 
@@ -221,124 +220,28 @@ def _items(values: list[str] | None, label: str) -> list[str]:
     return sorted(set(item.strip() for item in result))
 
 
-def complete_task(
-    settings: Settings,
-    agent_run_id: str,
-    *,
-    actor: str,
-    summary: str,
-    tags: list[str] | None = None,
-    files: list[str] | None = None,
-    terminal: bool = True,
-) -> dict[str, Any]:
-    if bridge_available(agent_run_id):
-        return write_control_intent(
-            agent_run_id=agent_run_id, kind="task_complete", actor=actor, content=summary,
-            terminal=terminal,
-        )
-    if bridge_required(agent_run_id):
-        return {"outcome": "unavailable", "reason": "control bridge unavailable"}
-    validate_id(actor, "actor ID")
-    summary = summary.strip()
-    if not summary or len(summary) > MAX_SUMMARY_CHARS:
-        raise WorkflowError(f"summary must be 1-{MAX_SUMMARY_CHARS} characters")
-    context = read(settings, agent_run_id)
-    status = read_status(settings, agent_run_id)
-    execution_status = authoritative_execution_status(run_dir(settings, agent_run_id))
-    if execution_status not in {"prepared", "running", "interruption_requested"}:
-        raise WorkflowError("task completion requires a live execution")
-    if execution_status not in {"running", "interruption_requested"}:
-        raise WorkflowError("task completion requires a running Agent Run")
-    if context.get("worker_mode") != "external" or not context.get("interactive"):
-        # Headless workers complete by writing the handoff and exiting; the
-        # runner owns collection and lifecycle transition.  A host-side
-        # task-complete attempt should therefore be a read-only validation
-        # convenience rather than an authority error.
-        if context.get("worker_mode") == "headless":
-            from .completion import validate_completion_handoff
 
-            receipt = validate_completion_handoff(run_dir(settings, agent_run_id))
-            return {
-                "agent_run_id": agent_run_id,
-                "outcome": "not_required",
-                "reason": "headless workers complete by validated handoff plus process exit",
-                "completion_validation_status": receipt["validation_status"],
-            }
-        raise WorkflowError("task-complete is only available to an interactive external worker")
-    if context.get("state") != "busy":
-        raise WorkflowError(f"agent is not busy: {context.get('state')}")
-    # A task-complete transition is an authority boundary.  Validate and
-    # collect the sidecar before making the agent reusable so a malformed
-    # human-readable report cannot later become a sealed invalid completion.
-    from .run_collections import collect_completion
-
-    receipt = collect_completion(
-        state_dir := run_dir(settings, agent_run_id),
-        Path(str(status["workdir"])),
-    )
-    if receipt["validation_status"] != "valid":
-        details = "; ".join(receipt.get("validation_errors", []))
-        raise WorkflowError(f"task completion handoff is invalid: {details}")
-    return _close_assignment(
-        state_dir,
-        context,
-        agent_run_id=agent_run_id,
-        actor=actor,
-        summary=summary,
-        tags=_items(tags, "tags"),
-        files=_items(files, "files"),
-        lifecycle_reason="child emitted structured task completion",
-        emit_message=True,
-    )
-
-
-def apply_bridged_completion(
+def close_terminal_assignment(
     state_dir: Path,
     agent_run_id: str,
     *,
-    actor: str,
-    summary: str,
-    terminal: bool = True,
+    actor: str = "agent-workflow",
+    summary: str = "terminal completion evidence collected",
 ) -> dict[str, Any]:
-    """Apply a validated child completion using host-owned assignment state."""
+    """Close assignment state after canonical completion evidence is collected.
+
+    This is host-owned administrative state. Workers do not emit a separate
+    task-complete intent in the 0.11 protocol. The operation is idempotent so
+    normal and recovery finalization share the same sequence safely.
+    """
     validate_id(agent_run_id, "agent run ID")
-    validate_id(actor, "actor ID")
-    summary = summary.strip()
-    if not summary or len(summary) > MAX_SUMMARY_CHARS:
-        raise WorkflowError(f"summary must be 1-{MAX_SUMMARY_CHARS} characters")
     context = _read_json(state_dir / CONTEXT_NAME)
     if context.get("agent_run_id") != agent_run_id:
-        raise WorkflowError("bridged completion Agent Run identity mismatch")
+        raise WorkflowError("terminal assignment Agent Run identity mismatch")
     if context.get("state") == "closed":
-        completed = context.get("completed_assignment")
-        if not isinstance(completed, dict) or completed.get("summary") != summary:
-            raise WorkflowError("closed assignment evidence does not match task completion")
-        records = []
-        try:
-            from .journal import read_jsonl
-            records = read_jsonl(
-                state_dir / LEDGER_NAME,
-                validator=_validate_assignment_record,
-                missing_ok=True,
-                sequence_field="sequence",
-            )
-        except (OSError, WorkflowError) as exc:
-            raise WorkflowError("cannot validate closed assignment evidence") from exc
-        if not any(
-            item.get("event") == "task_completed"
-            and item.get("assignment_id") == completed.get("assignment_id")
-            and item.get("summary") == summary
-            and item.get("actor") == actor
-            for item in records
-        ):
-            raise WorkflowError("closed assignment evidence does not match task completion")
         return context
-    if context.get("worker_mode") not in {"external", "headless"}:
-        raise WorkflowError("unsupported worker mode for bridged task completion")
-    if context.get("worker_mode") == "external" and not context.get("interactive"):
-        raise WorkflowError("task-complete is only available to an interactive external worker")
     if context.get("state") != "busy" or not isinstance(context.get("current_assignment"), dict):
-        raise WorkflowError("agent is not busy")
+        raise WorkflowError("terminal assignment is not busy")
     return _close_assignment(
         state_dir,
         context,
@@ -347,7 +250,6 @@ def apply_bridged_completion(
         summary=summary,
         tags=[],
         files=[],
-        lifecycle_reason="host applied bridged task completion",
-        emit_message=False,
+        lifecycle_reason="canonical completion evidence collected",
+        emit_message=True,
     )
-

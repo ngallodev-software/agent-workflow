@@ -82,6 +82,28 @@ def scaffold(
                         "tier": "C",
                         "agent_run_id": f"{slug(pack_name)}-p{number}-00-baseline",
                         "prompt": f"{phase_name}/tickets/{actual_ticket.name}",
+                        "criteria": [
+                            {
+                                "id": f"{task_id}-AC-01",
+                                "description": "Exact revisions and branches are recorded.",
+                            },
+                            {
+                                "id": f"{task_id}-AC-02",
+                                "description": "Dirty state is recorded.",
+                            },
+                            {
+                                "id": f"{task_id}-AC-03",
+                                "description": "Path mappings are explicit.",
+                            },
+                            {
+                                "id": f"{task_id}-AC-04",
+                                "description": "Blocking source contradictions are visible.",
+                            },
+                            {
+                                "id": f"{task_id}-AC-05",
+                                "description": "No production source changed.",
+                            },
+                        ],
                     }
                 ],
             }

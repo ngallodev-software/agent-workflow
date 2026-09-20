@@ -4,20 +4,21 @@ import hashlib
 import json
 import sys
 from pathlib import Path
-from types import ModuleType, SimpleNamespace
+from types import ModuleType
 
 import pytest
 
 from agent_workflow import comparative_eval
 from agent_workflow.comparative_eval_adapters import (
     CandidateUnavailable,
-    routing_candidate,
     skill_behavior_candidate,
     skill_behavior_control,
 )
-from agent_workflow.comparative_eval_runtime import EvidenceStore, ShadowCapture, join_delayed_outcome
-from agent_workflow.typesafe_eval import make_observation as legacy_make_observation
-from agent_workflow.typesafe_eval_runtime import EvidenceStore as LegacyEvidenceStore
+from agent_workflow.comparative_eval_runtime import (
+    EvidenceStore,
+    join_agent_run_outcome,
+    make_precomputed_observation,
+)
 
 
 def _stub_shared() -> ModuleType:
@@ -28,16 +29,39 @@ def _stub_shared() -> ModuleType:
         payload = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
         return hashlib.sha256(payload.encode()).hexdigest()
 
-    def observation(**kwargs):
-        result = legacy_make_observation(**{k: v for k, v in kwargs.items() if k != "candidate_timeout"})
-        result["schema"] = "agent-workflow-comparative-eval/comparison-observation/v1"
-        return result
+    def make_observation(**kwargs):
+        control = kwargs["control"]()
+        candidate = kwargs["candidate"]()
+        return {
+            "schema": "agent-workflow-comparative-eval/comparison-observation/v1",
+            "observation_id": kwargs["observation_id"],
+            "feature_id": kwargs["feature_id"],
+            "mode": kwargs["mode"],
+            "identity": dict(kwargs["identity"]),
+            "input": {
+                "case_id": kwargs.get("case_id"),
+                "input_sha256": sha256(kwargs["source_input"]),
+                "projection_sha256": sha256(kwargs["projected_input"]),
+                "raw_input_persisted": False,
+            },
+            "control": {"result": control},
+            "candidate": {"result": candidate},
+            "comparison": {
+                "candidate_applied": bool(kwargs.get("candidate_applied", False)),
+                "authoritative_arm": kwargs.get("authoritative_arm", "control"),
+            },
+            "privacy": {
+                "data_class": kwargs.get("data_class", "production-metadata"),
+                "raw_content_stored": False,
+                "secret_values_stored": False,
+            },
+        }
 
     def validate_observation(value):
         assert value["schema"] == "agent-workflow-comparative-eval/comparison-observation/v1"
         assert value["comparison"]["candidate_applied"] is False
 
-    def outcome(observation_id, outcome_kind, value):
+    def make_outcome(observation_id, outcome_kind, value):
         return {
             "schema": "agent-workflow-comparative-eval/comparison-outcome/v1",
             "observation_id": observation_id,
@@ -52,59 +76,57 @@ def _stub_shared() -> ModuleType:
             "feature_id": observations[0]["feature_id"],
             "cohort": observations[0]["identity"],
             "counts": {"observations": len(observations), "oracle_eligible": 0},
-            "correctness": {"control_only": 0, "candidate_only": 0, "both_correct": 0, "both_wrong": 0},
-            "efficiency": {}, "reliability": {"candidate_timeouts": 0},
-            "calibration": {}, "downstream": {}, "limitations": [],
+            "correctness": {
+                "control_only": 0,
+                "candidate_only": 0,
+                "both_correct": 0,
+                "both_wrong": 0,
+            },
+            "efficiency": {},
+            "reliability": {"candidate_timeouts": 0},
+            "calibration": {},
+            "downstream": {"outcomes": len(outcomes)},
+            "limitations": [],
         }
 
     module.sha256 = sha256
-    module.observation = observation
+    module.make_observation = make_observation
     module.validate_observation = validate_observation
-    module.outcome = outcome
+    module.make_outcome = make_outcome
     module.comparison_report = comparison_report
     return module
 
 
-def test_base_mode_preserves_legacy_import_and_emits_neutral_new_records(monkeypatch) -> None:
+def test_base_mode_reports_optional_shared_library_absent(monkeypatch) -> None:
     monkeypatch.delitem(sys.modules, "agent_workflow_comparative_eval", raising=False)
     status = comparative_eval.shared_library_status()
-    assert status["backend"] == "legacy-compatibility"
-    legacy = legacy_make_observation(
-        feature_id="x/v1", mode="static", identity={"v": 1},
-        source_input={"x": 1}, projected_input={"x": 1},
-        control=lambda: {"ok": True}, candidate=lambda: {"ok": True},
-    )
-    assert legacy["schema"] == "agent-workflow-typesafe/comparison-observation/v1"
-    neutral = comparative_eval.make_observation(
-        feature_id="x/v1", mode="static", identity={"v": 1},
-        source_input={"x": 1}, projected_input={"x": 1},
-        control=lambda: {"ok": True}, candidate=lambda: {"ok": True},
-    )
-    assert neutral["schema"] == "agent-workflow-comparative-eval/comparison-observation/v1"
-    comparative_eval.validate_observation(neutral)
+    assert status["installed"] is False
+    assert status["compatible"] is False
 
 
 def test_shared_library_delegation_and_runtime_persistence(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setitem(sys.modules, "agent_workflow_comparative_eval", _stub_shared())
-    assert comparative_eval.shared_library_status()["backend"] == "shared"
+    assert comparative_eval.shared_library_status()["compatible"] is True
     store = EvidenceStore(tmp_path / "evidence.sqlite")
-    capture = ShadowCapture(store, enabled=True, sample_rate=1.0, seed=1)
-    observation = capture.capture(
-        feature_id="routing-advice/v1", identity={"cohort": "x"},
-        source_input={"task": "review"}, projected_input={"task": "review"},
-        control=lambda: {"task_class": "implementation"},
-        candidate=lambda: {"task_class": "review"},
+    observation = make_precomputed_observation(
+        feature_id="routing-advice/v1",
+        identity={"cohort": "x"},
+        source_input={"task": "review"},
+        projected_input={"task": "review"},
+        control_result={"task_class": "implementation"},
+        candidate_result={"task_class": "review"},
+        control_duration_seconds=0.01,
+        candidate_duration_seconds=0.02,
     )
-    assert observation is not None
-    assert observation["schema"] == "agent-workflow-comparative-eval/comparison-observation/v1"
-    outcome = join_delayed_outcome(store, observation["observation_id"], "agent-run-outcome", {"accepted": True})
+    store.put_observation(observation)
+    outcome = join_agent_run_outcome(
+        store, observation["observation_id"], {"accepted": True}
+    )
     assert outcome["schema"] == "agent-workflow-comparative-eval/comparison-outcome/v1"
-    assert store.report()["schema"] == "agent-workflow-comparative-eval/comparison-report/v1"
+    reports = store.reports()
+    assert len(reports) == 1
+    assert reports[0]["schema"] == "agent-workflow-comparative-eval/comparison-report/v1"
     store.close()
-
-
-def test_legacy_runtime_import_reexports_neutral_runtime() -> None:
-    assert LegacyEvidenceStore is EvidenceStore
 
 
 def test_skill_control_requires_original_patterns() -> None:

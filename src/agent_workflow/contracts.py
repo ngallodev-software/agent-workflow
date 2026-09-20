@@ -13,6 +13,15 @@ from .path import absolute_path, inventory_tree, read_regular_file, require_dire
 
 def _schema_roots() -> tuple[Path, ...]:
     source_root = absolute_path(Path(__file__).parent.parent.parent / "schemas")
+    # ``pip --target`` relocates data_files beside the package root rather than
+    # under the interpreter's sys.prefix. Resolve that deterministic installed
+    # layout before consulting user/global installation roots.
+    package_data_root = (
+        Path(__file__).resolve().parent.parent
+        / "share"
+        / "agent-workflow"
+        / "schemas"
+    )
     installed_root = Path(sys.prefix) / "share" / "agent-workflow" / "schemas"
     user_data_root = (
         Path(os.environ.get("XDG_DATA_HOME", "~/.local/share")).expanduser()
@@ -20,8 +29,8 @@ def _schema_roots() -> tuple[Path, ...]:
         / "schemas"
     )
     # A source checkout and an installed package are separate runtime modes.
-    # Never merge ambient user/site-package roots into the authority path.
-    for root in (source_root, user_data_root, installed_root):
+    # Never merge multiple schema roots into one authority path.
+    for root in (source_root, package_data_root, user_data_root, installed_root):
         if root.is_dir():
             return (root,)
     return ()
@@ -139,6 +148,24 @@ def validate_ticket_identity(value: dict[str, Any]) -> None:
         raise WorkflowError("launch contract ticket identity does not match ticket")
 
 
+
+
+def validate_criteria_catalog(value: dict[str, Any]) -> None:
+    raw = value.get("criteria", [])
+    if not isinstance(raw, list):
+        raise WorkflowError("launch contract criterion catalog must be a list")
+    seen: set[str] = set()
+    for item in raw:
+        if not isinstance(item, dict):
+            raise WorkflowError("launch contract criterion catalog contains a non-object")
+        criterion_id = item.get("id")
+        if not isinstance(criterion_id, str) or not criterion_id:
+            raise WorkflowError("launch contract criterion catalog contains an empty ID")
+        if criterion_id in seen:
+            raise WorkflowError(f"launch contract contains duplicate criterion ID: {criterion_id}")
+        seen.add(criterion_id)
+
+
 def validate_agent_run_contract_value(value: dict[str, Any], *, artifact: str) -> str:
     schema_id = value.get("schema")
     if schema_id != AGENT_RUN_CONTRACT_SCHEMA:
@@ -146,6 +173,7 @@ def validate_agent_run_contract_value(value: dict[str, Any], *, artifact: str) -
     assert isinstance(schema_id, str)
     validate_instance(value, schema_id, artifact=artifact)
     validate_ticket_identity(value)
+    validate_criteria_catalog(value)
     return schema_id
 
 

@@ -198,6 +198,44 @@ def task_result_contract(root: Path, ticket_id: str | None) -> dict[str, Any] | 
     return None
 
 
+def task_criteria(root: Path, ticket_id: str | None) -> tuple[dict[str, str | None], ...]:
+    """Return the machine-readable criterion catalog declared for one ticket.
+
+    Packs may omit the catalog during the compatibility window. Once present,
+    Agent-Workflow freezes it into the launch contract so workers cannot invent
+    criterion IDs or silently omit declared criteria at completion time.
+    """
+    if not ticket_id:
+        return ()
+    manifest = load_pack_manifest(root)
+    for _phase, task in _task_records(manifest):
+        if task.get("id") != ticket_id:
+            continue
+        raw = task.get("criteria", [])
+        if not isinstance(raw, list):
+            return ()
+        result: list[dict[str, str | None]] = []
+        seen: set[str] = set()
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            criterion_id = str(item.get("id", "")).strip()
+            if not criterion_id:
+                raise WorkflowError(f"ticket {ticket_id!r} has an empty criterion ID")
+            if criterion_id in seen:
+                raise WorkflowError(
+                    f"ticket {ticket_id!r} has duplicate criterion ID: {criterion_id}"
+                )
+            seen.add(criterion_id)
+            description = item.get("description")
+            result.append({
+                "id": criterion_id,
+                "description": str(description) if description is not None else None,
+            })
+        return tuple(result)
+    return ()
+
+
 def _validate_phase(
     root: Path,
     entries: dict[str, Any],
@@ -269,6 +307,22 @@ def _validate_phase(
 
         raw_dependencies = task.get("dependencies", []) or []
         dependencies[task_id] = list(raw_dependencies) if isinstance(raw_dependencies, list) else []
+
+        raw_criteria = task.get("criteria", []) or []
+        if isinstance(raw_criteria, list):
+            criterion_ids = [
+                str(item.get("id", ""))
+                for item in raw_criteria
+                if isinstance(item, dict)
+            ]
+            duplicates = sorted({
+                criterion_id for criterion_id in criterion_ids
+                if criterion_ids.count(criterion_id) > 1
+            })
+            if duplicates:
+                report.errors.append(
+                    f"{location}: duplicate criterion IDs: {duplicates}"
+                )
 
         result_contract = task.get("result_contract")
         if isinstance(result_contract, dict):
