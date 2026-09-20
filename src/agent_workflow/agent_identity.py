@@ -270,12 +270,9 @@ def resolve_agent_identity(
     active_names = set(active_owners)
     active_names.update(unavailable_names or ())
     if requested_name is not None:
+        # preferred_names controls automatic allocation order; it is not an
+        # allowlist for operator-supplied logical worker identities.
         validate_id(requested_name, "agent name")
-        generated_name = requested_name.startswith(f"{settings.generated_agent_prefix}-")
-        if requested_name not in settings.preferred_agent_names and not generated_name:
-            raise WorkflowError(
-                f"agent name {requested_name!r} is not listed in [agents].preferred_names"
-            )
         if requested_name in active_names and not allow_active_name:
             raise AgentNameInUseError(requested_name, active_owners.get(requested_name))
         agent_name = requested_name
@@ -302,8 +299,11 @@ def resolve_agent_identity(
     if role_first:
         if explicit_role and legacy_override:
             raise WorkflowError(
-                "--role cannot be combined with --agent-class, --executor, --model, "
-                "--reasoning-effort, --allow-no-go-model, or an explicit command"
+                "--role selects its configured private runtime binding and cannot be "
+                "combined with --agent-class, --executor, --model, --reasoning-effort, "
+                "--allow-no-go-model, or an explicit command; for an operator runtime "
+                "override, omit --role and use the matching --agent-class with explicit "
+                "--executor/--model/--reasoning-effort options"
             )
         role_id = requested_role or settings.default_agent_role
         role = roles.get(role_id)
