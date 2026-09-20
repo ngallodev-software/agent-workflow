@@ -69,8 +69,11 @@ def steer(
     delivery = queue_request(run_dir(settings, agent_run_id), message)
     return {
         **message,
+        "message_persisted": True,
         "delivery_outcome": delivery["outcome"],
         "delivery_event_id": delivery["event_id"],
+        "delivery_reason": delivery.get("reason"),
+        "acknowledgement_required": True,
     }
 
 
