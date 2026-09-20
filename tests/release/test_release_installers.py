@@ -124,7 +124,8 @@ def test_jenkins_does_not_run_extracted_benchmark_contracts() -> None:
     assert "test_benchmark_target_and_tool_mode.py" not in jenkinsfile
     assert "stage('Plugin and contract compatibility')" in jenkinsfile
     assert "stage('Benchmark plugin')" in jenkinsfile
-    assert "stage('TypeSafe plugin')" in jenkinsfile
+    assert "stage('Built-in TypeSafe provider')" in jenkinsfile
+    assert "stage('TypeSafe plugin')" not in jenkinsfile
     assert "stage('Shared contract bundle')" in jenkinsfile
     assert "codebase-memory-cli" not in jenkinsfile
     assert "jenkins-artifacts" not in jenkinsfile
