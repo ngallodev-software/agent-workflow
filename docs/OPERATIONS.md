@@ -25,6 +25,18 @@ Role-to-runtime bindings and runtime aliases are operator configuration. In 0.9 
 
 Changing a private role binding must not require changing a workflow, prompt, role file, or peer-agent message. The actual resolved runtime remains available in restricted run provenance for diagnosis and reproducibility.
 
+### Logical names versus runtime selection
+
+`--agent-name` names the logical worker lease; it does not select a model. `[agents].preferred_names` is the automatic-allocation order, not an allowlist for explicit valid names. An operator may therefore use a descriptive logical name such as `terra` without changing runtime selection.
+
+`--role` and explicit runtime overrides are intentionally separate modes. A role selects its configured private runtime binding. If an operator must pin a runtime for diagnosis or qualification, omit `--role` and use the matching `--agent-class` with `--executor`, `--model`, and optional `--reasoning-effort`. For example, a review qualification may use `--agent-class review --executor codex --model MODEL`; this is an operator compatibility path, not normal workflow vocabulary.
+
+## Dirty source baselines
+
+Source cleanliness remains fail-closed. Use `--allow-dirty` only when the operator has intentionally chosen to preserve an already-dirty worktree or repository as the launch baseline. Agent-Workflow records the dirty baseline and injects that fact into the immutable launch context; it does not normalize, discard, or authorize rewriting pre-existing changes.
+
+For read-only review or evidence collection on a dirty repository, combine `--allow-dirty` with an explicit read-only task contract. The worker should preserve all pre-existing changes, report only newly observed evidence, and avoid treating the mere presence of baseline drift as a task failure.
+
 ## External workers
 
 Use `--worker-mode external` when another runtime will launch the worker. Preparation remains durable and host-independent. The external runtime is presentation/execution infrastructure, not workflow authority.
@@ -55,6 +67,8 @@ For headless workers, Agent Run control targets the Agent-Workflow-owned process
 ## Messaging
 
 Persist first. Delivery is optional. A steer request remains pending until correlated acknowledgement evidence exists.
+
+Inspect steering capability before depending on live delivery. `delegate` returns a compact `steering` block, while `agent-run status RUN` exposes `steering_supported`, `steering_adapter`, and `steering_reason`. If a request returns `delivery_outcome=unsupported`, the message is still durable, but no evidence-capable adapter delivered it to the running worker. The worker must not be assumed to have seen or applied it; correlated acknowledgement remains the gate.
 
 For one Agent Run, `agent-run watch` accepts `--after` and `--timeout`:
 
