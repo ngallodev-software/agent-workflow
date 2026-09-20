@@ -25,9 +25,6 @@ DECISIONS: dict[str, DecisionDefinition] = {
     "routing.task_class": DecisionDefinition("routing.task_class", "choice", "SEMANTIC_BOUNDED", "medium", True),
     "routing.interaction_required": DecisionDefinition("routing.interaction_required", "noul", "SEMANTIC_BOUNDED", "medium", True),
     "routing.semantic_risk": DecisionDefinition("routing.semantic_risk", "score", "SEMANTIC_BOUNDED", "high", False),
-    "skill.behavior_satisfied": DecisionDefinition("skill.behavior_satisfied", "noul", "SEMANTIC_BOUNDED", "medium", False),
-    "skill.completeness": DecisionDefinition("skill.completeness", "score", "SEMANTIC_BOUNDED", "low", False),
-    "skill.actionability": DecisionDefinition("skill.actionability", "score", "SEMANTIC_BOUNDED", "low", False),
 }
 
 def mode_inventory(registry: PluginRegistry | None) -> list[dict[str, object]]:
