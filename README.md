@@ -89,7 +89,6 @@ agent-workflow agent-run review RUN-001 --actor reviewer --reason "evidence insp
 agent-workflow agent-run accept RUN-001 --actor maintainer --reason "accepted"
 ```
 
-
 ### Deterministic worker protocol
 
 Implementation and review workers do not author Agent-Workflow protocol JSON.
@@ -202,7 +201,6 @@ Version `0.11.1` tightens the 0.11 lifecycle surface around real prompt-pack ope
 ## Repository-only CI assets
 
 Jenkins CI and local server-job files remain in the source repository for maintainers. They are repository infrastructure, not installed runtime features; see [Contributing](docs/CONTRIBUTING.md#jenkins-and-repository-only-ci-assets).
-
 
 ## Phase 2 simplification notes
 
