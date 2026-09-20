@@ -206,7 +206,7 @@ Jenkins CI and local server-job files remain in the source repository for mainta
 
 ## Phase 2 simplification notes
 
-Normal `agent-workflow delegate` output is intentionally compact: run ID, logical role, worker mode, worktree, state, idempotency/worktree indicators, and next actions. Use `agent-workflow agent-run status RUN` or `agent-workflow agent context RUN` when detailed durable state is actually needed rather than paying that context cost on every delegation.
+Normal `agent-workflow delegate` output is intentionally compact: run ID, logical role, worker mode, worktree, state, idempotency/worktree indicators, steering capability, and next actions. Use `agent-workflow agent-run status RUN` or `agent-workflow agent context RUN` when detailed durable state is actually needed rather than paying that context cost on every delegation.
 
 ## Decision modes
 
