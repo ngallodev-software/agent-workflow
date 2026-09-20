@@ -179,7 +179,7 @@ def test_approval_gate_requires_canonical_child_acceptance(
         "agent-run", "review", "approval-child", "--actor", "independent-reviewer", "--reason", "verified", env=product_env
     )
     installed_product.json(
-        "agent-run", "accept", "approval-child", "--actor", "independent-reviewer", "--reason", "accepted", "--revision", revision,
+        "agent-run", "accept", "approval-child", "--actor", "independent-reviewer", "--reason", "accepted",
         env=product_env,
     )
     installed_product.json("workflow", "resume", run_dir, snapshot, "--config", config, env=product_env)
