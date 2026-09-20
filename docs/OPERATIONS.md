@@ -71,10 +71,10 @@ Do not infer success from worker exit alone. Verify completion schema, sealed ev
 Read-only work is still evidence-bearing work. When there is no task-specific test to execute, record one known-safe successful verification such as:
 
 ```bash
-agent-workflow agent verify RUN --cwd /path/to/worktree -- git rev-parse --verify HEAD
+agent-workflow agent verify --cwd /path/to/worktree RUN -- git rev-parse --verify HEAD
 ```
 
-The `agent verify` parser consumes the verification command as the trailing remainder, so `--cwd` and `--timeout` belong before `--`. Failed verification receipts remain durable and block a later `completed` handoff; investigate uncertain commands outside `agent verify`, then record the command intended as completion evidence.
+The `agent verify` parser consumes the verification command as the trailing remainder. Use the parser-native ordering `agent verify [--cwd ...] [--timeout ...] RUN -- COMMAND`; the CLI also normalizes the common `RUN --cwd ... -- COMMAND` form. Failed verification receipts remain durable and block a later `completed` handoff; investigate uncertain commands outside `agent verify`, then record the command intended as completion evidence.
 
 ## Failure classification and triage
 
