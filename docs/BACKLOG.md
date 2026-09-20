@@ -36,6 +36,18 @@ Complete the external/real-provider execution and acceptance evidence required b
 
 Produce the content-addressed browser image/runtime digest and verified font evidence required for publication-grade visual review. Development capture/sealing mechanics already exist; publication evidence must remain pinned and reproducible.
 
+### BKL-011 — Re-author the agent-job small-task treatment-effect corpus
+
+The retired `agent-job` repository contains a useful six-task human-run A/B suite that compared a competent plain prompt with a structured job/package prompt across: documentation correction, a small bugfix, a behavior-preserving refactor, test-only work, a scope-boundary stress case, and an intentionally ambiguous request.
+
+Preserve the experimental question, not the legacy package format. Re-author these task classes against the current comparative benchmark contracts so they can measure whether Agent-Workflow discipline improves outcomes enough to justify its overhead on small work, where workflow friction matters most. Use current `control_raw` versus `workflow_full` treatment identity, pinned source/fixture/model/executor cohorts, sealed evidence, current scoring contracts, and current review policy.
+
+Retain the strongest neutrality rules from the historical suite: do not reward structure by default; count operator/review friction as a real cost; allow control to be better; allow roughly-equal or inconclusive outcomes; and score from captured evidence rather than evaluator rhetoric. Historical task text, checkout-specific paths, Copilot-only assumptions, hand-maintained model selection, and free-form result templates are not authoritative inputs.
+
+This corpus should also be usable as reusable prompt-pack/corpus-body benchmark data so ordinary implementation prompt packs can contribute comparable task-shape evidence without weakening benchmark isolation.
+
+**Done when:** current versioned benchmark assets cover the six task classes (or a documented non-redundant subset), each task has frozen canonical input and deterministic/public evaluation where feasible, human reviewability/friction is recorded separately from quality, treatment leakage is prevented, and repeated real-executor runs can be consolidated under the existing comparative operating policy.
+
 ## P1 — Public integration contracts
 
 ### EXT-HOST-001 — Make external-host launch consumption mandatory and observable
