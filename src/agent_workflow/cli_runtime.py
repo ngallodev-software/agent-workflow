@@ -79,6 +79,7 @@ def parse_args(
     """Parse CLI arguments while preserving global-option and Agent Run prepare rules."""
     raw = list(sys.argv[1:] if argv is None else argv)
     explicit_command: list[str] | None = None
+    agent_verify_command: list[str] | None = None
     if "--" in raw:
         separator = raw.index("--")
         trailing_command = raw[separator + 1 :]
@@ -87,10 +88,12 @@ def parse_args(
             parser.error("missing command after --")
         command_tokens = _command_tokens(leading)
         if command_tokens[:2] == ["agent", "verify"]:
-            # ``agent verify`` owns a REMAINDER argv contract. Preserve the
-            # conventional separator without confusing it with the legacy
-            # explicit executor override used by ``agent-run prepare``.
-            raw = leading + trailing_command
+            # ``agent verify`` owns a REMAINDER argv contract. Keep the
+            # verification command separate until Agent-Workflow options have
+            # been normalized; otherwise argparse can treat options written
+            # after AGENT_RUN_ID as part of the command itself.
+            agent_verify_command = trailing_command
+            raw = leading
         else:
             explicit_command = trailing_command
             raw = leading
@@ -116,6 +119,41 @@ def parse_args(
             continue
         normalized_rest.append(token)
         index += 1
+
+    if agent_verify_command is not None:
+        if normalized_rest[:2] != ["agent", "verify"]:
+            parser.error("-- COMMAND is only supported by agent-run prepare or agent verify")
+        verify_tokens = normalized_rest[2:]
+        verify_options: list[str] = []
+        agent_run_id: str | None = None
+        index = 0
+        while index < len(verify_tokens):
+            token = verify_tokens[index]
+            if token in {"--cwd", "--timeout"}:
+                if index + 1 >= len(verify_tokens):
+                    parser.error(f"argument {token}: expected one argument")
+                verify_options.extend([token, verify_tokens[index + 1]])
+                index += 2
+                continue
+            if token.startswith(("--cwd=", "--timeout=")):
+                verify_options.append(token)
+                index += 1
+                continue
+            if token.startswith("-"):
+                parser.error(f"unrecognized agent verify option before --: {token}")
+            if agent_run_id is not None:
+                parser.error(f"unexpected argument before -- for agent verify: {token}")
+            agent_run_id = token
+            index += 1
+        if agent_run_id is None:
+            parser.error("agent verify requires AGENT_RUN_ID before --")
+        normalized_rest = [
+            "agent",
+            "verify",
+            *verify_options,
+            agent_run_id,
+            *agent_verify_command,
+        ]
 
     if explicit_command is not None and normalized_rest[:2] != ["agent-run", "prepare"]:
         parser.error("-- COMMAND is only supported by agent-run prepare or agent verify")
