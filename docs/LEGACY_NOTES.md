@@ -46,6 +46,14 @@ The historical `invoke-codex-from-claude` / `codex-job` / `agent-job` repository
 
 The historical repository is not a compatibility target. Do not reintroduce its Claude-home skill installer, `codex-job` schema, model registry, queue/dashboard prototypes, or provider-session semantics into Agent-Workflow.
 
+### agent-job intermediate architecture
+
+The later standalone `agent-job` repository was the intermediate executor-neutral step between `codex-job` and Agent-Workflow. It introduced a structured v2 work-order schema, Copilot/manual package mode, explicit non-execution metadata, generic agent-versus-executor provenance vocabulary, and a small baseline-versus-structured-prompt evaluation suite.
+
+Those runtime/package abstractions are superseded by Agent-Workflow rather than compatibility targets. In particular, package creation without execution maps to the current external-worker/preparation boundary; bounded scope maps to immutable Agent Run/worktree/prompt-pack contracts; claimed-versus-observed output maps to provider/provenance/completion evidence; and mandatory human review maps to the separate completion/evaluation/review/acceptance lifecycle.
+
+One historical asset remains intentionally useful as research input: the six-task small-work A/B corpus. Its task classes and neutrality/friction principles are tracked for re-authoring under the current benchmark contracts in `BKL-011`. The old Copilot package renderer, schema-v1 migration, model-sync registry, install skill, mock executor, and unfinished Codex executor must not be restored as current product surfaces.
+
 ## Current authoritative records
 
 Use the current documentation set rather than implementation-era Phase 0–2 handoff material:
