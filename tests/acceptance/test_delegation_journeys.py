@@ -50,7 +50,7 @@ def test_headless_completion_is_sealed_and_lifecycle_is_separate(
     assert reviewed["disposition"] == "reviewed"
     accepted = installed_product.json(
         "agent-run", "accept", "success-run", "--actor", "maintainer", "--reason", "accepted",
-        "--revision", head, env=product_env,
+        env=product_env,
     )
     assert accepted["disposition"] == "accepted"
     projected = installed_product.json("agent-run", "status", "success-run", env=product_env)
@@ -193,7 +193,7 @@ def test_failed_headless_run_restarts_as_new_agent_run_with_lineage(
 
     env["FAKE_AGENT_MODE"] = "success"
     restarted = installed_product.json(
-        "agent-run", "restart", "failed-run", "--new-agent-run-id", "failed-run-retry", env=env,
+        "agent-run", "restart", "failed-run", "--new-agent-run-id", "failed-run-retry", "--start", env=env,
     )
     assert restarted["retry_of_agent_run_id"] == "failed-run"
     retry = wait_for_status(env, "failed-run-retry")
