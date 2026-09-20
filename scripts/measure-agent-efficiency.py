@@ -112,7 +112,7 @@ def _launch_context_overhead_bytes(role: str, catalog: dict) -> int:
         # (notably macOS /var/folders paths).  Path length is deployment noise,
         # not agent-facing contract growth, so normalize the synthetic
         # measurement root before enforcing the cross-platform byte budget.
-        canonical_root = "/tmp/agent-workflow-measurement"
+        canonical_root = "/aw-state"
         rendered = rendered.replace(str(state_dir), canonical_root)
         total = len(rendered.encode("utf-8"))
         return total - len(prompt_text.encode("utf-8"))
