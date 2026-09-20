@@ -13,6 +13,7 @@ from agent_workflow.util import atomic_write_json, sha256_file
 
 def write_minimal_run(root: Path, *, agent_run_id: str = "test-run", terminal: str = "completed") -> None:
     root.mkdir(parents=True, exist_ok=True)
+    (root / "handoff").mkdir(parents=True, exist_ok=True)
     for name, content in {
         "prompt.md": "task\n",
         "launch-prompt.md": "task\n",
@@ -129,7 +130,7 @@ def write_minimal_run(root: Path, *, agent_run_id: str = "test-run", terminal: s
         "paths": {
             "run_dir": ".",
             "workdir": str(root),
-            "handoff_dir": str(root),
+            "handoff_dir": str(root / "handoff"),
             "completion": "completion.json",
             "result": "result.json",
             "result_contract": None,
