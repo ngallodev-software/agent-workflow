@@ -273,6 +273,18 @@ Only after `ROLE-001`, `BIND-001`, and `API-001` stabilize, write and approve a 
 
 The plugin may own workspace/presentation, launching a prepared external worker, best-effort live delivery after persistence, focus/navigation, review presentation, and binding recovery. It must not become a core dependency, durable-message authority, review/acceptance authority, worktree-provenance authority, or source of Agent Run identity.
 
+## P2 — Advisory executor/provider metadata
+
+### EXEC-META-001 — Provider capability and model-lifecycle freshness evidence
+
+The retired `invoke-codex-from-claude` project maintained a local model registry and EOL checker. Preserve the useful freshness-checking intent without restoring a hand-maintained routing authority.
+
+A future operator-facing health capability may collect current executor/provider model availability, lifecycle/deprecation metadata, and compatibility evidence from authoritative provider surfaces. It must be advisory evidence only: normal agents continue to choose logical roles, configured runtime policy remains authoritative, and an unavailable/stale metadata source must degrade to `unknown` rather than silently changing routing.
+
+Do not store subjective benchmark scores, guessed prices, or manually asserted context windows as runtime truth. Pin/cache any fetched metadata with source identity, retrieval time, and digest so release/compatibility claims remain reproducible.
+
+**Done when:** a bounded health/report command can identify configured models that are unavailable, deprecated, or unverified without mutating workflow state or model selection; fixtures prove stale/offline behavior fails open only to `unknown`, never to a routing change.
+
 ## P2 — Independent spec-generation integration
 
 ### SPEC-001 — AW-optimized spec/eval producer boundary
