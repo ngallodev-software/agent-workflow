@@ -207,8 +207,8 @@ def build_parser(
     delegate.add_argument(
         "--role",
         help=(
-            "logical role; defaults to the configured role unless a low-level "
-            "executor/model override is supplied"
+            "logical role; selects its configured private runtime binding; "
+            "omit --role when using explicit operator executor/model overrides"
         ),
     )
     delegate.add_argument(
@@ -231,7 +231,7 @@ def build_parser(
     delegate.add_argument(
         "--allow-dirty",
         action="store_true",
-        help="explicitly preserve and baseline pre-existing uncommitted worktree changes",
+        help="record and preserve pre-existing uncommitted changes as the launch baseline",
     )
     delegate.add_argument(
         "--worker-mode", choices=("headless", "external"), default="headless",
@@ -307,11 +307,23 @@ def build_parser(
         help="native JSON job path or task ID from the selected prompt pack",
     )
     launch.add_argument("--prerequisite", action="append", dest="prerequisites", help="required prerequisite agent run ID; repeatable")
-    launch.add_argument("--role", help="logical agent role; runtime/provider resolution remains private")
+    launch.add_argument(
+        "--role",
+        help="logical agent role; selects its configured private runtime and cannot be combined with explicit runtime overrides",
+    )
     launch.add_argument("--executor", help="operator compatibility override; prefer --role")
-    launch.add_argument("--agent-name", help="preferred configured agent name")
-    launch.add_argument("--agent-class", help="operator compatibility classification; prefer --role")
-    launch.add_argument("--model", help="operator compatibility model override; prefer --role")
+    launch.add_argument(
+        "--agent-name",
+        help="logical worker name; [agents].preferred_names controls auto-allocation order, not allowed values; does not select a model",
+    )
+    launch.add_argument(
+        "--agent-class",
+        help="operator compatibility classification; use instead of --role when explicitly overriding executor/model/runtime",
+    )
+    launch.add_argument(
+        "--model",
+        help="operator compatibility model override; omit --role and supply the matching --agent-class for explicit runtime selection",
+    )
     launch.add_argument(
         "--reasoning-effort",
         choices=("low", "medium", "high"),
@@ -337,7 +349,7 @@ def build_parser(
     launch.add_argument(
         "--allow-dirty",
         action="store_true",
-        help="allow launching from a Git worktree with uncommitted changes",
+        help="record and preserve pre-existing uncommitted changes as the launch baseline",
     )
     launch.add_argument(
         "--worker-mode",
@@ -580,7 +592,8 @@ def build_parser(
     tail.add_argument("--lines", type=int, default=50)
 
     steer = agent_run_commands.add_parser(
-        "steer", help="persist a parent-to-child steering request"
+        "steer",
+        help="persist steering, attempt configured delivery, and require correlated acknowledgement before treating it as applied",
     )
     steer.add_argument("agent_run_id")
     steer.add_argument("content")
