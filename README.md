@@ -45,7 +45,9 @@ agent-workflow delegate RUN-001 prompt.md --repo /path/to/repo \
 
 Dirty worktrees remain fail-closed by default. If pre-existing changes are intentionally part of reconciliation work, pass `--allow-dirty`; Agent-Workflow records that dirty launch baseline rather than silently discarding or normalizing it.
 
-When `--allow-dirty` is used, that approval is also injected into the immutable worker launch context: pre-existing overlapping changes are treated as baseline drift rather than an automatic blocker. Workers must still preserve unrelated drift and stay within the assigned scope.
+When `--allow-dirty` is used, that approval is also injected into the immutable worker launch context: pre-existing overlapping changes are treated as baseline drift rather than an automatic blocker. Workers must still preserve unrelated drift and stay within the assigned scope. For read-only review/evidence work, the flag records the baseline only; it is not permission to rewrite the pre-existing changes.
+
+`--agent-name` is a logical worker identity, not a model selector. `[agents].preferred_names` controls automatic allocation order only, so an explicit valid name may be outside that list. Normal launches use `--role`, which selects a configured private runtime binding. If an operator intentionally pins executor/model/reasoning for qualification or diagnosis, omit `--role` and use the matching `--agent-class` with the explicit runtime options.
 
 Lineage retries are prepare-first:
 
@@ -77,6 +79,8 @@ agent-workflow agent-run progress RUN-001 "implemented parser changes" --actor w
 agent-workflow agent-run steer RUN-001 "also run the integration tests" --actor parent
 agent-workflow agent-run ack RUN-001 MESSAGE_ID "applied" --actor worker
 ```
+
+The compact `delegate` response includes a `steering` capability block. `agent-run status` exposes the same decision as `steering_supported`, `steering_adapter`, and `steering_reason`. Steering is persist-first: `delivery_outcome=unsupported` means the request is durably recorded but no evidence-capable adapter delivered it to the running worker. Do not treat delivery or persistence as application; correlated acknowledgement is still required.
 
 Review and disposition remain separate from worker completion:
 
@@ -206,7 +210,7 @@ Normal `agent-workflow delegate` output is intentionally compact: run ID, logica
 
 ## Decision modes
 
-Agent-Workflow has one built-in decision mode: `deterministic`. Optional plugins may advertise additional semantic decision providers and modes through the public plugin API. Inspect the effective capabilities with:
+Agent-Workflow has built-in `deterministic`, `typesafe`, and `comparative` decision modes. The TypeSafe-backed modes require the optional `typesafe` install extra and remain bounded to registered semantic seams; deterministic lifecycle/recovery authority does not move to the provider. Unrelated trusted plugins may still advertise additional decision providers or modes through the public plugin API. Inspect the effective capabilities with:
 
 ```bash
 agent-workflow decision modes
@@ -214,7 +218,7 @@ agent-workflow decision providers
 agent-workflow decision check
 ```
 
-Select a mode/profile in configuration or for one invocation with `--decision-mode` / `--decision-profile`. Plugin-dependent modes are unavailable unless their plugin is installed and enabled. `--no-plugins` is the deterministic recovery path.
+Select a mode/profile in configuration or for one invocation with `--decision-mode` / `--decision-profile`. Built-in TypeSafe modes are unavailable when the optional SDK extra is absent; plugin-contributed modes are unavailable unless their plugin is installed and enabled. `--no-plugins` suppresses optional plugins but does not remove built-in deterministic recovery authority.
 
 Modes that advertise comparative capture also require the neutral shared library:
 
