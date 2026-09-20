@@ -37,6 +37,8 @@ def test_installed_cli_exposes_headless_agent_run_surface(
     assert doctor["version"] == expected_version
     assert doctor["checks"]["required_commands_present"] is True
     assert set(doctor["commands"]) >= {"git", "bash", "python3", "tar", "zstd"}
+    assert doctor["executors"]["codex"]["steering_adapter"] == "unsupported"
+    assert doctor["executors"]["codex"]["late_steering_supported"] is False
 
     config = installed_product.json("config", "show", env=product_env)
     assert "terminal" not in config
