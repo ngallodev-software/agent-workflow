@@ -157,8 +157,8 @@ def advise_routing_with_policy(
     if settings.decision_mode != "deterministic":
         candidate_started=time.perf_counter()
         applied["counterfactual_candidate"] = compose(
-            receipts["routing.task_class"].get("candidate_result"),
-            receipts["routing.interaction_required"].get("candidate_result"),
+            receipts["routing.task_class"].get("policy_candidate_result"),
+            receipts["routing.interaction_required"].get("policy_candidate_result"),
         )
         applied["decision_timing"]["candidate_policy_seconds"]=time.perf_counter()-candidate_started
     return applied

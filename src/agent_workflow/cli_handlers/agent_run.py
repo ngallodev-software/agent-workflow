@@ -268,7 +268,6 @@ def handle_agent_run_command(
                 action=lifecycle_actions[command],
                 actor=args.actor,
                 reason=args.reason,
-                revision=getattr(args, "revision", None),
             ),
             False,
         )

@@ -238,23 +238,11 @@ def _require_allowed_prior(
     )
 
 
-def _acceptance_revision(
-    completion: dict[str, Any],
-    requested_revision: str | None,
-) -> str:
-    """Derive canonical acceptance revision from sealed completion evidence.
-
-    ``requested_revision`` is a compatibility assertion only. Callers no longer
-    need to copy the revision out of completion evidence merely to feed it back
-    into Agent-Workflow.
-    """
+def _acceptance_revision(completion: dict[str, Any]) -> str:
+    """Derive canonical acceptance revision from sealed completion evidence."""
     expected_revision = completion.get("head_revision")
     if not isinstance(expected_revision, str) or not expected_revision:
         raise WorkflowError("acceptance requires a completion head revision")
-    if requested_revision is not None and requested_revision != expected_revision:
-        raise WorkflowError(
-            f"accepted revision mismatch: {requested_revision}; expected {expected_revision}"
-        )
     return expected_revision
 
 
@@ -298,7 +286,6 @@ def record(
     action: Action,
     actor: str,
     reason: str,
-    revision: str | None = None,
 ) -> dict[str, Any]:
     """Execute one schema-governed lifecycle operation.
 
@@ -372,9 +359,7 @@ def record(
             reviewed=reviewed,
             independent=independent,
         )
-        effective_revision = _acceptance_revision(completion, revision)
-    elif revision is not None:
-        raise WorkflowError("revision is only valid for acceptance")
+        effective_revision = _acceptance_revision(completion)
 
     value = {
         "schema": "agent-workflow/lifecycle-receipt/v1",

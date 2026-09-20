@@ -387,11 +387,10 @@ def build_parser(
     status.add_argument("agent_run_id")
     status.add_argument(
         "--json",
-        "--structured",
         dest="json",
         action="store_true",
         default=argparse.SUPPRESS,
-        help="machine-readable JSON status output; --structured is a compatibility alias",
+        help="machine-readable JSON status output",
     )
 
     public_messages = agent_run_commands.add_parser(
@@ -700,11 +699,6 @@ def build_parser(
         lifecycle.add_argument("agent_run_id")
         lifecycle.add_argument("--actor", required=True)
         lifecycle.add_argument("--reason", required=True)
-        if name == "accept":
-            lifecycle.add_argument(
-                "--revision",
-                help="optional compatibility assertion; canonical revision is derived from sealed completion",
-            )
 
     force = agent_run_commands.add_parser(
         "force-accept", help="record an explicit local operator acceptance override"

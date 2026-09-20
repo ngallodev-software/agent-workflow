@@ -10,7 +10,7 @@ from .config import DecisionPolicyRule, Settings
 from .errors import WorkflowError
 from .plugin_api import DecisionContext, DecisionEvidence, DecisionRequest
 
-DECISION_RECEIPT_SCHEMA = "agent-workflow/decision-execution-receipt/v1"
+DECISION_RECEIPT_SCHEMA = "agent-workflow/decision-execution-receipt/v2"
 
 
 @dataclass(frozen=True)
@@ -98,7 +98,7 @@ def validate_decision_configuration(settings: Settings, _registry: object | None
     return result
 
 
-def _normalize_candidate(defn: DecisionDefinition, evidence: DecisionEvidence, threshold: float) -> tuple[object | None, str | None]:
+def _policy_candidate(defn: DecisionDefinition, evidence: DecisionEvidence, threshold: float) -> tuple[object | None, str | None]:
     if evidence.status != "success":
         return None, evidence.status
     if defn.semantic_type == "noul":
@@ -129,7 +129,7 @@ def execute_decision_set(*, settings: Settings, registry: object | None, decisio
             raise WorkflowError(f"missing deterministic control value for {decision_id}")
     mode = decision_mode(settings.decision_mode)
     if mode.name == "deterministic":
-        return {decision_id: _receipt(settings, decision_id, control_values[decision_id], None, "deterministic", control_values[decision_id], None) for decision_id in decision_ids}
+        return {decision_id: _receipt(settings, decision_id, control_values[decision_id], None, None, "deterministic", control_values[decision_id], None) for decision_id in decision_ids}
     if mode.provider != "typesafe":
         raise WorkflowError(f"unsupported semantic provider: {mode.provider}")
     from .semantic.typesafe import evaluate
@@ -147,25 +147,26 @@ def execute_decision_set(*, settings: Settings, registry: object | None, decisio
             evidence = DecisionEvidence(decision_id, "invalid_contract", DECISIONS[decision_id].semantic_type, error_class="missing_evidence")
         rule = _profile_rule(settings, decision_id, mode.disposition)
         disposition = rule.disposition or mode.disposition
-        candidate, fallback = _normalize_candidate(DECISIONS[decision_id], evidence, rule.minimum_confidence)
+        policy_candidate, fallback = _policy_candidate(DECISIONS[decision_id], evidence, rule.minimum_confidence)
+        evidence_result = evidence.value if evidence.status in {"success", "no_match"} else None
         applied = control_values[decision_id]
         if fallback is None and disposition == "automated":
             if DECISIONS[decision_id].automatable:
-                applied = candidate
+                applied = policy_candidate
             else:
                 fallback = "policy_rejection"
-        receipts[decision_id] = _receipt(settings, decision_id, control_values[decision_id], candidate, disposition, applied, fallback, evidence=evidence, provider=mode.provider, provider_elapsed_seconds=provider_elapsed)
+        receipts[decision_id] = _receipt(settings, decision_id, control_values[decision_id], evidence_result, policy_candidate, disposition, applied, fallback, evidence=evidence, provider=mode.provider, provider_elapsed_seconds=provider_elapsed)
     return receipts
 
 
-def _receipt(settings: Settings, decision_id: str, control: object, candidate: object | None, disposition: str, applied: object, fallback: str | None, *, evidence: DecisionEvidence | None = None, provider: str | None = None, provider_elapsed_seconds: float | None = None) -> dict[str, Any]:
+def _receipt(settings: Settings, decision_id: str, control: object, evidence_result: object | None, policy_candidate: object | None, disposition: str, applied: object, fallback: str | None, *, evidence: DecisionEvidence | None = None, provider: str | None = None, provider_elapsed_seconds: float | None = None) -> dict[str, Any]:
     return {
         "schema": DECISION_RECEIPT_SCHEMA, "decision_id": decision_id, "decision_version": 1,
         "classification": DECISIONS[decision_id].classification, "consequence": DECISIONS[decision_id].consequence,
         "mode": settings.decision_mode, "profile": settings.decision_profile, "control_result": control,
-        "candidate_result": candidate, "disposition": disposition, "applied_result": applied,
+        "evidence_result": evidence_result, "policy_candidate_result": policy_candidate, "disposition": disposition, "applied_result": applied,
         "fallback": {"used": fallback is not None, "reason": fallback},
-        "provider": {"plugin": None, "name": provider, "elapsed_seconds": provider_elapsed_seconds},
+        "provider": {"name": provider, "elapsed_seconds": provider_elapsed_seconds},
         "semantic": None if evidence is None else {
             "status": evidence.status, "semantic_type": evidence.semantic_type, "confidence": evidence.confidence,
             "probability": evidence.probability, "distribution": dict(evidence.distribution), "model": evidence.model,

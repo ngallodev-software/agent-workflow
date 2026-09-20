@@ -47,6 +47,8 @@ def main() -> int:
         }
         case_ok = case_ok and advice["recommendation"]["agent_class"] == expected_control
         case_ok = case_ok and all(receipt["applied_result"] == receipt["control_result"] for receipt in receipts.values())
+        case_ok = case_ok and all("evidence_result" in receipt and "policy_candidate_result" in receipt for receipt in receipts.values())
+        case_ok = case_ok and all(receipt["evidence_result"] is not None for receipt in receipts.values())
         ok = ok and case_ok
         rows.append({
             "case": index, "ok": case_ok, "control_agent_class": advice["recommendation"]["agent_class"],
@@ -54,7 +56,7 @@ def main() -> int:
             "receipts": receipts,
         })
     result = {
-        "schema": "agent-workflow/typesafe-live-qualification/v1", "ok": ok,
+        "schema": "agent-workflow/typesafe-live-qualification/v2", "ok": ok,
         "mode": "comparative", "capability": capability(settings), "cases": rows,
         "elapsed_seconds": round(time.perf_counter() - started, 3),
     }

@@ -45,8 +45,7 @@ def _context(settings: Settings, agent_run_id: str) -> tuple[Path, dict[str, Any
     workdir = Path(str(contract["worktree"]["path"])).resolve()
     handoff = Path(str(contract["paths"]["handoff_dir"])).resolve()
     current_handoff = (state_dir / "handoff").resolve()
-    legacy_handoff = (workdir / ".agent-workflow-handoff" / agent_run_id).resolve()
-    if handoff not in {current_handoff, legacy_handoff}:
+    if handoff != current_handoff:
         raise WorkflowError("launch handoff is outside the authorized runtime boundary")
     return state_dir, contract, workdir, handoff
 

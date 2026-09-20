@@ -24,7 +24,6 @@ SCHEMA = "agent-workflow/release-evidence/v1"
 PROVENANCE_SCHEMA = "agent-workflow/build-provenance/v1"
 
 _EXCLUDED_DIRS = {
-    ".agent-workflow-handoff",
     ".claude",
     ".claude-flow",
     ".codebase-memory",

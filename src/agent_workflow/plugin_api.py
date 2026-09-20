@@ -111,11 +111,6 @@ class DecisionContext:
 DecisionEvaluate = Callable[[DecisionRequest, DecisionContext], Mapping[str, DecisionEvidence]]
 
 
-# Backward-compatible public aliases for third-party semantic plugins.
-PluginDecisionRequest = DecisionRequest
-PluginDecisionEvidence = DecisionEvidence
-PluginDecisionContext = DecisionContext
-PluginDecisionEvaluate = DecisionEvaluate
 
 
 @dataclass(frozen=True)

@@ -17,7 +17,8 @@ from typing import Any, Protocol
 
 from ..plugin_api import DecisionContext, DecisionEvidence, DecisionRequest
 
-QUESTION_SET_VERSION = "routing/v1alpha1"
+QUESTION_SET_VERSION = "routing/v2"
+PROJECTOR_VERSION = "routing-state/v2"
 SUPPORTED_DECISIONS = (
     "routing.task_class",
     "routing.interaction_required",
@@ -34,7 +35,7 @@ QUESTION_SPECS: dict[str, dict[str, object]] = {
     "routing.task_class": {
         "primitive": "choice",
         "answer_key": "task_class",
-        "instructions": "Classify this task by its primary requested work. Choose other when no listed class fits.",
+        "instructions": "Based only on the supplied request and observed metadata, choose the single primary kind of work being requested. Choose other when none of the supplied classes fits; do not infer an unavailable class.",
         "criteria": {
             "implementation": "Change product code or configuration.",
             "diagnosis": "Investigate a failure without changing product behavior.",
@@ -46,12 +47,12 @@ QUESTION_SPECS: dict[str, dict[str, object]] = {
     "routing.interaction_required": {
         "primitive": "noul",
         "answer_key": "interaction_needed",
-        "instructions": "Would completing this task require a material user decision or authorization not present in the supplied task?",
+        "instructions": "Based only on the supplied request and observed metadata, does completing the requested work require a material user decision or authorization that is not already supplied? Do not treat ordinary execution risk as missing authorization.",
     },
     "routing.semantic_risk": {
         "primitive": "score",
         "answer_key": "semantic_risk",
-        "instructions": "Assess the semantic consequence of misunderstanding this task, using the ordered rubric.",
+        "instructions": "Assess the consequence of Agent-Workflow acting on an incorrect semantic interpretation of this request. Score only this consequence dimension, using the ordered rubric and supplied execution context.",
         "criteria": [
             "Low consequence; easily reversible.",
             "Moderate consequence; requires careful verification.",
@@ -93,12 +94,29 @@ def project_routing(source: Mapping[str, object]) -> tuple[dict[str, object], tu
     refs = source.get("source_refs", [])
     if not isinstance(refs, list) or not all(isinstance(item, str) for item in refs):
         raise ValueError("source_refs must be a list of stable strings")
-    return {"task": _safe(text), "declared_metadata": _safe(source.get("metadata", {}))}, tuple(refs)
+    return {
+        "observed": {
+            "request_text": _safe(text),
+            "declared_metadata": _safe(source.get("metadata", {})),
+            "source_refs": list(refs),
+        },
+        "deterministic_context": {
+            "routing_classes": {
+                "implementation": "change product code or configuration",
+                "diagnosis": "investigate a failure without changing product behavior",
+                "review": "assess existing evidence or changes",
+                "documentation": "create or revise explanatory material",
+                "other": "none of the listed classes fits",
+            },
+            "semantic_provider_authority": "evidence_only",
+            "enforced_selection_remains_authoritative": True,
+        },
+    }, tuple(refs)
 
 
 def _request_hash(state: Mapping[str, object], decision_ids: tuple[str, ...], model: str | None) -> str:
     specs = {decision_id: QUESTION_SPECS[decision_id] for decision_id in decision_ids}
-    payload = {"state": state, "questions": specs, "question_set_version": QUESTION_SET_VERSION, "requested_model": model}
+    payload = {"state": state, "questions": specs, "question_set_version": QUESTION_SET_VERSION, "projector_version": PROJECTOR_VERSION, "requested_model": model}
     return hashlib.sha256(_canonical_json(payload).encode()).hexdigest()
 
 
@@ -164,6 +182,7 @@ def _record_call(settings: Any, *, request_sha256: str, state: object, decision_
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "request_sha256": request_sha256,
             "question_set_version": QUESTION_SET_VERSION,
+            "projector_version": PROJECTOR_VERSION,
             "requested_model": requested_model,
             "resolved_model": resolved_model,
             "input": {"state": _safe(state), "decision_ids": list(decision_ids)},
@@ -254,5 +273,6 @@ def capability(settings: Any) -> dict[str, object]:
         "api_key_configured": bool(os.environ.get("TYPESAFE_API_KEY")),
         "model": getattr(settings, "typesafe_model", None),
         "question_set_version": QUESTION_SET_VERSION,
+        "projector_version": PROJECTOR_VERSION,
         "decisions": list(SUPPORTED_DECISIONS),
     }

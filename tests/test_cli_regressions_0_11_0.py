@@ -56,7 +56,7 @@ def test_model_pinned_identity_without_role_uses_compatibility_path(tmp_path: Pa
     assert identity.runtime_alias is None
 
 
-@pytest.mark.parametrize("flag", ["--json", "--structured"])
+@pytest.mark.parametrize("flag", ["--json"])
 def test_agent_run_status_accepts_machine_readable_flag_after_subcommand(flag: str) -> None:
     parser = build_parser(command_scope="agent-run")
     args = parser.parse_args(["agent-run", "status", "run-1", flag])
@@ -789,18 +789,15 @@ def test_limitation_command_has_no_free_form_result_enum() -> None:
     assert not hasattr(args, "result")
 
 
-def test_accept_revision_is_derived_and_cli_assertion_is_optional() -> None:
+def test_accept_revision_is_derived_from_sealed_completion() -> None:
     from agent_workflow.lifecycle import _acceptance_revision
 
     parser = build_parser(command_scope="agent-run")
     args = parser.parse_args(
         ["agent-run", "accept", "run-1", "--actor", "host", "--reason", "reviewed"]
     )
-    assert args.revision is None
-    assert _acceptance_revision({"head_revision": "abc123"}, None) == "abc123"
-    with pytest.raises(Exception, match="accepted revision mismatch"):
-        _acceptance_revision({"head_revision": "abc123"}, "def456")
-
+    assert not hasattr(args, "revision")
+    assert _acceptance_revision({"head_revision": "abc123"}) == "abc123"
 
 def test_prerequisite_policy_names_are_closed() -> None:
     from agent_workflow.errors import WorkflowError

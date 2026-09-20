@@ -42,6 +42,8 @@ def test_semantic_uncertainty_falls_back_to_control(monkeypatch):
     settings = replace(defaults(), decision_mode="typesafe", decision_profile="strict", decision_profiles={"strict": {"routing.task_class": DecisionPolicyRule("automated", 0.99)}})
     result = advise_routing_with_policy({"task": "review this", "task_type": "implementation"}, settings)
     receipt = result["decision_receipts"]["routing.task_class"]
+    assert receipt["evidence_result"] == "review"
+    assert receipt["policy_candidate_result"] is None
     assert receipt["applied_result"] == "implementation"
     assert receipt["fallback"]["reason"] == "semantic_uncertainty"
 

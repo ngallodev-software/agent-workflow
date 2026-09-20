@@ -28,7 +28,7 @@ Completion criterion results are exact parser choices: `pass`, `fail`, or `not_v
 
 If an exact launch root contains `.agent-workflow-execution.toml`, Agent-Workflow auto-discovers it for `agent-run prepare` and `delegate` when `--config` is not supplied. The repo-local file is an execution overlay only: it may define agents/classes/executors/roles/runtime aliases, but cannot override host security, state paths, plugins, or other administrative policy.
 
-New run handoffs live under Agent-Workflow state rather than inside the source checkout. This keeps `0700` runtime evidence out of Docker/build contexts and removes the need for repository-specific `.dockerignore` exclusions. Existing runs with legacy worktree-local handoffs remain readable.
+New run handoffs live under Agent-Workflow state rather than inside the source checkout. This keeps `0700` runtime evidence out of Docker/build contexts and removes the need for repository-specific `.dockerignore` exclusions.
 
 Controlled workers do not inherit the host's authenticated GitHub/service
 credentials. Tickets that require privileged external mutation should produce

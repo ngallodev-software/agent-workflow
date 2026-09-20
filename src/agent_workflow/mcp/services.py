@@ -13,7 +13,7 @@ from typing import Any, Generic, TypeVar
 from .. import __version__
 from ..command_catalog import (
     COMMAND_CATALOG_SCHEMA,
-    COMMAND_ROLES,
+    COMMAND_PROFILES,
     command_catalog_sha256,
     filter_catalog,
     runtime_command_catalog,
@@ -363,7 +363,7 @@ class WorkflowReadService:
         return _page(request, values)
 
     def get_command_catalog(self, role: str | None = None) -> dict[str, Any]:
-        if role is not None and role not in COMMAND_ROLES:
+        if role is not None and role not in COMMAND_PROFILES:
             raise ServiceError("invalid_identifier", "unknown command-catalog role")
         try:
             catalog = filter_catalog(

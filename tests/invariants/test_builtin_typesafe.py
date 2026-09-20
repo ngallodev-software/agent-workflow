@@ -24,7 +24,7 @@ def test_modes_are_builtin_and_typesafe_support_is_routing_only():
 
 def test_projection_redacts_secret_keys():
     state, refs = project_routing({"task": "review", "metadata": {"api_key": "secret"}, "source_refs": ["T-1"]})
-    assert state["declared_metadata"]["api_key"] == "[redacted]"
+    assert state["observed"]["declared_metadata"]["api_key"] == "[redacted]"
     assert refs == ("T-1",)
 
 

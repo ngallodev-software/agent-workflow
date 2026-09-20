@@ -19,9 +19,6 @@ from .util import atomic_write_bytes
 COMMAND_CATALOG_SCHEMA = "agent-workflow/command-catalog/v1"
 COMMAND_CATALOG_FILENAME = "command-catalog.json"
 COMMAND_CARD_FILENAME = "command-card.md"
-# Backward-compatible parser/export name. Command profiles are not logical AgentRole IDs.
-COMMAND_ROLES = COMMAND_PROFILES
-
 _PROFILE_COMMANDS: dict[str, frozenset[str]] = {
     "implementation": frozenset(
         {
@@ -80,7 +77,7 @@ def command_profile_top_level_commands(profile: str) -> frozenset[str]:
     membership remains defined by ``_PROFILE_COMMANDS`` and enforced by
     ``filter_catalog`` after the selected parser branches are materialized.
     """
-    if profile not in COMMAND_ROLES:
+    if profile not in COMMAND_PROFILES:
         raise WorkflowError(f"unknown command profile: {profile}")
     return frozenset(command.split(" ", 1)[0] for command in _PROFILE_COMMANDS[profile])
 
@@ -248,7 +245,7 @@ def build_command_catalog(
 def filter_catalog(catalog: dict[str, Any], role: str | None) -> dict[str, Any]:
     if role is None or role == "all":
         return catalog
-    if role not in COMMAND_ROLES:
+    if role not in COMMAND_PROFILES:
         raise WorkflowError(f"unknown command profile: {role}")
     allowed = set(_PROFILE_COMMANDS[role])
     represented = {str(item["command"]) for item in catalog["commands"]}
