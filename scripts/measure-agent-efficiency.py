@@ -107,7 +107,14 @@ def _launch_context_overhead_bytes(role: str, catalog: dict) -> int:
             command_artifacts=command_artifacts,
             steering_adapter="unsupported",
         )
-        total = len(launch.read_bytes())
+        rendered = launch.read_text(encoding="utf-8")
+        # Temporary-directory roots differ substantially across CI hosts
+        # (notably macOS /var/folders paths).  Path length is deployment noise,
+        # not agent-facing contract growth, so normalize the synthetic
+        # measurement root before enforcing the cross-platform byte budget.
+        canonical_root = "/tmp/agent-workflow-measurement"
+        rendered = rendered.replace(str(state_dir), canonical_root)
+        total = len(rendered.encode("utf-8"))
         return total - len(prompt_text.encode("utf-8"))
 
 
