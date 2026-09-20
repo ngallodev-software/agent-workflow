@@ -22,7 +22,7 @@ def test_prepare_failure_removes_created_artifacts_and_lease(tmp_path: Path, mon
     def fail_after_side_effects(settings, *, agent_run_id, workdir, **kwargs):
         run = agent_runs.run_dir(settings, agent_run_id)
         run.mkdir(parents=True)
-        handoff = workdir / ".agent-workflow-handoff" / agent_run_id
+        handoff = run / "handoff"
         handoff.mkdir(parents=True)
         claim_agent_name(
             settings, agent_name="worker", agent_run_id=agent_run_id, interactive=False
@@ -41,7 +41,7 @@ def test_prepare_failure_removes_created_artifacts_and_lease(tmp_path: Path, mon
         )
 
     assert not agent_runs.run_dir(settings, "run-1").exists()
-    assert not (workdir / ".agent-workflow-handoff" / "run-1").exists()
+    assert not (agent_runs.run_dir(settings, "run-1") / "handoff").exists()
     assert not (settings.state_root / "agent-name-leases" / "worker.json").exists()
 
 
@@ -56,7 +56,7 @@ def test_name_collision_rolls_back_artifacts(tmp_path: Path, monkeypatch) -> Non
     def collide(settings, *, agent_run_id, workdir, **kwargs):
         run = agent_runs.run_dir(settings, agent_run_id)
         run.mkdir(parents=True)
-        (workdir / ".agent-workflow-handoff" / agent_run_id).mkdir(parents=True)
+        (run / "handoff").mkdir(parents=True)
         claim_agent_name(
             settings, agent_name="worker", agent_run_id=agent_run_id, interactive=False
         )
@@ -73,7 +73,7 @@ def test_name_collision_rolls_back_artifacts(tmp_path: Path, monkeypatch) -> Non
         )
 
     assert not agent_runs.run_dir(settings, "run-1").exists()
-    assert not (workdir / ".agent-workflow-handoff" / "run-1").exists()
+    assert not (agent_runs.run_dir(settings, "run-1") / "handoff").exists()
     assert (settings.state_root / "agent-name-leases" / "worker.json").exists()
 
 
