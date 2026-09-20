@@ -14,6 +14,7 @@ from agent_workflow.agent_identity import (
 from agent_workflow.agent_runs import _resolve_job_reference, _resolve_pack_reference
 from agent_workflow import delegation as delegation_module
 from agent_workflow.cli_parser import build_parser
+from agent_workflow.cli_runtime import parse_args
 from agent_workflow.config import LUNA_MODEL, defaults
 from agent_workflow.pack import scaffold
 
@@ -179,6 +180,30 @@ def test_live_unpublished_name_lease_can_be_skipped_for_implicit_allocation(
             agent_name="agent-01",
             agent_run_id="owner-run",
         )
+
+
+def test_agent_verify_accepts_cwd_after_run_id_before_separator() -> None:
+    parser = build_parser(command_scope="agent")
+    args = parse_args(
+        parser,
+        [
+            "agent",
+            "verify",
+            "run-1",
+            "--cwd",
+            "/tmp/worktree",
+            "--timeout",
+            "30",
+            "--",
+            "python",
+            "-c",
+            "raise SystemExit(0)",
+        ],
+    )
+    assert args.agent_run_id == "run-1"
+    assert args.cwd == Path("/tmp/worktree")
+    assert args.timeout == 30
+    assert args.argv == ["python", "-c", "raise SystemExit(0)"]
 
 
 def test_restart_parser_is_prepare_first_and_accepts_context_file() -> None:
