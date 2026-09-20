@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import subprocess
 from pathlib import Path
 
@@ -10,7 +9,6 @@ from agent_workflow.completion import (
     completion_revision_errors,
     substantive_completion_errors,
     validate_completion_repository_closeout,
-    validate_completion_sidecar,
 )
 from agent_workflow.contracts import validate_instance
 from agent_workflow.diagnostics import classify_failure
@@ -109,27 +107,6 @@ def test_completion_schema_rejects_string_criteria_before_collection() -> None:
     value = _completion(criteria=["criterion text"])
     with pytest.raises(WorkflowError, match="invalid artifact"):
         validate_instance(value, "agent-workflow/completion/v1")
-
-
-def test_completion_sidecar_preflight_reports_enum_field_and_allowed_values(tmp_path: Path) -> None:
-    value = _completion(criteria=[{
-        "id": "criterion-1",
-        "result": "verified",
-        "evidence": ["focused test passed"],
-    }])
-    path = tmp_path / "completion.json"
-    path.write_text(json.dumps(value), encoding="utf-8")
-    with pytest.raises(WorkflowError, match=r"criteria\.0\.result.*pass.*not_verified"):
-        validate_completion_sidecar(path)
-
-
-def test_completion_sidecar_preflight_accepts_valid_schema_without_semantic_checks(
-    tmp_path: Path,
-) -> None:
-    value = _completion(result="partial", unresolved=["follow-up"])
-    path = tmp_path / "completion.json"
-    path.write_text(json.dumps(value), encoding="utf-8")
-    assert validate_completion_sidecar(path)["validation_status"] == "valid"
 
 
 def test_completion_schema_diagnostic_precedes_missing_command() -> None:

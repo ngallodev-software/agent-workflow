@@ -12,6 +12,7 @@ from typing import Any
 
 from .contracts import read_agent_run_contract, validate_instance
 from .errors import WorkflowError
+from .path import read_regular_file
 from .process import run
 from .protocol_values import CRITERION_RESULTS, REVIEW_DISPOSITIONS
 from .repository_closeout import (
