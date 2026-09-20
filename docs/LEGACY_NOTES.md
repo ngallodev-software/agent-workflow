@@ -32,6 +32,20 @@ After the headless-core rewrite, an eight-phase simplification program removed r
 
 The simplification program intentionally stopped after Phase 8. Future structural refactoring should require a concrete duplication, authority conflict, obsolete compatibility surface, or change-boundary problem; file length or module count alone is not a reason to recombine or split the core. Detailed phase reports and the implementation plan were removed from the active documentation tree and remain available through source-control/release history.
 
+## invoke-codex-from-claude lineage
+
+The historical `invoke-codex-from-claude` / `codex-job` / `agent-job` repository predates the durable Agent Run architecture. Its useful design lessons are absorbed here rather than maintained as a second execution stack:
+
+- bounded job/write scope became immutable Agent Run, worktree, prompt-pack, and evaluation contracts;
+- the distinction between observed facts and agent/executor claims became run provenance, provider evidence, completion collections, and sealed receipts;
+- resume/retry became explicit Agent Run restart lineage instead of mutable provider-session state;
+- post-run review became separate completion, evaluation, independent review, and authorized acceptance/rejection gates;
+- wrapper callbacks evolved into persist-first messaging plus the watcher/orchestrator advisory-notification boundary;
+- coarse environment/specification/execution failure thinking remains useful for operator triage, while current runtime evidence preserves more precise failure categories;
+- hand-maintained provider/model registries, benchmark scores, prices, and EOL dates are intentionally not runtime authority.
+
+The historical repository is not a compatibility target. Do not reintroduce its Claude-home skill installer, `codex-job` schema, model registry, queue/dashboard prototypes, or provider-session semantics into Agent-Workflow.
+
 ## Current authoritative records
 
 Use the current documentation set rather than implementation-era Phase 0–2 handoff material:
