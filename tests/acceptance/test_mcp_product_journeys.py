@@ -51,7 +51,7 @@ def test_installed_stdio_mcp_reads_bounded_metadata_only(
     state_root = Path(product_env["XDG_STATE_HOME"]) / "agent-workflow"
     run = state_root / "runs" / "mcp-run"
     secret = "synthetic-secret@example.test"
-    append_message(
+    secret_message = append_message(
         run,
         agent_run_id="mcp-run",
         direction="child_to_parent",
@@ -116,7 +116,10 @@ def test_installed_stdio_mcp_reads_bounded_metadata_only(
     assert "Do not run `--help`" in card["markdown"]
     assert "agent-workflow agent-run progress" in card["markdown"]
     assert "agent-workflow worktree create" not in card["markdown"]
-    item = messages["items"][0]
+    item = next(
+        entry for entry in messages["items"]
+        if entry["message_id"] == secret_message["message_id"]
+    )
     assert item["redaction_state"] == "body_omitted"
     assert item["content_length"] == len(secret.encode())
     assert "content" not in item
