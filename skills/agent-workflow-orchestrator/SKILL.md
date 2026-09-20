@@ -10,6 +10,9 @@ Use this skill for multi-run coordination or a dependency-ordered workflow. Use
 
 ## Authority and scheduling
 
+If a workflow enables comparative or TypeSafe decision mode, read `references/semantic-routing.md`; semantic evidence never changes orchestration/lifecycle authority.
+
+
 1. Define the parent workflow, immutable source/worktree baseline, task IDs,
    prerequisites, roles, budgets, and the bounded concurrency policy.
 2. Validate the workflow snapshot before execution, then start or resume it:
