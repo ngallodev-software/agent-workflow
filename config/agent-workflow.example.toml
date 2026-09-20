@@ -47,6 +47,8 @@ mode = "deterministic"
 profile = "default"
 
 [agents]
+# Automatic allocation order only. Explicit --agent-name values are logical
+# worker identities and are not restricted to this list.
 preferred_names = ["larry", "moe", "curly"]
 generated_prefix = "agent"
 # Legacy/operator defaults. Normal orchestration selects a logical role below.
@@ -112,6 +114,9 @@ models = ["gpt-5.6-luna"]
 default_model = "gpt-5.6-luna"
 reasoning_effort = "medium"
 model_arg = ["--model"]
+# Persist-first steering remains available, but live delivery is unsupported
+# unless a cooperative executor wrapper explicitly provides control-file-v1.
+steering_adapter = "unsupported"
 interactive_permission_args = ["--ask-for-approval", "on-request"]
 non_interactive_permission_args = []
 
