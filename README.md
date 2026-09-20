@@ -197,7 +197,7 @@ The core is deliberately host-independent. A future plugin may project Agent Run
 
 ## Version
 
-Version `0.11.1` tightens the 0.11 lifecycle surface around real prompt-pack operation: explicit logical agent names are no longer constrained to the preferred auto-allocation pool, role-bound versus operator-pinned runtime selection now fails with actionable guidance, delegation/doctor surfaces expose late-steering capability, steering responses distinguish durable persistence from delivery/acknowledgement, dirty-baseline guidance is explicit, and release checks use host-independent launch-context measurement. The deterministic worker/admin protocol and shared terminal pipeline remain unchanged authority boundaries. See `ARCHITECTURE_SIMPLIFICATION_PLAN.md` for the migration boundary.
+Version `0.11.1` builds on the 0.11 lifecycle surface with real prompt-pack operational fixes: explicit logical agent names are no longer constrained to the preferred auto-allocation pool, role-bound versus operator-pinned runtime selection now fails with actionable guidance, delegation/doctor surfaces expose late-steering capability, steering responses distinguish durable persistence from delivery/acknowledgement, dirty-baseline guidance is explicit, and release checks use host-independent launch-context measurement. The deterministic worker/admin protocol and shared terminal pipeline remain unchanged authority boundaries. See `ARCHITECTURE_SIMPLIFICATION_PLAN.md` for the migration boundary.
 
 ## Repository-only CI assets
 
