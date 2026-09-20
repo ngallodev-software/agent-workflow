@@ -101,6 +101,32 @@ def test_delegate_defers_ticket_default_when_job_selector_is_present(
     assert captured["job_path"] == Path("P0-00")
     assert result["state"] == "prepared"
 
+def test_delegation_result_surfaces_steering_capability(tmp_path: Path) -> None:
+    settings = replace(
+        defaults(tmp_path / "config.toml"),
+        state_root=tmp_path / "state",
+    )
+    result = delegation_module._delegation_result(
+        settings=settings,
+        agent_run_id="run-1",
+        worktree=tmp_path,
+        role="review",
+        worker_mode="headless",
+        state="running",
+        reused_existing_run=False,
+        worktree_created=False,
+        steering_adapter="unsupported",
+        steering_supported=False,
+        steering_reason="executor has no configured evidence-capable late-steering adapter",
+    )
+    assert result["steering"] == {
+        "supported": False,
+        "adapter": "unsupported",
+        "reason": "executor has no configured evidence-capable late-steering adapter",
+        "acknowledgement_required": True,
+    }
+
+
 def test_pack_path_and_v1_task_id_resolve_to_manifest_identity(tmp_path: Path) -> None:
     pack_root = tmp_path / "portfolio-pack"
     scaffold(pack_root, 1, name="portfolio-site")
@@ -160,7 +186,7 @@ def test_role_runtime_override_error_points_to_operator_compatibility_path(
         state_root=tmp_path / "state",
     )
     with pytest.raises(
-        Exception,
+        WorkflowError,
         match="omit --role and use the matching --agent-class",
     ):
         resolve_agent_identity(
