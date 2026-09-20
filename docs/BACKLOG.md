@@ -219,6 +219,36 @@ initialization but before runner creation. Add rollback for only invocation-
 owned artifacts plus lease release, without altering intentional preflight
 failure records or sealed runs.
 
+### UX-RUN-001 — Align 0.11 runtime command surfaces and completion guidance — COMPLETE
+
+Prompt-pack execution on 2026-09-20 exposed three operator-facing contract
+gaps. First, a configured optional plugin prevented all commands from starting
+when its distribution was absent; the error was actionable, but `doctor` could
+not run to report it. Second, the installed `agent-run watch` exposes
+`--after`/`--timeout`, while current orchestration guidance references an
+unsupported `--max-cycles` option. Third, a read-only task required one
+successful `agent verify` receipt before terminal completion, but a worker can
+easily place `--cwd` after the run ID even though the command card requires it
+before the ID. The first failed receipt correctly remained terminally blocking;
+that strictness is intended and must not be weakened.
+
+**Evidence:** `ce-boundary-audit-luna3` (`completion_invalid`, recorded exit 1),
+`ce-boundary-audit-luna4` (`completion_invalid`, recorded exit 127 from option
+ordering), `ce-boundary-audit-luna5` (`completion_missing`), and successful
+retry `ce-boundary-audit-luna6` (completion receipt
+`52f63e122f8fa5a4d26959baf78e6649ae0504e8837989ce6d0ba39415f07e94`).
+
+**Done when:** configuration diagnostics remain available with missing optional
+plugins; shipped skills/runbooks match the installed CLI; and the worker launch
+card includes one copy-safe, zero-exit read-only verification example. Preserve
+the invariant that a recorded failing verification cannot be hidden by a later
+successful command.
+
+**Implementation evidence (2026-09-20):** `1aac6f5` keeps prompt-pack
+diagnostics recovery-safe; `ed2c3b8`, `da688a2`, `7babf87`, and `fd3219c`
+normalize and document canonical `agent verify` option ordering and the
+copy-safe zero-exit example; the focused journey and release gates pass.
+
 ### COMP-001 — Preflight completion sidecars and classify their failures correctly — COMPLETE
 
 Workers can finish scoped implementation and tests yet submit an intuitive but
