@@ -48,8 +48,8 @@ design changes their role:
 - review/acceptance gates and final acceptance authority;
 - command exit status and other directly observable execution facts.
 
-Semantic advice may later help classify evidence, failures, or remediation choices, but such
-advice must remain distinct from these deterministic gates.
+Semantic advice may later help classify evidence, failures, or remediation choices, but
+such advice must remain distinct from these deterministic gates.
 
 ## Coverage invariant
 
@@ -57,9 +57,18 @@ For every entry in `DECISIONS`:
 
 1. a production host path supplies an independent deterministic control value;
 2. the path enters `execute_decision_set()` rather than calling a semantic plugin directly;
-3. a provider advertising the decision can be invoked automatically when its decision mode is active;
-4. comparative mode keeps the control authoritative and records candidate/fallback evidence; and
+3. a provider advertising the decision can be invoked automatically when its decision
+   mode is active;
+4. comparative mode keeps the control authoritative and records candidate/fallback
+   evidence; and
 5. registration, provider support, and the production call site are changed together.
 
 A plugin may expose additional explicit advisory/evaluation commands without advertising
 those questions as host decision-provider coverage.
+
+## Source-wide audit
+
+See [SEMANTIC_DECISION_AUDIT.md](SEMANTIC_DECISION_AUDIT.md) for the 0.11.0 review of
+planning/delegation, supervision/remediation, evaluation, review/acceptance, and skill
+evaluation paths. The audit deliberately does not promote deterministic or unused semantic
+questions into runtime decisions simply to increase provider invocation coverage.
