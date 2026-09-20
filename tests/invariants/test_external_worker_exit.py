@@ -9,7 +9,7 @@ import pytest
 from agent_workflow.config import defaults
 from agent_workflow.errors import WorkflowError
 from agent_workflow.external_bindings import external_exit
-from agent_workflow.finalization import finalize_run
+from agent_workflow.terminal_pipeline import TerminalObservation, derive_terminal_outcome
 
 
 def _settings(tmp_path: Path):
@@ -77,29 +77,24 @@ def test_external_exit_rejects_sealed_run(tmp_path: Path) -> None:
             external_exit(settings, "run-1", generation=1, actor="operator", reason="exit")
 
 
-@pytest.mark.parametrize("validation_status", ["missing", "invalid"])
-def test_external_exit_refuses_recovery_without_valid_completion(
-    tmp_path: Path, validation_status: str
+@pytest.mark.parametrize(
+    ("validation_status", "failure_category"),
+    [("missing", "completion_missing"), ("invalid", "completion_invalid")],
+)
+def test_external_exit_cannot_produce_completed_outcome_without_valid_completion(
+    validation_status: str, failure_category: str
 ) -> None:
-    settings, run = _settings(tmp_path)
-    (run / "external-worker-exit.json").write_text("{}", encoding="utf-8")
-    launch = {"worktree": {"path": str(tmp_path)}, "worker_plan": {"stream_format": "text"}}
-    with (
-        patch("agent_workflow.finalization.run_dir", return_value=run),
-        patch("agent_workflow.finalization.synchronize_projection", return_value={"agent_run_id": "run-1", "status": "running"}),
-        patch("agent_workflow.finalization._already_finalized", return_value=None),
-        patch("agent_workflow.finalization.read_agent_run_contract", return_value=launch),
-        patch("agent_workflow.finalization.read_contract", return_value={"schema": "agent-workflow/external-worker-exit/v1"}),
-        patch("agent_workflow.finalization._heartbeat_pids", return_value=(None, None)),
-        patch("agent_workflow.finalization.process_sample", return_value={"alive": False}),
-        patch("agent_workflow.finalization._json_object", return_value={}),
-        patch("agent_workflow.finalization.collect_completion", return_value={"validation_status": validation_status}),
-        patch("agent_workflow.finalization.collect_task_result") as collect_result,
-        patch("agent_workflow.finalization.capture_patch") as capture_patch,
-    ):
-        with pytest.raises(WorkflowError, match="schema-valid completion"):
-            finalize_run(settings, "run-1")
-    collect_result.assert_not_called()
-    capture_patch.assert_not_called()
-    assert not (run / "recovery-finalization.json").exists()
-    assert not (run / "final-receipt.json").exists()
+    outcome = derive_terminal_outcome(
+        TerminalObservation(
+            executor_result="completed",
+            exit_code=None,
+            failure_category="external_exit_observed",
+        ),
+        completion_result=validation_status,
+        policy_result="passed",
+    )
+
+    assert outcome.status == "failed"
+    assert outcome.acceptance_eligible is False
+    assert outcome.failure_category == failure_category
+    assert outcome.exit_code == 1
