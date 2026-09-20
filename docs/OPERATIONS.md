@@ -56,9 +56,25 @@ For headless workers, Agent Run control targets the Agent-Workflow-owned process
 
 Persist first. Delivery is optional. A steer request remains pending until correlated acknowledgement evidence exists.
 
+For one Agent Run, `agent-run watch` accepts `--after` and `--timeout`:
+
+```bash
+agent-workflow agent-run watch RUN --after 0 --timeout 60
+```
+
+Do not pass `--max-cycles` to that command. `--max-cycles` is an `orchestrator watch` option for the foreground orchestrator loop.
+
 ## Completion gates
 
 Do not infer success from worker exit alone. Verify completion schema, sealed evidence, evaluation policy, review state, and lifecycle disposition.
+
+Read-only work is still evidence-bearing work. When there is no task-specific test to execute, record one known-safe successful verification such as:
+
+```bash
+agent-workflow agent verify RUN --cwd /path/to/worktree -- git rev-parse --verify HEAD
+```
+
+The `agent verify` parser consumes the verification command as the trailing remainder, so `--cwd` and `--timeout` belong before `--`. Failed verification receipts remain durable and block a later `completed` handoff; investigate uncertain commands outside `agent verify`, then record the command intended as completion evidence.
 
 ## Failure classification and triage
 

@@ -167,7 +167,7 @@ def plugins_required_for_command(argv: list[str] | None, builtin_commands: set[s
         return False
     if command not in builtin_commands:
         return True
-    if command in {"doctor", "completion"}:
+    if command == "completion":
         return True
     if command == "commands":
         try:

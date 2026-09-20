@@ -11,6 +11,7 @@ from .config import Settings
 from .compatibility import probe_executor
 from .process import redact_argv, run, secret_values_from_argv
 from .config import trust_report
+from .errors import WorkflowError
 
 
 def _executor_capability(name: str, command: list[str]) -> dict[str, Any]:
@@ -73,12 +74,48 @@ def _parent_writable(path: Path) -> bool:
     )
 
 
+def _plugin_diagnostics(settings: Settings) -> dict[str, Any]:
+    """Inspect configured optional plugins without making doctor depend on activation."""
+    from .plugins import PluginRegistry, discover_plugin_candidates, load_plugin_registry
+
+    try:
+        candidates = discover_plugin_candidates()
+    except Exception as exc:
+        return {
+            "ok": False,
+            "configured_enabled": list(settings.plugins_enabled),
+            "plugins": [],
+            "error": f"plugin discovery failed: {type(exc).__name__}: {exc}",
+        }
+
+    recovery_inventory = PluginRegistry(
+        (), candidates, tuple(settings.plugins_enabled)
+    ).inventory()
+    try:
+        registry = load_plugin_registry(settings.plugins_enabled)
+    except WorkflowError as exc:
+        return {
+            "ok": False,
+            "configured_enabled": list(settings.plugins_enabled),
+            "plugins": recovery_inventory,
+            "error": str(exc),
+        }
+
+    return {
+        "ok": True,
+        "configured_enabled": list(settings.plugins_enabled),
+        "plugins": registry.inventory(),
+        "error": None,
+    }
+
+
 def run_doctor(settings: Settings) -> dict[str, Any]:
     commands = {
         name: shutil.which(name)
         for name in ("git", "bash", "tar", "zstd", "python3")
     }
     security = trust_report(settings)
+    plugins = _plugin_diagnostics(settings)
     executors = {
         name: _executor_capability(name, command)
         for name, command in sorted(settings.executors.items())
@@ -97,6 +134,7 @@ def run_doctor(settings: Settings) -> dict[str, Any]:
         ),
         "trusted_policy_inputs": security["ok"],
         "executor_compatibility": compatibility_ok,
+        "plugin_configuration": plugins["ok"],
     }
     return {
         "ok": all(checks.values()),
@@ -106,6 +144,7 @@ def run_doctor(settings: Settings) -> dict[str, Any]:
         "executors": executors,
         "checks": checks,
         "security": security,
+        "plugins": plugins,
         "archive_ready": _archive_commands_supported(commands),
         "state_root": str(settings.state_root),
         "worktree_root": str(settings.worktree_root),

@@ -208,3 +208,29 @@ def test_installed_trusted_plugin_is_explicit_atomic_and_recoverable(
     tampered = installed_product.run("--config", enabled, "plugins", "list", env=env)
     assert tampered.returncode != 0
     assert "package resource digest mismatch" in tampered.stderr
+
+
+def test_doctor_reports_missing_optional_plugin_without_aborting(
+    installed_product: InstalledProduct,
+    tmp_path: Path,
+) -> None:
+    config = tmp_path / "missing-plugin.toml"
+    config.write_text(
+        'schema_version = 1\n\n[plugins]\nenabled = ["not-installed"]\n',
+        encoding="utf-8",
+    )
+
+    result = installed_product.run(
+        "--config", config, "--json", "doctor", check=True
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload["checks"]["plugin_configuration"] is False
+    assert payload["plugins"]["ok"] is False
+    assert payload["plugins"]["configured_enabled"] == ["not-installed"]
+    missing = next(
+        item for item in payload["plugins"]["plugins"] if item["name"] == "not-installed"
+    )
+    assert missing["enabled"] is True
+    assert missing["loaded"] is False
+    assert "not installed" in payload["plugins"]["error"]

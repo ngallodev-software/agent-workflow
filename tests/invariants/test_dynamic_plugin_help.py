@@ -50,3 +50,7 @@ def test_command_catalog_schema_allows_decision_capability_inventory() -> None:
     plugin = catalog["plugins"][0]
     assert plugin["decision_providers"] == ["example-provider"]
     assert plugin["decision_modes"] == ["example-mode"]
+
+
+def test_doctor_does_not_require_plugin_activation_before_diagnostics() -> None:
+    assert plugins_required_for_command(["doctor"], set(BUILTIN_TOP_LEVEL_COMMANDS)) is False

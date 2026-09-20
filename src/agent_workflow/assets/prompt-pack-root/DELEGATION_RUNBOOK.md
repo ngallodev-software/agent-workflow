@@ -61,7 +61,10 @@ The external host owns presentation and live interaction. Agent-Workflow remains
 agent-workflow agent-run list
 agent-workflow agent-run status AGENT-RUN-ID
 agent-workflow agent-run tail AGENT-RUN-ID
+agent-workflow agent-run watch AGENT-RUN-ID --after 0 --timeout 60
 ```
+
+`agent-run watch` supports `--after` and `--timeout`. The `--max-cycles` option belongs to `orchestrator watch`, not `agent-run watch`; do not copy options between those command surfaces.
 
 `possibly_stalled` is advisory. It means the worker is still observed as running while durable/log progress has not advanced during the configured threshold. Inspect evidence before interrupting it.
 
@@ -70,9 +73,9 @@ agent-workflow agent-run tail AGENT-RUN-ID
 Persist workflow instructions before attempting any live delivery:
 
 ```bash
-agent-workflow agent-run steer AGENT-RUN-ID "Re-run the integration suite"
-agent-workflow agent-run progress AGENT-RUN-ID --message "Integration suite running"
-agent-workflow agent-run ack AGENT-RUN-ID MESSAGE-ID
+agent-workflow agent-run steer AGENT-RUN-ID "Re-run the integration suite" --actor parent
+agent-workflow agent-run progress AGENT-RUN-ID "Integration suite running" --actor worker
+agent-workflow agent-run ack AGENT-RUN-ID MESSAGE-ID "Applied steering" --actor worker --outcome applied
 ```
 
 Delivery by an external host is not an acknowledgement. The worker records the acknowledgement through Agent-Workflow.
@@ -138,6 +141,14 @@ agent limitation RUN live-github-fetch --evidence "controlled DNS unavailable"
 agent verify RUN -- pytest -q
 agent complete RUN --result completed
 ```
+
+A read-only assignment still needs at least one successful recorded verification before terminal completion. Record a known-safe, zero-exit repository check rather than inventing a test command:
+
+```bash
+agent-workflow agent verify RUN --cwd /path/to/worktree -- git rev-parse --verify HEAD
+```
+
+Place `--cwd` and `--timeout` before the verification-command separator. A failed `agent verify` receipt is intentionally preserved and cannot be hidden by a later successful verification, so use ordinary shell exploration first and record only a command whose result is meant to become durable completion evidence.
 
 The executable owns enum validation, observed command exit status, identity,
 Git revisions, changed-file derivation, schema construction, and terminal
