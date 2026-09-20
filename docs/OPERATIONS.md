@@ -60,6 +60,18 @@ Persist first. Delivery is optional. A steer request remains pending until corre
 
 Do not infer success from worker exit alone. Verify completion schema, sealed evidence, evaluation policy, review state, and lifecycle disposition.
 
+## Failure classification and triage
+
+Do not use exit code alone to decide why a run failed. The precise durable `failure_category`, incident evidence, completion/evaluation evidence, and provider/process observations remain authoritative.
+
+For operator triage only, the historical three-way distinction is still useful:
+
+- **environment/runtime** — authentication, permission, network, rate-limit, dependency/command availability, host resource pressure, process loss, or bounded output/provider-capture failures;
+- **specification/contract** — invalid or missing completion handoffs, invalid contracts/digests, contradictory requirements, or other failures showing that the requested/evidence contract could not be satisfied as written;
+- **execution/task** — the executor ran but the implementation, acceptance commands, timeout/interruption path, or other task execution did not complete successfully.
+
+This grouping is deliberately coarser than Agent-Workflow's failure categories. Never replace a precise recorded category with the coarse domain, and never convert an unknown category into a confident domain merely to simplify reporting. Implementation/test failures should remain grounded in completion and evaluation evidence instead of being inferred from process exit alone.
+
 ## SQLite index operations
 
 The SQLite database is a disposable query projection over durable evidence. It may accelerate fleet status, workflow views, incidents, permissions, and performance analysis, but it must never become authority for an acceptance or lifecycle decision.
