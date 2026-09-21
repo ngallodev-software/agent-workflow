@@ -164,3 +164,48 @@ source scripts/dev-env.sh off
 
 The benchmark smoke runner performs the same isolation in its child process, so its
 XDG changes disappear automatically when the smoke script exits.
+
+
+## Complete shared development stack
+
+For the benchmark/SpecGen development environment, install the complete stack into the existing Agent-Workflow virtualenv:
+
+```bash
+export TYPESAFE_API_KEY='...'
+bash scripts/build-install-all.sh --venv "$PWD/.venv"
+```
+
+By default the installer expects sibling source checkouts named `agent-workflow-spec-contracts`, `agent-workflow-comparative-eval`, `specgen-aw`, and `agent-workflow-benchmark`. Override any source explicitly with `--contracts-source`, `--comparative-eval-source`, `--specgen-source`, or `--benchmark-source`.
+
+The install order is dependency-aware:
+
+```text
+specgen-agent-workflow-contracts
+→ agent-workflow-comparative-eval
+→ Agent-Workflow
+→ SpecGen-AW
+→ agent-workflow-benchmark
+→ final shared config + verification
+```
+
+The final venv-local configuration intentionally uses TypeSafe comparative decisions and enables both installed host plugins:
+
+```toml
+[plugins]
+enabled = ["agent-workflow-benchmark", "agent-workflow-spec"]
+
+[semantic]
+provider = "typesafe"
+
+[decision_policy]
+mode = "comparative"
+profile = "default"
+```
+
+The installer requires `TYPESAFE_API_KEY` before doing work, verifies `typesafe-sdk==0.6.0` and `agent-workflow-comparative-eval==0.1.0`, requires the Agent-Workflow Codex executor to resolve directly to `codex` rather than `agent-workflow-codex`, executes SpecGen's exact host-compatibility command, checks both plugins are enabled/loaded, and runs `pip check`.
+
+Audit the existing shared stack without rebuilding:
+
+```bash
+bash scripts/build-install-all.sh --venv "$PWD/.venv" --verify-only
+```
