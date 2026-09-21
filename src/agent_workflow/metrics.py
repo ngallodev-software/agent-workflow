@@ -36,7 +36,7 @@ def normalize_usage(usage: object) -> dict[str, Any]:
         )
     )
     output = _number(source.get("output_tokens", source.get("completion_tokens")))
-    provider_total = _number(source.get("total_tokens"))
+    provider_total = _number(source.get("provider_total_tokens", source.get("total_tokens")))
     cache_write = _number(
         source.get("cache_write_input_tokens", source.get("cache_creation_input_tokens"))
     )
