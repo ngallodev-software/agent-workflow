@@ -12,25 +12,40 @@ from .path import absolute_path, inventory_tree, read_regular_file, require_dire
 
 
 def _schema_roots() -> tuple[Path, ...]:
-    source_root = absolute_path(Path(__file__).parent.parent.parent / "schemas")
+    module_path = Path(__file__).resolve()
+    source_root = absolute_path(module_path.parent.parent.parent / "schemas")
     # ``pip --target`` relocates data_files beside the package root rather than
     # under the interpreter's sys.prefix. Resolve that deterministic installed
-    # layout before consulting user/global installation roots.
+    # layout before consulting prefix/user installation roots.
     package_data_root = (
-        Path(__file__).resolve().parent.parent
+        module_path.parent.parent
         / "share"
         / "agent-workflow"
         / "schemas"
     )
-    installed_root = Path(sys.prefix) / "share" / "agent-workflow" / "schemas"
+    prefix_root = Path(sys.prefix).expanduser().resolve()
+    installed_root = prefix_root / "share" / "agent-workflow" / "schemas"
     user_data_root = (
         Path(os.environ.get("XDG_DATA_HOME", "~/.local/share")).expanduser()
         / "agent-workflow"
         / "schemas"
     )
+
+    # Match schema authority to the installation family that supplied the
+    # imported package. In particular, a stale ~/.local/share schema directory
+    # must not override the current wheel inside an active virtual environment.
+    # Conversely, a --user install lives outside sys.prefix and must prefer its
+    # user data directory over any older system-wide schema copy.
+    package_under_prefix = module_path.is_relative_to(prefix_root)
+    installation_roots = (
+        (installed_root, user_data_root)
+        if package_under_prefix
+        else (user_data_root, installed_root)
+    )
+
     # A source checkout and an installed package are separate runtime modes.
     # Never merge multiple schema roots into one authority path.
-    for root in (source_root, package_data_root, user_data_root, installed_root):
+    for root in (source_root, package_data_root, *installation_roots):
         if root.is_dir():
             return (root,)
     return ()
