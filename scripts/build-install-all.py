@@ -344,6 +344,7 @@ print(
 
     run([aw, "benchmark", "--help"], env=env)
     run([aw, "spec", "--help"], env=env)
+    run([aw, "--json", "spec", "compatibility"], env=env)
     run([py, "-m", "pip", "check"], env=env)
     print("complete Agent-Workflow stack verification passed")
 
