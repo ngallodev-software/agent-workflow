@@ -21,6 +21,8 @@ def _make_fake_venv(path: Path) -> None:
 
 
 def test_dev_env_script_has_valid_bash_syntax() -> None:
+    text = SCRIPT.read_text(encoding="utf-8")
+    assert '[[ -v ' not in text
     result = subprocess.run(
         ["bash", "-n", str(SCRIPT)],
         cwd=REPO_ROOT,
