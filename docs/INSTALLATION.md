@@ -133,3 +133,34 @@ The version is intentional: the 0.9 line builds on the breaking Agent Run/headle
 ## Repository-only CI assets
 
 Jenkins and local server-job definitions are excluded from installed wheels and platform runtime bundles. They remain source-repository maintenance assets only.
+
+
+## Isolated development runtime
+
+The wheel build/install helper uses a venv-local XDG runtime while it runs:
+
+```text
+<venv>/.xdg/config
+<venv>/.xdg/state
+<venv>/.xdg/data
+```
+
+For an interactive shell, opt into the same environment by sourcing:
+
+```bash
+source scripts/dev-env.sh on
+```
+
+This sets `VIRTUAL_ENV`, `AGENT_WORKFLOW_VENV`, `AGENT_WORKFLOW_BIN`, `PATH`,
+`XDG_CONFIG_HOME`, `XDG_STATE_HOME`, and `XDG_DATA_HOME`. The helper seeds or
+refreshes the venv-local Agent-Workflow config and rewrites only `[paths].worktree_root`
+and `[paths].state_root` to the isolated venv locations.
+
+Restore every prior shell value, including previously unset variables, with:
+
+```bash
+source scripts/dev-env.sh off
+```
+
+The benchmark smoke runner performs the same isolation in its child process, so its
+XDG changes disappear automatically when the smoke script exits.
