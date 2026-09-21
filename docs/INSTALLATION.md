@@ -25,6 +25,36 @@ python -m build
 python -m pip install dist/agent_workflow-*.whl
 ```
 
+For local development where Agent-Workflow and external plugins share one virtualenv,
+prefer the repository helper:
+
+```bash
+bash scripts/build-install.sh
+```
+
+It resolves the target virtualenv from `--venv`, `AGENT_WORKFLOW_VENV`,
+`VIRTUAL_ENV`, the active Python interpreter, the repository `.venv`, or the
+current Agent-Workflow launcher, in that order. It does not create a virtualenv
+and does not install into the user Python environment.
+
+The helper removes an editable Agent-Workflow install from the selected venv,
+builds a wheel from this checkout, installs that wheel back into the same venv
+with `--no-deps`, and verifies package/version/launcher ownership plus exact
+schema filename and SHA-256 parity. It also rejects benchmark schemas in the core
+wheel and preserves an already installed benchmark plugin in the same venv.
+
+Audit an existing wheel install without rebuilding:
+
+```bash
+bash scripts/build-install.sh --verify-only
+```
+
+Use an explicit target when needed:
+
+```bash
+bash scripts/build-install.sh --venv /path/to/agent-workflow/.venv
+```
+
 The shared contracts source is hosted on GitHub and installed directly by the
 project dependency:
 
@@ -103,3 +133,34 @@ The version is intentional: the 0.9 line builds on the breaking Agent Run/headle
 ## Repository-only CI assets
 
 Jenkins and local server-job definitions are excluded from installed wheels and platform runtime bundles. They remain source-repository maintenance assets only.
+
+
+## Isolated development runtime
+
+The wheel build/install helper uses a venv-local XDG runtime while it runs:
+
+```text
+<venv>/.xdg/config
+<venv>/.xdg/state
+<venv>/.xdg/data
+```
+
+For an interactive shell, opt into the same environment by sourcing:
+
+```bash
+source scripts/dev-env.sh on
+```
+
+This sets `VIRTUAL_ENV`, `AGENT_WORKFLOW_VENV`, `AGENT_WORKFLOW_BIN`, `PATH`,
+`XDG_CONFIG_HOME`, `XDG_STATE_HOME`, and `XDG_DATA_HOME`. The helper seeds or
+refreshes the venv-local Agent-Workflow config and rewrites only `[paths].worktree_root`
+and `[paths].state_root` to the isolated venv locations.
+
+Restore every prior shell value, including previously unset variables, with:
+
+```bash
+source scripts/dev-env.sh off
+```
+
+The benchmark smoke runner performs the same isolation in its child process, so its
+XDG changes disappear automatically when the smoke script exits.

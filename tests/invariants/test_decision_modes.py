@@ -1,7 +1,10 @@
 from dataclasses import replace
 
+import pytest
+
 from agent_workflow.config import DecisionPolicyRule, defaults
 from agent_workflow.decisions import validate_decision_configuration
+from agent_workflow.errors import WorkflowError
 from agent_workflow.plugin_api import DecisionEvidence
 from agent_workflow.routing import advise_routing_with_policy
 
@@ -19,6 +22,7 @@ def _evaluate(request, _context):
 
 
 def test_builtin_typesafe_mode_composes_through_host_router(monkeypatch):
+    monkeypatch.setenv("TYPESAFE_API_KEY", "test-key")
     monkeypatch.setattr("agent_workflow.semantic.typesafe.evaluate", _evaluate)
     settings = replace(defaults(), decision_mode="typesafe")
     assert validate_decision_configuration(settings)["provider"] == "typesafe"
@@ -29,6 +33,7 @@ def test_builtin_typesafe_mode_composes_through_host_router(monkeypatch):
 
 
 def test_builtin_comparative_mode_keeps_control_authoritative(monkeypatch):
+    monkeypatch.setenv("TYPESAFE_API_KEY", "test-key")
     monkeypatch.setattr("agent_workflow.semantic.typesafe.evaluate", _evaluate)
     settings = replace(defaults(), decision_mode="comparative")
     result = advise_routing_with_policy({"task": "review this change", "task_type": "implementation"}, settings)
@@ -38,6 +43,7 @@ def test_builtin_comparative_mode_keeps_control_authoritative(monkeypatch):
 
 
 def test_semantic_uncertainty_falls_back_to_control(monkeypatch):
+    monkeypatch.setenv("TYPESAFE_API_KEY", "test-key")
     monkeypatch.setattr("agent_workflow.semantic.typesafe.evaluate", _evaluate)
     settings = replace(defaults(), decision_mode="typesafe", decision_profile="strict", decision_profiles={"strict": {"routing.task_class": DecisionPolicyRule("automated", 0.99)}})
     result = advise_routing_with_policy({"task": "review this", "task_type": "implementation"}, settings)
@@ -52,3 +58,23 @@ def test_deterministic_mode_requires_no_semantic_provider():
     result = advise_routing_with_policy({"task": "review this", "task_type": "review"}, defaults())
     assert result["decision_mode"] == "deterministic"
     assert result["recommendation"]["agent_class"] == "review"
+
+
+def test_typesafe_mode_requires_api_key_at_execution(monkeypatch):
+    monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
+    settings = replace(defaults(), decision_mode="typesafe")
+    with pytest.raises(WorkflowError, match="requires TYPESAFE_API_KEY"):
+        advise_routing_with_policy(
+            {"task": "review this", "task_type": "implementation"},
+            settings,
+        )
+
+
+def test_comparative_mode_requires_api_key_at_execution(monkeypatch):
+    monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
+    settings = replace(defaults(), decision_mode="comparative")
+    with pytest.raises(WorkflowError, match="requires TYPESAFE_API_KEY"):
+        advise_routing_with_policy(
+            {"task": "review this", "task_type": "implementation"},
+            settings,
+        )

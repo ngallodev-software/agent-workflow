@@ -37,3 +37,16 @@ Semantic transport failure, no-match, uncertainty, and policy rejection remain d
 ## Comparative evidence
 
 `comparative` requires the neutral `agent-workflow-comparative-eval` optional dependency. Agent-Workflow records the already-computed control/candidate pair without a second TypeSafe call and persists `comparative-eval.sqlite` in the workflow coordinator directory.
+
+
+## Credential readiness
+
+When `decision_policy.mode` is `typesafe` or `comparative`, Agent-Workflow
+requires `TYPESAFE_API_KEY` to be present in the runtime environment before a
+semantic decision is executed. Missing credentials are treated as a configuration/
+readiness error rather than an ordinary semantic fallback.
+
+`agent-workflow doctor` reports TypeSafe SDK/key readiness when those modes are
+active. `comparative` mode additionally requires a compatible
+`agent-workflow-comparative-eval` installation. Deterministic mode requires
+neither TypeSafe credentials nor the comparative-eval library.

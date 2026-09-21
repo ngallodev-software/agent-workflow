@@ -411,3 +411,8 @@ def test_mcp_installer_registers_and_cleans_only_owned_entries(tmp_path: Path) -
     assert "removed Agent-Workflow Codex MCP" in result.stdout
     assert set(tomllib.loads(codex_config.read_text(encoding="utf-8"))["mcp_servers"]) == {"other"}
     assert "agent-workflow" not in json.loads(claude_mcp.read_text(encoding="utf-8"))["mcpServers"]
+
+
+def test_ci_release_build_strips_crlf_from_version() -> None:
+    script = (REPO_ROOT / "scripts" / "ci-release-build.sh").read_text(encoding="utf-8")
+    assert "tr -d '\\r\\n' < VERSION" in script

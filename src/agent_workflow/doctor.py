@@ -116,6 +116,34 @@ def _plugin_diagnostics(settings: Settings) -> dict[str, Any]:
     }
 
 
+def _decision_runtime_diagnostics(settings: Settings) -> dict[str, Any]:
+    from .decisions import decision_mode
+    from .semantic.typesafe import capability
+
+    mode = decision_mode(settings.decision_mode)
+    result: dict[str, Any] = {
+        "mode": mode.name,
+        "provider": mode.provider,
+        "typesafe_required": mode.provider == "typesafe",
+        "comparative_eval_required": mode.capture_comparison,
+        "ok": True,
+    }
+    if mode.provider != "typesafe":
+        return result
+
+    cap = capability(settings)
+    result["typesafe"] = cap
+    ok = bool(cap.get("typesafe_sdk_installed")) and bool(cap.get("api_key_configured"))
+    if mode.capture_comparison:
+        from .comparative_eval import shared_library_status
+
+        shared = shared_library_status()
+        result["comparative_eval"] = shared
+        ok = ok and bool(shared.get("installed")) and bool(shared.get("compatible"))
+    result["ok"] = ok
+    return result
+
+
 def run_doctor(settings: Settings) -> dict[str, Any]:
     commands = {
         name: shutil.which(name)
@@ -123,6 +151,7 @@ def run_doctor(settings: Settings) -> dict[str, Any]:
     }
     security = trust_report(settings)
     plugins = _plugin_diagnostics(settings)
+    decisions = _decision_runtime_diagnostics(settings)
     executors = {
         name: _executor_capability(
             name,
@@ -150,6 +179,7 @@ def run_doctor(settings: Settings) -> dict[str, Any]:
         "trusted_policy_inputs": security["ok"],
         "executor_compatibility": compatibility_ok,
         "plugin_configuration": plugins["ok"],
+        "decision_runtime": decisions["ok"],
     }
     return {
         "ok": all(checks.values()),
@@ -160,6 +190,7 @@ def run_doctor(settings: Settings) -> dict[str, Any]:
         "checks": checks,
         "security": security,
         "plugins": plugins,
+        "decisions": decisions,
         "archive_ready": _archive_commands_supported(commands),
         "state_root": str(settings.state_root),
         "worktree_root": str(settings.worktree_root),

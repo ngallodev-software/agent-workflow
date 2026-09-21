@@ -4,6 +4,12 @@ Scripts in this directory support repository bootstrap, release validation/evide
 
 `install-source.sh` is the default CLI installer and deliberately excludes MCP. `install-mcp.sh` is the separate explicit opt-in for the optional MCP SDK, entry point, and Codex/Claude registration.
 
+`build-install.sh` is the local development wheel installer. It deliberately bypasses
+the user-local behavior of `install-source.sh`: it locates an existing development
+virtualenv, builds the current Agent-Workflow wheel, replaces any editable core
+install in that exact venv, and verifies launcher/schema/package ownership. It never
+creates a venv and never uses `pip --user`.
+
 Prompt-pack helper scripts are packaged only in `src/agent_workflow/assets/prompt-pack-root/` and are materialized by `agent-workflow pack scaffold`. The repository no longer keeps byte-identical compatibility copies under `scripts/` or `templates/`.
 
 ## Release evidence
@@ -21,3 +27,9 @@ Use `python3 scripts/bump-version.py --bump patch|minor|major` for active versio
 ## Agent-efficiency baseline
 
 `measure-agent-efficiency.py` records the Phase 0 agent-facing baseline from the live parser, role cards, launch-context generator, primary skill, and documented multi-command journeys. It is deliberately provider-neutral and does not launch Codex or Claude. The committed `release/agent-efficiency-baseline.json` is the comparison point for the 0.9 skill-first simplification; dynamic setup/finalization timing should be taken from existing installed-product journeys rather than by adding measurement-only test files.
+
+
+`dev-env.sh` is a sourceable reversible development-environment helper. Use
+`source scripts/dev-env.sh on` to bind the current shell to the repository/shared
+venv and venv-local XDG config/state/data. Use `source scripts/dev-env.sh off` to
+restore the exact prior shell environment.
