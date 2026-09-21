@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "\${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENV_ARG=""
 VERIFY_ONLY=0
 BOOTSTRAP_BUILD=1
@@ -75,9 +75,9 @@ infer_venv_from_launcher() {
 
 if [[ -n "$VENV_ARG" ]]; then
   VENV="$(resolve_path "$VENV_ARG")"
-elif [[ -n "\${AGENT_WORKFLOW_VENV:-}" ]]; then
+elif [[ -n "${AGENT_WORKFLOW_VENV:-}" ]]; then
   VENV="$(resolve_path "$AGENT_WORKFLOW_VENV")"
-elif [[ -n "\${VIRTUAL_ENV:-}" ]]; then
+elif [[ -n "${VIRTUAL_ENV:-}" ]]; then
   VENV="$(resolve_path "$VIRTUAL_ENV")"
 else
   ACTIVE_PREFIX="$(active_python_venv)"
@@ -91,7 +91,7 @@ else
   fi
 fi
 
-[[ -n "\${VENV:-}" ]] || {
+[[ -n "${VENV:-}" ]] || {
   echo "no development virtualenv could be resolved; activate it or pass --venv PATH" >&2
   exit 1
 }
@@ -274,11 +274,11 @@ WHEELS=()
 while IFS= read -r path; do
   [[ -n "$path" ]] && WHEELS+=("$path")
 done < <(find "$ROOT/dist" -maxdepth 1 -type f -name 'agent_workflow-*.whl' -print | sort)
-[[ "\${#WHEELS[@]}" -eq 1 ]] || {
-  echo "expected exactly one Agent-Workflow wheel, found \${#WHEELS[@]}" >&2
+[[ "${#WHEELS[@]}" -eq 1 ]] || {
+  echo "expected exactly one Agent-Workflow wheel, found ${#WHEELS[@]}" >&2
   exit 1
 }
-WHEEL="\${WHEELS[0]}"
+WHEEL="${WHEELS[0]}"
 echo "built wheel: $WHEEL"
 
 "$PYTHON" - "$ROOT" "$WHEEL" "$EXPECTED_VERSION" <<'PY'
