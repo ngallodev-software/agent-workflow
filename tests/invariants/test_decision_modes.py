@@ -3,7 +3,7 @@ from dataclasses import replace
 import pytest
 
 from agent_workflow.config import DecisionPolicyRule, defaults
-from agent_workflow.decisions import validate_decision_configuration
+from agent_workflow.decisions import require_decision_runtime_ready, validate_decision_configuration
 from agent_workflow.errors import WorkflowError
 from agent_workflow.plugin_api import DecisionEvidence
 from agent_workflow.routing import advise_routing_with_policy
@@ -78,3 +78,82 @@ def test_comparative_mode_requires_api_key_at_execution(monkeypatch):
             {"task": "review this", "task_type": "implementation"},
             settings,
         )
+
+
+def test_decision_runtime_ready_deterministic_requires_no_semantic_runtime():
+    result = require_decision_runtime_ready(defaults())
+    assert result["ready"] is True
+    assert result["mode"] == "deterministic"
+
+
+def test_decision_runtime_ready_requires_typesafe_sdk(monkeypatch):
+    monkeypatch.setattr(
+        "agent_workflow.semantic.typesafe.capability",
+        lambda settings: {
+            "typesafe_sdk_installed": False,
+            "api_key_configured": True,
+        },
+    )
+    settings = replace(defaults(), decision_mode="typesafe")
+    with pytest.raises(WorkflowError, match="requires the TypeSafe SDK"):
+        require_decision_runtime_ready(settings)
+
+
+def test_decision_runtime_ready_requires_api_key(monkeypatch):
+    monkeypatch.setattr(
+        "agent_workflow.semantic.typesafe.capability",
+        lambda settings: {
+            "typesafe_sdk_installed": True,
+            "api_key_configured": False,
+        },
+    )
+    settings = replace(defaults(), decision_mode="typesafe")
+    with pytest.raises(WorkflowError, match="requires TYPESAFE_API_KEY"):
+        require_decision_runtime_ready(settings)
+
+
+def test_comparative_runtime_ready_requires_shared_library(monkeypatch):
+    monkeypatch.setattr(
+        "agent_workflow.semantic.typesafe.capability",
+        lambda settings: {
+            "typesafe_sdk_installed": True,
+            "api_key_configured": True,
+        },
+    )
+    monkeypatch.setattr(
+        "agent_workflow.comparative_eval.shared_library_status",
+        lambda: {
+            "installed": False,
+            "compatible": False,
+            "version": None,
+            "distribution": "agent-workflow-comparative-eval",
+        },
+    )
+    settings = replace(defaults(), decision_mode="comparative")
+    with pytest.raises(WorkflowError, match="agent-workflow-comparative-eval==0.1.0"):
+        require_decision_runtime_ready(settings)
+
+
+def test_comparative_runtime_ready_accepts_key_and_library(monkeypatch):
+    monkeypatch.setattr(
+        "agent_workflow.semantic.typesafe.capability",
+        lambda settings: {
+            "typesafe_sdk_installed": True,
+            "api_key_configured": True,
+        },
+    )
+    monkeypatch.setattr(
+        "agent_workflow.comparative_eval.shared_library_status",
+        lambda: {
+            "installed": True,
+            "compatible": True,
+            "version": "0.1.0",
+            "distribution": "agent-workflow-comparative-eval",
+        },
+    )
+    settings = replace(defaults(), decision_mode="comparative")
+    result = require_decision_runtime_ready(settings)
+    assert result["ready"] is True
+    assert result["mode"] == "comparative"
+    assert result["typesafe"]["api_key_configured"] is True
+    assert result["comparative_eval"]["compatible"] is True
