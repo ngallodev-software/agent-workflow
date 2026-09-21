@@ -25,6 +25,36 @@ python -m build
 python -m pip install dist/agent_workflow-*.whl
 ```
 
+For local development where Agent-Workflow and external plugins share one virtualenv,
+prefer the repository helper:
+
+```bash
+bash scripts/build-install.sh
+```
+
+It resolves the target virtualenv from `--venv`, `AGENT_WORKFLOW_VENV`,
+`VIRTUAL_ENV`, the active Python interpreter, the repository `.venv`, or the
+current Agent-Workflow launcher, in that order. It does not create a virtualenv
+and does not install into the user Python environment.
+
+The helper removes an editable Agent-Workflow install from the selected venv,
+builds a wheel from this checkout, installs that wheel back into the same venv
+with `--no-deps`, and verifies package/version/launcher ownership plus exact
+schema filename and SHA-256 parity. It also rejects benchmark schemas in the core
+wheel and preserves an already installed benchmark plugin in the same venv.
+
+Audit an existing wheel install without rebuilding:
+
+```bash
+bash scripts/build-install.sh --verify-only
+```
+
+Use an explicit target when needed:
+
+```bash
+bash scripts/build-install.sh --venv /path/to/agent-workflow/.venv
+```
+
 The shared contracts source is hosted on GitHub and installed directly by the
 project dependency:
 
