@@ -999,6 +999,9 @@ def prepare(
     **kwargs: Any,
 ) -> dict[str, Any]:
     """Prepare an Agent Run transactionally, preserving preflight evidence."""
+    from .decisions import require_decision_runtime_ready
+
+    require_decision_runtime_ready(settings)
     state_dir = run_dir(settings, agent_run_id)
     handoff_dir = state_dir / "handoff"
     state_existed = state_dir.exists()
@@ -1603,7 +1606,9 @@ def _prepare(
 def start(settings: Settings, agent_run_id: str) -> dict[str, Any]:
     """Start a prepared headless Agent Run under AW process ownership."""
     import uuid
+    from .decisions import require_decision_runtime_ready
 
+    require_decision_runtime_ready(settings)
     paths = AgentRunPaths(run_dir(settings, agent_run_id))
     status = synchronize_projection(status_path := paths.status, source="start")
     if authoritative_execution_status(status_path.parent) != "prepared":
