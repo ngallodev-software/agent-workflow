@@ -57,9 +57,14 @@ _aw_dev_env_restore_var() {
 }
 
 _aw_dev_env_seed_config() {
-  local source_config="$1" target_config="$2" venv="$3"
+  local source_config="$1" target_config="$2" venv="$3" python
+  if [[ -x "$venv/bin/python" ]]; then
+    python="$venv/bin/python"
+  else
+    python="$venv/bin/python3"
+  fi
   mkdir -p "$(dirname "$target_config")"
-  python3 - "$source_config" "$target_config" "$venv" <<'PY'
+  "$python" - "$source_config" "$target_config" "$venv" <<'PY'
 from pathlib import Path
 from datetime import datetime, timezone
 import json
