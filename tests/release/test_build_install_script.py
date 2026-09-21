@@ -75,3 +75,11 @@ def test_build_install_script_handles_unset_venv_environment(tmp_path: Path) -> 
 
     assert "unbound variable" not in result.stderr.lower()
     assert "AGENT_WORKFLOW_VENV" not in result.stderr
+
+
+def test_build_install_script_uses_dev_environment_helper() -> None:
+    text = SCRIPT.read_text(encoding="utf-8")
+    assert 'source "$ROOT/scripts/dev-env.sh"' in text
+    assert 'aw_dev_env_on "$VENV"' in text
+    assert "TYPESAFE_API_KEY" in text
+    assert "agent-workflow-comparative-eval" in text
