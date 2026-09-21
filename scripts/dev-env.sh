@@ -35,7 +35,7 @@ PY
 
 _aw_dev_env_save_var() {
   local name="$1" set_name="_AW_DEV_PREV_${1}_SET" value_name="_AW_DEV_PREV_${1}"
-  if [[ -v "$name" ]]; then
+  if declare -p "$name" >/dev/null 2>&1; then
     printf -v "$set_name" '%s' 1
     printf -v "$value_name" '%s' "${!name}"
   else
