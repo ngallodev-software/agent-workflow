@@ -90,11 +90,16 @@ def build_environment(
             for name in ("GIT_CONFIG_NOSYSTEM", "GIT_CONFIG_SYSTEM", "GIT_CONFIG_GLOBAL"):
                 if name not in policy.values:
                     environment.pop(name, None)
+        # An empty GIT_EXTERNAL_DIFF does not disable external diff in Git;
+        # it asks Git to execute an empty command and makes diff fail. Remove
+        # the variable entirely instead. Isolated Git config already blocks
+        # global diff.external, while callers needing evidence should also use
+        # --no-ext-diff for command-level defense in depth.
+        environment.pop("GIT_EXTERNAL_DIFF", None)
         environment.update(
             {
                 "GIT_PAGER": "cat",
                 "PAGER": "cat",
-                "GIT_EXTERNAL_DIFF": "",
                 "GIT_TERMINAL_PROMPT": "0",
                 "GIT_EDITOR": "true",
                 "GIT_SEQUENCE_EDITOR": "true",
