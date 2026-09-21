@@ -70,7 +70,7 @@ def test_custom_executor_is_explicitly_unclassified_and_git_env_is_fixed() -> No
     environment, policy, _ = build_environment(["git"], EnvironmentPolicy())
     assert policy == "controlled"
     assert environment["GIT_PAGER"] == "cat"
-    assert environment["GIT_EXTERNAL_DIFF"] == ""
+    assert "GIT_EXTERNAL_DIFF" not in environment
     assert "SSH_AUTH_SOCK" not in environment
 
 
