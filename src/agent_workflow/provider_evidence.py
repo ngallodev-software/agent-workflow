@@ -145,16 +145,25 @@ def normalize_provider_usage(usage: Mapping[str, Any]) -> dict[str, Any]:
     estimated = first("local_estimated_cost")
     if estimated is None and untyped_cost is not None and usage.get("cost_source") == "local_estimate":
         estimated = untyped_cost
+    input_tokens = first("input_tokens", "prompt_tokens")
+    output_tokens = first("output_tokens", "completion_tokens")
+    provider_total_tokens = first("total_tokens", "provider_total_tokens")
+    if (
+        provider_total_tokens is None
+        and input_tokens is not None
+        and output_tokens is not None
+    ):
+        provider_total_tokens = input_tokens + output_tokens
     currency = usage.get("currency")
     return {
-        "input_tokens": first("input_tokens", "prompt_tokens"),
+        "input_tokens": input_tokens,
         "cached_input_tokens": cached,
         "cache_write_input_tokens": first(
             "cache_write_input_tokens", "cache_creation_input_tokens"
         ),
-        "output_tokens": first("output_tokens", "completion_tokens"),
+        "output_tokens": output_tokens,
         "reasoning_output_tokens": reasoning,
-        "provider_total_tokens": first("total_tokens", "provider_total_tokens"),
+        "provider_total_tokens": provider_total_tokens,
         "provider_billed_cost": billed,
         "local_estimated_cost": estimated,
         "currency": currency if isinstance(currency, str) and currency else None,

@@ -196,7 +196,7 @@ The core is deliberately host-independent. A future plugin may project Agent Run
 
 ## Version
 
-Version `0.11.2` builds with installed contract-schema authority so the active environment's packaged schemas cannot be shadowed by a stale user-data copy, while preserving user-site installs outside `sys.prefix`. It retains the 0.11.1 prompt-pack operational fixes for logical agent names, runtime override guidance, steering capability/reporting, copy-safe verification, and host-independent launch-context measurement. The deterministic worker/admin protocol and shared terminal pipeline remain unchanged authority boundaries. See `ARCHITECTURE_SIMPLIFICATION_PLAN.md` for the migration boundary.
+Version `0.11.3` builds with installed contract-schema authority so the active environment's packaged schemas cannot be shadowed by a stale user-data copy, while preserving user-site installs outside `sys.prefix`. It retains the 0.11.1 prompt-pack operational fixes for logical agent names, runtime override guidance, steering capability/reporting, copy-safe verification, and host-independent launch-context measurement. The deterministic worker/admin protocol and shared terminal pipeline remain unchanged authority boundaries. See `ARCHITECTURE_SIMPLIFICATION_PLAN.md` for the migration boundary.
 
 ## Repository-only CI assets
 

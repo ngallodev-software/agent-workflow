@@ -250,7 +250,7 @@ def test_retry_refreshes_configured_executor_and_environment_policy(
     assert json.loads((original_run / "command.json").read_text()) == original_command
 
 
-def test_structured_provider_usage_reaches_sealed_evidence(
+def test_headless_codex_automatically_captures_structured_provider_usage(
     installed_product: InstalledProduct,
     product_env: dict[str, str],
     fake_agent_path: Path,
@@ -267,12 +267,29 @@ def test_structured_provider_usage_reaches_sealed_evidence(
     prepare_and_start_agent_run(
         installed_product,
         "structured-run", repo, prompt,
-        "--config", config, "--executor", "codex", "--structured", "--tier", "low",
+        "--config", config, "--executor", "codex", "--tier", "low",
         env=env,
     )
     assert wait_for_status(env, "structured-run")["status"] == "completed"
-    evidence = json.loads((_run_dir(env, "structured-run") / "provider-evidence.json").read_text())
+    run = _run_dir(env, "structured-run")
+    command = json.loads((run / "command.json").read_text())
+    assert command["stream_format"] == "codex-jsonl"
+    assert "--json" in command["argv"]
+
+    evidence = json.loads((run / "provider-evidence.json").read_text())
     assert evidence["usage_complete"] is True
     assert evidence["aggregate"]["input_tokens"] == 5
     assert evidence["aggregate"]["cached_input_tokens"] == 1
+    assert evidence["aggregate"]["cache_write_input_tokens"] == 0
     assert evidence["aggregate"]["output_tokens"] == 3
+    assert evidence["aggregate"]["reasoning_output_tokens"] == 2
+    assert evidence["aggregate"]["provider_total_tokens"] == 8
+
+    metrics = json.loads((run / "execution-metrics.json").read_text())
+    total = next(item for item in metrics["stages"] if item["stage"] == "total")
+    assert total["input_tokens"] == 5
+    assert total["cached_input_tokens"] == 1
+    assert total["cache_write_input_tokens"] == 0
+    assert total["output_tokens"] == 3
+    assert total["reasoning_output_tokens"] == 2
+    assert total["provider_total_tokens"] == 8
