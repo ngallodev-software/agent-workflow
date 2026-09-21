@@ -15,7 +15,7 @@ def _make_fake_venv(path: Path) -> None:
     (path / "bin").mkdir(parents=True)
     python = path / "bin" / "python"
     python.write_text(
-        f"#!/usr/bin/env bash\\nexec {sys.executable} \"$@\"\\n",
+        f"#!/usr/bin/env bash\nexec {sys.executable} \"$@\"\n",
         encoding="utf-8",
     )
     python.chmod(0o755)
