@@ -56,6 +56,7 @@ def test_build_install_script_verifies_schema_and_editable_cleanup() -> None:
     assert "__editable___agent_workflow_*_finder.py" in text
     assert "Agent-Workflow is still installed editable" in text
     assert "\\${" not in text
+    assert 'ORIGINAL_AGENT_WORKFLOW="$(command -v agent-workflow 2>/dev/null || true)"' in text
 
 
 def test_build_install_script_handles_unset_venv_environment(tmp_path: Path) -> None:
