@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 import time
 from typing import Any, Mapping
 
@@ -132,6 +133,10 @@ def execute_decision_set(*, settings: Settings, registry: object | None, decisio
         return {decision_id: _receipt(settings, decision_id, control_values[decision_id], None, None, "deterministic", control_values[decision_id], None) for decision_id in decision_ids}
     if mode.provider != "typesafe":
         raise WorkflowError(f"unsupported semantic provider: {mode.provider}")
+    if not os.environ.get("TYPESAFE_API_KEY"):
+        raise WorkflowError(
+            f"decision mode {mode.name!r} requires TYPESAFE_API_KEY in the runtime environment"
+        )
     from .semantic.typesafe import evaluate
     request = DecisionRequest(decision_ids, dict(state), dict(control_values))
     started = time.perf_counter()
