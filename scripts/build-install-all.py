@@ -281,17 +281,23 @@ def verify_stack(
     code = r"""
 from importlib import metadata
 from pathlib import Path
+import os
 import shutil
+import tomllib
 
 from agent_workflow.config import load_settings
 from agent_workflow.decisions import require_decision_runtime_ready
 from specgen.agent_workflow import AW_VERSION
 
+config_path = Path(os.environ["XDG_CONFIG_HOME"]) / "agent-workflow" / "config.toml"
+config = tomllib.loads(config_path.read_text(encoding="utf-8"))
+provider = config.get("semantic", {}).get("provider")
+if provider != "typesafe":
+    raise SystemExit(f"expected TypeSafe provider in config, observed {provider!r}")
+
 settings = load_settings()
 if settings.decision_mode != "comparative":
     raise SystemExit(f"expected comparative mode, observed {settings.decision_mode!r}")
-if settings.semantic_provider != "typesafe":
-    raise SystemExit(f"expected TypeSafe provider, observed {settings.semantic_provider!r}")
 status = require_decision_runtime_ready(settings)
 if status.get("ready") is not True:
     raise SystemExit(f"semantic runtime is not ready: {status}")
