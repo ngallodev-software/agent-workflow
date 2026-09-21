@@ -353,7 +353,7 @@ if mode == "post-exit-intent":
     os._exit(0)
 if mode == "structured":
     print(json.dumps({"event_id": "message-1", "type": "item.completed", "item": {"type": "agent_message", "text": "fake agent completed"}}))
-    print(json.dumps({"event_id": "usage-1", "type": "turn.completed", "usage": {"input_tokens": 5, "cached_input_tokens": 1, "output_tokens": 3}}))
+    print(json.dumps({"event_id": "usage-1", "type": "turn.completed", "usage": {"input_tokens": 5, "cached_input_tokens": 1, "cache_write_input_tokens": 0, "output_tokens": 3, "reasoning_output_tokens": 2}}))
 else:
     print("fake agent completed")
 if "--secret" in sys.argv:
