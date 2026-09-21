@@ -74,6 +74,44 @@ def decision_mode(name: str) -> DecisionMode:
         raise WorkflowError(f"unknown decision mode: {name}") from exc
 
 
+def require_decision_runtime_ready(settings: Settings) -> dict[str, object]:
+    """Require the configured semantic decision runtime before an Agent Run starts."""
+    mode = decision_mode(settings.decision_mode)
+    result: dict[str, object] = {
+        "mode": mode.name,
+        "provider": mode.provider,
+        "capture_comparison": mode.capture_comparison,
+        "ready": True,
+    }
+    if mode.provider != "typesafe":
+        return result
+
+    from .semantic.typesafe import capability
+
+    cap = capability(settings)
+    result["typesafe"] = cap
+    if not cap.get("typesafe_sdk_installed"):
+        raise WorkflowError(
+            f"decision mode {mode.name!r} requires the TypeSafe SDK in the runtime environment"
+        )
+    if not cap.get("api_key_configured"):
+        raise WorkflowError(
+            f"decision mode {mode.name!r} requires TYPESAFE_API_KEY in the runtime environment"
+        )
+
+    if mode.capture_comparison:
+        from .comparative_eval import shared_library_status
+
+        shared = shared_library_status()
+        result["comparative_eval"] = shared
+        if not shared.get("installed") or not shared.get("compatible"):
+            raise WorkflowError(
+                "comparative decision mode requires "
+                "agent-workflow-comparative-eval==0.1.0 in the runtime environment"
+            )
+    return result
+
+
 def validate_decision_configuration(settings: Settings, _registry: object | None = None) -> dict[str, object]:
     mode = decision_mode(settings.decision_mode)
     configured_ids = set(settings.decision_profiles.get(settings.decision_profile, {}))

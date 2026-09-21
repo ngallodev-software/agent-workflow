@@ -1,6 +1,6 @@
 # Trusted plugin API
 
-`agent-workflow` 0.11.3 includes the trusted in-process plugin host. The boundary exists to keep optional capabilities modular; it is not a sandbox and installing or enabling a plugin does not grant workflow, permission, review, or acceptance authority.
+`agent-workflow` 0.11.4 includes the trusted in-process plugin host. The boundary exists to keep optional capabilities modular; it is not a sandbox and installing or enabling a plugin does not grant workflow, permission, review, or acceptance authority.
 
 ## Enablement and recovery
 

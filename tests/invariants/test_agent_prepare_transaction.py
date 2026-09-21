@@ -99,3 +99,54 @@ def test_intentional_preflight_evidence_is_preserved(tmp_path: Path, monkeypatch
         )
 
     assert (agent_runs.run_dir(settings, "run-1") / "preflight.json").is_file()
+
+
+def test_prepare_requires_semantic_runtime_before_creating_state(tmp_path: Path, monkeypatch) -> None:
+    settings = _settings(tmp_path)
+    workdir = tmp_path / "repo"
+    workdir.mkdir()
+    prompt = tmp_path / "prompt.md"
+    prompt.write_text("test\n", encoding="utf-8")
+
+    def reject(_settings):
+        raise WorkflowError("decision runtime not ready")
+
+    monkeypatch.setattr(
+        "agent_workflow.decisions.require_decision_runtime_ready",
+        reject,
+    )
+    monkeypatch.setattr(
+        agent_runs,
+        "_prepare",
+        lambda *args, **kwargs: pytest.fail("_prepare must not run before semantic readiness"),
+    )
+
+    with pytest.raises(WorkflowError, match="decision runtime not ready"):
+        agent_runs.prepare(
+            settings,
+            agent_run_id="run-semantic-preflight",
+            workdir=workdir,
+            prompt_path=prompt,
+        )
+
+    assert not agent_runs.run_dir(settings, "run-semantic-preflight").exists()
+
+
+def test_start_rechecks_semantic_runtime_before_spawning(tmp_path: Path, monkeypatch) -> None:
+    settings = _settings(tmp_path)
+
+    def reject(_settings):
+        raise WorkflowError("decision runtime no longer ready")
+
+    monkeypatch.setattr(
+        "agent_workflow.decisions.require_decision_runtime_ready",
+        reject,
+    )
+    monkeypatch.setattr(
+        agent_runs,
+        "spawn_detached",
+        lambda *args, **kwargs: pytest.fail("worker must not spawn without semantic readiness"),
+    )
+
+    with pytest.raises(WorkflowError, match="decision runtime no longer ready"):
+        agent_runs.start(settings, "run-semantic-start")
