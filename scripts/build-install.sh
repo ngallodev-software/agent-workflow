@@ -99,7 +99,11 @@ is_venv "$VENV" || { echo "selected path is not a virtualenv: $VENV" >&2; exit 1
 
 if [[ -x "$VENV/bin/python" ]]; then PYTHON="$VENV/bin/python"; else PYTHON="$VENV/bin/python3"; fi
 AW_LAUNCHER="$VENV/bin/agent-workflow"
-export PATH="$VENV/bin:$PATH"
+# Use the same venv-local config/state/data layout that benchmark/dev runs use.
+# This affects only this build/install process; source scripts/dev-env.sh manually
+# when the calling shell should remain in the isolated environment.
+source "$ROOT/scripts/dev-env.sh"
+aw_dev_env_on "$VENV" >/dev/null
 
 echo "Agent-Workflow source: $ROOT"
 echo "target virtualenv: $VENV"
@@ -368,6 +372,14 @@ echo "  virtualenv: $VENV"
 echo "  version: $EXPECTED_VERSION"
 echo "  launcher: $AW_LAUNCHER"
 echo "  wheel: $WHEEL"
+echo "  config: $XDG_CONFIG_HOME/agent-workflow/config.toml"
+echo "  state: $XDG_STATE_HOME/agent-workflow"
+echo "  data: $XDG_DATA_HOME/agent-workflow"
+echo
+echo "For an interactive isolated dev/benchmark shell:"
+echo "  source scripts/dev-env.sh on"
+echo "Restore the previous shell environment afterward with:"
+echo "  source scripts/dev-env.sh off"
 if [[ -n "$ORIGINAL_AGENT_WORKFLOW" ]] && [[ "$(resolve_path "$ORIGINAL_AGENT_WORKFLOW")" != "$(resolve_path "$AW_LAUNCHER")" ]]; then
   echo
   echo "note: before this script, PATH resolved agent-workflow to:"
