@@ -59,7 +59,6 @@ _aw_dev_env_restore_var() {
 _aw_dev_env_seed_config() {
   local source_config="$1" target_config="$2" venv="$3"
   mkdir -p "$(dirname "$target_config")"
-  [[ -f "$target_config" ]] && return 0
   python3 - "$source_config" "$target_config" "$venv" <<'PY'
 from pathlib import Path
 import json
@@ -69,7 +68,8 @@ import sys
 source = Path(sys.argv[1])
 target = Path(sys.argv[2])
 venv = Path(sys.argv[3]).resolve()
-text = source.read_text(encoding="utf-8") if source.is_file() else "schema_version = 1\n"
+input_path = target if target.is_file() else source
+text = input_path.read_text(encoding="utf-8") if input_path.is_file() else "schema_version = 1\n"
 worktree = json.dumps(str(venv / ".xdg" / "data" / "agent-workflow" / "worktrees"))
 state = json.dumps(str(venv / ".xdg" / "state" / "agent-workflow"))
 
