@@ -1248,7 +1248,13 @@ def _prepare(
         executor=executor,
         explicit_command=explicit_command,
         workdir=workdir,
-        structured=structured,
+        # Headless Codex always uses its JSONL provider surface so token/cost
+        # evidence is available to the terminal pipeline.  This changes only
+        # provider capture; output.log remains normalized human-readable text.
+        structured=(
+            structured
+            or (worker_mode == "headless" and executor == "codex")
+        ),
         executor_interactive=executor_interactive,
         model=model,
         reasoning_effort=reasoning_effort,
