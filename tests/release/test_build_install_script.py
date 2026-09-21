@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
 import subprocess
 
 from tests.conftest import REPO_ROOT
@@ -54,3 +55,23 @@ def test_build_install_script_verifies_schema_and_editable_cleanup() -> None:
     assert "__editable__.agent_workflow-*.pth" in text
     assert "__editable___agent_workflow_*_finder.py" in text
     assert "Agent-Workflow is still installed editable" in text
+    assert "\\${" not in text
+
+
+def test_build_install_script_handles_unset_venv_environment(tmp_path: Path) -> None:
+    env = os.environ.copy()
+    env.pop("AGENT_WORKFLOW_VENV", None)
+    env.pop("VIRTUAL_ENV", None)
+    env["PATH"] = "/usr/bin:/bin"
+
+    result = subprocess.run(
+        ["bash", str(SCRIPT), "--verify-only"],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=env,
+    )
+
+    assert "unbound variable" not in result.stderr.lower()
+    assert "AGENT_WORKFLOW_VENV" not in result.stderr
