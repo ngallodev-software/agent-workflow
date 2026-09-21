@@ -29,11 +29,12 @@ def test_build_install_script_documents_active_venv_and_verify_mode() -> None:
         check=False,
     )
     assert result.returncode == 0, result.stderr
-    assert "active" in result.stdout.lower()
-    assert "VIRTUAL_ENV" in result.stdout
-    assert "--venv PATH" in result.stdout
-    assert "--verify-only" in result.stdout
-    assert "never installs to the user Python environment" in result.stdout
+    normalized = " ".join(result.stdout.split())
+    assert "active" in normalized.lower()
+    assert "VIRTUAL_ENV" in normalized
+    assert "--venv PATH" in normalized
+    assert "--verify-only" in normalized
+    assert "never installs to the user Python environment" in normalized
 
 
 def test_build_install_script_is_wheel_only_and_does_not_call_source_installer() -> None:
