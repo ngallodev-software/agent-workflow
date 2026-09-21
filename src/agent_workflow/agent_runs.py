@@ -1951,7 +1951,12 @@ def restart(
         agent_run_id=new_id,
         workdir=Path(str(worktree["path"])),
         prompt_path=prompt_source,
-        explicit_command=command,
+        # The predecessor command was validated above as sealed evidence, but
+        # must not become the retry's launch configuration.  Resolve the
+        # current executor policy so wrappers, argv, and environment
+        # allowlists are refreshed for the retry.
+        executor=command_data.get("executor"),
+        explicit_command=command if command_data.get("executor") is None else None,
         agent_name=agent_run.get("agent_name"),
         agent_class=agent_run.get("agent_class"),
         model=command_data.get("model"),
@@ -1963,6 +1968,7 @@ def restart(
         allow_dirty=True,
         saved_stream_format=str(command_data.get("stream_format", "text")),
         saved_executor=command_data.get("executor"),
+        structured=command_data.get("stream_format") != "text",
         interactive=(worker_plan.get("mode") == "external"),
         prompt_source_override=prompt_source,
         prompt_pack_root_override=Path(str(pack["root"])) if pack.get("root") else None,

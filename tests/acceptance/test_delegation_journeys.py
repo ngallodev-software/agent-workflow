@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
 
@@ -200,6 +201,53 @@ def test_failed_headless_run_restarts_as_new_agent_run_with_lineage(
     assert retry["status"] == "completed"
     contract = json.loads((_run_dir(env, "failed-run-retry") / "agent-run-contract.json").read_text())
     assert contract["agent_run"]["retry_of_agent_run_id"] == "failed-run"
+
+
+def test_retry_refreshes_configured_executor_and_environment_policy(
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+    fake_agent_path: Path,
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    git_repo(repo)
+    prompt = tmp_path / "prompt.md"
+    prompt.write_text("Retry with current executor configuration.\n", encoding="utf-8")
+    config = write_config(product_env, fake_agent=fake_agent_path)
+    codex = fake_agent_path.parent / "codex"
+    codex.symlink_to(fake_agent_path)
+    config_text = config.read_text(encoding="utf-8").replace(
+        f'command = ["{fake_agent_path}"]', f'command = ["{codex}"]'
+    )
+    config.write_text(config_text, encoding="utf-8")
+
+    prepare_and_start_agent_run(
+        installed_product, "configured-retry", repo, prompt, "--tier", "low",
+        env=product_env,
+    )
+    assert wait_for_status(product_env, "configured-retry")["status"] == "completed"
+    original_run = _run_dir(product_env, "configured-retry")
+    original_command = json.loads((original_run / "command.json").read_text())
+
+    wrapper = tmp_path / "codex-wrapper"
+    wrapper.write_text(f"#!/bin/sh\nexec {os.fspath(fake_agent_path)} \"$@\"\n", encoding="utf-8")
+    wrapper.chmod(0o755)
+    config.write_text(
+        config_text.replace(f'command = ["{codex}"]', f'command = ["{wrapper}"]')
+        .replace('"FAKE_AGENT_EMIT_PROGRESS"]', '"FAKE_AGENT_EMIT_PROGRESS", "TYPESAFE_API_KEY"]'),
+        encoding="utf-8",
+    )
+    retry = installed_product.json(
+        "agent-run", "restart", "configured-retry", "--new-agent-run-id", "configured-retry-2",
+        env={**product_env, "TYPESAFE_API_KEY": "secret"},
+    )
+    assert retry["retry_of_agent_run_id"] == "configured-retry"
+    retry_run = _run_dir(product_env, "configured-retry-2")
+    retry_command = json.loads((retry_run / "command.json").read_text())
+    assert retry_command["argv"][0] == str(wrapper)
+    assert retry_command["argv"] != original_command["argv"]
+    assert "TYPESAFE_API_KEY" in retry_command["environment_allowlist"]
+    assert json.loads((original_run / "command.json").read_text()) == original_command
 
 
 def test_structured_provider_usage_reaches_sealed_evidence(
