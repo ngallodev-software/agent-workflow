@@ -124,6 +124,11 @@ def test_jenkins_does_not_run_extracted_benchmark_contracts() -> None:
     assert "test_benchmark_target_and_tool_mode.py" not in jenkinsfile
     assert "stage('Plugin and contract compatibility')" in jenkinsfile
     assert "stage('Benchmark plugin')" in jenkinsfile
+    assert "benchmark_revision=a4b0b3e09ecb37b191c22a198d910b49efe886ba" in jenkinsfile
+    assert "178fd5c3641ad5f7d2c5b0a8f00547f001accd41" not in jenkinsfile
+    assert "git clone --depth 1 --no-checkout https://github.com/ngallodev-software/agent-workflow-benchmark.git" in jenkinsfile
+    assert 'git -C "$compat/source" fetch --depth 1 origin "$benchmark_revision"' in jenkinsfile
+    assert 'git -C "$compat/source" checkout --detach "$benchmark_revision"' in jenkinsfile
     assert "stage('Built-in TypeSafe provider')" in jenkinsfile
     assert "stage('TypeSafe plugin')" not in jenkinsfile
     assert "stage('Shared contract bundle')" in jenkinsfile
