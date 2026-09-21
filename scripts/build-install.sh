@@ -195,8 +195,8 @@ if scripts != expected:
 
 dist_infos = sorted(purelib.glob("agent_workflow-*.dist-info"))
 egg_infos = sorted(purelib.glob("agent_workflow*.egg-info"))
-editable = sorted(purelib.glob("__editable__*agent_workflow*"))
-editable += sorted(purelib.glob("*agent_workflow*.pth"))
+editable = sorted(purelib.glob("__editable__.agent_workflow-*.pth"))
+editable += sorted(purelib.glob("__editable___agent_workflow_*_finder.py"))
 if len(dist_infos) != 1:
     raise SystemExit("expected exactly one Agent-Workflow dist-info directory")
 if egg_infos:
@@ -341,8 +341,8 @@ bin_dir = Path(sys.executable).resolve().parent
 paths = [purelib / "agent_workflow"]
 paths += sorted(purelib.glob("agent_workflow-*.dist-info"))
 paths += sorted(purelib.glob("agent_workflow*.egg-info"))
-paths += sorted(purelib.glob("__editable__*agent_workflow*"))
-paths += sorted(purelib.glob("*agent_workflow*.pth"))
+paths += sorted(purelib.glob("__editable__.agent_workflow-*.pth"))
+paths += sorted(purelib.glob("__editable___agent_workflow_*_finder.py"))
 
 for path in paths:
     if not path.exists() and not path.is_symlink():
@@ -368,5 +368,11 @@ echo "  virtualenv: $VENV"
 echo "  version: $EXPECTED_VERSION"
 echo "  launcher: $AW_LAUNCHER"
 echo "  wheel: $WHEEL"
+if [[ -n "$ORIGINAL_AGENT_WORKFLOW" ]] && [[ "$(resolve_path "$ORIGINAL_AGENT_WORKFLOW")" != "$(resolve_path "$AW_LAUNCHER")" ]]; then
+  echo
+  echo "note: before this script, PATH resolved agent-workflow to:"
+  echo "  $ORIGINAL_AGENT_WORKFLOW"
+  echo "activate $VENV (or fix PATH) before invoking Agent-Workflow from this shell."
+fi
 echo
 echo "If this shell cached an older ~/.local/bin launcher, run: hash -r"
