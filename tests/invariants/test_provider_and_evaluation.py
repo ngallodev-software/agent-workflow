@@ -60,3 +60,35 @@ def test_comparison_rejects_mismatched_cohorts_and_never_overclaims_small_sample
     assert result["paired_n"] == 1
     with pytest.raises(WorkflowError, match="cohorts do not match"):
         compare_trials([trial("b", "fail", task_id="a")], [trial("c", "pass", task_id="b")])
+
+
+def test_live_codex_terminal_usage_shape_normalizes_all_token_counts(tmp_path: Path) -> None:
+    evidence = _evidence(
+        tmp_path,
+        [
+            {
+                "type": "turn.completed",
+                "usage": {
+                    "input_tokens": 130856,
+                    "cached_input_tokens": 88320,
+                    "cache_write_input_tokens": 0,
+                    "output_tokens": 2759,
+                    "reasoning_output_tokens": 475,
+                },
+            }
+        ],
+    )
+
+    assert evidence["usage_complete"] is True
+    assert evidence["aggregate"] == {
+        "input_tokens": 130856,
+        "cached_input_tokens": 88320,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 2759,
+        "reasoning_output_tokens": 475,
+        "provider_total_tokens": 133615,
+        "provider_billed_cost": None,
+        "local_estimated_cost": None,
+        "currency": None,
+        "price_catalog_id": None,
+    }
