@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import os
 import subprocess
+import sys
 
 from tests.conftest import REPO_ROOT
 
@@ -13,7 +14,10 @@ SCRIPT = REPO_ROOT / "scripts" / "dev-env.sh"
 def _make_fake_venv(path: Path) -> None:
     (path / "bin").mkdir(parents=True)
     python = path / "bin" / "python"
-    python.write_text("#!/usr/bin/env bash\nexec python3 \"$@\"\n", encoding="utf-8")
+    python.write_text(
+        f"#!/usr/bin/env bash\\nexec {sys.executable} \"$@\"\\n",
+        encoding="utf-8",
+    )
     python.chmod(0o755)
     aw = path / "bin" / "agent-workflow"
     aw.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
