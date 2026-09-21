@@ -93,3 +93,53 @@ def test_dev_env_script_must_be_sourced() -> None:
     )
     assert result.returncode == 2
     assert "must be sourced" in result.stderr
+
+
+def test_dev_env_repairs_invalid_existing_target_config(tmp_path: Path) -> None:
+    venv = tmp_path / "venv"
+    _make_fake_venv(venv)
+    home = tmp_path / "home"
+    source_config = home / ".config" / "agent-workflow" / "config.toml"
+    source_config.parent.mkdir(parents=True)
+    source_config.write_text(
+        "schema_version = 1\n\n"
+        "[decision_policy]\n"
+        'mode = "comparative"\n'
+        'profile = "default"\n',
+        encoding="utf-8",
+    )
+
+    target = venv / ".xdg" / "config" / "agent-workflow" / "config.toml"
+    target.parent.mkdir(parents=True)
+    target.write_text(
+        "schema_version = 1\n"
+        "[paths]\n"
+        'worktree_root = "unterminated\n',
+        encoding="utf-8",
+    )
+
+    command = (
+        "set -euo pipefail\n"
+        f"export HOME={home}\n"
+        "export PATH=/usr/bin:/bin\n"
+        "unset VIRTUAL_ENV AGENT_WORKFLOW_VENV AGENT_WORKFLOW_BIN XDG_CONFIG_HOME XDG_STATE_HOME XDG_DATA_HOME\n"
+        f"source {SCRIPT} on {venv}\n"
+    )
+    result = subprocess.run(
+        ["bash", "-c", command],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+        env={**os.environ, "HOME": str(home), "PATH": "/usr/bin:/bin"},
+    )
+
+    assert result.returncode == 0, result.stderr
+    repaired = target.read_text(encoding="utf-8")
+    assert 'mode = "comparative"' in repaired
+    assert f'worktree_root = "{venv}/.xdg/data/agent-workflow/worktrees"' in repaired
+    assert f'state_root = "{venv}/.xdg/state/agent-workflow"' in repaired
+    backups = list(target.parent.glob("config.toml.invalid-*"))
+    assert len(backups) == 1
+    assert "unterminated" in backups[0].read_text(encoding="utf-8")
+    assert "recovered invalid development config" in result.stderr
