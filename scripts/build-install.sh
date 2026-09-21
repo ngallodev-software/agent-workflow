@@ -233,6 +233,39 @@ PY
   "$AW_LAUNCHER" --version >/dev/null
   "$AW_LAUNCHER" --no-plugins --help >/dev/null
 
+  "$PYTHON" - <<'PY'
+from agent_workflow.config import load_settings
+from agent_workflow.decisions import decision_mode
+from agent_workflow.semantic.typesafe import capability
+
+settings = load_settings()
+mode = decision_mode(settings.decision_mode)
+if mode.provider == "typesafe":
+    cap = capability(settings)
+    if not cap.get("typesafe_sdk_installed"):
+        raise SystemExit(
+            f"decision mode {mode.name!r} requires the TypeSafe SDK in the shared virtualenv"
+        )
+    if not cap.get("api_key_configured"):
+        raise SystemExit(
+            f"decision mode {mode.name!r} requires TYPESAFE_API_KEY in the runtime environment"
+        )
+    if mode.capture_comparison:
+        from agent_workflow.comparative_eval import shared_library_status
+        shared = shared_library_status()
+        if not shared.get("installed") or not shared.get("compatible"):
+            raise SystemExit(
+                "comparative decision mode requires compatible "
+                "agent-workflow-comparative-eval in the shared virtualenv"
+            )
+    print(
+        f"semantic runtime verified: mode={mode.name}; "
+        "typesafe_api_key=configured"
+    )
+else:
+    print("semantic runtime verified: mode=deterministic; TypeSafe key not required")
+PY
+
   local active
   active="$(command -v agent-workflow 2>/dev/null || true)"
   [[ -n "$active" ]] || { echo "agent-workflow is not on PATH" >&2; return 1; }
