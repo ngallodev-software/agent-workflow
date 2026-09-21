@@ -4,6 +4,12 @@ Scripts in this directory support repository bootstrap, release validation/evide
 
 `install-source.sh` is the default CLI installer and deliberately excludes MCP. `install-mcp.sh` is the separate explicit opt-in for the optional MCP SDK, entry point, and Codex/Claude registration.
 
+`build-install.sh` is the local development wheel installer. It deliberately bypasses
+the user-local behavior of `install-source.sh`: it locates an existing development
+virtualenv, builds the current Agent-Workflow wheel, replaces any editable core
+install in that exact venv, and verifies launcher/schema/package ownership. It never
+creates a venv and never uses `pip --user`.
+
 Prompt-pack helper scripts are packaged only in `src/agent_workflow/assets/prompt-pack-root/` and are materialized by `agent-workflow pack scaffold`. The repository no longer keeps byte-identical compatibility copies under `scripts/` or `templates/`.
 
 ## Release evidence
