@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ORIGINAL_AGENT_WORKFLOW="$(command -v agent-workflow 2>/dev/null || true)"
 VENV_ARG=""
 VERIFY_ONLY=0
 BOOTSTRAP_BUILD=1
