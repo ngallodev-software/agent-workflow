@@ -61,8 +61,13 @@ pipeline {
                             python3 -m venv "$compat/venv"
                             test -s "$wheel"
                             "$compat/venv/bin/pip" install --disable-pip-version-check "$wheel"
-                            git clone --depth 1 https://github.com/ngallodev-software/agent-workflow-benchmark.git "$compat/source"
-                            git -C "$compat/source" checkout --detach 178fd5c3641ad5f7d2c5b0a8f00547f001accd41
+                            benchmark_revision=178fd5c3641ad5f7d2c5b0a8f00547f001accd41
+                            # This immutable upstream commit is the benchmark plugin revision
+                            # validated against Agent-Workflow 0.11.x. Fetch it explicitly:
+                            # a shallow clone otherwise contains only the remote default tip.
+                            git clone --depth 1 --no-checkout https://github.com/ngallodev-software/agent-workflow-benchmark.git "$compat/source"
+                            git -C "$compat/source" fetch --depth 1 origin "$benchmark_revision"
+                            git -C "$compat/source" checkout --detach "$benchmark_revision"
                             "$compat/venv/bin/pip" install --disable-pip-version-check "$compat/source[test]"
                             printf '%s\n' 'schema_version = 1' '' '[plugins]' 'enabled = ["agent-workflow-benchmark"]' > "$compat/config.toml"
                             "$compat/venv/bin/agent-workflow" --config "$compat/config.toml" benchmark --help
