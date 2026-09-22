@@ -276,7 +276,7 @@ bash scripts/run-bm3-structured.sh \
   --repetitions 1
 ```
 
-The script requires Agent-Workflow 0.11.6, benchmark plugin 0.3.0, TypeSafe SDK 0.6.0, comparative mode, compatible comparative-eval, and an authenticated Codex subscription session.
+The script requires Agent-Workflow 0.11.6, benchmark plugin 0.3.1, TypeSafe SDK 0.6.0, comparative mode, compatible comparative-eval, and an authenticated Codex subscription session.
 
 Before paired execution it writes `typesafe-semantic-qualification.json` plus a private redacted `typesafe-api-audit.jsonl` by exercising the real comparative routing boundary on the exported phase prompts. This qualification is diagnostic and outside both treatment arms, so the exact semantic state/questions and returned evidence can be reviewed without changing treatment identity. Never publish the raw semantic request/response bodies; derive public counts, durations, hashes, primitive coverage, disagreement, and calibration summaries instead.
 
