@@ -24,7 +24,13 @@ SUPPORTED_DECISIONS = (
     "routing.interaction_required",
     "routing.semantic_risk",
 )
-_SECRET_MARKERS = ("api_key", "apikey", "authorization", "password", "secret", "token")
+_SECRET_KEYS = frozenset({
+    "api_key", "apikey", "x_api_key", "authorization", "proxy_authorization",
+    "password", "passwd", "secret", "client_secret", "token", "access_token",
+    "refresh_token", "id_token", "cookie", "set_cookie", "credential",
+    "credentials", "bearer",
+})
+_SECRET_SUFFIXES = ("_api_key", "_password", "_secret", "_token", "_credential", "_credentials")
 _MAX_TEXT = 8_000
 _MAX_ITEMS = 100
 _MAX_DEPTH = 8
@@ -71,8 +77,8 @@ def _canonical_json(value: object) -> str:
 
 
 def _safe(value: Any, *, key: str = "", depth: int = 0) -> Any:
-    normalized = key.lower().replace("-", "_")
-    if any(marker in normalized for marker in _SECRET_MARKERS):
+    normalized = key.lower().replace("-", "_").strip()
+    if normalized in _SECRET_KEYS or normalized.endswith(_SECRET_SUFFIXES):
         return "[redacted]"
     if depth >= _MAX_DEPTH:
         return "[depth_limit]"
@@ -125,6 +131,75 @@ def question_specs(decision_ids: tuple[str, ...]) -> dict[str, dict[str, object]
     return {decision_id: dict(QUESTION_SPECS[decision_id]) for decision_id in decision_ids}
 
 
+def _audit_questions(decision_ids: tuple[str, ...]) -> dict[str, dict[str, object]]:
+    """Return the JSON-shaped question body supplied at the SDK boundary."""
+    result: dict[str, dict[str, object]] = {}
+    for decision_id in decision_ids:
+        spec = QUESTION_SPECS[decision_id]
+        question: dict[str, object] = {
+            "type": str(spec["primitive"]),
+            "instructions": spec["instructions"],
+        }
+        if "criteria" in spec:
+            question["criteria"] = spec["criteria"]
+        result[str(spec["answer_key"])] = question
+    return result
+
+
+def _body_value(content: Any) -> Any:
+    if isinstance(content, bytes):
+        text = content.decode("utf-8", errors="replace")
+    elif isinstance(content, str):
+        text = content
+    else:
+        return _safe(content)
+    try:
+        return _safe(json.loads(text))
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return _safe(text)
+
+
+def _headers_value(headers: Any) -> dict[str, Any] | None:
+    try:
+        return _safe(dict(headers.items()))
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+
+def _raw_http_exchange(response: Any) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    try:
+        raw = response.raw_http_response
+    except Exception:
+        return None, None
+    request = getattr(raw, "request", None)
+    request_value: dict[str, Any] | None = None
+    if request is not None:
+        request_value = {
+            "method": _safe(getattr(request, "method", None)),
+            "url": _safe(str(getattr(request, "url", ""))),
+            "headers": _headers_value(getattr(request, "headers", None)),
+            "body": _body_value(getattr(request, "content", None)),
+        }
+    response_value: dict[str, Any] = {
+        "status_code": _safe(getattr(raw, "status_code", None)),
+        "headers": _headers_value(getattr(raw, "headers", None)),
+        "body": _body_value(getattr(raw, "content", None)),
+    }
+    try:
+        response_value["request_id"] = _safe(response.request_id)
+    except Exception:
+        response_value["request_id"] = None
+    return request_value, response_value
+
+
+def _typesafe_sdk_version() -> str | None:
+    try:
+        from importlib import metadata
+        return metadata.version("typesafe-sdk")
+    except Exception:
+        return None
+
+
 def _sdk_questions(decision_ids: tuple[str, ...]) -> dict[str, object]:
     try:
         from typesafe_sdk import Choice, Noul, Score
@@ -170,21 +245,55 @@ def _answers(response: Any) -> Mapping[str, object]:
     return merged
 
 
-def _record_call(settings: Any, *, request_sha256: str, state: object, decision_ids: tuple[str, ...], status: str,
-                 requested_model: str | None, resolved_model: str | None = None, outputs: object | None = None,
-                 error_class: str | None = None, duration_ms: float | None = None) -> None:
-    path = getattr(settings, "typesafe_api_call_log", None)
+def _record_call(
+    settings: Any,
+    *,
+    request_sha256: str,
+    state: object,
+    questions: Mapping[str, object],
+    decision_ids: tuple[str, ...],
+    status: str,
+    requested_model: str | None,
+    resolved_model: str | None = None,
+    response: object | None = None,
+    outputs: object | None = None,
+    error_class: str | None = None,
+    duration_ms: float | None = None,
+) -> None:
+    path = os.environ.get("AGENT_WORKFLOW_TYPESAFE_API_CALL_LOG") or getattr(
+        settings, "typesafe_api_call_log", None
+    )
     if path is None:
         return
     try:
+        http_request, http_response = _raw_http_exchange(response) if response is not None else (None, None)
+        logical_request = {
+            "state": _safe(state),
+            "questions": _safe(questions),
+            "model": requested_model,
+        }
         payload: dict[str, Any] = {
-            "schema": "agent-workflow/typesafe-api-call/v1",
+            "schema": "agent-workflow/typesafe-api-call/v2",
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "request_sha256": request_sha256,
             "question_set_version": QUESTION_SET_VERSION,
             "projector_version": PROJECTOR_VERSION,
+            "typesafe_sdk_version": _typesafe_sdk_version(),
             "requested_model": requested_model,
             "resolved_model": resolved_model,
+            "request": {
+                "logical_body": logical_request,
+                "http": http_request,
+            },
+            "response": {
+                "http": http_response,
+                "normalized": _safe(outputs),
+            },
+            "capture": {
+                "raw_http_available": http_request is not None or http_response is not None,
+                "credentials_redacted": True,
+            },
+            # Backward-compatible projections retained for existing consumers.
             "input": {"state": _safe(state), "decision_ids": list(decision_ids)},
             "output": _safe(outputs),
             "status": status,
@@ -193,7 +302,7 @@ def _record_call(settings: Any, *, request_sha256: str, state: object, decision_
             payload["error_class"] = error_class
         if duration_ms is not None:
             payload["duration_ms"] = round(max(0.0, duration_ms), 3)
-        target = Path(path)
+        target = Path(os.path.expandvars(os.path.expanduser(str(path))))
         target.parent.mkdir(parents=True, exist_ok=True)
         with target.open("a", encoding="utf-8") as stream:
             stream.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n")
@@ -212,6 +321,7 @@ def evaluate(request: DecisionRequest, context: DecisionContext, *, client: Type
         return {decision_id: DecisionEvidence(decision_id, "invalid_input", str(QUESTION_SPECS[decision_id]["primitive"]), error_class=type(exc).__name__) for decision_id in decision_ids}
     model = getattr(context.settings, "typesafe_model", None)
     digest = _request_hash(state, decision_ids, model)
+    audit_questions = _audit_questions(decision_ids)
     if client is None and not os.environ.get("TYPESAFE_API_KEY"):
         return {decision_id: DecisionEvidence(decision_id, "service_failure", str(QUESTION_SPECS[decision_id]["primitive"]), question_set_version=QUESTION_SET_VERSION, request_sha256=digest, source_refs=source_refs, error_class="typesafe_api_key_unavailable") for decision_id in decision_ids}
     started = monotonic()
@@ -221,7 +331,7 @@ def evaluate(request: DecisionRequest, context: DecisionContext, *, client: Type
         answers = _answers(response)
         resolved_model = getattr(response, "model", None)
     except Exception as exc:
-        _record_call(context.settings, request_sha256=digest, state=state, decision_ids=decision_ids, status="service_failure", requested_model=model, error_class=type(exc).__name__, duration_ms=(monotonic() - started) * 1000)
+        _record_call(context.settings, request_sha256=digest, state=state, questions=audit_questions, decision_ids=decision_ids, status="service_failure", requested_model=model, error_class=type(exc).__name__, duration_ms=(monotonic() - started) * 1000)
         return {decision_id: DecisionEvidence(decision_id, "service_failure", str(QUESTION_SPECS[decision_id]["primitive"]), question_set_version=QUESTION_SET_VERSION, request_sha256=digest, source_refs=source_refs, error_class=type(exc).__name__) for decision_id in decision_ids}
 
     result: dict[str, DecisionEvidence] = {}
@@ -261,7 +371,7 @@ def evaluate(request: DecisionRequest, context: DecisionContext, *, client: Type
             model=resolved_model if isinstance(resolved_model, str) else None,
             question_set_version=QUESTION_SET_VERSION, request_sha256=digest, source_refs=source_refs,
         )
-    _record_call(context.settings, request_sha256=digest, state=state, decision_ids=decision_ids, status="success", requested_model=model, resolved_model=resolved_model if isinstance(resolved_model, str) else None, outputs=normalized_outputs, duration_ms=(monotonic() - started) * 1000)
+    _record_call(context.settings, request_sha256=digest, state=state, questions=audit_questions, decision_ids=decision_ids, status="success", requested_model=model, resolved_model=resolved_model if isinstance(resolved_model, str) else None, response=response, outputs=normalized_outputs, duration_ms=(monotonic() - started) * 1000)
     return result
 
 
@@ -275,4 +385,7 @@ def capability(settings: Any) -> dict[str, object]:
         "question_set_version": QUESTION_SET_VERSION,
         "projector_version": PROJECTOR_VERSION,
         "decisions": list(SUPPORTED_DECISIONS),
+        "audit_schema": "agent-workflow/typesafe-api-call/v2",
+        "audit_log": os.environ.get("AGENT_WORKFLOW_TYPESAFE_API_CALL_LOG")
+        or (str(getattr(settings, "typesafe_api_call_log", "")) if getattr(settings, "typesafe_api_call_log", None) else None),
     }

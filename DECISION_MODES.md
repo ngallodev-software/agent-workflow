@@ -47,3 +47,19 @@ When `decision_policy.mode` is `typesafe` or `comparative`, Agent-Workflow requi
 active. `comparative` mode additionally requires a compatible
 `agent-workflow-comparative-eval` installation. Deterministic mode requires
 neither TypeSafe credentials nor the comparative-eval library.
+
+
+## TypeSafe request/response audit
+
+Set `semantic.typesafe.api_call_log` or the per-process
+`AGENT_WORKFLOW_TYPESAFE_API_CALL_LOG` override to capture JSONL audit records.
+
+Audit schema `agent-workflow/typesafe-api-call/v2` records the complete
+redacted logical System One request (state, question bodies, requested model),
+the raw HTTP request and response bodies/metadata when exposed by
+`typesafe-sdk==0.6.0`, normalized Choice/Noul/Score results, request hash,
+question/projector versions, SDK version, resolved model, status, and duration.
+
+Credential-bearing header fields such as Authorization/API-key/cookie values
+are redacted. Do not publish raw semantic request/response bodies as portfolio
+assets; retain them as private run evidence and publish only sanitized summaries.
