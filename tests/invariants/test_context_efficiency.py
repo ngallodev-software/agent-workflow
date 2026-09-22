@@ -137,3 +137,46 @@ def test_failed_verification_is_never_reused(tmp_path, monkeypatch) -> None:
     assert first["ok"] is False
     assert second["reused"] is False
     assert len(calls) == 2
+
+
+def test_verification_cache_reuses_success_across_agent_runs_on_same_worktree(tmp_path, monkeypatch) -> None:
+    import agent_workflow.worker_completion as module
+
+    repo = tmp_path / "repo-shared"
+    repo.mkdir()
+    settings = SimpleNamespace(state_root=tmp_path / "state")
+    contexts = {}
+    for run_id in ("run-a", "run-b"):
+        handoff = settings.state_root / "runs" / run_id / "handoff"
+        handoff.mkdir(parents=True)
+        contract = {
+            "agent_run": {"id": run_id},
+            "worktree": {"path": str(repo), "source_revision": None},
+            "paths": {"handoff_dir": str(handoff)},
+            "ticket": None,
+            "ticket_identity": {"mode": "omitted", "value": None},
+            "pack": {"id": None},
+        }
+        contexts[run_id] = (handoff.parent, contract, repo, handoff)
+
+    monkeypatch.setattr(module, "_context", lambda _settings, run_id: contexts[run_id])
+    fingerprints = iter(["same-workspace", "same-workspace", "same-workspace"])
+    monkeypatch.setattr(module, "_workspace_fingerprint", lambda _repo: next(fingerprints))
+    calls = []
+
+    def fake_run(argv, **kwargs):
+        calls.append(list(argv))
+        return SimpleNamespace(argv=tuple(argv), stdout="passed", stderr="", returncode=0)
+
+    monkeypatch.setattr(module, "run", fake_run)
+
+    first = verify_command(settings, "run-a", argv=["python", "-m", "unittest"])
+    second = verify_command(settings, "run-b", argv=["python", "-m", "unittest"])
+
+    assert first["reused"] is False
+    assert second["reused"] is True
+    assert second["reused_from_agent_run_id"] == "run-a"
+    assert len(calls) == 1
+    assert first["stdout"] == ""
+    assert first["output_refs"]["stdout"]["bytes"] == len("passed")
+    assert (settings.state_root / "runs" / "run-a" / first["output_refs"]["stdout"]["path"]).is_file()
