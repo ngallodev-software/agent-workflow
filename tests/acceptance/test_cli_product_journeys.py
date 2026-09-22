@@ -72,7 +72,7 @@ def test_headless_agent_run_prepare_start_and_provenance_journey(
     prompt.write_text("Complete the fixture task.\n", encoding="utf-8")
     config = write_config(product_env, fake_agent=fake_agent_path)
     private_alias = "private-review-runtime-sentinel"
-    private_model = "gpt-5.6-luna"
+    private_model = "gpt-6-luna"
     with config.open("a", encoding="utf-8") as stream:
         stream.write(
             "\n[runtime_aliases.private-review-runtime-sentinel]\n"
