@@ -87,6 +87,7 @@ def test_git_pull_all_uses_nonpersistent_github_https_auth_by_default() -> None:
     assert "GITHUB_TOKEN" in text
     assert "gh auth token --hostname github.com" in text
     assert "remote set-url" not in text
-    assert "credential approve" not in text
-    assert "credential reject" not in text
-    assert "credential-store" not in text
+    assert "git credential approve" not in text
+    assert "git credential reject" not in text
+    assert "credential.helper store" not in text
+    assert "credential.helper cache" not in text
