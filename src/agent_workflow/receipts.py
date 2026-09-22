@@ -42,6 +42,7 @@ SEALED_OPTIONAL_ARTIFACTS = (
     "result.json",
     "evaluation-runtime.json",
     "execution-metrics.json",
+    "terminal-timing.json",
     "control-events.jsonl",
     "control-intents.jsonl",
     "job-binding.json",
