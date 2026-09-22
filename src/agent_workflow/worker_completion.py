@@ -337,6 +337,44 @@ def _load_verification_cache(path: Path) -> dict[str, Any]:
     return value
 
 
+def _cache_entry_reusable(
+    settings: Settings,
+    *,
+    current_agent_run_id: str,
+    entry: dict[str, Any],
+) -> bool:
+    """Cross-run reuse requires the source run's sealed matching cache entry."""
+    source_run_id = entry.get("source_agent_run_id")
+    if source_run_id == current_agent_run_id:
+        return True
+    if not isinstance(source_run_id, str) or not source_run_id:
+        return False
+    try:
+        validate_id(source_run_id, "source Agent Run ID")
+        source_dir = run_dir(settings, source_run_id)
+        source_paths = AgentRunPaths(source_dir)
+        if not source_paths.final_receipt.is_file() or not source_paths.verification_cache.is_file():
+            return False
+        from .receipts import verify_seal_details
+
+        receipt, _ = verify_seal_details(source_dir)
+        if not any(
+            isinstance(item, dict) and item.get("path") == "verification-cache.json"
+            for item in receipt.get("artifacts", [])
+        ):
+            return False
+        source_cache = _load_verification_cache(source_paths.verification_cache)
+        return any(
+            isinstance(item, dict)
+            and item.get("key") == entry.get("key")
+            and item.get("workspace_sha256") == entry.get("workspace_sha256")
+            and item.get("record") == entry.get("record")
+            for item in source_cache.get("entries", [])
+        )
+    except Exception:
+        return False
+
+
 def verify_command(
     settings: Settings,
     agent_run_id: str,
@@ -375,6 +413,11 @@ def verify_command(
             and item.get("workspace_sha256") == workspace_sha256
             and isinstance(item.get("record"), dict)
             and item["record"].get("exit_code") == 0
+            and _cache_entry_reusable(
+                settings,
+                current_agent_run_id=agent_run_id,
+                entry=item,
+            )
         ),
         None,
     )
