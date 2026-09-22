@@ -192,14 +192,27 @@ Override any checkout explicitly with `--contracts-source`,
 A normal full-stack run first updates all five source repositories with
 `git pull --ff-only`. The helper fails closed on dirty checkouts, detached
 HEADs, missing upstreams, or divergence; it never switches branches, resets,
-cleans, or stashes. Agent-Workflow itself is pulled last and the installer then
-re-execs the freshly pulled script before version checks/builds.
+cleans, stashes, rewrites remotes, or writes Git credential configuration.
+Agent-Workflow itself is pulled last and the installer then re-execs the freshly
+pulled script before version checks/builds.
+
+For GitHub HTTPS remotes, pull authentication is **non-persistent by default**.
+The helper disables the configured Git credential helper for that command and
+uses a one-shot token from `GH_TOKEN`/`GITHUB_TOKEN` or read-only
+`gh auth token`. This keeps build/install automation from prompting through or
+mutating Git Credential Manager. SSH/local remotes continue to use their normal
+transport. If an environment intentionally relies on its configured Git
+credential helper, opt in explicitly with `--allow-credential-helper`.
 
 Useful update modes:
 
 ```bash
-# Update all stack repositories and exit.
+# Update all stack repositories and exit, without persistent GitHub credential-helper use.
 bash scripts/build-install-all.sh --pull-only
+
+# Compatibility escape hatch for an environment that intentionally relies on
+# its configured Git credential helper.
+bash scripts/build-install-all.sh --pull-only --allow-credential-helper
 
 # Build the exact checked-out source without Git/network mutation.
 bash scripts/build-install-all.sh --no-pull --venv /path/to/.venv
