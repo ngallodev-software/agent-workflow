@@ -23,6 +23,7 @@ BOOTSTRAP_BUILD=1
 NO_PULL=0
 PULL_ONLY=0
 ALLOW_DIRTY_PULL=0
+ALLOW_CREDENTIAL_HELPER=0
 
 usage() {
   cat <<'USAGE'
@@ -41,6 +42,7 @@ Options:
   --no-pull
   --pull-only
   --allow-dirty-pull
+  --allow-credential-helper
   --no-bootstrap-build
   -h, --help
 
@@ -58,9 +60,12 @@ Required versions:
   agent-workflow-benchmark          0.3.0
   typesafe-sdk                      0.6.0
 
-Normal build/install runs first fast-forward every stack repository with
-scripts/git-pull-all.sh, then re-exec the freshly pulled installer. Use
---no-pull for offline/reproducible builds. --verify-only never mutates Git
+Normal build/install first fast-forwards every stack repository with
+scripts/git-pull-all.sh, then re-execs the freshly pulled installer. GitHub
+HTTPS authentication is non-persistent by default: the pull helper disables
+credential helpers and uses GH_TOKEN/GITHUB_TOKEN or read-only gh auth state.
+Use --allow-credential-helper only as an explicit compatibility escape hatch.
+Use --no-pull for offline/reproducible builds. --verify-only never mutates Git
 repositories. --pull-only updates repositories and exits before venv/key checks.
 
 The script never creates a venv, never uses pip --user, and never installs
@@ -95,6 +100,7 @@ while [[ $# -gt 0 ]]; do
     --no-pull) NO_PULL=1 ;;
     --pull-only) PULL_ONLY=1 ;;
     --allow-dirty-pull) ALLOW_DIRTY_PULL=1 ;;
+    --allow-credential-helper) ALLOW_CREDENTIAL_HELPER=1 ;;
     --no-bootstrap-build) BOOTSTRAP_BUILD=0 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown option: $1" >&2; usage >&2; exit 2 ;;
@@ -124,6 +130,9 @@ if [[ "$PULL_ONLY" -eq 1 || "$NO_PULL" -eq 0 ]]; then
   )
   if [[ "$ALLOW_DIRTY_PULL" -eq 1 ]]; then
     pull_args+=(--allow-dirty)
+  fi
+  if [[ "$ALLOW_CREDENTIAL_HELPER" -eq 1 ]]; then
+    pull_args+=(--allow-credential-helper)
   fi
   bash "$ROOT/scripts/git-pull-all.sh" "${pull_args[@]}"
   if [[ "$PULL_ONLY" -eq 1 ]]; then
