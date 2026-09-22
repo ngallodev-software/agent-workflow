@@ -8,7 +8,7 @@ EXPECTED_CONTRACTS_VERSION="0.2.1"
 EXPECTED_AGENT_WORKFLOW_VERSION="0.11.5"
 EXPECTED_COMPARATIVE_EVAL_VERSION="0.1.0"
 EXPECTED_SPECGEN_VERSION="0.2.4"
-EXPECTED_BENCHMARK_VERSION="0.2.8"
+EXPECTED_BENCHMARK_VERSION="0.2.9"
 EXPECTED_TYPESAFE_VERSION="0.6.0"
 
 VENV_ARG=""
@@ -47,7 +47,7 @@ Required versions:
   agent-workflow                    0.11.5
   agent-workflow-comparative-eval   0.1.0
   specgen                           0.2.4
-  agent-workflow-benchmark          0.2.8
+  agent-workflow-benchmark          0.2.9
   typesafe-sdk                      0.6.0
 
 The script never creates a venv, never uses pip --user, and never installs
@@ -235,7 +235,7 @@ expected = {
     "agent-workflow": "0.11.5",
     "agent-workflow-comparative-eval": "0.1.0",
     "specgen": "0.2.4",
-    "agent-workflow-benchmark": "0.2.8",
+    "agent-workflow-benchmark": "0.2.9",
     "typesafe-sdk": "0.6.0",
 }
 for name, version in expected.items():
