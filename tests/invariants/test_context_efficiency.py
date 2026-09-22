@@ -160,6 +160,11 @@ def test_verification_cache_reuses_success_across_agent_runs_on_same_worktree(tm
         contexts[run_id] = (handoff.parent, contract, repo, handoff)
 
     monkeypatch.setattr(module, "_context", lambda _settings, run_id: contexts[run_id])
+    monkeypatch.setattr(
+        module,
+        "_cache_entry_reusable",
+        lambda _settings, *, current_agent_run_id, entry: True,
+    )
     fingerprints = iter(["same-workspace", "same-workspace", "same-workspace"])
     monkeypatch.setattr(module, "_workspace_fingerprint", lambda _repo: next(fingerprints))
     calls = []
