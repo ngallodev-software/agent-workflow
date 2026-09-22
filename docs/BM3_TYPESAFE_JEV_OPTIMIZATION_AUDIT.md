@@ -324,7 +324,9 @@ The combination is intended to answer:
 
 ## TypeSafe audit requirements for BM3
 
-For each semantic call, retain private redacted audit evidence for:
+BM3 must not add TypeSafe routing work to only the Agent-Workflow treatment arm. The paired comparison pins executor/model/class for runtime comparability, so the current scheduler routing seam is qualified separately **before** paired execution. The benchmark runner exercises `advise_routing_with_policy()` on the three exported phase prompts, keeps deterministic control applied in comparative mode, records a separate semantic-qualification receipt, and requires zero additional TypeSafe calls during the paired treatment.
+
+For each pre-treatment semantic qualification call, retain private redacted audit evidence for:
 
 - exact projected state;
 - exact Choice/Noul/Score question definitions;
@@ -366,7 +368,7 @@ This is intentionally narrower than Round 2. It allows the study to distinguish:
 - prompt-discipline cost;
 - coding-model execution cost;
 - host lifecycle cost;
-- bounded semantic-decision cost;
+- bounded semantic-decision cost measured outside the treatment;
 - machine quality outcome.
 
 A development run with one repetition remains descriptive. It is useful for diagnosis and qualification, not a generalized product-performance claim.
