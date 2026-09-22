@@ -381,7 +381,7 @@ def _write_launch_prompt(
         context.extend(["", "## Operator retry context", retry_context.strip()])
     if interactive:
         context.append(
-            "- Apply durable steering only after acknowledgement."
+            "- Apply durable steering only after you acknowledge a steer message ID; durable acknowledgement remains evidence."
             if steering_adapter != "unsupported"
             else "- No evidence-capable steering adapter is available; never wait for input when authorization is required."
         )
