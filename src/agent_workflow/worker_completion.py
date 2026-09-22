@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import stat
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -231,6 +233,65 @@ def _digest_text(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8", errors="replace")).hexdigest()
 
 
+def _workspace_fingerprint(workdir: Path) -> str:
+    """Hash HEAD plus tracked/untracked non-ignored working-tree objects."""
+    policy = EnvironmentPolicy(unsafe_inherit=True, git_config_policy="operator")
+    head = run(["git", "-C", str(workdir), "rev-parse", "HEAD"], environment=policy)
+    listed = run(
+        ["git", "-C", str(workdir), "ls-files", "-co", "--exclude-standard", "-z"],
+        environment=policy,
+    )
+    status_value = run(
+        ["git", "-C", str(workdir), "status", "--porcelain=v1", "-z", "--untracked-files=all"],
+        environment=policy,
+    )
+    digest = hashlib.sha256()
+    digest.update(str(head.stdout).strip().encode("utf-8", errors="surrogateescape"))
+    digest.update(b"\0status\0")
+    digest.update(str(status_value.stdout).encode("utf-8", errors="surrogateescape"))
+    for relative in sorted({item for item in str(listed.stdout).split("\0") if item}):
+        digest.update(b"\0path\0")
+        digest.update(relative.encode("utf-8", errors="surrogateescape"))
+        path = workdir / relative
+        try:
+            info = os.lstat(path)
+        except FileNotFoundError:
+            digest.update(b"\0missing")
+            continue
+        digest.update(f"\0mode:{stat.S_IMODE(info.st_mode):o}\0".encode())
+        if stat.S_ISLNK(info.st_mode):
+            digest.update(b"symlink\0")
+            digest.update(os.readlink(path).encode("utf-8", errors="surrogateescape"))
+        elif stat.S_ISREG(info.st_mode):
+            digest.update(b"file\0")
+            digest.update(sha256_file(path).encode())
+        else:
+            digest.update(f"type:{stat.S_IFMT(info.st_mode)}".encode())
+    return digest.hexdigest()
+
+
+def _verification_key(command: list[str], cwd: Path) -> str:
+    payload = json.dumps(
+        {"argv": command, "cwd": str(cwd)}, sort_keys=True, separators=(",", ":")
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _load_verification_cache(path: Path) -> dict[str, Any]:
+    empty = {"schema": "agent-workflow/verification-cache/v1", "entries": []}
+    if not path.is_file():
+        return empty
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return empty
+    if not isinstance(value, dict) or value.get("schema") != empty["schema"]:
+        return empty
+    if not isinstance(value.get("entries"), list):
+        value["entries"] = []
+    return value
+
+
 def verify_command(
     settings: Settings,
     agent_run_id: str,
@@ -239,17 +300,11 @@ def verify_command(
     cwd: Path | None = None,
     timeout_seconds: float | None = None,
 ) -> dict[str, Any]:
-    """Execute a verification command and record its observed result.
-
-    The command result is observed by Agent-Workflow, never supplied by the
-    worker. Re-running the same argv/cwd replaces its prior final receipt so a
-    corrected successful verification can become the canonical completion
-    receipt without erasing the fact that the worker had to retry from logs.
-    """
+    """Observe verification, reusing only an unchanged prior successful receipt."""
     command = [str(item) for item in argv]
     if not command or any(not item for item in command):
         raise WorkflowError("verification command must contain non-empty argv values")
-    _, contract, workdir, handoff = _context(settings, agent_run_id)
+    state_dir, contract, workdir, handoff = _context(settings, agent_run_id)
     draft = _load_draft(handoff, contract)
     _require_open(draft)
     selected_cwd = (cwd or workdir).resolve()
@@ -259,6 +314,42 @@ def verify_command(
         raise WorkflowError("verification cwd must stay inside the Agent Run worktree") from exc
     if not selected_cwd.is_dir():
         raise WorkflowError(f"verification cwd is not a directory: {selected_cwd}")
+
+    cache_path = AgentRunPaths(state_dir).verification_cache
+    cache = _load_verification_cache(cache_path)
+    cache_key = _verification_key(command, selected_cwd)
+    workspace_sha256 = _workspace_fingerprint(workdir)
+    cached = next(
+        (
+            item
+            for item in cache["entries"]
+            if isinstance(item, dict)
+            and item.get("key") == cache_key
+            and item.get("workspace_sha256") == workspace_sha256
+            and isinstance(item.get("record"), dict)
+            and item["record"].get("exit_code") == 0
+        ),
+        None,
+    )
+    if cached is not None:
+        record = dict(cached["record"])
+        key = (tuple(record["argv"]), record["cwd"])
+        draft["commands"] = [
+            item
+            for item in draft.get("commands", [])
+            if (tuple(item.get("argv", [])), item.get("cwd")) != key
+        ] + [record]
+        _save_draft(handoff, draft)
+        return {
+            "agent_run_id": agent_run_id,
+            "command": record,
+            "ok": True,
+            "stdout": "",
+            "stderr": "",
+            "reused": True,
+            "workspace_sha256": workspace_sha256,
+        }
+
     result = run(
         command,
         cwd=selected_cwd,
@@ -279,22 +370,39 @@ def verify_command(
         "receipt": receipt,
     }
     key = (tuple(record["argv"]), record["cwd"])
-    commands = [
+    draft["commands"] = [
         item
         for item in draft.get("commands", [])
         if (tuple(item.get("argv", [])), item.get("cwd")) != key
-    ]
-    commands.append(record)
-    draft["commands"] = commands
+    ] + [record]
     _save_draft(handoff, draft)
+
+    entries = [
+        item
+        for item in cache["entries"]
+        if not (isinstance(item, dict) and item.get("key") == cache_key)
+    ]
+    post_fingerprint = _workspace_fingerprint(workdir)
+    if result.returncode == 0:
+        entries.append(
+            {
+                "key": cache_key,
+                "workspace_sha256": post_fingerprint,
+                "record": record,
+                "recorded_at": utc_now(),
+            }
+        )
+    cache["entries"] = entries
+    atomic_write_json(cache_path, cache)
     return {
         "agent_run_id": agent_run_id,
         "command": record,
         "ok": result.returncode == 0,
         "stdout": stdout,
         "stderr": stderr,
+        "reused": False,
+        "workspace_sha256": post_fingerprint,
     }
-
 
 def _changed_files(workdir: Path, base_revision: str | None, head_revision: str) -> list[str]:
     if not base_revision:
