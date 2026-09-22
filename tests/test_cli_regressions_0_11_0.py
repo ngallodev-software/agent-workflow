@@ -326,14 +326,13 @@ def test_launch_prompt_records_dirty_authorization_retry_context_and_completion_
         retry_context="Use pass/fail/not_verified and preserve the approved baseline drift.",
     )
     text = launch.read_text(encoding="utf-8")
-    assert "Operator-approved source drift" in text
-    assert "do not mark the task blocked merely because the baseline is dirty" in text
+    assert "Operator-approved dirty baseline is authoritative" in text
+    assert "preserve unrelated drift" in text
     assert "## Operator retry context" in text
-    assert "pass|fail|not_verified" in text
+    assert "pass/fail/not_verified" in text
     assert "agent complete AGENT_RUN_ID" in text
-    assert "## Machine-readable acceptance criteria" in text
-    assert "`P0-AC-01`" in text
-    assert "rejects unknown IDs" in text
+    assert "declared criterion IDs: P0-AC-01, P0-AC-02" in text
+    assert "The deterministic protocol is used." not in text
 
 
 def test_review_prerequisite_accepts_verified_sealed_completion_without_lifecycle_receipt(
@@ -1119,3 +1118,57 @@ def test_terminal_outcome_collection_failure_is_not_process_success() -> None:
     assert outcome.status == "failed"
     assert outcome.exit_code == 1
     assert outcome.failure_category == "terminal_collection_failed"
+
+
+def test_launch_prompt_is_compact_and_keeps_runtime_guardrails(tmp_path: Path) -> None:
+    from agent_workflow.agent_runs import _write_launch_prompt
+
+    state = tmp_path / "run-compact"
+    state.mkdir()
+    handoff = state / "handoff"
+    handoff.mkdir()
+    (state / "prompt.md").write_text("# Ticket\n\nImplement the bounded change.\n", encoding="utf-8")
+    launch = _write_launch_prompt(
+        state,
+        agent_run_id="run-compact",
+        agent_name=None,
+        agent_class="implementation",
+        role_id="implementation",
+        role_digest="d" * 64,
+        role_instructions="Implement only the bounded task.",
+        tier=None,
+        retry_of=None,
+        created_at="2026-09-22T00:00:00+00:00",
+        prompt_source=state / "prompt.md",
+        prompt_pack_root=None,
+        handoff_dir=handoff,
+        criteria=({"id": "AC-01", "description": "Long description deliberately omitted"},),
+        command_artifacts={"role": "implementation"},
+    )
+    text = launch.read_text(encoding="utf-8")
+    injected = len(text.encode()) - len((state / "prompt.md").read_bytes())
+    assert injected < 2500
+    assert "AGENT_WORKFLOW_EXECUTION_CONTEXT" in text
+    assert "host-only authority" in text
+    assert "agent verify AGENT_RUN_ID" in text
+    assert "agent complete AGENT_RUN_ID" in text
+    assert "process exit and completion are not acceptance" in text
+    assert "Long description deliberately omitted" not in text
+    assert "# Ticket" in text
+
+
+def test_launch_command_card_is_common_path_but_json_catalog_stays_complete() -> None:
+    from agent_workflow.command_catalog import (
+        _PROFILE_COMMANDS,
+        filter_catalog,
+        render_launch_command_card,
+        runtime_command_catalog,
+    )
+
+    catalog = filter_catalog(runtime_command_catalog(include_plugins=False), "implementation")
+    card = render_launch_command_card(catalog, role="implementation")
+    assert "agent criterion" in card
+    assert "agent verify" in card
+    assert "agent complete" in card
+    assert "agent-run watch" not in card
+    assert {item["command"] for item in catalog["commands"]} == set(_PROFILE_COMMANDS["implementation"])
