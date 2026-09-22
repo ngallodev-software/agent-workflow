@@ -35,25 +35,10 @@ venv and venv-local XDG config/state/data. Use `source scripts/dev-env.sh off` t
 restore the exact prior shell environment.
 
 
-## Unified development stack install
-
-`build-install-all.sh` orchestrates the complete local Agent-Workflow development stack into one existing virtualenv. It builds local wheels for `specgen-agent-workflow-contracts`, `agent-workflow-comparative-eval`, and SpecGen-AW, delegates core installation to `build-install.sh`, delegates benchmark installation to its own qualified installer, writes one venv-local comparative/TypeSafe config, and verifies both external plugins plus direct Codex execution.
-
-The default sibling layout is:
-
-```text
-<parent>/
-├── agent-workflow/
-├── agent-workflow-spec-contracts/
-├── agent-workflow-comparative-eval/
-├── specgen-aw/
-└── agent-workflow-benchmark/
-```
-
-Run it from the Agent-Workflow checkout with `TYPESAFE_API_KEY` loaded:
-
-```bash
-bash scripts/build-install-all.sh --venv "$PWD/.venv"
-```
-
-The script never creates a virtualenv and never uses `pip --user`. Use `--verify-only` to audit an already installed stack without rebuilding or changing configuration.
+`build-install-all.sh` builds and installs the complete local Agent-Workflow
+development/benchmark stack into one existing shared virtualenv. It installs
+the contract library, Agent-Workflow, comparative-eval, SpecGen, and the
+benchmark plugin from local wheels, pins TypeSafe, writes an isolated
+comparative-mode config, and verifies both enabled plugins plus direct Codex
+execution. It never creates a venv, never uses `pip --user`, and never leaves
+the local projects editable.
