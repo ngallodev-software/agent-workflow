@@ -95,7 +95,7 @@ Recover from source, the immutable Agent Run contract, append-only journals, sea
 
 ## Specialized capabilities
 
-When semantic routing, TypeSafe, comparative decision evidence, or decision receipts are relevant, read `references/typesafe-semantic-routing.md`. Do not load that reference for ordinary deterministic lifecycle work.
+When semantic routing, TypeSafe, comparative decision evidence, decision receipts, or optimization of bounded decisions currently handled by a coding LLM are relevant, read `references/typesafe-semantic-routing.md`. Use TypeSafe/Jev for bounded semantic interpretation and finite choice/ranking/escalation where evidence supports it; keep lifecycle/authorization/verification/review/acceptance authority deterministic. Do not load that reference for ordinary deterministic lifecycle work.
 
 
 The primary lifecycle remains authoritative. Use specialized skills only for added contracts:
