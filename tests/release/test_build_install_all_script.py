@@ -72,6 +72,21 @@ def test_build_install_all_uses_required_dependency_order() -> None:
     assert positions == sorted(positions)
 
 
+def test_build_install_all_records_source_provenance() -> None:
+    text = SCRIPT.read_text(encoding="utf-8")
+    assert "write_source_provenance" in text
+    assert 'source-provenance.json' in text
+    assert 'agent-workflow/source-provenance/v1' in text
+    assert 'git", "-C", str(source), "rev-parse"' in text
+    assert 'git", "-C", str(source), "status"' in text
+    last_install = text.index(
+        'install_wheel "agent-workflow-benchmark" "$BENCHMARK_WHEEL"'
+    )
+    provenance_write = text.index("write_source_provenance", last_install)
+    final_verify = text.index("verify_stack", provenance_write)
+    assert last_install < provenance_write < final_verify
+
+
 def test_build_install_all_writes_comparative_plugin_config() -> None:
     text = SCRIPT.read_text(encoding="utf-8")
     assert 'enabled = ["agent-workflow-spec", "agent-workflow-benchmark"]' in text
