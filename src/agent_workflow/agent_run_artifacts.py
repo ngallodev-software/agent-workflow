@@ -121,6 +121,7 @@ def _write_runner(
         f"readonly AGENT_WORKFLOW_PROMPT_PACK_ROOT={shlex.quote(str(prompt_pack_root or ''))}\n"
         f"readonly AGENT_WORKFLOW_COMMAND_CATALOG={shlex.quote(str((handoff_dir or state_dir) / str((command_artifacts or {}).get('catalog_path', 'command-catalog.json'))))}\n"
         f"readonly AGENT_WORKFLOW_COMMAND_CARD={shlex.quote(str((handoff_dir or state_dir) / str((command_artifacts or {}).get('card_path', 'command-card.md'))))}\n"
+        f"readonly AGENT_WORKFLOW_EXECUTION_CONTEXT={shlex.quote(str((handoff_dir or state_dir) / 'executor-context.json'))}\n"
         f"readonly AGENT_WORKFLOW_CLI={shlex.quote(str(((command_artifacts or {}).get('cli_invocation') or ['agent-workflow'])[0]))}\n"
     )
     runner_text += (
@@ -128,7 +129,7 @@ def _write_runner(
         "AGENT_WORKFLOW_HANDOFF_DIR AGENT_WORKFLOW_PROMPT_PACK_ROOT "
         "AGENT_WORKFLOW_CONTROL_BRIDGE "
         "AGENT_WORKFLOW_COMPLETION_TEMPLATE AGENT_WORKFLOW_COMMAND_CATALOG "
-        "AGENT_WORKFLOW_COMMAND_CARD AGENT_WORKFLOW_CLI"
+        "AGENT_WORKFLOW_COMMAND_CARD AGENT_WORKFLOW_EXECUTION_CONTEXT AGENT_WORKFLOW_CLI"
         + "\n"
         + f"export PYTHONPATH={shlex.quote(str(source_root))}${{PYTHONPATH:+:$PYTHONPATH}}\n"
         + runner_command
