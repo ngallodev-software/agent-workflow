@@ -26,7 +26,7 @@ from .process import EnvironmentPolicy, run
 from .protocol_values import COMPLETION_RESULTS, CRITERION_RESULTS, REVIEW_DISPOSITIONS
 from .run_lifecycle import authoritative_execution_status
 from .state import run_dir
-from .util import atomic_write_json, sha256_file, utc_now, validate_id
+from .util import atomic_write_bytes, atomic_write_json, sha256_file, utc_now, validate_id
 
 DRAFT_SCHEMA = "agent-workflow/worker-completion-draft/v1"
 DRAFT_NAME = "completion-draft.json"
@@ -277,6 +277,51 @@ def _verification_key(command: list[str], cwd: Path) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def _shared_verification_cache_path(settings: Settings, workdir: Path) -> Path:
+    """Return a host-owned cache path shared by Agent Runs on one checkout."""
+    identity = hashlib.sha256(str(workdir.resolve()).encode("utf-8")).hexdigest()
+    root = settings.state_root / "verification-cache"
+    root.mkdir(parents=True, exist_ok=True)
+    return root / f"{identity}.json"
+
+
+def _write_verification_output(
+    state_dir: Path,
+    *,
+    cache_key: str,
+    workspace_sha256: str,
+    stdout: str,
+    stderr: str,
+) -> dict[str, Any]:
+    root = state_dir / "verification"
+    root.mkdir(parents=True, exist_ok=True)
+    stem = f"{cache_key[:16]}-{workspace_sha256[:16]}"
+    stdout_path = root / f"{stem}.stdout.log"
+    stderr_path = root / f"{stem}.stderr.log"
+    stdout_bytes = stdout.encode("utf-8", errors="replace")
+    stderr_bytes = stderr.encode("utf-8", errors="replace")
+    atomic_write_bytes(stdout_path, stdout_bytes)
+    atomic_write_bytes(stderr_path, stderr_bytes)
+    return {
+        "stdout": {
+            "path": stdout_path.relative_to(state_dir).as_posix(),
+            "sha256": hashlib.sha256(stdout_bytes).hexdigest(),
+            "bytes": len(stdout_bytes),
+        },
+        "stderr": {
+            "path": stderr_path.relative_to(state_dir).as_posix(),
+            "sha256": hashlib.sha256(stderr_bytes).hexdigest(),
+            "bytes": len(stderr_bytes),
+        },
+    }
+
+
+def _bounded_failure_preview(value: str, *, limit: int = 4096) -> str:
+    if len(value) <= limit:
+        return value
+    return "[truncated; durable full output retained]\n" + value[-limit:]
+
+
 def _load_verification_cache(path: Path) -> dict[str, Any]:
     empty = {"schema": "agent-workflow/verification-cache/v1", "entries": []}
     if not path.is_file():
@@ -317,12 +362,14 @@ def verify_command(
 
     cache_path = AgentRunPaths(state_dir).verification_cache
     cache = _load_verification_cache(cache_path)
+    shared_cache_path = _shared_verification_cache_path(settings, workdir)
+    shared_cache = _load_verification_cache(shared_cache_path)
     cache_key = _verification_key(command, selected_cwd)
     workspace_sha256 = _workspace_fingerprint(workdir)
     cached = next(
         (
             item
-            for item in cache["entries"]
+            for item in [*cache["entries"], *shared_cache["entries"]]
             if isinstance(item, dict)
             and item.get("key") == cache_key
             and item.get("workspace_sha256") == workspace_sha256
@@ -340,6 +387,19 @@ def verify_command(
             if (tuple(item.get("argv", [])), item.get("cwd")) != key
         ] + [record]
         _save_draft(handoff, draft)
+        source_run_id = str(cached.get("source_agent_run_id") or agent_run_id)
+        reused_entry = {
+            "key": cache_key,
+            "workspace_sha256": workspace_sha256,
+            "record": record,
+            "source_agent_run_id": source_run_id,
+            "reused_at": utc_now(),
+        }
+        cache["entries"] = [
+            item for item in cache["entries"]
+            if not (isinstance(item, dict) and item.get("key") == cache_key)
+        ] + [reused_entry]
+        atomic_write_json(cache_path, cache)
         return {
             "agent_run_id": agent_run_id,
             "command": record,
@@ -347,6 +407,7 @@ def verify_command(
             "stdout": "",
             "stderr": "",
             "reused": True,
+            "reused_from_agent_run_id": source_run_id,
             "workspace_sha256": workspace_sha256,
         }
 
@@ -359,9 +420,17 @@ def verify_command(
     )
     stdout = str(result.stdout)
     stderr = str(result.stderr)
+    post_fingerprint = _workspace_fingerprint(workdir)
+    output_refs = _write_verification_output(
+        state_dir,
+        cache_key=cache_key,
+        workspace_sha256=post_fingerprint,
+        stdout=stdout,
+        stderr=stderr,
+    )
     receipt = (
-        f"exit={result.returncode}; stdout_sha256={_digest_text(stdout)}; "
-        f"stderr_sha256={_digest_text(stderr)}"
+        f"exit={result.returncode}; workspace_sha256={post_fingerprint}; "
+        f"stdout_sha256={_digest_text(stdout)}; stderr_sha256={_digest_text(stderr)}"
     )
     record = {
         "argv": list(result.argv),
@@ -382,24 +451,36 @@ def verify_command(
         for item in cache["entries"]
         if not (isinstance(item, dict) and item.get("key") == cache_key)
     ]
-    post_fingerprint = _workspace_fingerprint(workdir)
     if result.returncode == 0:
-        entries.append(
-            {
-                "key": cache_key,
-                "workspace_sha256": post_fingerprint,
-                "record": record,
-                "recorded_at": utc_now(),
-            }
-        )
+        success_entry = {
+            "key": cache_key,
+            "workspace_sha256": post_fingerprint,
+            "record": record,
+            "source_agent_run_id": agent_run_id,
+            "output_refs": output_refs,
+            "recorded_at": utc_now(),
+        }
+        entries.append(success_entry)
+        shared_entries = [
+            item for item in shared_cache["entries"]
+            if not (
+                isinstance(item, dict)
+                and item.get("key") == cache_key
+                and item.get("workspace_sha256") == post_fingerprint
+            )
+        ]
+        shared_entries.append(success_entry)
+        shared_cache["entries"] = shared_entries
+        atomic_write_json(shared_cache_path, shared_cache)
     cache["entries"] = entries
     atomic_write_json(cache_path, cache)
     return {
         "agent_run_id": agent_run_id,
         "command": record,
         "ok": result.returncode == 0,
-        "stdout": stdout,
-        "stderr": stderr,
+        "stdout": "" if result.returncode == 0 else _bounded_failure_preview(stdout),
+        "stderr": "" if result.returncode == 0 else _bounded_failure_preview(stderr),
+        "output_refs": output_refs,
         "reused": False,
         "workspace_sha256": post_fingerprint,
     }
