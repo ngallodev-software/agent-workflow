@@ -41,6 +41,7 @@ def test_build_install_all_help_documents_stack_and_sources() -> None:
         "--no-pull",
         "--pull-only",
         "--allow-dirty-pull",
+        "--allow-credential-helper",
     ):
         assert option in text
     for version in ("0.2.1", "0.11.6", "0.1.0", "0.2.5", "0.3.0", "0.6.0"):
@@ -151,3 +152,10 @@ def test_build_install_all_pulls_stack_before_build_and_reexecs() -> None:
 def test_build_install_all_verify_only_disables_pull() -> None:
     text = SCRIPT.read_text(encoding="utf-8")
     assert '--verify-only) VERIFY_ONLY=1; NO_PULL=1' in text
+
+
+def test_build_install_all_passes_credential_helper_opt_in_only() -> None:
+    text = SCRIPT.read_text(encoding="utf-8")
+    assert 'ALLOW_CREDENTIAL_HELPER=0' in text
+    assert 'pull_args+=(--allow-credential-helper)' in text
+    assert '--allow-credential-helper' in text
