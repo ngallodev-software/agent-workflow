@@ -219,6 +219,69 @@ check_source "$COMPARATIVE_EVAL_SOURCE" "agent-workflow-comparative-eval" "$EXPE
 check_source "$SPECGEN_SOURCE" "specgen" "$EXPECTED_SPECGEN_VERSION"
 check_source "$BENCHMARK_SOURCE" "agent-workflow-benchmark" "$EXPECTED_BENCHMARK_VERSION"
 
+write_source_provenance() {
+  local target="$VENV/share/agent-workflow/source-provenance.json"
+  mkdir -p "$(dirname "$target")"
+  "$PYTHON" - "$target" \
+    "specgen-agent-workflow-contracts" "$EXPECTED_CONTRACTS_VERSION" "$CONTRACTS_SOURCE" \
+    "agent-workflow" "$EXPECTED_AGENT_WORKFLOW_VERSION" "$ROOT" \
+    "agent-workflow-comparative-eval" "$EXPECTED_COMPARATIVE_EVAL_VERSION" "$COMPARATIVE_EVAL_SOURCE" \
+    "specgen" "$EXPECTED_SPECGEN_VERSION" "$SPECGEN_SOURCE" \
+    "agent-workflow-benchmark" "$EXPECTED_BENCHMARK_VERSION" "$BENCHMARK_SOURCE" <<'PY'
+from datetime import datetime, timezone
+from pathlib import Path
+import json
+import subprocess
+import sys
+import tempfile
+
+target = Path(sys.argv[1])
+raw = sys.argv[2:]
+if len(raw) % 3:
+    raise SystemExit("source provenance arguments must be name/version/path triples")
+
+components = {}
+for offset in range(0, len(raw), 3):
+    name, version, source_raw = raw[offset : offset + 3]
+    source = Path(source_raw).resolve()
+    revision = subprocess.run(
+        ["git", "-C", str(source), "rev-parse", "--verify", "HEAD"],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if revision.returncode != 0 or not revision.stdout.strip():
+        raise SystemExit(f"cannot resolve source revision for {name}: {source}")
+    status = subprocess.run(
+        ["git", "-C", str(source), "status", "--porcelain=v1", "--untracked-files=all"],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if status.returncode != 0:
+        raise SystemExit(f"cannot inspect source status for {name}: {source}")
+    components[name] = {
+        "version": version,
+        "revision": revision.stdout.strip(),
+        "dirty": bool(status.stdout.strip()),
+    }
+
+value = {
+    "schema": "agent-workflow/source-provenance/v1",
+    "recorded_at": datetime.now(timezone.utc).isoformat(),
+    "components": components,
+}
+with tempfile.NamedTemporaryFile(
+    "w", encoding="utf-8", dir=target.parent, prefix=target.name + ".", delete=False
+) as handle:
+    json.dump(value, handle, indent=2, sort_keys=True)
+    handle.write("\n")
+    temp = Path(handle.name)
+temp.replace(target)
+print(f"source provenance: {target}")
+PY
+}
+
 write_stack_config() {
   local target="$XDG_CONFIG_HOME/agent-workflow/config.toml"
   mkdir -p "$(dirname "$target")"
@@ -276,6 +339,31 @@ expected = {
     "agent-workflow-benchmark": "0.3.1",
     "typesafe-sdk": "0.6.0",
 }
+provenance_path = Path(os.sys.prefix) / "share" / "agent-workflow" / "source-provenance.json"
+if not provenance_path.is_file():
+    raise SystemExit(f"missing source provenance manifest: {provenance_path}")
+provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+if provenance.get("schema") != "agent-workflow/source-provenance/v1":
+    raise SystemExit(f"unexpected source provenance schema: {provenance.get('schema')}")
+local_expected = {
+    "specgen-agent-workflow-contracts": "0.2.1",
+    "agent-workflow": "0.11.6",
+    "agent-workflow-comparative-eval": "0.1.0",
+    "specgen": "0.2.5",
+    "agent-workflow-benchmark": "0.3.1",
+}
+for name, version in local_expected.items():
+    item = provenance.get("components", {}).get(name)
+    if not isinstance(item, dict):
+        raise SystemExit(f"missing source provenance component: {name}")
+    if item.get("version") != version:
+        raise SystemExit(f"{name} provenance version {item.get('version')}; expected {version}")
+    revision = item.get("revision")
+    if not isinstance(revision, str) or len(revision) not in {40, 64}:
+        raise SystemExit(f"{name} source revision is invalid: {revision!r}")
+    if not isinstance(item.get("dirty"), bool):
+        raise SystemExit(f"{name} dirty source flag is missing")
+
 for name, version in expected.items():
     try:
         observed = metadata.version(name)
@@ -414,6 +502,7 @@ install_wheel "agent-workflow-comparative-eval" "$COMPARATIVE_EVAL_WHEEL"
 install_wheel "specgen" "$SPECGEN_WHEEL"
 install_wheel "agent-workflow-benchmark" "$BENCHMARK_WHEEL"
 
+write_source_provenance
 write_stack_config
 verify_stack
 
