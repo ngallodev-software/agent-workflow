@@ -63,7 +63,7 @@ SEALED_OPTIONAL_ARTIFACTS = (
     "recovery-finalization.json",
     "external-worker-exit.json",
 )
-SEALED_OPTIONAL_TREES = ("assignments",)
+SEALED_OPTIONAL_TREES = ("assignments", "verification")
 
 
 @contextmanager
