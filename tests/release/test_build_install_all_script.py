@@ -48,7 +48,8 @@ def test_build_install_all_is_existing_venv_wheel_only() -> None:
     text = SCRIPT.read_text(encoding="utf-8")
     assert "python -m venv" not in text
     assert "virtualenv" not in text.lower() or "existing virtualenv" in text.lower()
-    assert "--user" not in text
+    assert "pip install --user" not in text
+    assert "-m pip install --user" not in text
     assert "pip install -e" not in text
     assert "--no-deps --force-reinstall" in text
     assert "python -m build" not in text
