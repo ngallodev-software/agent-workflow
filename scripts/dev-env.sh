@@ -57,19 +57,59 @@ _aw_dev_env_restore_var() {
 }
 
 _aw_dev_env_seed_config() {
-  local source_config="$1" target_config="$2" venv="$3"
+  local source_config="$1" target_config="$2" venv="$3" python
+  if [[ -x "$venv/bin/python" ]]; then
+    python="$venv/bin/python"
+  else
+    python="$venv/bin/python3"
+  fi
   mkdir -p "$(dirname "$target_config")"
-  python3 - "$source_config" "$target_config" "$venv" <<'PY'
+  "$python" - "$source_config" "$target_config" "$venv" <<'PY'
 from pathlib import Path
+from datetime import datetime, timezone
 import json
+import os
 import re
 import sys
+import tempfile
+import tomllib
 
 source = Path(sys.argv[1])
 target = Path(sys.argv[2])
 venv = Path(sys.argv[3]).resolve()
-input_path = target if target.is_file() else source
-text = input_path.read_text(encoding="utf-8") if input_path.is_file() else "schema_version = 1\n"
+
+def read_valid(path: Path) -> tuple[str | None, str | None]:
+    if not path.is_file():
+        return None, None
+    text = path.read_text(encoding="utf-8")
+    try:
+        tomllib.loads(text)
+    except tomllib.TOMLDecodeError as exc:
+        return text, str(exc)
+    return text, None
+
+target_text, target_error = read_valid(target)
+source_text, source_error = read_valid(source)
+
+backup = None
+if target_text is not None and target_error is None:
+    text = target_text
+elif source_text is not None and source_error is None:
+    if target_text is not None and target_error is not None:
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        backup = target.with_name(f"{target.name}.invalid-{stamp}")
+        backup.write_text(target_text, encoding="utf-8")
+    text = source_text
+elif target_text is None and source_text is None:
+    text = "schema_version = 1\n"
+else:
+    details = []
+    if target_error is not None:
+        details.append(f"target {target}: {target_error}")
+    if source_error is not None:
+        details.append(f"source {source}: {source_error}")
+    raise SystemExit("cannot seed development config from valid TOML; " + "; ".join(details))
+
 worktree = json.dumps(str(venv / ".xdg" / "data" / "agent-workflow" / "worktrees"))
 state = json.dumps(str(venv / ".xdg" / "state" / "agent-workflow"))
 
@@ -112,7 +152,27 @@ if not saw_paths:
         out.append("")
     out.extend(["[paths]", f"worktree_root = {worktree}", f"state_root = {state}"])
 
-target.write_text("\n".join(out).rstrip() + "\n", encoding="utf-8")
+rendered = "\n".join(out).rstrip() + "\n"
+try:
+    tomllib.loads(rendered)
+except tomllib.TOMLDecodeError as exc:
+    raise SystemExit(f"refusing to write invalid development config: {exc}") from exc
+
+target.parent.mkdir(parents=True, exist_ok=True)
+with tempfile.NamedTemporaryFile(
+    "w",
+    encoding="utf-8",
+    dir=target.parent,
+    prefix=target.name + ".",
+    suffix=".tmp",
+    delete=False,
+) as handle:
+    handle.write(rendered)
+    temp = Path(handle.name)
+os.replace(temp, target)
+
+if backup is not None:
+    print(f"recovered invalid development config; backup preserved at {backup}", file=sys.stderr)
 PY
 }
 
