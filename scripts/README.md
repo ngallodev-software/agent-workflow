@@ -33,3 +33,12 @@ Use `python3 scripts/bump-version.py --bump patch|minor|major` for active versio
 `source scripts/dev-env.sh on` to bind the current shell to the repository/shared
 venv and venv-local XDG config/state/data. Use `source scripts/dev-env.sh off` to
 restore the exact prior shell environment.
+
+
+`build-install-all.sh` builds and installs the complete local Agent-Workflow
+development/benchmark stack into one existing shared virtualenv. It installs
+the contract library, Agent-Workflow, comparative-eval, SpecGen, and the
+benchmark plugin from local wheels, pins TypeSafe, writes an isolated
+comparative-mode config, and verifies both enabled plugins plus direct Codex
+execution. It never creates a venv, never uses `pip --user`, and never leaves
+the local projects editable.
