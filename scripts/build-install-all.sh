@@ -329,7 +329,7 @@ verify_stack() {
   "$PYTHON" - <<'PY'
 from importlib import metadata
 from pathlib import Path
-import json, os, shutil
+import json, os, shutil, sys
 
 expected = {
     "specgen-agent-workflow-contracts": "0.2.1",
@@ -339,7 +339,7 @@ expected = {
     "agent-workflow-benchmark": "0.3.1",
     "typesafe-sdk": "0.6.0",
 }
-provenance_path = Path(os.sys.prefix) / "share" / "agent-workflow" / "source-provenance.json"
+provenance_path = Path(sys.prefix) / "share" / "agent-workflow" / "source-provenance.json"
 if not provenance_path.is_file():
     raise SystemExit(f"missing source provenance manifest: {provenance_path}")
 provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
