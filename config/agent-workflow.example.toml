@@ -39,6 +39,7 @@ provider = "typesafe"
 [semantic.typesafe]
 # model = "jev-latest"
 # api_call_log = "~/.local/state/agent-workflow/typesafe-api-calls.jsonl"
+# AGENT_WORKFLOW_TYPESAFE_API_CALL_LOG overrides this path for a single process/run.
 
 [decision_policy]
 # deterministic makes no semantic network calls. Other built-in modes are
