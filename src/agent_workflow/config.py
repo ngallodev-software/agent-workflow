@@ -11,6 +11,8 @@ from .trust import inspect_path, require_trusted
 
 CONFIG_SCHEMA_VERSION = 1
 LUNA_MODEL = "gpt-6-luna"
+HISTORICAL_LUNA_MODEL = "gpt-5.6-luna"
+CODEX_MODELS = (LUNA_MODEL, HISTORICAL_LUNA_MODEL)
 LUNA_REASONING_EFFORTS = ("low", "medium", "high")
 
 
@@ -140,7 +142,7 @@ def defaults(path: Path | None = None) -> Settings:
         executor_policies={
             "codex": ExecutorPolicy(
                 interactive_command=["codex"],
-                models=(LUNA_MODEL,),
+                models=CODEX_MODELS,
                 default_model=LUNA_MODEL,
                 interactive_permission_args=("--ask-for-approval", "on-request"),
                 reasoning_effort="medium",
@@ -159,7 +161,7 @@ def defaults(path: Path | None = None) -> Settings:
                 interactive=False,
                 default_executor="claude",
                 default_model="haiku",
-                allowed_models={"claude": ("haiku",), "codex": (LUNA_MODEL,)},
+                allowed_models={"claude": ("haiku",), "codex": CODEX_MODELS},
             ),
             "review": AgentClassPolicy(
                 interactive=False,
@@ -167,7 +169,7 @@ def defaults(path: Path | None = None) -> Settings:
                 default_model=LUNA_MODEL,
                 allowed_models={
                     "claude": ("haiku", "sonnet"),
-                    "codex": (LUNA_MODEL,),
+                    "codex": CODEX_MODELS,
                 },
             ),
             "implementation": AgentClassPolicy(
@@ -176,7 +178,7 @@ def defaults(path: Path | None = None) -> Settings:
                 default_model=LUNA_MODEL,
                 allowed_models={
                     "claude": ("haiku", "sonnet"),
-                    "codex": (LUNA_MODEL,),
+                    "codex": CODEX_MODELS,
                 },
             ),
         },
