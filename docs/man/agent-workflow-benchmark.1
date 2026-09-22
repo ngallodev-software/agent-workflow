@@ -49,13 +49,13 @@ bash scripts/run-bm3-structured.sh --help
 bash scripts/run-bm3-structured.sh --root /path/to/bm3 --repetitions 1
 .fi
 .PP
-The helper performs readiness, paired planning/execution, machine scoring, descriptive reporting, TypeSafe request/response audit capture, granular timing capture, and self-contained evidence collection.
+The helper performs a pre-treatment TypeSafe/Jev routing qualification, then readiness, paired planning/execution, machine scoring, descriptive reporting, granular timing capture, and self-contained evidence collection. The paired treatments are expected to emit zero additional TypeSafe calls.
 .SH TIMING
 Per-phase evidence preserves wall time, executor-active time, provider usage, and a timing_breakdown. The Agent-Workflow arm additionally records delegate-call time, terminal wait, benchmark evidence-copy time, derived host overhead, and copied terminal-pipeline section timings.
 .PP
 Each Agent-Workflow run may contain sealed terminal-timing.json with host-side timing for completion collection, assignment close, task-result collection, post-policy collection, patch capture, provider-evidence normalization, policy evaluation, provenance update, final-status writing, execution-evidence generation, and the pre-seal terminal total.
 .SH TYPESAFE AUDIT
-When AGENT_WORKFLOW_TYPESAFE_API_CALL_LOG or semantic.typesafe.api_call_log is configured, Agent-Workflow writes redacted agent-workflow/typesafe-api-call/v2 JSONL. BM3 stores this under its artifact root. Raw semantic request/response bodies are private evidence and must not be published; public summaries should use counts, durations, hashes, primitive coverage, disagreement, and calibration statistics.
+BM3 first exercises the real comparative routing boundary on the exported phase prompts and writes typesafe-semantic-qualification.json plus redacted agent-workflow/typesafe-api-call/v2 JSONL under its artifact root. This qualification occurs outside both benchmark arms; treatment execution must add zero semantic-routing calls. Raw semantic request/response bodies are private evidence and must not be published; public summaries should use counts, durations, hashes, primitive coverage, disagreement, and calibration statistics.
 .SH EVIDENCE
 Benchmark 0.2.9 and later archive the smoke root, coordinator run, and referenced treatment arm evidence roots so arm.json, provider telemetry, Git evidence, scores, and phase receipts remain self-contained. The collector refuses an archive if the active TYPESAFE_API_KEY value appears in collected files.
 .SH INTERPRETATION
