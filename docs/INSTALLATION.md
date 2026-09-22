@@ -121,11 +121,11 @@ For external-plugin rollback, disable the affected plugin in `[plugins].enabled`
 
 ## Tagged bootstrap install
 
-For a published release, pin the release explicitly. For version `0.11.2`:
+For a published release, pin the release explicitly. For version `0.11.4`:
 
 ```bash
-curl -fsSL https://github.com/ngallodev-software/agent-workflow/releases/download/v0.11.2/install.sh | \
-  sh -s -- --version v0.11.2
+curl -fsSL https://github.com/ngallodev-software/agent-workflow/releases/download/v0.11.4/install.sh | \
+  sh -s -- --version v0.11.4
 ```
 
 The version is intentional: the 0.9 line builds on the breaking Agent Run/headless-core rewrite and does not carry terminal-host compatibility.
@@ -164,3 +164,56 @@ source scripts/dev-env.sh off
 
 The benchmark smoke runner performs the same isolation in its child process, so its
 XDG changes disappear automatically when the smoke script exits.
+
+
+## Complete shared development stack
+
+For the benchmark/SpecGen development environment, install the entire qualified
+stack into one existing virtualenv:
+
+```bash
+export TYPESAFE_API_KEY='...'
+bash scripts/build-install-all.sh --venv /path/to/agent-workflow/.venv
+```
+
+Default sibling source layout:
+
+```text
+../agent-workflow-spec-contracts
+../agent-workflow-comparative-eval
+../specgen-aw
+../agent-workflow-benchmark
+```
+
+Override any checkout explicitly with `--contracts-source`,
+`--comparative-eval-source`, `--specgen-source`, or
+`--benchmark-source`.
+
+The installer builds local wheels and installs this exact stack:
+
+```text
+specgen-agent-workflow-contracts  0.2.1
+agent-workflow                    0.11.4
+agent-workflow-comparative-eval   0.1.0
+specgen                           0.2.3
+agent-workflow-benchmark          0.2.7
+typesafe-sdk                      0.6.0
+```
+
+The generated venv-local config enables `agent-workflow-spec` and
+`agent-workflow-benchmark`, selects the built-in TypeSafe semantic provider,
+and sets `decision_policy.mode = "comparative"`.
+`agent-workflow-comparative-eval` is a shared library and is intentionally not
+listed as a plugin.
+
+The verification gate requires `TYPESAFE_API_KEY`, a compatible comparative
+runtime, both plugins loaded, SpecGen targeting Agent-Workflow 0.11.4,
+`pip check` success, and direct `codex` execution rather than the obsolete
+`agent-workflow-codex` wrapper.
+
+Audit the already-installed stack without rebuilding:
+
+```bash
+export TYPESAFE_API_KEY='...'
+bash scripts/build-install-all.sh --verify-only --venv /path/to/.venv
+```
