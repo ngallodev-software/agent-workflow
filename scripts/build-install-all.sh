@@ -5,10 +5,10 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PARENT="$(dirname "$ROOT")"
 
 EXPECTED_CONTRACTS_VERSION="0.2.1"
-EXPECTED_AGENT_WORKFLOW_VERSION="0.11.4"
+EXPECTED_AGENT_WORKFLOW_VERSION="0.11.5"
 EXPECTED_COMPARATIVE_EVAL_VERSION="0.1.0"
-EXPECTED_SPECGEN_VERSION="0.2.3"
-EXPECTED_BENCHMARK_VERSION="0.2.7"
+EXPECTED_SPECGEN_VERSION="0.2.4"
+EXPECTED_BENCHMARK_VERSION="0.2.8"
 EXPECTED_TYPESAFE_VERSION="0.6.0"
 
 VENV_ARG=""
@@ -44,10 +44,10 @@ Default sibling checkout layout:
 
 Required versions:
   specgen-agent-workflow-contracts  0.2.1
-  agent-workflow                    0.11.4
+  agent-workflow                    0.11.5
   agent-workflow-comparative-eval   0.1.0
-  specgen                           0.2.3
-  agent-workflow-benchmark          0.2.7
+  specgen                           0.2.4
+  agent-workflow-benchmark          0.2.8
   typesafe-sdk                      0.6.0
 
 The script never creates a venv, never uses pip --user, and never installs
@@ -203,6 +203,9 @@ rendered = "\n".join([
     "[semantic]",
     'provider = "typesafe"',
     "",
+    "[semantic.typesafe]",
+    f"api_call_log = {q(str(venv / '.xdg' / 'state' / 'agent-workflow' / 'typesafe-api-calls.jsonl'))}",
+    "",
     "[decision_policy]",
     'mode = "comparative"',
     'profile = "default"',
@@ -229,10 +232,10 @@ import json, os, shutil
 
 expected = {
     "specgen-agent-workflow-contracts": "0.2.1",
-    "agent-workflow": "0.11.4",
+    "agent-workflow": "0.11.5",
     "agent-workflow-comparative-eval": "0.1.0",
-    "specgen": "0.2.3",
-    "agent-workflow-benchmark": "0.2.7",
+    "specgen": "0.2.4",
+    "agent-workflow-benchmark": "0.2.8",
     "typesafe-sdk": "0.6.0",
 }
 for name, version in expected.items():
@@ -278,8 +281,8 @@ loaded = tuple(item.descriptor.name for item in registry.loaded)
 if loaded != ("agent-workflow-spec", "agent-workflow-benchmark"):
     raise SystemExit(f"unexpected loaded plugins: {loaded!r}")
 
-if AW_VERSION != "0.11.4":
-    raise SystemExit(f"SpecGen target {AW_VERSION}; expected 0.11.4")
+if AW_VERSION != "0.11.5":
+    raise SystemExit(f"SpecGen target {AW_VERSION}; expected 0.11.5")
 
 codex = shutil.which("codex")
 if not codex:
