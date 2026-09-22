@@ -105,7 +105,7 @@ bash scripts/run-bm3-structured.sh --help
 bash scripts/run-bm3-structured.sh --root /path/to/bm3 --repetitions 1
 ```
 
-The helper runs readiness, planning, paired execution, machine scoring, descriptive reporting, TypeSafe audit capture, granular timing capture, and self-contained evidence collection. One development repetition is diagnostic only and cannot establish a generalized treatment effect.
+The helper first runs a separate pre-treatment TypeSafe/Jev routing qualification over the three phase prompts, then runs readiness, planning, paired execution, machine scoring, descriptive reporting, granular timing capture, and self-contained evidence collection. The paired treatments intentionally emit no semantic-routing calls; the helper fails if additional TypeSafe audit records appear during treatment. One development repetition is diagnostic only and cannot establish a generalized treatment effect.
 
 See `docs/BM3_TYPESAFE_JEV_OPTIMIZATION_AUDIT.md` for the semantic-decision optimization questions BM3 is designed to answer.
 
@@ -278,7 +278,7 @@ bash scripts/run-bm3-structured.sh \
 
 The script requires Agent-Workflow 0.11.6, benchmark plugin 0.3.0, TypeSafe SDK 0.6.0, comparative mode, compatible comparative-eval, and an authenticated Codex subscription session.
 
-It also writes a private redacted `typesafe-api-audit.jsonl` so the exact semantic state/questions and returned evidence can be reviewed. Never publish the raw semantic request/response bodies; derive public counts, durations, hashes, primitive coverage, disagreement, and calibration summaries instead.
+Before paired execution it writes `typesafe-semantic-qualification.json` plus a private redacted `typesafe-api-audit.jsonl` by exercising the real comparative routing boundary on the exported phase prompts. This qualification is diagnostic and outside both treatment arms, so the exact semantic state/questions and returned evidence can be reviewed without changing treatment identity. Never publish the raw semantic request/response bodies; derive public counts, durations, hashes, primitive coverage, disagreement, and calibration summaries instead.
 
 ## Evidence, consolidation, and reproducibility
 
