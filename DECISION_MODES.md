@@ -41,10 +41,7 @@ Semantic transport failure, no-match, uncertainty, and policy rejection remain d
 
 ## Credential readiness
 
-When `decision_policy.mode` is `typesafe` or `comparative`, Agent-Workflow
-requires `TYPESAFE_API_KEY` to be present in the runtime environment before a
-semantic decision is executed. Missing credentials are treated as a configuration/
-readiness error rather than an ordinary semantic fallback.
+When `decision_policy.mode` is `typesafe` or `comparative`, Agent-Workflow requires `TYPESAFE_API_KEY` before every Agent Run is prepared and checks again immediately before a prepared headless run is started. Missing credentials are treated as a configuration/readiness error rather than an ordinary semantic fallback. Comparative mode performs the same two run-boundary checks for `agent-workflow-comparative-eval==0.1.0`.
 
 `agent-workflow doctor` reports TypeSafe SDK/key readiness when those modes are
 active. `comparative` mode additionally requires a compatible
