@@ -222,7 +222,6 @@ PY
 }
 
 verify_stack() {
-  write_stack_config
   "$PYTHON" - <<'PY'
 from importlib import metadata
 from pathlib import Path
@@ -374,6 +373,7 @@ install_wheel "agent-workflow-comparative-eval" "$COMPARATIVE_EVAL_WHEEL"
 install_wheel "specgen" "$SPECGEN_WHEEL"
 install_wheel "agent-workflow-benchmark" "$BENCHMARK_WHEEL"
 
+write_stack_config
 verify_stack
 
 echo
