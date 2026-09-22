@@ -260,7 +260,7 @@ Both arms receive the same structured workflow prompt discipline; only the candi
 bash scripts/run-bm3-structured.sh --help
 ```
 
-BM3 records per-phase executor-active/host-overhead timing, copies sealed Agent-Workflow terminal-section timing, performs machine scoring, and preserves the private redacted TypeSafe request/response audit. See [Comparative benchmarks](docs/BENCHMARKS.md) and the [BM3 TypeSafe/Jev optimization audit](docs/BM3_TYPESAFE_JEV_OPTIMIZATION_AUDIT.md).
+BM3 records per-phase executor-active/host-overhead timing, copies sealed Agent-Workflow terminal-section timing, performs machine scoring, and runs a separate pre-treatment TypeSafe/Jev routing qualification with private redacted request/response audit. The paired treatments themselves must add zero TypeSafe routing calls. See [Comparative benchmarks](docs/BENCHMARKS.md) and the [BM3 TypeSafe/Jev optimization audit](docs/BM3_TYPESAFE_JEV_OPTIMIZATION_AUDIT.md).
 
 ## Optional bounded semantic decisions
 
