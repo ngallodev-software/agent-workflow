@@ -198,7 +198,7 @@ The core is deliberately host-independent. A future plugin may project Agent Run
 
 ## Version
 
-Version `0.11.6` adds sealed terminal-pipeline section timing for benchmark diagnosis and a safe pull-all/re-exec path for the complete local development stack. It retains the 0.11.5 TypeSafe request/response audit and contract-schema authority changes. The deterministic worker/admin protocol, lifecycle gates, verification, review, and acceptance authority remain unchanged. See `ARCHITECTURE_SIMPLIFICATION_PLAN.md` for the migration boundary.
+Version `0.11.6` builds on 0.11.5 with sealed terminal-pipeline section timing for benchmark diagnosis and a safe pull-all/re-exec path for the complete local development stack. It retains the 0.11.5 TypeSafe request/response audit and contract-schema authority changes. The deterministic worker/admin protocol, lifecycle gates, verification, review, and acceptance authority remain unchanged. See `ARCHITECTURE_SIMPLIFICATION_PLAN.md` for the migration boundary.
 
 ## Repository-only CI assets
 
