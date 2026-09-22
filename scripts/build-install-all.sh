@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PARENT="$(dirname "$ROOT")"
 
 EXPECTED_CONTRACTS_VERSION="0.2.1"
@@ -96,9 +96,9 @@ PY
 
 if [[ -n "$VENV_ARG" ]]; then
   VENV="$(resolve_path "$VENV_ARG")"
-elif [[ -n "$${AGENT_WORKFLOW_VENV:-}" ]]; then
+elif [[ -n "${AGENT_WORKFLOW_VENV:-}" ]]; then
   VENV="$(resolve_path "$AGENT_WORKFLOW_VENV")"
-elif [[ -n "$${VIRTUAL_ENV:-}" ]]; then
+elif [[ -n "${VIRTUAL_ENV:-}" ]]; then
   VENV="$(resolve_path "$VIRTUAL_ENV")"
 elif [[ -x "$ROOT/.venv/bin/python" || -x "$ROOT/.venv/bin/python3" ]]; then
   VENV="$(resolve_path "$ROOT/.venv")"
@@ -128,15 +128,15 @@ if sys.version_info < (3, 11):
     raise SystemExit("Agent-Workflow stack requires Python >= 3.11")
 PY
 
-[[ -n "$${TYPESAFE_API_KEY:-}" ]] || {
+[[ -n "${TYPESAFE_API_KEY:-}" ]] || {
   echo "comparative stack requires TYPESAFE_API_KEY in the environment" >&2
   exit 1
 }
 
-CONTRACTS_SOURCE="$(resolve_path "$${CONTRACTS_SOURCE_ARG:-$PARENT/agent-workflow-spec-contracts}")"
-COMPARATIVE_EVAL_SOURCE="$(resolve_path "$${COMPARATIVE_EVAL_SOURCE_ARG:-$PARENT/agent-workflow-comparative-eval}")"
-SPECGEN_SOURCE="$(resolve_path "$${SPECGEN_SOURCE_ARG:-$PARENT/specgen-aw}")"
-BENCHMARK_SOURCE="$(resolve_path "$${BENCHMARK_SOURCE_ARG:-$PARENT/agent-workflow-benchmark}")"
+CONTRACTS_SOURCE="$(resolve_path "${CONTRACTS_SOURCE_ARG:-$PARENT/agent-workflow-spec-contracts}")"
+COMPARATIVE_EVAL_SOURCE="$(resolve_path "${COMPARATIVE_EVAL_SOURCE_ARG:-$PARENT/agent-workflow-comparative-eval}")"
+SPECGEN_SOURCE="$(resolve_path "${SPECGEN_SOURCE_ARG:-$PARENT/specgen-aw}")"
+BENCHMARK_SOURCE="$(resolve_path "${BENCHMARK_SOURCE_ARG:-$PARENT/agent-workflow-benchmark}")"
 
 export VIRTUAL_ENV="$VENV"
 export AGENT_WORKFLOW_VENV="$VENV"
@@ -321,7 +321,7 @@ else
   "$PYTHON" -c 'import build, setuptools, wheel, jsonschema, yaml, typesafe_sdk'
 fi
 
-BUILD_ROOT="$(mktemp -d "$${TMPDIR:-/tmp}/agent-workflow-stack-build.XXXXXX")"
+BUILD_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/agent-workflow-stack-build.XXXXXX")"
 trap 'rm -rf "$BUILD_ROOT"' EXIT
 
 build_wheel() {
