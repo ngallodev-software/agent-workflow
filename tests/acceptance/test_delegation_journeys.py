@@ -43,6 +43,15 @@ def test_headless_completion_is_sealed_and_lifecycle_is_separate(
     assert completion["head_revision"] == head
     assert (run / "final-receipt.json").is_file()
     assert (run / "final-receipt.json").stat().st_mode & 0o222 == 0
+    timing = json.loads((run / "terminal-timing.json").read_text())
+    assert timing["schema"] == "agent-workflow/terminal-timing/v1"
+    assert timing["agent_run_id"] == "success-run"
+    assert timing["pre_seal_total_seconds"] >= 0
+    assert timing["sections"]["completion_collection"] >= 0
+    assert timing["sections"]["execution_evidence"] >= 0
+    receipt = json.loads((run / "final-receipt.json").read_text())
+    sealed_paths = {item["path"] for item in receipt["artifacts"]}
+    assert "terminal-timing.json" in sealed_paths
 
     reviewed = installed_product.json(
         "agent-run", "review", "success-run", "--actor", "reviewer", "--reason", "evidence inspected",
