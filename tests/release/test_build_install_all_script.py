@@ -43,7 +43,7 @@ def test_build_install_all_help_documents_stack_and_sources() -> None:
         "--allow-dirty-pull",
     ):
         assert option in text
-    for version in ("0.2.1", "0.11.6", "0.1.0", "0.2.5", "0.3.0", "0.6.0"):
+    for version in ("0.2.1", "0.11.6", "0.1.0", "0.2.5", "0.3.1", "0.6.0"):
         assert version in text
 
 
@@ -72,6 +72,21 @@ def test_build_install_all_uses_required_dependency_order() -> None:
     assert positions == sorted(positions)
 
 
+def test_build_install_all_records_source_provenance() -> None:
+    text = SCRIPT.read_text(encoding="utf-8")
+    assert "write_source_provenance" in text
+    assert 'source-provenance.json' in text
+    assert 'agent-workflow/source-provenance/v1' in text
+    assert 'git", "-C", str(source), "rev-parse"' in text
+    assert 'git", "-C", str(source), "status"' in text
+    last_install = text.index(
+        'install_wheel "agent-workflow-benchmark" "$BENCHMARK_WHEEL"'
+    )
+    provenance_write = text.index("write_source_provenance", last_install)
+    final_verify = text.index("verify_stack", provenance_write)
+    assert last_install < provenance_write < final_verify
+
+
 def test_build_install_all_writes_comparative_plugin_config() -> None:
     text = SCRIPT.read_text(encoding="utf-8")
     assert 'enabled = ["agent-workflow-spec", "agent-workflow-benchmark"]' in text
@@ -92,7 +107,7 @@ def test_build_install_all_requires_exact_stack_versions() -> None:
         "EXPECTED_AGENT_WORKFLOW_VERSION": "0.11.6",
         "EXPECTED_COMPARATIVE_EVAL_VERSION": "0.1.0",
         "EXPECTED_SPECGEN_VERSION": "0.2.5",
-        "EXPECTED_BENCHMARK_VERSION": "0.3.0",
+        "EXPECTED_BENCHMARK_VERSION": "0.3.1",
         "EXPECTED_TYPESAFE_VERSION": "0.6.0",
     }
     for name, version in expected.items():
