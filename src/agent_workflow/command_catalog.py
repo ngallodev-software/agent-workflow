@@ -293,6 +293,8 @@ def render_launch_command_card(catalog: dict[str, Any], *, role: str) -> str:
         return render_command_markdown(catalog, role=role)
     selected = filter_catalog(catalog, role)
     common = {
+        "agent-run progress",
+        "agent-run ack",
         "agent criterion",
         "agent limitation",
         "agent verify",
