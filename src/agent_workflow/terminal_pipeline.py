@@ -19,6 +19,7 @@ from typing import Any, Iterable
 from .agent_run_paths import AgentRunPaths
 from .agent_context import close_terminal_assignment
 from .contracts import read_contract
+from .context_efficiency import update_executor_context_runtime
 from .errors import WorkflowError
 from .eval.attempts import emit_attempt_artifacts
 from .eval.commands import collect_commands, specs_from_data
@@ -352,6 +353,7 @@ def finalize_terminal_run(
             section_timings[label] = round(monotonic() - started, 6)
 
     evidence_errors = list(observation.errors)
+    telemetry_warnings: list[str] = []
     completion = timed(
         "completion_collection",
         lambda: collect_completion(run_dir, workdir, secret_values=secret_values),
@@ -400,6 +402,18 @@ def finalize_terminal_run(
         )
     except Exception as exc:
         evidence_errors.append(f"provider-evidence: {exc}")
+
+    try:
+        timed(
+            "context_efficiency",
+            lambda: update_executor_context_runtime(
+                run_dir,
+                events_path=paths.executor_events,
+                provider_evidence=provider,
+            ),
+        )
+    except Exception as exc:
+        telemetry_warnings.append(f"context-efficiency: {exc}")
 
     provenance = _json_object(paths.provenance)
     wall_seconds = observation.wall_seconds
@@ -457,7 +471,7 @@ def finalize_terminal_run(
         "acceptance_eligible": outcome.acceptance_eligible,
         "finished_at": finished_at,
         "exit_code": run_exit_code,
-        "pump_errors": [*evidence_errors, *observation.warnings],
+        "pump_errors": [*evidence_errors, *observation.warnings, *telemetry_warnings],
         "failure_category": failure_category,
         "updated_at": finished_at,
     }
