@@ -287,6 +287,33 @@ def render_command_markdown(catalog: dict[str, Any], *, role: str | None = None)
     return "\n".join(lines).rstrip() + "\n"
 
 
+def render_launch_command_card(catalog: dict[str, Any], *, role: str) -> str:
+    """Render common-path signatures while retaining the full JSON catalog."""
+    if role not in {"implementation", "review"}:
+        return render_command_markdown(catalog, role=role)
+    selected = filter_catalog(catalog, role)
+    common = {
+        "agent criterion",
+        "agent limitation",
+        "agent verify",
+        "agent complete",
+        "agent completion-status",
+    }
+    by_name = {str(item["command"]): item for item in selected["commands"]}
+    lines = [
+        f"# Agent-workflow {role} common-path commands",
+        "",
+        "Use these signatures directly. The complete role-scoped JSON catalog is in AGENT_WORKFLOW_COMMAND_CATALOG.",
+        "Do not run --help unless the catalog is missing/mismatched or a represented signature rejects an argument.",
+        "",
+    ]
+    for name in sorted(common):
+        item = by_name.get(name)
+        if item is not None:
+            lines.extend([f"## {name}", "", str(item["synopsis"]), ""])
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def encode_command_catalog(catalog: dict[str, Any]) -> bytes:
     return (json.dumps(catalog, indent=2, sort_keys=True) + "\n").encode("utf-8")
 
@@ -346,7 +373,7 @@ def write_launch_command_artifacts(
     catalog_path = state_dir / COMMAND_CATALOG_FILENAME
     card_path = state_dir / COMMAND_CARD_FILENAME
     atomic_write_bytes(catalog_path, encode_command_catalog(catalog), mode=0o444)
-    card = render_command_markdown(catalog, role=profile).encode("utf-8")
+    card = render_launch_command_card(catalog, role=profile).encode("utf-8")
     atomic_write_bytes(card_path, card, mode=0o444)
     if agent_visible_dir is not None:
         agent_visible_dir.mkdir(parents=True, exist_ok=True)
