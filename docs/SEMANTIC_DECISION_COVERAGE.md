@@ -68,7 +68,12 @@ those questions as host decision-provider coverage.
 
 ## Source-wide audit
 
-See [SEMANTIC_DECISION_AUDIT.md](SEMANTIC_DECISION_AUDIT.md) for the 0.11.0 review of
-planning/delegation, supervision/remediation, evaluation, review/acceptance, and skill
-evaluation paths. The audit deliberately does not promote deterministic or unused semantic
-questions into runtime decisions simply to increase provider invocation coverage.
+See [SEMANTIC_DECISION_AUDIT.md](SEMANTIC_DECISION_AUDIT.md) for the 0.11.6 review of
+planning/delegation, supervision/remediation, evaluation, review/acceptance, and candidate
+bounded LLM-decision seams. BM3 studies verification-path selection, review-attention
+triage, evidence/context relevance, remediation classification, planning depth, and
+need-for-additional-pass as comparative candidates only. None is registered production
+coverage until representative evidence and a deterministic consumer justify promotion.
+
+See [BM3_TYPESAFE_JEV_OPTIMIZATION_AUDIT.md](BM3_TYPESAFE_JEV_OPTIMIZATION_AUDIT.md)
+for the Round 2 cost evidence and promotion criteria.

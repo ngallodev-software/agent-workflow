@@ -38,9 +38,12 @@ def test_build_install_all_help_documents_stack_and_sources() -> None:
         "--specgen-source PATH",
         "--benchmark-source PATH",
         "--verify-only",
+        "--no-pull",
+        "--pull-only",
+        "--allow-dirty-pull",
     ):
         assert option in text
-    for version in ("0.2.1", "0.11.5", "0.1.0", "0.2.4", "0.2.9", "0.6.0"):
+    for version in ("0.2.1", "0.11.6", "0.1.0", "0.2.5", "0.3.0", "0.6.0"):
         assert version in text
 
 
@@ -86,10 +89,10 @@ def test_build_install_all_requires_exact_stack_versions() -> None:
     text = SCRIPT.read_text(encoding="utf-8")
     expected = {
         "EXPECTED_CONTRACTS_VERSION": "0.2.1",
-        "EXPECTED_AGENT_WORKFLOW_VERSION": "0.11.5",
+        "EXPECTED_AGENT_WORKFLOW_VERSION": "0.11.6",
         "EXPECTED_COMPARATIVE_EVAL_VERSION": "0.1.0",
-        "EXPECTED_SPECGEN_VERSION": "0.2.4",
-        "EXPECTED_BENCHMARK_VERSION": "0.2.9",
+        "EXPECTED_SPECGEN_VERSION": "0.2.5",
+        "EXPECTED_BENCHMARK_VERSION": "0.3.0",
         "EXPECTED_TYPESAFE_VERSION": "0.6.0",
     }
     for name, version in expected.items():
@@ -135,3 +138,16 @@ def test_build_install_all_verify_only_does_not_rewrite_config() -> None:
     config_write = text.index("write_stack_config", last_install)
     final_verify = text.index("verify_stack", config_write)
     assert last_install < config_write < final_verify
+
+
+def test_build_install_all_pulls_stack_before_build_and_reexecs() -> None:
+    text = SCRIPT.read_text(encoding="utf-8")
+    assert 'bash "$ROOT/scripts/git-pull-all.sh"' in text
+    assert 'exec bash "$ROOT/scripts/build-install-all.sh" --no-pull' in text
+    assert '--pull-only' in text
+    assert '--allow-dirty-pull' in text
+
+
+def test_build_install_all_verify_only_disables_pull() -> None:
+    text = SCRIPT.read_text(encoding="utf-8")
+    assert '--verify-only) VERIFY_ONLY=1; NO_PULL=1' in text

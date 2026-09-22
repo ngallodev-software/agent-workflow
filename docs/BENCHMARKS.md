@@ -81,6 +81,34 @@ Receives the same canonical task and safety envelope plus the declared Agent-Wor
 
 The task prompt digest and treatment/wrapper digest are recorded separately. A pair is invalid if the canonical task differs between arms or if undeclared treatment leaks into control.
 
+## BM3 structured-direct study
+
+Benchmark plugin 0.3 adds a v3 treatment study that reuses the Priority Picker v2 fixture/scoring contract while changing the treatment comparison:
+
+| Compatibility slot | Treatment | Runner |
+| --- | --- | --- |
+| `control_raw` | `structured-direct/v1` | direct Codex executor |
+| `workflow_full` | `agent-workflow-full/v1` | real Agent-Workflow Agent Run lifecycle |
+
+Both arms receive the same structured `workflow_full` profile. The treatment difference is therefore the lifecycle/orchestration/evidence machinery, not whether one arm received workflow discipline and the other did not.
+
+Export manually with:
+
+```bash
+agent-workflow benchmark structured-value-smoke-export /tmp/aw-bm3
+```
+
+For the complete development workflow, use the benchmark repository helper:
+
+```bash
+bash scripts/run-bm3-structured.sh --help
+bash scripts/run-bm3-structured.sh --root /path/to/bm3 --repetitions 1
+```
+
+The helper runs readiness, planning, paired execution, machine scoring, descriptive reporting, TypeSafe audit capture, granular timing capture, and self-contained evidence collection. One development repetition is diagnostic only and cannot establish a generalized treatment effect.
+
+See `docs/BM3_TYPESAFE_JEV_OPTIMIZATION_AUDIT.md` for the semantic-decision optimization questions BM3 is designed to answer.
+
 ## Priority Picker task
 
 The full benchmark asks the model to implement a dependency-free Python/browser dashboard that reads `data/backlog.json`, validates backlog records, computes deterministic priority scores, ranks/filters/sorts them, exposes a small Python API, and presents a responsive accessible browser UI with JSON export.
@@ -189,6 +217,10 @@ A cohort pins material execution identity, including provider, model, executor c
 
 The benchmark preserves phase and arm timing rather than collapsing every duration into one ambiguous number. Critical-path wall time and active execution time remain distinguishable where available.
 
+BM3 phase evidence also carries a `timing_breakdown`. Direct phases record executor-active time, benchmark postprocessing, and derived host overhead. Agent-Workflow phases additionally record delegate-call time, terminal wait, benchmark evidence-copy time, derived host overhead, and the copied sealed Agent-Workflow `terminal-timing.json`.
+
+Agent-Workflow 0.11.6 records host-side terminal sections for completion/task-result collection, post-policy checks, patch capture, provider-evidence normalization, policy evaluation, provenance/final-status writing, execution-evidence generation, and the pre-seal terminal total. These timings occur after executor exit and are intended to separate lifecycle/evidence cost from coding-model process duration.
+
 Usage evidence keeps provider-reported token categories explicit, including cached/cache-write fields when the provider exposes them. Missing usage is not rewritten as zero.
 
 Cost has three distinct meanings:
@@ -232,6 +264,21 @@ Operational commands also include `status`, `resume`, `live-start`, `live-stop`,
 ```bash
 agent-workflow commands --format markdown
 ```
+
+### Complete BM3 development command
+
+After installing the BM3-ready stack and exporting `TYPESAFE_API_KEY`:
+
+```bash
+cd /path/to/agent-workflow-benchmark
+bash scripts/run-bm3-structured.sh \
+  --root /path/to/artifacts/bm3-$(date -u +%Y%m%dT%H%M%SZ) \
+  --repetitions 1
+```
+
+The script requires Agent-Workflow 0.11.6, benchmark plugin 0.3.0, TypeSafe SDK 0.6.0, comparative mode, compatible comparative-eval, and an authenticated Codex subscription session.
+
+It also writes a private redacted `typesafe-api-audit.jsonl` so the exact semantic state/questions and returned evidence can be reviewed. Never publish the raw semantic request/response bodies; derive public counts, durations, hashes, primitive coverage, disagreement, and calibration summaries instead.
 
 ## Evidence, consolidation, and reproducibility
 

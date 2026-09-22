@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+ORIGINAL_ARGS=("$@")
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PARENT="$(dirname "$ROOT")"
 
 EXPECTED_CONTRACTS_VERSION="0.2.1"
-EXPECTED_AGENT_WORKFLOW_VERSION="0.11.5"
+EXPECTED_AGENT_WORKFLOW_VERSION="0.11.6"
 EXPECTED_COMPARATIVE_EVAL_VERSION="0.1.0"
-EXPECTED_SPECGEN_VERSION="0.2.4"
-EXPECTED_BENCHMARK_VERSION="0.2.9"
+EXPECTED_SPECGEN_VERSION="0.2.5"
+EXPECTED_BENCHMARK_VERSION="0.3.0"
 EXPECTED_TYPESAFE_VERSION="0.6.0"
 
 VENV_ARG=""
@@ -18,6 +20,9 @@ SPECGEN_SOURCE_ARG=""
 BENCHMARK_SOURCE_ARG=""
 VERIFY_ONLY=0
 BOOTSTRAP_BUILD=1
+NO_PULL=0
+PULL_ONLY=0
+ALLOW_DIRTY_PULL=0
 
 usage() {
   cat <<'USAGE'
@@ -33,6 +38,9 @@ Options:
   --specgen-source PATH
   --benchmark-source PATH
   --verify-only
+  --no-pull
+  --pull-only
+  --allow-dirty-pull
   --no-bootstrap-build
   -h, --help
 
@@ -44,11 +52,16 @@ Default sibling checkout layout:
 
 Required versions:
   specgen-agent-workflow-contracts  0.2.1
-  agent-workflow                    0.11.5
+  agent-workflow                    0.11.6
   agent-workflow-comparative-eval   0.1.0
-  specgen                           0.2.4
-  agent-workflow-benchmark          0.2.9
+  specgen                           0.2.5
+  agent-workflow-benchmark          0.3.0
   typesafe-sdk                      0.6.0
+
+Normal build/install runs first fast-forward every stack repository with
+scripts/git-pull-all.sh, then re-exec the freshly pulled installer. Use
+--no-pull for offline/reproducible builds. --verify-only never mutates Git
+repositories. --pull-only updates repositories and exits before venv/key checks.
 
 The script never creates a venv, never uses pip --user, and never installs
 editable packages. TYPESAFE_API_KEY is required because the resulting runtime is
@@ -78,7 +91,10 @@ while [[ $# -gt 0 ]]; do
       shift; [[ $# -gt 0 ]] || { echo "--benchmark-source requires a value" >&2; exit 2; }
       BENCHMARK_SOURCE_ARG="$1"
       ;;
-    --verify-only) VERIFY_ONLY=1 ;;
+    --verify-only) VERIFY_ONLY=1; NO_PULL=1 ;;
+    --no-pull) NO_PULL=1 ;;
+    --pull-only) PULL_ONLY=1 ;;
+    --allow-dirty-pull) ALLOW_DIRTY_PULL=1 ;;
     --no-bootstrap-build) BOOTSTRAP_BUILD=0 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown option: $1" >&2; usage >&2; exit 2 ;;
@@ -93,6 +109,31 @@ import sys
 print(Path(sys.argv[1]).expanduser().resolve())
 PY
 }
+
+CONTRACTS_SOURCE="$(resolve_path "${CONTRACTS_SOURCE_ARG:-$PARENT/agent-workflow-spec-contracts}")"
+COMPARATIVE_EVAL_SOURCE="$(resolve_path "${COMPARATIVE_EVAL_SOURCE_ARG:-$PARENT/agent-workflow-comparative-eval}")"
+SPECGEN_SOURCE="$(resolve_path "${SPECGEN_SOURCE_ARG:-$PARENT/specgen-aw}")"
+BENCHMARK_SOURCE="$(resolve_path "${BENCHMARK_SOURCE_ARG:-$PARENT/agent-workflow-benchmark}")"
+
+if [[ "$PULL_ONLY" -eq 1 || "$NO_PULL" -eq 0 ]]; then
+  pull_args=(
+    --contracts-source "$CONTRACTS_SOURCE"
+    --comparative-eval-source "$COMPARATIVE_EVAL_SOURCE"
+    --specgen-source "$SPECGEN_SOURCE"
+    --benchmark-source "$BENCHMARK_SOURCE"
+  )
+  if [[ "$ALLOW_DIRTY_PULL" -eq 1 ]]; then
+    pull_args+=(--allow-dirty)
+  fi
+  bash "$ROOT/scripts/git-pull-all.sh" "${pull_args[@]}"
+  if [[ "$PULL_ONLY" -eq 1 ]]; then
+    exit 0
+  fi
+  # Agent-Workflow itself was pulled last. Re-exec from disk so updated version
+  # pins and installer logic, rather than this process's pre-pull script text,
+  # control the build.
+  exec bash "$ROOT/scripts/build-install-all.sh" --no-pull "${ORIGINAL_ARGS[@]}"
+fi
 
 if [[ -n "$VENV_ARG" ]]; then
   VENV="$(resolve_path "$VENV_ARG")"
@@ -132,11 +173,6 @@ PY
   echo "comparative stack requires TYPESAFE_API_KEY in the environment" >&2
   exit 1
 }
-
-CONTRACTS_SOURCE="$(resolve_path "${CONTRACTS_SOURCE_ARG:-$PARENT/agent-workflow-spec-contracts}")"
-COMPARATIVE_EVAL_SOURCE="$(resolve_path "${COMPARATIVE_EVAL_SOURCE_ARG:-$PARENT/agent-workflow-comparative-eval}")"
-SPECGEN_SOURCE="$(resolve_path "${SPECGEN_SOURCE_ARG:-$PARENT/specgen-aw}")"
-BENCHMARK_SOURCE="$(resolve_path "${BENCHMARK_SOURCE_ARG:-$PARENT/agent-workflow-benchmark}")"
 
 export VIRTUAL_ENV="$VENV"
 export AGENT_WORKFLOW_VENV="$VENV"
@@ -232,10 +268,10 @@ import json, os, shutil
 
 expected = {
     "specgen-agent-workflow-contracts": "0.2.1",
-    "agent-workflow": "0.11.5",
+    "agent-workflow": "0.11.6",
     "agent-workflow-comparative-eval": "0.1.0",
-    "specgen": "0.2.4",
-    "agent-workflow-benchmark": "0.2.9",
+    "specgen": "0.2.5",
+    "agent-workflow-benchmark": "0.3.0",
     "typesafe-sdk": "0.6.0",
 }
 for name, version in expected.items():
@@ -281,8 +317,8 @@ loaded = tuple(item.descriptor.name for item in registry.loaded)
 if loaded != ("agent-workflow-spec", "agent-workflow-benchmark"):
     raise SystemExit(f"unexpected loaded plugins: {loaded!r}")
 
-if AW_VERSION != "0.11.5":
-    raise SystemExit(f"SpecGen target {AW_VERSION}; expected 0.11.5")
+if AW_VERSION != "0.11.6":
+    raise SystemExit(f"SpecGen target {AW_VERSION}; expected 0.11.6")
 
 codex = shutil.which("codex")
 if not codex:

@@ -121,11 +121,11 @@ For external-plugin rollback, disable the affected plugin in `[plugins].enabled`
 
 ## Tagged bootstrap install
 
-For a published release, pin the release explicitly. For version `0.11.5`:
+For a published release, pin the release explicitly. For version `0.11.6`:
 
 ```bash
-curl -fsSL https://github.com/ngallodev-software/agent-workflow/releases/download/v0.11.5/install.sh | \
-  sh -s -- --version v0.11.5
+curl -fsSL https://github.com/ngallodev-software/agent-workflow/releases/download/v0.11.6/install.sh | \
+  sh -s -- --version v0.11.6
 ```
 
 The version is intentional: the 0.9 line builds on the breaking Agent Run/headless-core rewrite and does not carry terminal-host compatibility.
@@ -189,14 +189,39 @@ Override any checkout explicitly with `--contracts-source`,
 `--comparative-eval-source`, `--specgen-source`, or
 `--benchmark-source`.
 
+A normal full-stack run first updates all five source repositories with
+`git pull --ff-only`. The helper fails closed on dirty checkouts, detached
+HEADs, missing upstreams, or divergence; it never switches branches, resets,
+cleans, or stashes. Agent-Workflow itself is pulled last and the installer then
+re-execs the freshly pulled script before version checks/builds.
+
+Useful update modes:
+
+```bash
+# Update all stack repositories and exit.
+bash scripts/build-install-all.sh --pull-only
+
+# Build the exact checked-out source without Git/network mutation.
+bash scripts/build-install-all.sh --no-pull --venv /path/to/.venv
+
+# Verify the installed stack without pulling or rebuilding.
+bash scripts/build-install-all.sh --verify-only --venv /path/to/.venv
+```
+
+The lower-level update helper is also directly available:
+
+```bash
+bash scripts/git-pull-all.sh --help
+```
+
 The installer builds local wheels and installs this exact stack:
 
 ```text
 specgen-agent-workflow-contracts  0.2.1
-agent-workflow                    0.11.5
+agent-workflow                    0.11.6
 agent-workflow-comparative-eval   0.1.0
-specgen                           0.2.3
-agent-workflow-benchmark          0.2.7
+specgen                           0.2.5
+agent-workflow-benchmark          0.3.0
 typesafe-sdk                      0.6.0
 ```
 
@@ -207,7 +232,7 @@ and sets `decision_policy.mode = "comparative"`.
 listed as a plugin.
 
 The verification gate requires `TYPESAFE_API_KEY`, a compatible comparative
-runtime, both plugins loaded, SpecGen targeting Agent-Workflow 0.11.5,
+runtime, both plugins loaded, SpecGen targeting Agent-Workflow 0.11.6,
 `pip check` success, and direct `codex` execution rather than the obsolete
 `agent-workflow-codex` wrapper.
 

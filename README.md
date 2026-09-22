@@ -177,6 +177,8 @@ See [docs/TESTING.md](docs/TESTING.md).
 - [Operations and recovery](docs/OPERATIONS.md)
 - [Testing strategy](docs/TESTING.md)
 - [Prompt packs](docs/PROMPT_PACKS.md)
+- [Comparative benchmarks](docs/BENCHMARKS.md)
+- [BM3 TypeSafe/Jev optimization audit](docs/BM3_TYPESAFE_JEV_OPTIMIZATION_AUDIT.md)
 - [Benchmark plugin migration](BENCHMARK_PLUGIN_MIGRATION.md)
 - [MCP server](docs/MCP_SERVER.md)
 - [Plugin API](docs/PLUGIN_API.md)
@@ -196,7 +198,7 @@ The core is deliberately host-independent. A future plugin may project Agent Run
 
 ## Version
 
-Version `0.11.5` builds with installed contract-schema authority so the active environment's packaged schemas cannot be shadowed by a stale user-data copy, while preserving user-site installs outside `sys.prefix`. It retains the 0.11.1 prompt-pack operational fixes for logical agent names, runtime override guidance, steering capability/reporting, copy-safe verification, and host-independent launch-context measurement. The deterministic worker/admin protocol and shared terminal pipeline remain unchanged authority boundaries. See `ARCHITECTURE_SIMPLIFICATION_PLAN.md` for the migration boundary.
+Version `0.11.6` builds on 0.11.5 with sealed terminal-pipeline section timing for benchmark diagnosis and a safe pull-all/re-exec path for the complete local development stack. It retains the 0.11.5 TypeSafe request/response audit and contract-schema authority changes. The deterministic worker/admin protocol, lifecycle gates, verification, review, and acceptance authority remain unchanged. See `ARCHITECTURE_SIMPLIFICATION_PLAN.md` for the migration boundary.
 
 ## Repository-only CI assets
 
@@ -238,11 +240,27 @@ agent-workflow commands --format markdown
 agent-workflow completion bash
 ```
 
-Use `agent-workflow --no-plugins --help` for the core-only recovery surface. The parser-derived command catalog is the command-reference source of truth; Agent-Workflow does not maintain a separate static Unix man page that could drift from enabled plugin capabilities.
+Use `agent-workflow --no-plugins --help` for the core-only recovery surface. The parser-derived command catalog is the command-reference source of truth. Static man pages provide stable orientation for core/workflow/index/benchmark concepts but do not replace live plugin-aware `--help` or `commands --format markdown`.
 
 ## Optional benchmark capability
 
 The historical comparative benchmark subsystem is no longer part of Agent-Workflow core. Install and enable the separate `agent-workflow-benchmark` plugin to restore the top-level `agent-workflow benchmark ...` command. Core still owns generic sealed-run evaluation, review, acceptance, and lifecycle authority.
+
+Benchmark 0.3 adds the BM3 development study:
+
+```text
+structured-direct/v1
+vs
+agent-workflow-full/v1
+```
+
+Both arms receive the same structured workflow prompt discipline; only the candidate executes through Agent-Workflow lifecycle/evidence machinery. The benchmark repository provides a one-command runner:
+
+```bash
+bash scripts/run-bm3-structured.sh --help
+```
+
+BM3 records per-phase executor-active/host-overhead timing, copies sealed Agent-Workflow terminal-section timing, performs machine scoring, and preserves the private redacted TypeSafe request/response audit. See [Comparative benchmarks](docs/BENCHMARKS.md) and the [BM3 TypeSafe/Jev optimization audit](docs/BM3_TYPESAFE_JEV_OPTIMIZATION_AUDIT.md).
 
 ## Optional bounded semantic decisions
 
