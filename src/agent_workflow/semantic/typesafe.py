@@ -24,7 +24,13 @@ SUPPORTED_DECISIONS = (
     "routing.interaction_required",
     "routing.semantic_risk",
 )
-_SECRET_MARKERS = ("api_key", "apikey", "authorization", "password", "secret", "token", "cookie", "credential", "bearer")
+_SECRET_KEYS = frozenset({
+    "api_key", "apikey", "x_api_key", "authorization", "proxy_authorization",
+    "password", "passwd", "secret", "client_secret", "token", "access_token",
+    "refresh_token", "id_token", "cookie", "set_cookie", "credential",
+    "credentials", "bearer",
+})
+_SECRET_SUFFIXES = ("_api_key", "_password", "_secret", "_token", "_credential", "_credentials")
 _MAX_TEXT = 8_000
 _MAX_ITEMS = 100
 _MAX_DEPTH = 8
@@ -71,8 +77,8 @@ def _canonical_json(value: object) -> str:
 
 
 def _safe(value: Any, *, key: str = "", depth: int = 0) -> Any:
-    normalized = key.lower().replace("-", "_")
-    if any(marker in normalized for marker in _SECRET_MARKERS):
+    normalized = key.lower().replace("-", "_").strip()
+    if normalized in _SECRET_KEYS or normalized.endswith(_SECRET_SUFFIXES):
         return "[redacted]"
     if depth >= _MAX_DEPTH:
         return "[depth_limit]"
