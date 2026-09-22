@@ -26,6 +26,7 @@ from .config import Settings
 from .config import enforce_trust
 from .compatibility import probe_executor
 from .command_catalog import write_launch_command_artifacts
+from .context_efficiency import write_executor_context
 from .contracts import read_contract, read_agent_run_contract, schema_descriptor
 from .errors import WorkflowError
 from .eval.commands import collect_commands, specs_from_data
@@ -354,82 +355,47 @@ def _write_launch_prompt(
     dirty_authorized: bool = False,
     retry_context: str | None = None,
 ) -> Path:
+    """Write compact model-facing runtime context ahead of the unchanged ticket."""
     paths = AgentRunPaths(state_dir)
     context = [
-        "# Agent-workflow launch context",
-        "The complete ticket follows this runtime contract; do not reread prompt_source unless the ticket requires it.",
-        f"- run: `{agent_run_id}`; role: `{role_id}`; role_digest: `{role_digest}`",
-        f"- prompt_source: `{prompt_source}`",
-        f"- command_profile: `{command_artifacts['role']}`",
-        "- Use `AGENT_WORKFLOW_CLI` with signatures from `AGENT_WORKFLOW_COMMAND_CARD` / `AGENT_WORKFLOW_COMMAND_CATALOG`; do not browse `--help` unless the scoped contract is missing, mismatched, or rejects an argument.",
-        "- Review/accept/reject/force-accept are host-only disposition authority. Child runs report evidence/recommendations and never invoke them.",
+        "# Agent-Workflow runtime",
+        "The complete ticket follows. Agent-Workflow owns lifecycle, policy/scope gates, evidence collection, hashing, and sealing; do not spend model turns re-deriving those host decisions.",
+        f"- run: {agent_run_id}; role: {role_id} ({role_digest})",
+        "- Runtime projection: $AGENT_WORKFLOW_EXECUTION_CONTEXT; common commands: $AGENT_WORKFLOW_COMMAND_CARD; full role-scoped catalog: $AGENT_WORKFLOW_COMMAND_CATALOG.",
+        "- Record declared criteria with agent criterion; record environment limits with agent limitation.",
+        "- Run required final verification only through agent verify AGENT_RUN_ID -- <argv...>; identical successful verification is reused only while the workspace fingerprint is unchanged.",
+        "- Commit ticket-scoped source before exactly one agent complete AGENT_RUN_ID --result completed|partial|failed|blocked; process exit and completion are not acceptance.",
+        "- Review/accept/reject/force-accept remain host-only authority.",
     ]
     if role_instructions is not None:
-        context.extend(["", "## Role contract", role_instructions.strip(), ""])
-    if prompt_pack_root is not None:
-        context.append(f"- prompt_pack_root: `{prompt_pack_root}`")
+        context.extend(["", "## Role delta", role_instructions.strip()])
     if result_contract is not None:
-        context.append(
-            f"- task_result: write atomic `AGENT_WORKFLOW_HANDOFF_DIR/result.json` satisfying `{result_contract['schema']}`."
-        )
+        context.append(f"- task result schema: {result_contract['schema']}.")
     if criteria:
-        context.extend(["", "## Machine-readable acceptance criteria"])
-        for item in criteria:
-            description = item.get("description")
-            suffix = f": {description}" if description else ""
-            context.append(f"- `{item['id']}`{suffix}")
-        context.append(
-            "- These IDs are immutable for this run. `agent criterion` rejects unknown IDs and `agent complete` rejects omitted IDs."
-        )
+        context.append("- declared criterion IDs: " + ", ".join(str(item["id"]) for item in criteria))
     if dirty_at_launch and dirty_authorized:
         context.append(
-            "- Operator-approved source drift: this worktree was intentionally dirty at launch via --allow-dirty. "
-            "Treat those pre-existing changes as the recorded baseline, including overlap with assigned files; "
-            "do not mark the task blocked merely because the baseline is dirty. Preserve unrelated drift and report only new ticket-scoped changes."
+            "- Operator-approved dirty baseline is authoritative; preserve unrelated drift and report only new ticket-scoped changes."
         )
     if retry_context is not None:
-        context.extend(
-            [
-                "",
-                "## Operator retry context",
-                "This immutable context applies to this lineage retry in addition to the original ticket:",
-                retry_context.strip(),
-                "",
-            ]
-        )
+        context.extend(["", "## Operator retry context", retry_context.strip()])
     if interactive:
-        if steering_adapter != "unsupported":
-            context.append("- Interactive steering is durable; acknowledge a steer message ID before treating it as applied.")
-        else:
-            context.append("- No evidence-capable steering adapter is available; never wait for approval/input. Report blocked/partial completion when authorization is required.")
+        context.append(
+            "- Apply durable steering only after acknowledgement."
+            if steering_adapter != "unsupported"
+            else "- No evidence-capable steering adapter is available; never wait for input when authorization is required."
+        )
     else:
-        context.append("- Non-interactive worker: never wait for terminal/user input; record evidence through Agent-Workflow and exit normally after `agent complete`.")
-    context.extend(
-        [
-            f"- handoff: `{handoff_dir}`; Agent-Workflow owns completion protocol JSON in this directory.",
-            "- Do not author `completion.json` manually. Record each acceptance criterion with `agent criterion AGENT_RUN_ID CRITERION_ID pass|fail|not_verified --evidence ...`; use `--evidence-file PATH` to bind a worktree-local host/tool receipt by SHA-256.",
-            "- Controlled-environment limitations are not source failures. Record DNS/network/browser/listener/sandbox constraints with `agent limitation AGENT_RUN_ID LIMITATION_ID --evidence ...`; limitation outcome is always `not_verified` and does not masquerade as a gating criterion.",
-            "- Run final verification through `agent verify AGENT_RUN_ID -- <argv...>` so Agent-Workflow records the observed argv, cwd, and exit code. Re-running the same command replaces its final receipt.",
-            "- Finish exactly once with `agent complete AGENT_RUN_ID --result completed|partial|failed|blocked` and, for review runs only, optional `--review-disposition approved|changes_requested|blocked`.",
-            "- Agent-Workflow derives Agent Run/ticket/pack identity, base/head revisions, changed files, repository-closeout binding, and schema-valid JSON. The worker must not supply those administrative fields.",
-            "- `completed` implementation evidence requires all recorded criteria to pass, no unresolved items, and final recorded verification commands to succeed. For review runs, a host receipt may satisfy a criterion while a separate `agent limitation` preserves an unavailable live-fetch/browser gate; do not convert harness limits into source failures.",
-            "- Completion is not acceptance. Review/accept/reject and evidence sealing remain host/runner-owned lifecycle authority.",
-            "- The handoff directory is run-state outside the source checkout. Never copy protocol artifacts into the repository. Commit source before `agent complete`; the command derives current HEAD itself.",
-            "- Durable progress/steering uses the scoped `progress`, `steer`, and `ack` commands; acknowledge steering before applying it and never expose secrets.",
-            "- Authenticated external-service credentials are intentionally not inherited into controlled workers. If a ticket needs privileged GitHub or other host-authenticated mutation, leave exact proposed actions/evidence for the host rather than weakening credential isolation.",
-            "",
-            "---",
-            "",
-        ]
-    )
+        context.append(
+            "- Non-interactive worker: never wait for terminal/user input; record completion evidence and exit normally."
+        )
+    context.extend(["", "---", ""])
     launch_prompt = paths.launch_prompt
     launch_prompt.write_text(
-        "\n".join(context)
-        + (paths.prompt).read_text(encoding="utf-8"),
+        "\n".join(context) + paths.prompt.read_text(encoding="utf-8"),
         encoding="utf-8",
     )
     return launch_prompt
-
 
 def _write_agent_run_contract(
     state_dir: Path,
@@ -1370,6 +1336,19 @@ def _prepare(
         paths, workdir=workdir, preflight_snapshot=preflight_snapshot
     )
     baseline_path = paths.source_baseline
+    write_executor_context(
+        state_dir,
+        agent_run_id=agent_run_id,
+        role_id=role_id,
+        role_digest=role_digest,
+        prompt_path=prompt_copy,
+        launch_prompt_path=launch_prompt,
+        handoff_dir=handoff_dir,
+        command_artifacts=command_artifacts,
+        criteria=criteria,
+        result_contract=result_contract,
+        source_baseline_path=baseline_path,
+    )
 
     completion_path = paths.completion
     completion_template_path = handoff_dir / "completion-template.json"
