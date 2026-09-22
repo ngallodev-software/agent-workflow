@@ -10,7 +10,7 @@ from .process import redact_argv, secret_values_from_argv
 from .trust import inspect_path, require_trusted
 
 CONFIG_SCHEMA_VERSION = 1
-LUNA_MODEL = "gpt-5.6-luna"
+LUNA_MODEL = "gpt-6-luna"
 LUNA_REASONING_EFFORTS = ("low", "medium", "high")
 
 
