@@ -80,6 +80,14 @@ class AgentRunPaths:
         return self.root / "agent-context.json"
 
     @property
+    def executor_context(self) -> Path:
+        return self.root / "executor-context.json"
+
+    @property
+    def verification_cache(self) -> Path:
+        return self.root / "verification-cache.json"
+
+    @property
     def executor_events(self) -> Path:
         return self.root / "executor-events.jsonl"
 
