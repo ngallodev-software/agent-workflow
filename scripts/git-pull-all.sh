@@ -9,7 +9,6 @@ COMPARATIVE_EVAL_SOURCE=""
 SPECGEN_SOURCE=""
 BENCHMARK_SOURCE=""
 ALLOW_DIRTY=0
-ALLOW_CREDENTIAL_HELPER=0
 
 usage() {
   cat <<'USAGE'
@@ -23,7 +22,6 @@ Options:
   --specgen-source PATH
   --benchmark-source PATH
   --allow-dirty
-  --allow-credential-helper
   -h, --help
 
 The script never switches branches, resets files, stashes changes, or creates
@@ -32,11 +30,10 @@ Dirty repositories fail closed unless --allow-dirty is explicitly supplied;
 even with that override, git pull --ff-only remains authoritative and may
 refuse an update that conflicts with local changes.
 
-Authentication is non-interactive and credential-store-safe by default. GitHub
-HTTPS remotes use a one-shot token from GH_TOKEN/GITHUB_TOKEN or read-only
-`gh auth token` with Git credential helpers disabled. The script never writes
-Git credential configuration or remote URLs. Pass --allow-credential-helper
-only to opt back into the repository's configured credential helper.
+Authentication is owned entirely by Git and the repository's existing remote
+configuration. HTTPS, SSH, credential helpers, and any interactive prompts behave
+exactly as they do for an ordinary `git pull --ff-only`. This script does not
+inspect, replace, suppress, or persist authentication state.
 
 Default sibling checkout layout:
   ../agent-workflow-spec-contracts
@@ -76,7 +73,6 @@ while [[ $# -gt 0 ]]; do
       BENCHMARK_SOURCE="$1"
       ;;
     --allow-dirty) ALLOW_DIRTY=1 ;;
-    --allow-credential-helper) ALLOW_CREDENTIAL_HELPER=1 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -117,68 +113,8 @@ pull_repo() {
   }
   before="$(git -C "$source" rev-parse HEAD)"
 
-  local remote remote_url
-  remote="${upstream%%/*}"
-  remote_url="$(git -C "$source" remote get-url "$remote" 2>/dev/null || true)"
-  [[ -n "$remote_url" ]] || {
-    echo "$label upstream remote URL could not be resolved: $upstream" >&2
-    exit 1
-  }
-
   printf 'pulling %-28s branch=%s upstream=%s before=%s\n' "$label" "$branch" "$upstream" "$before"
-
-  if [[ "$remote_url" == https://github.com/* || "$remote_url" == http://github.com/* ]]; then
-    if [[ "$ALLOW_CREDENTIAL_HELPER" -eq 1 ]]; then
-      # Explicit compatibility escape hatch. Keep the operation non-interactive,
-      # but allow the caller's configured helper to satisfy GitHub auth.
-      GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=Never \
-        git -C "$source" pull --ff-only
-    else
-      # Do not invoke or mutate Git Credential Manager from an installer/update
-      # script. Supply a one-shot token through GIT_ASKPASS while disabling the
-      # configured credential helper for this command only.
-      local token auth_dir
-      token="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
-      if [[ -z "$token" ]] && command -v gh >/dev/null 2>&1; then
-        token="$(gh auth token --hostname github.com 2>/dev/null || true)"
-      fi
-      [[ -n "$token" ]] || {
-        echo "$label uses a GitHub HTTPS remote but no non-persistent token is available." >&2
-        echo "Set GH_TOKEN/GITHUB_TOKEN, authenticate with 'gh auth login', use an SSH remote," >&2
-        echo "or explicitly pass --allow-credential-helper." >&2
-        exit 1
-      }
-      auth_dir="$(mktemp -d "${TMPDIR:-/tmp}/agent-workflow-git-auth.XXXXXX")"
-      chmod 700 "$auth_dir"
-      printf '%s' "$token" >"$auth_dir/token"
-      chmod 600 "$auth_dir/token"
-      cat >"$auth_dir/askpass" <<'ASKPASS'
-#!/usr/bin/env bash
-case "$1" in
-  *Username*|*username*) printf '%s\n' "x-access-token" ;;
-  *Password*|*password*) cat "$GIT_PULL_ALL_TOKEN_FILE" ;;
-  *) exit 1 ;;
-esac
-ASKPASS
-      chmod 700 "$auth_dir/askpass"
-      if ! GIT_PULL_ALL_TOKEN_FILE="$auth_dir/token" \
-           GIT_ASKPASS="$auth_dir/askpass" \
-           GIT_TERMINAL_PROMPT=0 \
-           GIT_CONFIG_COUNT=1 \
-           GIT_CONFIG_KEY_0=credential.helper \
-           GIT_CONFIG_VALUE_0= \
-           git -C "$source" pull --ff-only; then
-        rm -rf "$auth_dir"
-        exit 1
-      fi
-      rm -rf "$auth_dir"
-      unset token
-    fi
-  else
-    # SSH and local/file transports do not use Git's HTTP credential helper.
-    # Keep terminal credential prompting disabled at the Git layer.
-    GIT_TERMINAL_PROMPT=0 git -C "$source" pull --ff-only
-  fi
+  git -C "$source" pull --ff-only
 
   after="$(git -C "$source" rev-parse HEAD)"
   printf 'updated %-28s branch=%s before=%s after=%s\n' "$label" "$branch" "$before" "$after"
