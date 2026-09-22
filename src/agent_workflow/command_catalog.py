@@ -304,7 +304,7 @@ def render_launch_command_card(catalog: dict[str, Any], *, role: str) -> str:
         f"# Agent-workflow {role} common-path commands",
         "",
         "Use these signatures directly. The complete role-scoped JSON catalog is in AGENT_WORKFLOW_COMMAND_CATALOG.",
-        "Do not run --help unless the catalog is missing/mismatched or a represented signature rejects an argument.",
+        "Do not run `--help` unless the catalog is missing/mismatched or a represented signature rejects an argument.",
         "",
     ]
     for name in sorted(common):
