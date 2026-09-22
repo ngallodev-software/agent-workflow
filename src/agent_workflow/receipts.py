@@ -48,6 +48,8 @@ SEALED_OPTIONAL_ARTIFACTS = (
     "job-binding.json",
     "jobs/native-job.json",
     "agent-context.json",
+    "executor-context.json",
+    "verification-cache.json",
     "workflow-inputs.json",
     "provider-evidence.json",
     "assignments.jsonl",
