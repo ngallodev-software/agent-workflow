@@ -111,3 +111,25 @@ def test_build_install_all_handles_unset_venv_without_unbound_variable(tmp_path:
     )
 
     assert "unbound variable" not in result.stderr.lower()
+
+
+def test_build_install_all_verify_only_does_not_rewrite_config() -> None:
+    text = SCRIPT.read_text(encoding="utf-8")
+
+    verify_body = text.split("verify_stack() {", 1)[1].split(
+        '\n}\n\nif [[ "$VERIFY_ONLY" -eq 1 ]]', 1
+    )[0]
+    assert "write_stack_config" not in verify_body
+
+    verify_only_block = text.split('if [[ "$VERIFY_ONLY" -eq 1 ]]; then', 1)[1].split(
+        "fi", 1
+    )[0]
+    assert "verify_stack" in verify_only_block
+    assert "write_stack_config" not in verify_only_block
+
+    last_install = text.index(
+        'install_wheel "agent-workflow-benchmark" "$BENCHMARK_WHEEL"'
+    )
+    config_write = text.index("write_stack_config", last_install)
+    final_verify = text.index("verify_stack", config_write)
+    assert last_install < config_write < final_verify
