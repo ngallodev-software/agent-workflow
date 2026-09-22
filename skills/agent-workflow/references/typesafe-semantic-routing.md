@@ -56,6 +56,31 @@ Never interpret `policy_candidate_result = null` as “TypeSafe returned no evid
 
 Thresholds are Agent-Workflow policy, not SDK semantics. Do not infer a production threshold from a TypeSafe confidence value. Calibrate thresholds from representative Agent-Workflow cases and retain raw distributions/probabilities so disagreement, false-accept/false-reject, escalation coverage, and calibration can be measured.
 
+## Choosing future Jev seams
+
+Do not assume every decision belongs in deterministic code or in the general-purpose coding LLM.
+
+A good Jev/TypeSafe candidate has:
+
+- messy semantic input but a finite output taxonomy;
+- a bounded StateProjector;
+- a Choice/Noul/Score question with versioned criteria;
+- a deterministic consumer that can revalidate and reject the semantic result;
+- explicit uncertainty/fallback behavior;
+- measurable general-model context/time/retry cost that could be avoided.
+
+Examples under BM3 study include verification-path selection, review-attention triage,
+evidence/context relevance, remediation classification, planning strategy/depth, and
+whether another expensive model pass is actually required.
+
+Keep open-ended code generation, patch synthesis, novel debugging explanations, and
+architecture generation with the coding model. Keep lifecycle, authorization, hashes,
+schemas, verification results, scoring arithmetic, review gates, and acceptance deterministic.
+
+Before promoting a new seam, inspect the full private TypeSafe request/response audit to
+verify that state projection and question framing are correct. See
+`docs/BM3_TYPESAFE_JEV_OPTIMIZATION_AUDIT.md`.
+
 ## Failure handling
 
 Missing SDK/key, service failure, invalid contracts, no-match, and semantic uncertainty must remain explicit in receipts. The deterministic route remains available. Do not retry an identical semantic request merely to seek a different opinion.
