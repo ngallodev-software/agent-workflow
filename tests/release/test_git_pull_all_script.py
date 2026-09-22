@@ -36,10 +36,7 @@ def test_git_pull_all_documents_safe_update_contract() -> None:
         "--specgen-source PATH",
         "--benchmark-source PATH",
         "--allow-dirty",
-        "--allow-credential-helper",
         "git pull --ff-only",
-        "GH_TOKEN/GITHUB_TOKEN",
-        "credential helpers disabled",
         "never switches branches",
     ):
         assert value in text
@@ -75,19 +72,17 @@ def test_agent_workflow_is_pulled_last_for_safe_reexec() -> None:
     ]
     assert positions == sorted(positions)
 
-
-def test_git_pull_all_uses_nonpersistent_github_https_auth_by_default() -> None:
+def test_git_pull_all_leaves_authentication_to_git() -> None:
     text = SCRIPT.read_text(encoding="utf-8")
-    assert "GIT_TERMINAL_PROMPT=0" in text
-    assert "GCM_INTERACTIVE=Never" in text
-    assert "GIT_ASKPASS" in text
-    assert "GIT_CONFIG_KEY_0=credential.helper" in text
-    assert "GIT_CONFIG_VALUE_0=" in text
-    assert "GH_TOKEN" in text
-    assert "GITHUB_TOKEN" in text
-    assert "gh auth token --hostname github.com" in text
-    assert "remote set-url" not in text
-    assert "git credential approve" not in text
-    assert "git credential reject" not in text
-    assert "credential.helper store" not in text
-    assert "credential.helper cache" not in text
+    assert 'git -C "$source" pull --ff-only' in text
+    for forbidden in (
+        "GIT_ASKPASS",
+        "GIT_TERMINAL_PROMPT",
+        "GCM_INTERACTIVE",
+        "GH_TOKEN",
+        "GITHUB_TOKEN",
+        "gh auth token",
+        "credential.helper",
+        "remote set-url",
+    ):
+        assert forbidden not in text
