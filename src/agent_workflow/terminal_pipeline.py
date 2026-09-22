@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import datetime
+from time import monotonic
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -340,37 +341,61 @@ def finalize_terminal_run(
     workdir = Path(str(launch["worktree"]["path"])).resolve()
     agent_run_id = str(launch["agent_run"]["id"])
     finished_at = utc_now()
+    pipeline_started = monotonic()
+    section_timings: dict[str, float] = {}
+
+    def timed(label: str, operation: Any) -> Any:
+        started = monotonic()
+        try:
+            return operation()
+        finally:
+            section_timings[label] = round(monotonic() - started, 6)
 
     evidence_errors = list(observation.errors)
-    completion = collect_completion(
-        run_dir, workdir, secret_values=secret_values
+    completion = timed(
+        "completion_collection",
+        lambda: collect_completion(run_dir, workdir, secret_values=secret_values),
     )
     completion_result = str(completion.get("validation_status", "invalid"))
     if completion_result == "valid":
         try:
-            close_terminal_assignment(run_dir, agent_run_id)
+            timed(
+                "assignment_close",
+                lambda: close_terminal_assignment(run_dir, agent_run_id),
+            )
         except Exception as exc:
             evidence_errors.append(f"assignment-close: {exc}")
     try:
-        collect_task_result(run_dir, workdir, secret_values=secret_values)
+        timed(
+            "task_result_collection",
+            lambda: collect_task_result(run_dir, workdir, secret_values=secret_values),
+        )
     except Exception as exc:
         evidence_errors.append(f"task-result: {exc}")
-    evidence_errors.extend(_collect_post_policy(run_dir, workdir, launch))
+    evidence_errors.extend(
+        timed(
+            "post_policy_collection",
+            lambda: _collect_post_policy(run_dir, workdir, launch),
+        )
+    )
     try:
-        capture_patch(workdir, run_dir, paths.patch)
+        timed("patch_capture", lambda: capture_patch(workdir, run_dir, paths.patch))
     except Exception as exc:
         evidence_errors.append(f"patch: {exc}")
 
     provider: dict[str, Any] | None = None
     try:
-        provider = write_provider_evidence(
-            run_dir,
-            capture_exceeded=observation.provider_capture_exceeded,
-            stream_format=str(launch["worker_plan"]["stream_format"]),
-            executor=(
-                str(launch["worker_plan"].get("executor"))
-                if launch["worker_plan"].get("executor")
-                else None
+        provider = timed(
+            "provider_evidence",
+            lambda: write_provider_evidence(
+                run_dir,
+                capture_exceeded=observation.provider_capture_exceeded,
+                stream_format=str(launch["worker_plan"]["stream_format"]),
+                executor=(
+                    str(launch["worker_plan"].get("executor"))
+                    if launch["worker_plan"].get("executor")
+                    else None
+                ),
             ),
         )
     except Exception as exc:
@@ -385,10 +410,13 @@ def finalize_terminal_run(
         if isinstance(provider, dict) and isinstance(provider.get("aggregate"), dict)
         else None
     )
-    policy = evaluate_budgets(
-        usage,
-        provenance.get("budgets") if isinstance(provenance.get("budgets"), dict) else None,
-        wall_seconds=wall_seconds,
+    policy = timed(
+        "policy_evaluation",
+        lambda: evaluate_budgets(
+            usage,
+            provenance.get("budgets") if isinstance(provenance.get("budgets"), dict) else None,
+            wall_seconds=wall_seconds,
+        ),
     )
 
     outcome = derive_terminal_outcome(
@@ -415,7 +443,7 @@ def finalize_terminal_run(
             "usage_complete": provider.get("usage_complete"),
             "capture_complete": provider.get("capture_complete"),
         }
-    update_provenance(run_dir, **provenance_changes)
+    timed("provenance_update", lambda: update_provenance(run_dir, **provenance_changes))
 
     current = read_status_path(paths.status)
     final_status: dict[str, Any] = {
@@ -490,8 +518,25 @@ def finalize_terminal_run(
             },
         )
 
-    atomic_write_json(paths.final_status, final_status)
-    write_execution_evidence(run_dir, elapsed_seconds=wall_seconds)
+    timed("final_status_write", lambda: atomic_write_json(paths.final_status, final_status))
+    timed(
+        "execution_evidence",
+        lambda: write_execution_evidence(run_dir, elapsed_seconds=wall_seconds),
+    )
+    terminal_timing = {
+        "schema": "agent-workflow/terminal-timing/v1",
+        "agent_run_id": agent_run_id,
+        "recorded_at": utc_now(),
+        "sections": section_timings,
+        "pre_seal_total_seconds": round(monotonic() - pipeline_started, 6),
+        "executor_wall_seconds": round(wall_seconds, 6) if wall_seconds is not None else None,
+        "note": (
+            "Section timings are host-side terminal evidence work after executor exit; "
+            "they exclude executor/model-active time. Sealing and final projection occur "
+            "after this artifact is written and are observable as residual host overhead."
+        ),
+    }
+    atomic_write_json(run_dir / "terminal-timing.json", terminal_timing)
     try:
         receipt = seal_run(run_dir, agent_run_id=agent_run_id)
         digest = final_receipt_sha256(run_dir)
