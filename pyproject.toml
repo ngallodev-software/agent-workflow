@@ -7,6 +7,7 @@ name = "agent-workflow"
 version = "0.11.9"
 description = "Headless, observable workflow for durable coding-agent delegation"
 readme = "README.md"
+keywords = ["agentic-ai", "coding-agents", "orchestration", "workflow-automation", "evaluation", "evidence"]
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 requires-python = ">=3.11"
@@ -23,6 +24,10 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
   "Operating System :: POSIX",
 ]
+
+[project.urls]
+Homepage = "https://ngallodev-software.uk/projects/agent-workflow"
+Repository = "https://github.com/ngallodev-software/agent-workflow"
 
 [project.optional-dependencies]
 dev = [
