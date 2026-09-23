@@ -77,31 +77,6 @@ def steer(
     }
 
 
-def progress(
-    settings: Settings,
-    agent_run_id: str,
-    *,
-    actor: str,
-    content: str,
-) -> dict[str, Any]:
-    """Persist an explicit child progress update for its parent."""
-    if bridge_available(agent_run_id):
-        return write_control_intent(
-            agent_run_id=agent_run_id, kind="progress", actor=actor, content=content
-        )
-    if bridge_required(agent_run_id):
-        return {"outcome": "unavailable", "reason": "control bridge unavailable"}
-    _active_run(settings, agent_run_id)
-    return _append_control_message(
-        settings,
-        agent_run_id,
-        direction="child_to_parent",
-        kind="progress",
-        actor=actor,
-        content=content,
-    )
-
-
 def acknowledge(
     settings: Settings,
     agent_run_id: str,
@@ -184,22 +159,6 @@ def messages(
 ) -> list[dict[str, Any]]:
     read_status(settings, agent_run_id)
     return replay_messages(run_dir(settings, agent_run_id), after_sequence=after_sequence)
-
-
-def wait_for_message(
-    settings: Settings,
-    agent_run_id: str,
-    *,
-    after_sequence: int = 0,
-    timeout_seconds: float | None = None,
-) -> list[dict[str, Any]]:
-    read_status(settings, agent_run_id)
-    state_dir = run_dir(settings, agent_run_id)
-    return wait_for_messages(
-        state_dir,
-        after_sequence=after_sequence,
-        timeout_seconds=timeout_seconds,
-    )
 
 
 def _signal_owned_process(status: dict[str, Any], signum: int) -> bool:
