@@ -151,7 +151,8 @@
         "type": "object",
         "required": [
           "id",
-          "description"
+          "description",
+          "acceptance_command_ids"
         ],
         "properties": {
           "id": {
@@ -163,6 +164,14 @@
               "string",
               "null"
             ]
+          },
+          "acceptance_command_ids": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
           }
         },
         "additionalProperties": false
