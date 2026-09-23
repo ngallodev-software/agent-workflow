@@ -599,13 +599,6 @@ def build_parser(
     steer.add_argument("content")
     steer.add_argument("--actor", required=True)
 
-    progress = agent_run_commands.add_parser(
-        "progress", help="persist a child-to-parent progress update"
-    )
-    progress.add_argument("agent_run_id")
-    progress.add_argument("content")
-    progress.add_argument("--actor", required=True)
-
     acknowledge = agent_run_commands.add_parser(
         "ack", help="record application of a steering request"
     )
@@ -616,13 +609,6 @@ def build_parser(
     acknowledge.add_argument(
         "--outcome", choices=("applied", "rejected"), default="applied"
     )
-
-    watch = agent_run_commands.add_parser(
-        "watch", help="block until a durable Agent Run message arrives"
-    )
-    watch.add_argument("agent_run_id")
-    watch.add_argument("--after", type=int, default=0)
-    watch.add_argument("--timeout", type=float)
 
     interrupt = agent_run_commands.add_parser(
         "interrupt", help="request interruption of an Agent Run worker"
@@ -659,8 +645,6 @@ def build_parser(
 
     agent = commands.add_parser("agent", help="Agent Run worker context and completion")
     agent_commands = agent.add_subparsers(dest="agent_command", required=True)
-    agent_context = agent_commands.add_parser("context", help="show durable agent context")
-    agent_context.add_argument("agent_run_id")
     agent_roles = agent_commands.add_parser("roles", help="show public logical agent roles")
     agent_roles.add_argument("role_id", nargs="?", help="optional logical role ID")
     agent_criterion = agent_commands.add_parser(
@@ -686,22 +670,6 @@ def build_parser(
         help="bind a worktree-local evidence file by relative path and SHA-256",
     )
 
-    agent_verify = agent_commands.add_parser(
-        "verify", help="execute and record one verification command"
-    )
-    agent_verify.add_argument("agent_run_id")
-    agent_verify.add_argument("--cwd", type=Path)
-    agent_verify.add_argument("--timeout", type=float)
-    agent_verify.add_argument("argv", nargs=argparse.REMAINDER)
-
-    agent_complete = agent_commands.add_parser(
-        "complete", help="generate the terminal completion handoff from recorded evidence"
-    )
-    agent_complete.add_argument("agent_run_id")
-    agent_complete.add_argument("--result", required=True, choices=COMPLETION_RESULTS)
-    agent_complete.add_argument("--review-disposition", choices=REVIEW_DISPOSITIONS)
-    agent_complete.add_argument("--unresolved", action="append", default=[])
-
     agent_finish = agent_commands.add_parser(
         "finish",
         help="run/reuse declared acceptance commands and complete through the deterministic fast path",
@@ -710,11 +678,6 @@ def build_parser(
     agent_finish.add_argument("--result", required=True, choices=COMPLETION_RESULTS)
     agent_finish.add_argument("--review-disposition", choices=REVIEW_DISPOSITIONS)
     agent_finish.add_argument("--unresolved", action="append", default=[])
-
-    agent_completion_status = agent_commands.add_parser(
-        "completion-status", help="show generated worker-completion protocol state"
-    )
-    agent_completion_status.add_argument("agent_run_id")
 
     for name in ("review", "accept", "reject"):
         lifecycle = agent_run_commands.add_parser(name, help=f"record {name} disposition")
