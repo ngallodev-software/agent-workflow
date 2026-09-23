@@ -65,14 +65,14 @@ agent-workflow agent-run message-state CHILD_ID
 agent-workflow agent-run ack CHILD_ID MESSAGE_ID "applied" --actor CHILD_ID
 ```
 
-Use progress for durable checkpoints:
+Do not require routine child progress commands. The parent sends any additional
+instructions/context through `steer`, the child acknowledges application with
+the correlated message ID, and the parent inspects durable run summaries or
+terminal evidence at orchestration boundaries.
 
-```bash
-agent-workflow agent-run progress CHILD_ID "checkpoint" --actor CHILD_ID
-```
-
-For shared child journals, import and inspect bounded inbox events. `watch` is
-an operational supervisor, not lifecycle authority:
+For shared child journals, import and inspect bounded inbox events. Orchestrator
+watching is an operator/supervisor capability, not a worker protocol or lifecycle
+authority:
 
 ```bash
 agent-workflow orchestrator inbox import ORCHESTRATOR_ID
@@ -88,7 +88,7 @@ proves that a request was applied.
 Keep these gates separate and record evidence for each child and the parent:
 
 1. worker execution/exit;
-2. structured completion (`agent-workflow agent task-complete`);
+2. structured completion (`agent-workflow agent finish CHILD_ID --result completed`);
 3. deterministic evaluation and prerequisite transition;
 4. independent review (`agent-run review`);
 5. authorized acceptance/rejection (`agent-run accept` or `reject`).
