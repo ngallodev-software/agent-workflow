@@ -215,7 +215,7 @@ The core is deliberately host-independent. A future plugin may project Agent Run
 
 ## Version
 
-Version `0.11.7` adds the BM5-prep deterministic finish fast path, host-derived acceptance-command criteria, a smaller steering-first worker command surface, and per-command/cache amplification telemetry. Legacy granular worker commands remain compatibility/recovery APIs. Lifecycle, review, acceptance, scope, provenance, and sealing authority remain host-owned.
+Version `0.11.7` builds on 0.11.6 with the BM5-prep deterministic finish fast path, host-derived acceptance-command criteria, a smaller steering-first worker command surface, and per-command/cache amplification telemetry. Legacy granular worker commands remain compatibility/recovery APIs. Lifecycle, review, acceptance, scope, provenance, and sealing authority remain host-owned.
 
 ## Repository-only CI assets
 
