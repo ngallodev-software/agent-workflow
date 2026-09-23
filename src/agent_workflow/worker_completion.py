@@ -142,6 +142,28 @@ def _job_binding(state_dir: Path) -> dict[str, Any] | None:
     return read_contract(path, "agent-workflow/job-binding/v1")
 
 
+def _declared_acceptance_commands(state_dir: Path) -> list[dict[str, Any]]:
+    binding = _job_binding(state_dir)
+    if binding is not None:
+        return [
+            dict(item)
+            for item in binding.get("acceptance_commands", [])
+            if isinstance(item, dict)
+        ]
+    runtime_path = AgentRunPaths(state_dir).evaluation_runtime
+    if not runtime_path.is_file():
+        return []
+    try:
+        value = read_contract(runtime_path, "agent-workflow/evaluation-runtime/v1")
+    except WorkflowError:
+        return []
+    return [
+        dict(item)
+        for item in value.get("acceptance_commands", [])
+        if isinstance(item, dict)
+    ]
+
+
 def _expected_criteria(contract: dict[str, Any]) -> tuple[dict[str, Any], ...]:
     raw = contract.get("criteria", [])
     if not isinstance(raw, list):
@@ -736,11 +758,12 @@ def finish(
     """
     state_dir, contract, workdir, handoff = _context(settings, agent_run_id)
     binding = _job_binding(state_dir)
+    acceptance_commands = _declared_acceptance_commands(state_dir)
     verification: list[dict[str, Any]] = []
     by_id: dict[str, dict[str, Any]] = {}
 
-    if result == "completed" and binding is not None:
-        for spec in binding.get("acceptance_commands", []):
+    if result == "completed" and acceptance_commands:
+        for spec in acceptance_commands:
             command_id = str(spec["id"])
             selected_cwd = (workdir / str(spec.get("cwd", "."))).resolve()
             observed = verify_command(
@@ -815,6 +838,32 @@ def finish(
 
     draft = _load_draft(handoff, contract)
     expected = _expected_criteria(contract)
+    if result == "completed" and not expected and acceptance_commands:
+        # Unstructured/evaluation-driven runs have no declared semantic
+        # criterion catalog. Bind one deterministic criterion per acceptance
+        # command so completion evidence stays substantive without asking the
+        # model to restate host-observed facts.
+        for item in verification:
+            record_criterion(
+                settings,
+                agent_run_id,
+                criterion_id=f"acceptance:{item['id']}",
+                result="pass" if item["ok"] else "fail",
+                evidence=[
+                    f"acceptance-command:{item['id']}; ok={item['ok']}; "
+                    f"reused={item['reused']}; receipt="
+                    + str(
+                        item.get("command", {}).get("receipt", "unavailable")
+                        if isinstance(item.get("command"), dict)
+                        else "unavailable"
+                    )
+                ],
+            )
+        draft = _load_draft(handoff, contract)
+        expected = tuple(
+            {"id": f"acceptance:{item['id']}", "description": None, "acceptance_command_ids": [item["id"]]}
+            for item in verification
+        )
     recorded = {str(item.get("id")) for item in draft.get("criteria", [])}
     semantic_missing = [
         str(item["id"])
@@ -837,7 +886,7 @@ def finish(
 
     if (
         result == "completed"
-        and (binding is None or not binding.get("acceptance_commands"))
+        and not acceptance_commands
         and not draft.get("commands")
     ):
         _record_finish_outcome(handoff, "verification_required")
