@@ -306,7 +306,11 @@ def _write_job_binding(state_dir: Path, job: ValidatedNativeJob, *, agent_run_id
             "forbidden_paths": list(job.path_policy.forbidden_paths),
         },
         "criteria": [
-            {"id": item.id, "description": item.description}
+            {
+                "id": item.id,
+                "description": item.description,
+                "acceptance_command_ids": list(item.acceptance_command_ids),
+            }
             for item in job.criteria
         ],
         "acceptance_commands": [
@@ -359,20 +363,34 @@ def _write_launch_prompt(
     paths = AgentRunPaths(state_dir)
     context = [
         "# Agent-Workflow runtime",
-        "The complete ticket follows. Agent-Workflow owns lifecycle, policy/scope gates, evidence collection, hashing, and sealing; do not spend model turns re-deriving those host decisions.",
+        "The complete ticket follows. Agent-Workflow owns lifecycle, deterministic policy/scope gates, acceptance-command execution/reuse, evidence collection, hashing, and sealing; do not spend model turns re-deriving those host decisions.",
         f"- run: {agent_run_id}; role: {role_id} ({role_digest})",
-        "- Runtime projection: $AGENT_WORKFLOW_EXECUTION_CONTEXT; common commands: $AGENT_WORKFLOW_COMMAND_CARD; full role-scoped catalog: $AGENT_WORKFLOW_COMMAND_CATALOG.",
-        "- Record declared criteria with agent criterion; record environment limits with agent limitation.",
-        "- Run required final verification only through agent verify AGENT_RUN_ID -- <argv...>; identical successful verification is reused only while the workspace fingerprint is unchanged.",
-        "- Commit ticket-scoped source before exactly one agent complete AGENT_RUN_ID --result completed|partial|failed|blocked; process exit and completion are not acceptance.",
-        "- Review/accept/reject/force-accept remain host-only authority.",
+        "- Runtime projection: $AGENT_WORKFLOW_EXECUTION_CONTEXT. Mid-run instructions/context arrive through durable steering; do not poll status, watch, or context during normal work.",
+        "- Normal successful path: implement, commit ticket-scoped source, then run exactly one agent finish AGENT_RUN_ID --result completed. Finish runs/reuses declared acceptance commands and derives criteria mapped to those commands.",
+        "- If finish reports verification_failed, repair only the reported defects and run finish again. If it reports semantic_evidence_required, record only those listed semantic criteria with agent criterion, then rerun finish.",
+        "- Use agent limitation only for a real controlled-environment limitation. Legacy agent verify/complete and progress/status polling are compatibility paths, not the normal protocol.",
+        "- Review/accept/reject/force-accept remain host-only authority; process exit and worker completion are not acceptance.",
     ]
     if role_instructions is not None:
         context.extend(["", "## Role delta", role_instructions.strip()])
     if result_contract is not None:
         context.append(f"- task result schema: {result_contract['schema']}.")
     if criteria:
+        mapped = [
+            str(item["id"])
+            for item in criteria
+            if item.get("acceptance_command_ids")
+        ]
+        semantic = [
+            str(item["id"])
+            for item in criteria
+            if not item.get("acceptance_command_ids")
+        ]
         context.append("- declared criterion IDs: " + ", ".join(str(item["id"]) for item in criteria))
+        if mapped:
+            context.append("- host-derived deterministic criteria: " + ", ".join(mapped))
+        if semantic:
+            context.append("- semantic criteria (only record if finish requests them): " + ", ".join(semantic))
     if dirty_at_launch and dirty_authorized:
         context.append(
             "- Operator-approved dirty baseline is authoritative; preserve unrelated drift and report only new ticket-scoped changes."
@@ -1293,7 +1311,11 @@ def _prepare(
     )
     if native_job is not None:
         criteria = tuple(
-            {"id": item.id, "description": item.description}
+            {
+                "id": item.id,
+                "description": item.description,
+                "acceptance_command_ids": list(item.acceptance_command_ids),
+            }
             for item in native_job.criteria
         )
     elif prompt_pack_root is not None:
