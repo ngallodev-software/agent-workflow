@@ -228,7 +228,7 @@ specgen-agent-workflow-contracts  0.2.1
 agent-workflow                    0.11.9
 agent-workflow-comparative-eval   0.1.0
 specgen                           0.2.8
-agent-workflow-benchmark          0.3.5
+agent-workflow-benchmark          0.3.6
 typesafe-sdk                      0.6.0
 ```
 
