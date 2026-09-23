@@ -959,3 +959,269 @@ The next architectural deliverable must therefore be an ADR choosing between:
 - existing Herdr workflow engine + Agent-Workflow evidence kernel;
 - event-sourced Herdr workflow prior art adopted/contributed to, with Agent-Workflow evaluation extensions;
 - or a hybrid where Agent-Workflow is primarily a governance/evidence plugin around Herdr's existing workflow ecosystem.
+
+
+## 24. Gap-focused search: evidence, approval, audit, policy, and validation
+
+A second search specifically targeted the capabilities that initially appeared most unique to Agent-Workflow: evidence, provenance, audit, approval, gates, evaluation, benchmarking, security policy, and test verification.
+
+No substantial Herdr-plugin results were found for general-purpose evaluation or benchmarking. That strengthens the case for retaining Agent-Workflow's evaluation/benchmark receipt layer.
+
+Several strong results were found for evidence, review, approval, policy, and exact-change validation.
+
+### 24.1 husniadil/herdr-tasks
+
+Repository:
+https://github.com/husniadil/herdr-tasks
+
+License:
+MIT.
+
+Observed capabilities:
+
+- todo -> doing -> review -> done task lifecycle;
+- one-winner claims with renewable leases;
+- evidence attached to submissions;
+- criterion-level evidence citations;
+- all-required-criteria behavior once criterion evidence is used;
+- independent review/recusal: the session that produced work may not approve it;
+- append-only entity events;
+- durable SQLite state with a single writer;
+- optimistic conflict checks;
+- event following with resume by event ID;
+- pane-loss lease reconciliation;
+- policy gate with allow/deny/defer;
+- stable JSON CLI;
+- MCP parity with CLI;
+- explicit principals derived from Herdr pane identity;
+- project scoping shared by worktrees;
+- human/operator actions represented distinctly from agent actions;
+- semver-bound plugin contract.
+
+This is a major overlap with the current Agent-Workflow task/review/orchestrator surface.
+
+Important differences:
+
+- its documented trust boundary is the local user account;
+- its human/operator distinction is governance, not hostile-process authentication;
+- task evidence is not automatically the same as Agent-Workflow's sealed immutable execution receipt;
+- it is a task system, not necessarily a workflow/evaluation benchmark engine;
+- exact Git-revision acceptance needs explicit comparison.
+
+Potential use:
+
+1. Use herdr-tasks as the task/claim/review substrate and keep Agent-Workflow as an evidence/evaluation extension.
+2. Adopt its shared plugin-contract patterns for principals, single-writer state, CLI/MCP parity, events, and error vocabulary.
+3. Avoid rebuilding leases, task boards, generic claims, and independent-review bookkeeping if its contracts are sufficient.
+
+Disposition:
+CRITICAL COMPARATOR, alongside XiaoConstantine/herdr-workflow.
+
+### 24.2 BASHBOP/otito and BASHBOP/otito-herdr-plugin
+
+Repositories:
+https://github.com/BASHBOP/otito
+https://github.com/BASHBOP/otito-herdr-plugin
+
+License:
+MIT for Otito and the reviewed Herdr plugin.
+
+Observed capabilities:
+
+- local-first deterministic trust layer;
+- task-aware context and change-impact analysis;
+- exact staged Git-tree validation;
+- convergence score bound to exact base/parent/staged-tree identity;
+- deterministic merge-readiness gate;
+- risk and secret checks;
+- validation commands;
+- workspace-level gates across repositories;
+- machine-readable JSON surface;
+- MCP tools;
+- Herdr plugin that explicitly keeps Herdr as execution host and Otito as independent trust authority.
+
+The architectural boundary is especially relevant:
+
+> Herdr owns persistent terminals, panes, worktrees, and agent lifecycle; Otito remains the independent trust authority.
+
+That is substantially the same separation this overhaul proposes.
+
+Important difference:
+Otito explicitly states that a passing local gate is not automatic merge approval; hosted CI, code review/CODEOWNERS, and human release decisions remain separate.
+
+Potential use:
+
+- exact-change validation/evidence provider;
+- deterministic context/impact provider;
+- convergence evidence feeding Agent-Workflow evaluation;
+- possible replacement for parts of current source/diff/gate analysis.
+
+Disposition:
+HIGH-PRIORITY INTEGRATION SPIKE. Do not duplicate deterministic exact-tree trust checks without comparing Otito first.
+
+### 24.3 Javamomma/herdr-approval-gate
+
+Repository:
+https://github.com/Javamomma/herdr-approval-gate
+
+License:
+MIT.
+
+Observed capabilities:
+
+- human sign-off gate;
+- independent checker;
+- fail-closed unreadable checker behavior;
+- durable append-only audit line for terminal outcomes;
+- explicit approve/abort token;
+- blocked Herdr pane as the human-attention surface;
+- no automatic execution of the guarded outward action.
+
+Important limitation:
+Approver identity is whoever can type into the Herdr session; initials are attribution, not authentication.
+
+Potential use:
+Human attention/gate UX. Agent-Workflow may still need stronger exact-manifest/revision-bound acceptance records.
+
+Disposition:
+PLUGIN/REFERENCE. Do not rebuild a generic “blocked pane waiting for sign-off” UX.
+
+### 24.4 StructuPath/herdr-guard
+
+Repository:
+https://github.com/StructuPath/herdr-guard
+
+License:
+MIT.
+
+Observed capabilities:
+
+- cross-agent command policy;
+- audit/warn/interrupt severities;
+- local audit state;
+- optional pre-execution harness reporter;
+- deterministic text policy;
+- project override constraints;
+- explicit fail/open limitations and same-user trust model.
+
+Potential use:
+Optional execution-policy layer or reference for harness pre-execution hooks.
+
+Disposition:
+OPTIONAL POLICY INTEGRATION. It is not acceptance authority and must not replace Agent-Workflow evidence semantics.
+
+### 24.5 voodootikigod/adlc-herdr
+
+Repository:
+https://github.com/voodootikigod/adlc-herdr
+
+Observed capabilities:
+
+- lifecycle phase and gate-evidence presentation across panes;
+- shared on-disk contract consumed by multiple harness integrations;
+- gate/prosecute/ticket actions;
+- board UI;
+- sanitized terminal rendering;
+- watcher/debounce patterns around Herdr events.
+
+Architectural lesson:
+Cross-harness lifecycle state can be projected into Herdr without making the Herdr plugin the enforcement tier.
+
+Disposition:
+REFERENCE for multi-harness lifecycle projection and plugin boundary.
+
+### 24.6 shindakun/herdr-testrun
+
+Repository:
+https://github.com/shindakun/herdr-testrun
+
+License:
+MIT.
+
+Observed capabilities:
+
+- test runner adapters for Go/Cargo/Jest/Vitest/node:test/Pytest;
+- structured failure extraction;
+- test-failure prompt delivery to the agent;
+- watch and watch+send loops;
+- bounded automatic repair rounds;
+- stop-on-same-failure convergence rule;
+- JSON CLI.
+
+Potential use:
+Operator test UX and bounded repair loop.
+
+Difference:
+Agent-Workflow verification evidence still needs to bind exact command/result/artifact state when required by acceptance.
+
+Disposition:
+PLUGIN for interactive test UX; possible evidence-source adapter.
+
+## 25. Revised uniqueness assessment
+
+After the gap-focused search, the set of features that are clearly unique to Agent-Workflow is smaller than the initial pass suggested.
+
+### Strongly covered elsewhere
+
+- task claims and leases;
+- criterion-level evidence entry;
+- independent reviewer recusal;
+- append-only task event trails;
+- policy allow/deny/defer;
+- exact staged-tree deterministic validation;
+- convergence scoring;
+- human sign-off UI;
+- command risk policy;
+- test-run/watch/fix loops;
+- project/thread orchestration;
+- workflow/review loops;
+- DAG visualization;
+- diff review;
+- routing;
+- notifications;
+- worktree UX.
+
+### Still not found as one mature, licensed, directly substitutable component
+
+- an immutable Agent Run execution contract tied to source baseline, resolved role/runtime policy, and retry lineage;
+- sealed terminal receipts joining execution, criteria, provider/evaluation evidence, and exact revision identity;
+- a complete deterministic separation of execution completion, evaluation, independent review, and final acceptance under one replayable authority;
+- comparative benchmark/evaluation receipts and experiment accounting;
+- the specific TypeSafe/Jev decision-audit seams already developed in Agent-Workflow;
+- compatibility with the existing Agent-Workflow benchmark and prompt-pack ecosystem.
+
+These should be treated as the provisional kernel, not as permanently unique intellectual territory.
+
+## 26. New mandatory comparison set
+
+Before designing the replacement core, Phase 0 must compare at least these four systems together:
+
+1. Agent-Workflow 0.11.6 — source of current invariants.
+2. XiaoConstantine/herdr-workflow — closest event-sourced workflow architecture.
+3. husniadil/herdr-tasks — strongest task/evidence/recusal/plugin-contract implementation.
+4. BASHBOP/otito — strongest deterministic exact-change trust/evidence component found.
+
+The likely minimum architecture may be a composition of existing components rather than a rewritten monolith:
+
+~~~
+Herdr
+  execution fabric
+
+herdr-tasks or selected workflow engine
+  task/workflow coordination
+
+Otito
+  deterministic exact-change/context/convergence evidence
+
+Agent-Workflow kernel
+  immutable run contract
+  provenance binding
+  evaluation/benchmark receipts
+  cross-component evidence sealing
+  review/acceptance disposition
+
+reviewr / dagr / notifications / progress
+  operator surfaces
+~~~
+
+This composition is now the default hypothesis to test.
