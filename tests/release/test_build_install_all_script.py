@@ -43,7 +43,7 @@ def test_build_install_all_help_documents_stack_and_sources() -> None:
         "--allow-dirty-pull",
     ):
         assert option in text
-    for version in ("0.2.1", "0.11.8", "0.1.0", "0.2.6", "0.3.3", "0.6.0"):
+    for version in ("0.2.1", "0.11.8", "0.1.0", "0.2.7", "0.3.4", "0.6.0"):
         assert version in text
 
 
@@ -106,8 +106,8 @@ def test_build_install_all_requires_exact_stack_versions() -> None:
         "EXPECTED_CONTRACTS_VERSION": "0.2.1",
         "EXPECTED_AGENT_WORKFLOW_VERSION": "0.11.8",
         "EXPECTED_COMPARATIVE_EVAL_VERSION": "0.1.0",
-        "EXPECTED_SPECGEN_VERSION": "0.2.6",
-        "EXPECTED_BENCHMARK_VERSION": "0.3.3",
+        "EXPECTED_SPECGEN_VERSION": "0.2.7",
+        "EXPECTED_BENCHMARK_VERSION": "0.3.4",
         "EXPECTED_TYPESAFE_VERSION": "0.6.0",
     }
     for name, version in expected.items():
