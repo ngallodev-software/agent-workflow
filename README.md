@@ -282,3 +282,26 @@ BM3 records per-phase executor-active/host-overhead timing, copies sealed Agent-
 ## Optional bounded semantic decisions
 
 Agent-Workflow includes an optional built-in TypeSafe provider for the three registered routing judgments. Install `agent-workflow[typesafe]`, provide `TYPESAFE_API_KEY` through the runtime environment, and select `decision_policy.mode = "typesafe"` or `"comparative"`. The provider uses the official SDK `Choice`, `Noul`, and `Score` primitives; deterministic control, fallback, lifecycle, review, and acceptance remain Agent-Workflow-owned. See `DECISION_MODES.md` and `TYPESAFE_ARCHITECTURE_ALIGNMENT.md`.
+
+The integration is intentionally narrow. `src/agent_workflow/semantic/typesafe.py` projects bounded task state, removes secret-like fields, versions the projector and question set, then lowers application-owned question specifications to the Python SDK. `src/agent_workflow/routing.py` computes the deterministic route first, records semantic receipts, applies the configured decision policy, and recomputes the route through the same deterministic policy function. The provider cannot start or complete runs, select an unsafe executor/model, waive review, or accept work.
+
+```mermaid
+flowchart LR
+    A[Task text and metadata] --> B[Bounded versioned state]
+    B --> C[TypeSafe system_one]
+    C --> D[Choice: task class]
+    C --> E[Noul: interaction needed]
+    C --> F[Score: semantic risk]
+    D --> G[Agent-Workflow decision policy]
+    E --> G
+    F --> G
+    H[Deterministic route and configured limits] --> G
+    G --> I[Deterministic route recomputation]
+    I --> J[Agent-Workflow enforcement and lifecycle]
+```
+
+`routing.task_class` chooses among registered work classes; `routing.interaction_required` assesses whether a material user decision is missing; `routing.semantic_risk` scores the consequence of a mistaken interpretation. Each result is accompanied by provenance, status, confidence/uncertainty, and fallback information. Policy dispositions can keep evidence in shadow, apply it under configured confidence rules, or use it comparatively. Service failures and uncertain answers follow the deterministic fallback path. Comparative capture stores the control/candidate pair and does not make another model request.
+
+The benchmark runner uses the same provider in a separate **pre-treatment qualification** step: one call for each analyze-plan, implement, and verify-repair context. It excludes routing calls from both paired treatments so that the lifecycle comparison does not also change model-call count or semantic-routing behavior. BM3, BM4, and BM5 each published three successful qualification calls; BM3 recorded one task-class disagreement and uncertainty fallbacks for all three risk scores, while BM4 and BM5 each matched deterministic control in all three phase recommendations. These are routing diagnostics, not evidence that TypeSafe improved the benchmark task score. See the [benchmark results](https://github.com/ngallodev-software/agent-workflow-benchmark-results).
+
+Learn more from [Jev and System One](https://typesafe.ai/blog/introducing-system-one-models-and-jev), the [System One documentation](https://docs.typesafe.ai/concepts/system-one.md), [building with System One](https://docs.typesafe.ai/concepts/how-to-build-with-system-one.md), [state and context](https://docs.typesafe.ai/concepts/state.md), [semantic primitives](https://docs.typesafe.ai/primitives.md), and the [Python SDK guide](https://docs.typesafe.ai/sdk/python.md). Agent-Workflow calls the TypeSafe SDK's `system_one` interface; Jev/System One supplies the semantic model and typed primitive layer, while Agent-Workflow retains operational authority.
