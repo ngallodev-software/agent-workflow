@@ -88,11 +88,14 @@ This decision does **not** commit the fork to porting the current Agent-Workflow
 Before implementing a workflow engine, the project must compare its remaining requirements against existing Herdr workflow systems, especially:
 
 - XiaoConstantine/herdr-workflow;
+- husniadil/herdr-tasks;
 - vekexasia/pi-extensible-workflows;
 - aorumbayev/herdr-workflows;
 - andthezhang/herdr-dynamic-workflow;
 - cyperx84/herdr-loop;
 - eliasstravik/herdr-projects.
+
+Before porting deterministic exact-change trust logic, it must also compare BASHBOP/otito and its Herdr integration.
 
 The fork may retain a reduced scheduler, adapt an existing engine, or become primarily a governance/evidence layer around an existing engine.
 
@@ -143,11 +146,13 @@ Rejected pending comparison. Existing workflow projects overlap heavily, but not
 
 1. Herdr minimum supported version.
 2. Workflow engine: retain, integrate, or contribute/adopt.
-3. Model/account routing ownership.
-4. Host-event persistence strategy.
-5. Whether an optional headless backend survives.
-6. Whether the SQLite projection and MCP read adapter remain useful.
-7. Which review/DAG/progress plugins receive first-class integration adapters.
+3. Whether herdr-tasks supplies task claims/leases/recusal/evidence mechanics.
+4. Whether Otito supplies deterministic exact-tree trust/convergence evidence.
+5. Model/account routing ownership.
+6. Host-event persistence strategy.
+7. Whether an optional headless backend survives.
+8. Whether the SQLite projection and MCP read adapter remain useful.
+9. Which review/DAG/progress plugins receive first-class integration adapters.
 
 ## Evidence required before implementation cutover
 
