@@ -113,9 +113,9 @@ agent-workflow agent finish RUN-001 --result completed
 ```
 
 `agent limitation` remains available for a real controlled-environment
-limitation. Legacy `agent verify`, `agent complete`, progress/status polling,
-and completion-status commands remain compatibility/recovery APIs but are no
-longer advertised in the normal implementation/review command profile.
+limitation. The former granular worker verification/completion and routine progress/context/watch
+commands are removed. Their deterministic responsibilities are owned behind
+`agent finish`; mid-run context uses `agent-run steer`.
 
 Mid-run instructions and additional context use durable `agent-run steer`;
 workers should not poll status/watch/context for information the parent can send
@@ -215,7 +215,7 @@ The core is deliberately host-independent. A future plugin may project Agent Run
 
 ## Version
 
-Version `0.11.8` builds on 0.11.6 with the BM5-prep deterministic finish fast path, host-derived acceptance-command criteria, a smaller steering-first worker command surface, and per-command/cache amplification telemetry. Legacy granular worker commands remain compatibility/recovery APIs. Lifecycle, review, acceptance, scope, provenance, and sealing authority remain host-owned.
+Version `0.11.8` builds on 0.11.7 by removing the obsolete granular worker protocol surface entirely. The normal worker path is steering plus one deterministic `agent finish` transaction, with host-derived acceptance-command evidence and BM5 command/cache amplification telemetry. Lifecycle, review, acceptance, scope, provenance, and sealing authority remain host-owned.
 
 ## Repository-only CI assets
 
