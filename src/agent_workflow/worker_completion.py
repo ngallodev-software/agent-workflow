@@ -18,7 +18,7 @@ from typing import Any, Iterable
 from .agent_run_paths import AgentRunPaths
 from .completion import substantive_completion_errors
 from .config import Settings
-from .contracts import read_agent_run_contract, validate_instance
+from .contracts import read_agent_run_contract, read_contract, validate_instance
 from .errors import WorkflowError
 from .git import snapshot
 from .path import read_regular_file
@@ -33,6 +33,8 @@ DRAFT_NAME = "completion-draft.json"
 FINAL_NAME = "completion.json"
 MAX_EVIDENCE_ITEMS = 64
 MAX_TEXT_CHARS = 4096
+PROTOCOL_TELEMETRY_SCHEMA = "agent-workflow/protocol-telemetry/v1"
+PROTOCOL_TELEMETRY_NAME = "protocol-telemetry.json"
 
 
 def _context(settings: Settings, agent_run_id: str) -> tuple[Path, dict[str, Any], Path, Path]:
@@ -59,6 +61,85 @@ def _clean_text(value: str, label: str) -> str:
     return value
 
 
+
+
+def _protocol_telemetry_path(handoff: Path) -> Path:
+    return handoff / PROTOCOL_TELEMETRY_NAME
+
+
+def _load_protocol_telemetry(handoff: Path) -> dict[str, Any]:
+    path = _protocol_telemetry_path(handoff)
+    empty = {
+        "schema": PROTOCOL_TELEMETRY_SCHEMA,
+        "cli_command_counts": {},
+        "acceptance": {
+            "executed": 0,
+            "reused": 0,
+            "failed": 0,
+            "cache_hits": 0,
+            "cache_misses": 0,
+        },
+        "finish": {"attempts": 0, "outcomes": {}},
+        "updated_at": None,
+    }
+    if not path.is_file():
+        return empty
+    try:
+        value = json.loads(read_regular_file(path, max_bytes=1024 * 1024).data.decode("utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, WorkflowError):
+        return empty
+    if not isinstance(value, dict) or value.get("schema") != PROTOCOL_TELEMETRY_SCHEMA:
+        return empty
+    value.setdefault("cli_command_counts", {})
+    value.setdefault("acceptance", dict(empty["acceptance"]))
+    value.setdefault("finish", {"attempts": 0, "outcomes": {}})
+    return value
+
+
+def _save_protocol_telemetry(handoff: Path, value: dict[str, Any]) -> None:
+    value["updated_at"] = utc_now()
+    atomic_write_json(_protocol_telemetry_path(handoff), value)
+
+
+def record_protocol_cli(settings: Settings, agent_run_id: str, command: str) -> None:
+    """Record one model/worker-issued protocol command for BM5 attribution."""
+    _, _, _, handoff = _context(settings, agent_run_id)
+    value = _load_protocol_telemetry(handoff)
+    counts = value.setdefault("cli_command_counts", {})
+    counts[command] = int(counts.get(command, 0)) + 1
+    _save_protocol_telemetry(handoff, value)
+
+
+def _record_acceptance_telemetry(
+    handoff: Path,
+    *,
+    reused: bool,
+    ok: bool,
+) -> None:
+    value = _load_protocol_telemetry(handoff)
+    acceptance = value.setdefault("acceptance", {})
+    acceptance["executed"] = int(acceptance.get("executed", 0)) + 1
+    acceptance["reused"] = int(acceptance.get("reused", 0)) + int(reused)
+    acceptance["failed"] = int(acceptance.get("failed", 0)) + int(not ok)
+    acceptance["cache_hits"] = int(acceptance.get("cache_hits", 0)) + int(reused)
+    acceptance["cache_misses"] = int(acceptance.get("cache_misses", 0)) + int(not reused)
+    _save_protocol_telemetry(handoff, value)
+
+
+def _record_finish_outcome(handoff: Path, outcome: str) -> None:
+    value = _load_protocol_telemetry(handoff)
+    finish = value.setdefault("finish", {})
+    finish["attempts"] = int(finish.get("attempts", 0)) + 1
+    outcomes = finish.setdefault("outcomes", {})
+    outcomes[outcome] = int(outcomes.get(outcome, 0)) + 1
+    _save_protocol_telemetry(handoff, value)
+
+
+def _job_binding(state_dir: Path) -> dict[str, Any] | None:
+    path = AgentRunPaths(state_dir).job_binding
+    if not path.is_file():
+        return None
+    return read_contract(path, "agent-workflow/job-binding/v1")
 
 
 def _expected_criteria(contract: dict[str, Any]) -> tuple[dict[str, Any], ...]:
@@ -633,6 +714,152 @@ def complete(
         "command_count": len(value["commands"]),
         "changed_files": value["changed_files"],
         "next_action": "exit the worker normally; Agent-Workflow runner will collect and seal evidence",
+    }
+
+
+def finish(
+    settings: Settings,
+    agent_run_id: str,
+    *,
+    result: str,
+    unresolved: Iterable[str] = (),
+    review_disposition: str | None = None,
+) -> dict[str, Any]:
+    """Execute the normal deterministic closeout path in one worker call.
+
+    For completed native jobs, all declared acceptance commands are executed or
+    safely reused. Criteria explicitly mapped to those commands are derived by
+    the host. Only unmapped semantic criteria require a separate worker
+    assertion. Verification failures return repair evidence without publishing
+    a terminal completion, allowing the same model turn/session to repair and
+    retry without launching a mandatory review phase.
+    """
+    state_dir, contract, workdir, handoff = _context(settings, agent_run_id)
+    binding = _job_binding(state_dir)
+    verification: list[dict[str, Any]] = []
+    by_id: dict[str, dict[str, Any]] = {}
+
+    if result == "completed" and binding is not None:
+        for spec in binding.get("acceptance_commands", []):
+            command_id = str(spec["id"])
+            selected_cwd = (workdir / str(spec.get("cwd", "."))).resolve()
+            observed = verify_command(
+                settings,
+                agent_run_id,
+                argv=[str(item) for item in spec["argv"]],
+                cwd=selected_cwd,
+                timeout_seconds=float(spec.get("timeout_seconds", 300)),
+            )
+            _record_acceptance_telemetry(
+                handoff,
+                reused=bool(observed.get("reused")),
+                ok=bool(observed.get("ok")),
+            )
+            item = {
+                "id": command_id,
+                "ok": bool(observed.get("ok")),
+                "reused": bool(observed.get("reused")),
+                "command": observed.get("command"),
+                "stdout": observed.get("stdout", ""),
+                "stderr": observed.get("stderr", ""),
+                "workspace_sha256": observed.get("workspace_sha256"),
+            }
+            verification.append(item)
+            by_id[command_id] = item
+
+        for criterion in _expected_criteria(contract):
+            command_ids = [
+                str(item)
+                for item in criterion.get("acceptance_command_ids", [])
+            ]
+            if not command_ids:
+                continue
+            passed = all(
+                command_id in by_id and bool(by_id[command_id]["ok"])
+                for command_id in command_ids
+            )
+            evidence = []
+            for command_id in command_ids:
+                item = by_id.get(command_id)
+                if item is None:
+                    evidence.append(f"acceptance-command:{command_id}; missing")
+                    continue
+                record = item.get("command")
+                receipt = record.get("receipt") if isinstance(record, dict) else None
+                evidence.append(
+                    f"acceptance-command:{command_id}; ok={item['ok']}; "
+                    f"reused={item['reused']}; receipt={receipt or 'unavailable'}"
+                )
+            record_criterion(
+                settings,
+                agent_run_id,
+                criterion_id=str(criterion["id"]),
+                result="pass" if passed else "fail",
+                evidence=evidence,
+            )
+
+        failures = [item for item in verification if not item["ok"]]
+        if failures:
+            _record_finish_outcome(handoff, "verification_failed")
+            return {
+                "agent_run_id": agent_run_id,
+                "state": "verification_failed",
+                "repair_required": True,
+                "verification": verification,
+                "failed_acceptance_commands": [item["id"] for item in failures],
+                "next_action": (
+                    "repair only the reported defects, commit the repair, and rerun "
+                    "agent finish; do not launch a separate review phase"
+                ),
+            }
+
+    draft = _load_draft(handoff, contract)
+    expected = _expected_criteria(contract)
+    recorded = {str(item.get("id")) for item in draft.get("criteria", [])}
+    semantic_missing = [
+        str(item["id"])
+        for item in expected
+        if not item.get("acceptance_command_ids")
+        and str(item["id"]) not in recorded
+    ]
+    if semantic_missing:
+        _record_finish_outcome(handoff, "semantic_evidence_required")
+        return {
+            "agent_run_id": agent_run_id,
+            "state": "semantic_evidence_required",
+            "criteria": semantic_missing,
+            "verification": verification,
+            "next_action": (
+                "record only the listed semantic criteria with agent criterion, "
+                "then rerun agent finish"
+            ),
+        }
+
+    if result == "completed" and binding is None and not draft.get("commands"):
+        _record_finish_outcome(handoff, "verification_required")
+        return {
+            "agent_run_id": agent_run_id,
+            "state": "verification_required",
+            "verification": [],
+            "next_action": (
+                "this compatibility run has no bound native acceptance commands; "
+                "record required verification with legacy agent verify, then rerun agent finish"
+            ),
+        }
+
+    completed = complete(
+        settings,
+        agent_run_id,
+        result=result,
+        unresolved=unresolved,
+        review_disposition=review_disposition,
+    )
+    _record_finish_outcome(handoff, "completed")
+    return {
+        **completed,
+        "fast_path": True,
+        "verification": verification,
+        "repair_required": False,
     }
 
 
