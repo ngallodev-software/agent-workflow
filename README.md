@@ -92,24 +92,41 @@ agent-workflow agent-run accept RUN-001 --actor maintainer --reason "accepted"
 ### Deterministic worker protocol
 
 Implementation and review workers do not author Agent-Workflow protocol JSON.
-They record bounded semantic intent through parser-constrained operations:
+The normal successful worker path is intentionally one closeout transaction:
 
 ```bash
-agent-workflow agent criterion RUN-001 criterion-id pass --evidence "test receipt"
-agent-workflow agent criterion RUN-001 metadata-receipt pass --evidence-file GITHUB_PROMOTION_RECEIPT.md
-agent-workflow agent limitation RUN-001 live-fetch --evidence "controlled DNS unavailable"
-agent-workflow agent verify RUN-001 -- npm test
-agent-workflow agent complete RUN-001 --result completed
+agent-workflow agent finish RUN-001 --result completed
 ```
 
+For native jobs, `finish` runs or safely reuses every declared acceptance
+command, records durable verification receipts, derives criteria explicitly
+mapped to those commands, and generates the completion handoff. A failed
+acceptance command returns `verification_failed` with bounded repair evidence
+without publishing a terminal completion; repair stays in the current worker
+session and `finish` is retried. Unmapped semantic criteria are the exception:
+`finish` returns only their IDs, after which the worker records those bounded
+judgments and retries `finish`:
+
+```bash
+agent-workflow agent criterion RUN-001 semantic-id pass --evidence "bounded semantic evidence"
+agent-workflow agent finish RUN-001 --result completed
+```
+
+`agent limitation` remains available for a real controlled-environment
+limitation. Legacy `agent verify`, `agent complete`, progress/status polling,
+and completion-status commands remain compatibility/recovery APIs but are no
+longer advertised in the normal implementation/review command profile.
+
+Mid-run instructions and additional context use durable `agent-run steer`;
+workers should not poll status/watch/context for information the parent can send
+directly. Correlated `agent-run ack` remains an exceptional evidence operation
+when a steering request must prove application.
+
 Agent-Workflow derives identity, Git revisions, changed files, observed command
-exit status, schema-valid completion JSON, and acceptance revision. When a
-prompt-pack task or native job declares a machine-readable `criteria` catalog,
-that catalog is frozen into the Agent Run contract: `agent criterion` rejects
-unknown IDs and `agent complete` rejects omitted declared criteria. Newly
-scaffolded v1 packs include criterion IDs by default. A `limitation` is always
-`not_verified` and is non-gating; it records a controlled environment constraint
-separately from source correctness.
+exit status, schema-valid completion JSON, and acceptance revision. Native-job
+criteria may bind `acceptance_command_ids`; only those explicit mappings permit
+host-derived criterion results. A `limitation` is always `not_verified` and
+non-gating.
 
 Normal runner completion and recovery finalization use the same terminal
 pipeline: collect completion/task evidence, collect post-run scope/commands,
@@ -198,7 +215,7 @@ The core is deliberately host-independent. A future plugin may project Agent Run
 
 ## Version
 
-Version `0.11.6` builds on 0.11.5 with sealed terminal-pipeline section timing for benchmark diagnosis and a safe pull-all/re-exec path for the complete local development stack. It retains the 0.11.5 TypeSafe request/response audit and contract-schema authority changes. The deterministic worker/admin protocol, lifecycle gates, verification, review, and acceptance authority remain unchanged. See `ARCHITECTURE_SIMPLIFICATION_PLAN.md` for the migration boundary.
+Version `0.11.7` adds the BM5-prep deterministic finish fast path, host-derived acceptance-command criteria, a smaller steering-first worker command surface, and per-command/cache amplification telemetry. Legacy granular worker commands remain compatibility/recovery APIs. Lifecycle, review, acceptance, scope, provenance, and sealing authority remain host-owned.
 
 ## Repository-only CI assets
 
