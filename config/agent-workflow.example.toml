@@ -39,6 +39,8 @@ provider = "typesafe"
 [semantic.typesafe]
 # model = "jev-latest"
 # api_call_log = "~/.local/state/agent-workflow/typesafe-api-calls.jsonl"
+# sdk_log_level = "WARNING" # DEBUG includes full HTTP request/response bodies
+# sdk_log = "~/.local/state/agent-workflow/typesafe-sdk.log"
 # AGENT_WORKFLOW_TYPESAFE_API_CALL_LOG overrides this path for a single process/run.
 
 [decision_policy]

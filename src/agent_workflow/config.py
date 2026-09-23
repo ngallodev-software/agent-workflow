@@ -101,6 +101,8 @@ class Settings:
     security: SecurityPolicy = field(default_factory=SecurityPolicy)
     plugins_enabled: tuple[str, ...] = ()
     typesafe_api_call_log: Path | None = None
+    typesafe_sdk_log: Path | None = None
+    typesafe_sdk_log_level: str = "WARNING"
     typesafe_model: str | None = None
     decision_mode: str = "deterministic"
     decision_profile: str = "default"
@@ -243,7 +245,7 @@ def _validate_shape(data: dict[str, Any]) -> None:
     if "typesafe" in semantic:
         if not isinstance(semantic["typesafe"], dict):
             raise WorkflowError("[semantic.typesafe] must be a table")
-        _reject_unknown(semantic["typesafe"], {"model", "api_call_log"}, "semantic.typesafe")
+        _reject_unknown(semantic["typesafe"], {"model", "api_call_log", "sdk_log", "sdk_log_level"}, "semantic.typesafe")
     executors = data.get("executors", {})
     if not isinstance(executors, dict):
         raise WorkflowError("[executors] must contain executor tables")
@@ -608,6 +610,14 @@ def load_settings(
     typesafe_api_call_log = typesafe.get("api_call_log", None)
     if typesafe_api_call_log is not None and (not isinstance(typesafe_api_call_log, str) or not typesafe_api_call_log.strip()):
         raise WorkflowError("config value [semantic.typesafe].api_call_log must be a non-empty string")
+    typesafe_sdk_log = typesafe.get("sdk_log", None)
+    if typesafe_sdk_log is not None and (not isinstance(typesafe_sdk_log, str) or not typesafe_sdk_log.strip()):
+        raise WorkflowError("config value [semantic.typesafe].sdk_log must be a non-empty string")
+    typesafe_sdk_log_level = typesafe.get("sdk_log_level", "WARNING")
+    if not isinstance(typesafe_sdk_log_level, str) or typesafe_sdk_log_level.strip().upper() not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL", "OFF"}:
+        raise WorkflowError("config value [semantic.typesafe].sdk_log_level must be DEBUG, INFO, WARNING, ERROR, CRITICAL, or OFF")
+    if typesafe_sdk_log_level.strip().upper() in {"DEBUG", "INFO"} and not typesafe_sdk_log:
+        raise WorkflowError("config value [semantic.typesafe].sdk_log is required when sdk_log_level is DEBUG or INFO")
     decision_policy = data.get("decision_policy", {})
     if not isinstance(decision_policy, dict):
         raise WorkflowError("[decision_policy] must be a table")
@@ -682,6 +692,11 @@ def load_settings(
             absolute_path(Path(os.path.expandvars(os.path.expanduser(typesafe_api_call_log))))
             if typesafe_api_call_log else None
         ),
+        typesafe_sdk_log=(
+            absolute_path(Path(os.path.expandvars(os.path.expanduser(typesafe_sdk_log))))
+            if typesafe_sdk_log else None
+        ),
+        typesafe_sdk_log_level=typesafe_sdk_log_level.strip().upper(),
         typesafe_model=typesafe_model.strip() if isinstance(typesafe_model, str) else None,
         decision_mode=decision_mode,
         decision_profile=decision_profile,
@@ -756,6 +771,8 @@ def as_dict(s: Settings) -> dict[str, Any]:
             "typesafe": {
                 "model": s.typesafe_model,
                 "api_call_log": str(s.typesafe_api_call_log) if s.typesafe_api_call_log else None,
+                "sdk_log": str(s.typesafe_sdk_log) if s.typesafe_sdk_log else None,
+                "sdk_log_level": s.typesafe_sdk_log_level,
             },
         },
         "decision_policy": {"mode": s.decision_mode, "profile": s.decision_profile},
