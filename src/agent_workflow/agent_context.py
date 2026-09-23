@@ -9,13 +9,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .config import Settings
 from .errors import WorkflowError
 from .journal import JournalTransactionResult, transact_jsonl
 from .events import append_lifecycle_event
 from .messages import append_message
 from .path import read_regular_file
-from .state import list_statuses, run_dir
+from .state import list_statuses
 from .protocol_values import ASSIGNMENT_EVENTS, ASSIGNMENT_STATES
 from .util import atomic_write_json, expand_path, sha256_file, utc_now, validate_id
 
@@ -203,14 +202,6 @@ def initialize(
     })
     atomic_write_json(state_dir / CONTEXT_NAME, context)
     return context
-
-
-def read(settings: Settings, agent_run_id: str) -> dict[str, Any]:
-    validate_id(agent_run_id, "agent run ID")
-    value = _read_json(run_dir(settings, agent_run_id) / CONTEXT_NAME)
-    if value.get("agent_run_id") != agent_run_id:
-        raise WorkflowError("agent context Agent Run identity does not match requested run")
-    return value
 
 
 def _items(values: list[str] | None, label: str) -> list[str]:
