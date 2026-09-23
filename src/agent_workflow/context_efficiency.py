@@ -88,8 +88,8 @@ def write_executor_context(
             "tool_call_types": {}, "command_families": {},
             "protocol_command_counts": {}, "message_kind_counts": {},
             "acceptance_command_executions": 0, "verification_cache_hits": 0,
-            "verification_cache_misses": 0, "finish_attempts": 0,
-            "finish_outcomes": {},
+            "verification_cache_misses": 0, "finish_invocations": 0,
+            "finish_incomplete_invocations": 0, "finish_outcomes": {},
             "input_tokens_per_turn": None, "cached_input_tokens_per_turn": None,
             "cached_input_ratio": None, "updated_at": None,
         },
@@ -209,7 +209,8 @@ def _protocol_runtime(state_dir: Path) -> dict[str, Any]:
         "acceptance_command_executions": 0,
         "verification_cache_hits": 0,
         "verification_cache_misses": 0,
-        "finish_attempts": 0,
+        "finish_invocations": 0,
+        "finish_incomplete_invocations": 0,
         "finish_outcomes": {},
     }
     telemetry_path = state_dir / "handoff" / "protocol-telemetry.json"
@@ -233,7 +234,8 @@ def _protocol_runtime(state_dir: Path) -> dict[str, Any]:
                 result["verification_cache_misses"] = int(acceptance.get("cache_misses", 0) or 0)
             finish = value.get("finish")
             if isinstance(finish, dict):
-                result["finish_attempts"] = int(finish.get("attempts", 0) or 0)
+                invocations = int(finish.get("invocations", 0) or 0)
+                result["finish_invocations"] = invocations
                 outcomes = finish.get("outcomes")
                 if isinstance(outcomes, dict):
                     result["finish_outcomes"] = {
@@ -241,6 +243,10 @@ def _protocol_runtime(state_dir: Path) -> dict[str, Any]:
                         for key, number in outcomes.items()
                         if isinstance(number, int) and not isinstance(number, bool)
                     }
+                recorded_outcomes = sum(result["finish_outcomes"].values())
+                result["finish_incomplete_invocations"] = max(
+                    0, invocations - recorded_outcomes
+                )
     messages_path = state_dir / "messages.jsonl"
     if messages_path.is_file():
         counts: dict[str, int] = {}
