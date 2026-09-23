@@ -7,7 +7,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PARENT="$(dirname "$ROOT")"
 
 EXPECTED_CONTRACTS_VERSION="0.2.1"
-EXPECTED_AGENT_WORKFLOW_VERSION="0.11.7"
+EXPECTED_AGENT_WORKFLOW_VERSION="0.11.8"
 EXPECTED_COMPARATIVE_EVAL_VERSION="0.1.0"
 EXPECTED_SPECGEN_VERSION="0.2.6"
 EXPECTED_BENCHMARK_VERSION="0.3.3"
@@ -52,7 +52,7 @@ Default sibling checkout layout:
 
 Required versions:
   specgen-agent-workflow-contracts  0.2.1
-  agent-workflow                    0.11.7
+  agent-workflow                    0.11.8
   agent-workflow-comparative-eval   0.1.0
   specgen                           0.2.6
   agent-workflow-benchmark          0.3.3
@@ -333,7 +333,7 @@ import json, os, shutil, sys
 
 expected = {
     "specgen-agent-workflow-contracts": "0.2.1",
-    "agent-workflow": "0.11.7",
+    "agent-workflow": "0.11.8",
     "agent-workflow-comparative-eval": "0.1.0",
     "specgen": "0.2.6",
     "agent-workflow-benchmark": "0.3.3",
@@ -347,7 +347,7 @@ if provenance.get("schema") != "agent-workflow/source-provenance/v1":
     raise SystemExit(f"unexpected source provenance schema: {provenance.get('schema')}")
 local_expected = {
     "specgen-agent-workflow-contracts": "0.2.1",
-    "agent-workflow": "0.11.7",
+    "agent-workflow": "0.11.8",
     "agent-workflow-comparative-eval": "0.1.0",
     "specgen": "0.2.6",
     "agent-workflow-benchmark": "0.3.3",
@@ -407,8 +407,8 @@ loaded = tuple(item.descriptor.name for item in registry.loaded)
 if loaded != ("agent-workflow-spec", "agent-workflow-benchmark"):
     raise SystemExit(f"unexpected loaded plugins: {loaded!r}")
 
-if AW_VERSION != "0.11.7":
-    raise SystemExit(f"SpecGen target {AW_VERSION}; expected 0.11.7")
+if AW_VERSION != "0.11.8":
+    raise SystemExit(f"SpecGen target {AW_VERSION}; expected 0.11.8")
 
 codex = shutil.which("codex")
 if not codex:
