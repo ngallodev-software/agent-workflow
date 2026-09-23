@@ -227,8 +227,8 @@ The installer builds local wheels and installs this exact stack:
 specgen-agent-workflow-contracts  0.2.1
 agent-workflow                    0.11.9
 agent-workflow-comparative-eval   0.1.0
-specgen                           0.2.7
-agent-workflow-benchmark          0.3.4
+specgen                           0.2.8
+agent-workflow-benchmark          0.3.5
 typesafe-sdk                      0.6.0
 ```
 
