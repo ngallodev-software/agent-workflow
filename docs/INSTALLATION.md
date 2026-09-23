@@ -121,11 +121,11 @@ For external-plugin rollback, disable the affected plugin in `[plugins].enabled`
 
 ## Tagged bootstrap install
 
-For a published release, pin the release explicitly. For version `0.11.7`:
+For a published release, pin the release explicitly. For version `0.11.8`:
 
 ```bash
-curl -fsSL https://github.com/ngallodev-software/agent-workflow/releases/download/v0.11.7/install.sh | \
-  sh -s -- --version v0.11.7
+curl -fsSL https://github.com/ngallodev-software/agent-workflow/releases/download/v0.11.8/install.sh | \
+  sh -s -- --version v0.11.8
 ```
 
 The version is intentional: the 0.9 line builds on the breaking Agent Run/headless-core rewrite and does not carry terminal-host compatibility.
@@ -225,7 +225,7 @@ The installer builds local wheels and installs this exact stack:
 
 ```text
 specgen-agent-workflow-contracts  0.2.1
-agent-workflow                    0.11.7
+agent-workflow                    0.11.8
 agent-workflow-comparative-eval   0.1.0
 specgen                           0.2.6
 agent-workflow-benchmark          0.3.3
@@ -239,7 +239,7 @@ and sets `decision_policy.mode = "comparative"`.
 listed as a plugin.
 
 The verification gate requires `TYPESAFE_API_KEY`, a compatible comparative
-runtime, both plugins loaded, SpecGen targeting Agent-Workflow 0.11.7,
+runtime, both plugins loaded, SpecGen targeting Agent-Workflow 0.11.8,
 `pip check` success, and direct `codex` execution rather than the obsolete
 `agent-workflow-codex` wrapper.
 
