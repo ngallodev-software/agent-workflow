@@ -263,7 +263,7 @@ def test_external_exit_completes_only_after_task_completion_and_rebuilds_receipt
             {
                 "schema": "agent-workflow/evaluation-plan/v1",
                 "dataset_split": "development",
-                "task_ids": ["external-success"],
+                "task_ids": ["EXT-HOST-002"],
                 "repetitions": 1,
                 "timeout_seconds": 30,
                 "scorers": ["acceptance_commands"],
