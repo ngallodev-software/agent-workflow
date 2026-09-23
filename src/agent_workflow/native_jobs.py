@@ -38,6 +38,7 @@ class ReviewRequirement:
 class CriterionRequirement:
     id: str
     description: str | None = None
+    acceptance_command_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -153,6 +154,9 @@ def validate_native_job(job_path: Path, *, pack_root: Path) -> ValidatedNativeJo
         CriterionRequirement(
             id=str(item["id"]),
             description=(str(item["description"]) if item.get("description") is not None else None),
+            acceptance_command_ids=tuple(
+                str(value) for value in item.get("acceptance_command_ids", [])
+            ),
         )
         for item in raw_criteria
         if isinstance(item, dict)
@@ -160,6 +164,14 @@ def validate_native_job(job_path: Path, *, pack_root: Path) -> ValidatedNativeJo
     criterion_ids = [item.id for item in criteria]
     if len(criterion_ids) != len(set(criterion_ids)):
         raise WorkflowError("criteria contains duplicate criterion IDs")
+    command_id_set = set(command_ids)
+    for criterion in criteria:
+        unknown = sorted(set(criterion.acceptance_command_ids) - command_id_set)
+        if unknown:
+            raise WorkflowError(
+                f"criterion {criterion.id!r} references unknown acceptance commands: "
+                + ", ".join(unknown)
+            )
     review_data = value["review_requirement"]
     return ValidatedNativeJob(
         schema=NATIVE_JOB_SCHEMA,

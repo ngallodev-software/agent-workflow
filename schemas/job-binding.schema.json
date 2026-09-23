@@ -17,6 +17,7 @@
     "job_source_sha256",
     "job_stored_path",
     "job_stored_sha256",
+    "bundle_provenance",
     "path_policy",
     "acceptance_commands",
     "review_requirement"
@@ -151,7 +152,8 @@
         "type": "object",
         "required": [
           "id",
-          "description"
+          "description",
+          "acceptance_command_ids"
         ],
         "properties": {
           "id": {
@@ -163,10 +165,48 @@
               "string",
               "null"
             ]
+          },
+          "acceptance_command_ids": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
           }
         },
         "additionalProperties": false
       }
+    },
+    "bundle_provenance": {
+      "type": "object",
+      "required": [
+        "bundle_version",
+        "schema_id",
+        "schema_digest"
+      ],
+      "properties": {
+        "bundle_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "schema_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "schema_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "features": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false

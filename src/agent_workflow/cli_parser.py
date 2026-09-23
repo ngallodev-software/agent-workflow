@@ -702,6 +702,15 @@ def build_parser(
     agent_complete.add_argument("--review-disposition", choices=REVIEW_DISPOSITIONS)
     agent_complete.add_argument("--unresolved", action="append", default=[])
 
+    agent_finish = agent_commands.add_parser(
+        "finish",
+        help="run/reuse declared acceptance commands and complete through the deterministic fast path",
+    )
+    agent_finish.add_argument("agent_run_id")
+    agent_finish.add_argument("--result", required=True, choices=COMPLETION_RESULTS)
+    agent_finish.add_argument("--review-disposition", choices=REVIEW_DISPOSITIONS)
+    agent_finish.add_argument("--unresolved", action="append", default=[])
+
     agent_completion_status = agent_commands.add_parser(
         "completion-status", help="show generated worker-completion protocol state"
     )

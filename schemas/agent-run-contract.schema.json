@@ -458,6 +458,14 @@
               "string",
               "null"
             ]
+          },
+          "acceptance_command_ids": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
           }
         },
         "additionalProperties": false

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import shlex
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -84,6 +85,11 @@ def write_executor_context(
         "runtime": {
             "measurement_source": "provider-events", "provider_event_count": 0,
             "model_turn_count": None, "tool_call_count": None, "command_execution_count": None,
+            "tool_call_types": {}, "command_families": {},
+            "protocol_command_counts": {}, "message_kind_counts": {},
+            "acceptance_command_executions": 0, "verification_cache_hits": 0,
+            "verification_cache_misses": 0, "finish_attempts": 0,
+            "finish_outcomes": {},
             "input_tokens_per_turn": None, "cached_input_tokens_per_turn": None,
             "cached_input_ratio": None, "updated_at": None,
         },
@@ -93,7 +99,42 @@ def write_executor_context(
     return value
 
 
-def _event_runtime(events_path: Path) -> dict[str, int | None]:
+def _command_family(item: Mapping[str, Any]) -> str:
+    """Return a bounded, argument-free command family for amplification telemetry."""
+    raw = item.get("argv")
+    tokens: list[str] = []
+    if isinstance(raw, list):
+        tokens = [str(value) for value in raw if str(value)]
+    else:
+        raw = item.get("command", item.get("cmd"))
+        if isinstance(raw, str) and raw.strip():
+            try:
+                tokens = shlex.split(raw)
+            except ValueError:
+                tokens = raw.strip().split()
+    if not tokens:
+        return "unknown"
+    first = Path(tokens[0]).name
+    if first in {"bash", "sh", "zsh"} and "-lc" in tokens:
+        try:
+            inner = tokens[tokens.index("-lc") + 1]
+            inner_tokens = shlex.split(inner)
+            if inner_tokens:
+                tokens = inner_tokens
+                first = Path(tokens[0]).name
+        except (IndexError, ValueError):
+            pass
+    if first.startswith("agent-workflow"):
+        return " ".join(["agent-workflow", *tokens[1:3]])
+    if first.startswith("python") and len(tokens) >= 3 and tokens[1] == "-m":
+        module = tokens[2]
+        if module.startswith("agent_workflow"):
+            return "python -m agent_workflow"
+        return f"python -m {module}"
+    return first
+
+
+def _event_runtime(events_path: Path) -> dict[str, Any]:
     event_count = 0
     completed_turns: set[str] = set()
     anonymous_turns = 0
@@ -101,8 +142,17 @@ def _event_runtime(events_path: Path) -> dict[str, int | None]:
     anonymous_tools = 0
     command_ids: set[str] = set()
     anonymous_commands = 0
+    tool_types: dict[str, int] = {}
+    command_families: dict[str, int] = {}
     if not events_path.is_file():
-        return {"provider_event_count": 0, "model_turn_count": None, "tool_call_count": None, "command_execution_count": None}
+        return {
+            "provider_event_count": 0,
+            "model_turn_count": None,
+            "tool_call_count": None,
+            "command_execution_count": None,
+            "tool_call_types": {},
+            "command_families": {},
+        }
     for sequence, raw in enumerate(events_path.read_bytes().splitlines(), start=1):
         if not raw:
             continue
@@ -127,15 +177,87 @@ def _event_runtime(events_path: Path) -> dict[str, int | None]:
         identity = item.get("id", event.get("item_id", event.get("id")))
         identity_text = str(identity) if isinstance(identity, (str, int)) and not isinstance(identity, bool) else f"anonymous-{sequence}"
         if item_type in _TOOL_ITEM_TYPES:
-            if identity_text.startswith("anonymous-"): anonymous_tools += 1
-            else: tool_ids.add(identity_text)
+            tool_types[item_type] = tool_types.get(item_type, 0) + 1
+            if identity_text.startswith("anonymous-"):
+                anonymous_tools += 1
+            else:
+                tool_ids.add(identity_text)
         if item_type == "command_execution":
-            if identity_text.startswith("anonymous-"): anonymous_commands += 1
-            else: command_ids.add(identity_text)
+            family = _command_family(item)
+            command_families[family] = command_families.get(family, 0) + 1
+            if identity_text.startswith("anonymous-"):
+                anonymous_commands += 1
+            else:
+                command_ids.add(identity_text)
     turns = len(completed_turns) + anonymous_turns
     tools = len(tool_ids) + anonymous_tools
     commands = len(command_ids) + anonymous_commands
-    return {"provider_event_count": event_count, "model_turn_count": turns or None, "tool_call_count": tools or None, "command_execution_count": commands or None}
+    return {
+        "provider_event_count": event_count,
+        "model_turn_count": turns or None,
+        "tool_call_count": tools or None,
+        "command_execution_count": commands or None,
+        "tool_call_types": dict(sorted(tool_types.items())),
+        "command_families": dict(sorted(command_families.items())),
+    }
+
+
+def _protocol_runtime(state_dir: Path) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "protocol_command_counts": {},
+        "message_kind_counts": {},
+        "acceptance_command_executions": 0,
+        "verification_cache_hits": 0,
+        "verification_cache_misses": 0,
+        "finish_attempts": 0,
+        "finish_outcomes": {},
+    }
+    telemetry_path = state_dir / "handoff" / "protocol-telemetry.json"
+    if telemetry_path.is_file():
+        try:
+            value = json.loads(telemetry_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            value = {}
+        if isinstance(value, dict):
+            counts = value.get("cli_command_counts")
+            if isinstance(counts, dict):
+                result["protocol_command_counts"] = {
+                    str(key): int(number)
+                    for key, number in counts.items()
+                    if isinstance(number, int) and not isinstance(number, bool)
+                }
+            acceptance = value.get("acceptance")
+            if isinstance(acceptance, dict):
+                result["acceptance_command_executions"] = int(acceptance.get("executed", 0) or 0)
+                result["verification_cache_hits"] = int(acceptance.get("cache_hits", 0) or 0)
+                result["verification_cache_misses"] = int(acceptance.get("cache_misses", 0) or 0)
+            finish = value.get("finish")
+            if isinstance(finish, dict):
+                result["finish_attempts"] = int(finish.get("attempts", 0) or 0)
+                outcomes = finish.get("outcomes")
+                if isinstance(outcomes, dict):
+                    result["finish_outcomes"] = {
+                        str(key): int(number)
+                        for key, number in outcomes.items()
+                        if isinstance(number, int) and not isinstance(number, bool)
+                    }
+    messages_path = state_dir / "messages.jsonl"
+    if messages_path.is_file():
+        counts: dict[str, int] = {}
+        try:
+            rows = messages_path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            rows = []
+        for raw in rows:
+            try:
+                message = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(message, dict):
+                kind = str(message.get("kind", "unknown"))
+                counts[kind] = counts.get(kind, 0) + 1
+        result["message_kind_counts"] = dict(sorted(counts.items()))
+    return result
 
 
 def update_executor_context_runtime(
@@ -146,6 +268,7 @@ def update_executor_context_runtime(
         return None
     value = json.loads(path.read_text(encoding="utf-8"))
     runtime = _event_runtime(events_path)
+    runtime.update(_protocol_runtime(state_dir))
     aggregate = provider_evidence.get("aggregate") if isinstance(provider_evidence, Mapping) and isinstance(provider_evidence.get("aggregate"), Mapping) else {}
     turns = runtime.get("model_turn_count")
     input_tokens, cached_tokens = aggregate.get("input_tokens"), aggregate.get("cached_input_tokens")

@@ -22,30 +22,18 @@ COMMAND_CARD_FILENAME = "command-card.md"
 _PROFILE_COMMANDS: dict[str, frozenset[str]] = {
     "implementation": frozenset(
         {
-            "agent-run status",
-            "agent-run progress",
             "agent-run ack",
-            "agent-run watch",
-            "agent context",
             "agent criterion",
             "agent limitation",
-            "agent verify",
-            "agent complete",
-            "agent completion-status",
+            "agent finish",
         }
     ),
     "review": frozenset(
         {
-            "agent-run status",
-            "agent-run progress",
             "agent-run ack",
-            "agent-run watch",
-            "agent context",
             "agent criterion",
             "agent limitation",
-            "agent verify",
-            "agent complete",
-            "agent completion-status",
+            "agent finish",
             "assess-sealed-runs",
             "ledger",
             "eval report",
@@ -293,19 +281,16 @@ def render_launch_command_card(catalog: dict[str, Any], *, role: str) -> str:
         return render_command_markdown(catalog, role=role)
     selected = filter_catalog(catalog, role)
     common = {
-        "agent-run progress",
-        "agent-run ack",
+        "agent finish",
         "agent criterion",
         "agent limitation",
-        "agent verify",
-        "agent complete",
-        "agent completion-status",
+        "agent-run ack",
     }
     by_name = {str(item["command"]): item for item in selected["commands"]}
     lines = [
         f"# Agent-workflow {role} common-path commands",
         "",
-        "Use these signatures directly. The complete role-scoped JSON catalog is in AGENT_WORKFLOW_COMMAND_CATALOG.",
+        "Normal path is agent finish. Steering carries mid-run instructions/context; the other signatures below are exceptional evidence/acknowledgement paths.",
         "Do not run `--help` unless the catalog is missing/mismatched or a represented signature rejects an argument.",
         "",
     ]
