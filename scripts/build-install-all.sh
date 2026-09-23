@@ -9,8 +9,8 @@ PARENT="$(dirname "$ROOT")"
 EXPECTED_CONTRACTS_VERSION="0.2.1"
 EXPECTED_AGENT_WORKFLOW_VERSION="0.11.8"
 EXPECTED_COMPARATIVE_EVAL_VERSION="0.1.0"
-EXPECTED_SPECGEN_VERSION="0.2.6"
-EXPECTED_BENCHMARK_VERSION="0.3.3"
+EXPECTED_SPECGEN_VERSION="0.2.7"
+EXPECTED_BENCHMARK_VERSION="0.3.4"
 EXPECTED_TYPESAFE_VERSION="0.6.0"
 
 VENV_ARG=""
@@ -54,8 +54,8 @@ Required versions:
   specgen-agent-workflow-contracts  0.2.1
   agent-workflow                    0.11.8
   agent-workflow-comparative-eval   0.1.0
-  specgen                           0.2.6
-  agent-workflow-benchmark          0.3.3
+  specgen                           0.2.7
+  agent-workflow-benchmark          0.3.4
   typesafe-sdk                      0.6.0
 
 Normal build/install first fast-forwards every stack repository with
@@ -335,8 +335,8 @@ expected = {
     "specgen-agent-workflow-contracts": "0.2.1",
     "agent-workflow": "0.11.8",
     "agent-workflow-comparative-eval": "0.1.0",
-    "specgen": "0.2.6",
-    "agent-workflow-benchmark": "0.3.3",
+    "specgen": "0.2.7",
+    "agent-workflow-benchmark": "0.3.4",
     "typesafe-sdk": "0.6.0",
 }
 provenance_path = Path(sys.prefix) / "share" / "agent-workflow" / "source-provenance.json"
@@ -349,8 +349,8 @@ local_expected = {
     "specgen-agent-workflow-contracts": "0.2.1",
     "agent-workflow": "0.11.8",
     "agent-workflow-comparative-eval": "0.1.0",
-    "specgen": "0.2.6",
-    "agent-workflow-benchmark": "0.3.3",
+    "specgen": "0.2.7",
+    "agent-workflow-benchmark": "0.3.4",
 }
 for name, version in local_expected.items():
     item = provenance.get("components", {}).get(name)
