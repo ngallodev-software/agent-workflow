@@ -215,7 +215,7 @@ The core is deliberately host-independent. A future plugin may project Agent Run
 
 ## Version
 
-Version `0.11.8` builds on 0.11.7 by removing the obsolete granular worker protocol surface entirely. The normal worker path is steering plus one deterministic `agent finish` transaction, with host-derived acceptance-command evidence and BM5 command/cache amplification telemetry. Lifecycle, review, acceptance, scope, provenance, and sealing authority remain host-owned.
+Version `0.11.9` builds on 0.11.7 by removing the obsolete granular worker protocol surface entirely. The normal worker path is steering plus one deterministic `agent finish` transaction, with host-derived acceptance-command evidence and BM5 command/cache amplification telemetry. Lifecycle, review, acceptance, scope, provenance, and sealing authority remain host-owned.
 
 ## Repository-only CI assets
 

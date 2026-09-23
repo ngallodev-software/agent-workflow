@@ -33,7 +33,7 @@ DRAFT_NAME = "completion-draft.json"
 FINAL_NAME = "completion.json"
 MAX_EVIDENCE_ITEMS = 64
 MAX_TEXT_CHARS = 4096
-PROTOCOL_TELEMETRY_SCHEMA = "agent-workflow/protocol-telemetry/v1"
+PROTOCOL_TELEMETRY_SCHEMA = "agent-workflow/protocol-telemetry/v2"
 PROTOCOL_TELEMETRY_NAME = "protocol-telemetry.json"
 
 
@@ -79,7 +79,7 @@ def _load_protocol_telemetry(handoff: Path) -> dict[str, Any]:
             "cache_hits": 0,
             "cache_misses": 0,
         },
-        "finish": {"attempts": 0, "outcomes": {}},
+        "finish": {"invocations": 0, "outcomes": {}},
         "updated_at": None,
     }
     if not path.is_file():
@@ -92,7 +92,7 @@ def _load_protocol_telemetry(handoff: Path) -> dict[str, Any]:
         return empty
     value.setdefault("cli_command_counts", {})
     value.setdefault("acceptance", dict(empty["acceptance"]))
-    value.setdefault("finish", {"attempts": 0, "outcomes": {}})
+    value.setdefault("finish", {"invocations": 0, "outcomes": {}})
     return value
 
 
@@ -126,10 +126,25 @@ def _record_acceptance_telemetry(
     _save_protocol_telemetry(handoff, value)
 
 
-def _record_finish_outcome(handoff: Path, outcome: str) -> None:
+def _record_finish_invocation(handoff: Path) -> None:
+    """Record entry into the deterministic finish transaction.
+
+    This is distinct from the worker-issued CLI command count: the CLI count
+    records requested commands, while invocations records calls that entered
+    the finish transaction far enough to resolve the authorized handoff.
+    """
     value = _load_protocol_telemetry(handoff)
     finish = value.setdefault("finish", {})
-    finish["attempts"] = int(finish.get("attempts", 0)) + 1
+    finish["invocations"] = int(finish.get("invocations", 0)) + 1
+    finish.setdefault("outcomes", {})
+    _save_protocol_telemetry(handoff, value)
+
+
+def _record_finish_outcome(handoff: Path, outcome: str) -> None:
+    """Record one terminal finish decision without changing invocation count."""
+    value = _load_protocol_telemetry(handoff)
+    finish = value.setdefault("finish", {})
+    finish.setdefault("invocations", 0)
     outcomes = finish.setdefault("outcomes", {})
     outcomes[outcome] = int(outcomes.get(outcome, 0)) + 1
     _save_protocol_telemetry(handoff, value)
@@ -757,6 +772,7 @@ def finish(
     retry without launching a mandatory review phase.
     """
     state_dir, contract, workdir, handoff = _context(settings, agent_run_id)
+    _record_finish_invocation(handoff)
     binding = _job_binding(state_dir)
     acceptance_commands = _declared_acceptance_commands(state_dir)
     verification: list[dict[str, Any]] = []
