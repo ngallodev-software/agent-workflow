@@ -5,20 +5,17 @@ from __future__ import annotations
 import argparse
 from typing import Any
 
-from ..agent_context import read as read_agent_context
 from ..config import Settings
 
 
 def handle_agent_command(settings: Settings, args: argparse.Namespace) -> Any:
     """Execute one parsed Agent Run worker-context command."""
     if hasattr(args, "agent_run_id") and args.agent_command in {
-        "criterion", "limitation", "verify", "complete", "finish", "completion-status"
+        "criterion", "limitation", "finish"
     }:
         from ..worker_completion import record_protocol_cli
 
         record_protocol_cli(settings, args.agent_run_id, args.agent_command)
-    if args.agent_command == "context":
-        return read_agent_context(settings, args.agent_run_id)
     if args.agent_command == "roles":
         from ..roles import public_role_catalog
 
@@ -46,23 +43,6 @@ def handle_agent_command(settings: Settings, args: argparse.Namespace) -> Any:
             evidence=args.evidence,
             evidence_files=args.evidence_file,
         )
-    if args.agent_command == "verify":
-        from ..worker_completion import verify_command
-
-        argv = list(args.argv)
-        if argv and argv[0] == "--":
-            argv = argv[1:]
-        return verify_command(
-            settings, args.agent_run_id, argv=argv, cwd=args.cwd,
-            timeout_seconds=args.timeout,
-        )
-    if args.agent_command == "complete":
-        from ..worker_completion import complete
-
-        return complete(
-            settings, args.agent_run_id, result=args.result,
-            unresolved=args.unresolved, review_disposition=args.review_disposition,
-        )
     if args.agent_command == "finish":
         from ..worker_completion import finish
 
@@ -70,8 +50,4 @@ def handle_agent_command(settings: Settings, args: argparse.Namespace) -> Any:
             settings, args.agent_run_id, result=args.result,
             unresolved=args.unresolved, review_disposition=args.review_disposition,
         )
-    if args.agent_command == "completion-status":
-        from ..worker_completion import status
-
-        return status(settings, args.agent_run_id)
     raise ValueError(f"unsupported agent command: {args.agent_command}")
