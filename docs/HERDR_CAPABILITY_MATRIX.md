@@ -40,7 +40,7 @@ Baseline: Agent-Workflow 0.11.6 at 63627e6ec73fa62c18da64ffc38c5189cced6458
 | Worktree provenance | yes | host worktree state is not sealed provenance | Agent-Workflow | KEEP |
 | Worktree bootstrap | none/general | worktree-setup/seed/bootstrap plugins | plugin | PLUGIN |
 | Ticket -> worktree UX | prompt pack / external | worktree-from-linear and similar | plugin | PLUGIN |
-| Durable messages | append-only AW journal | Herdr prompt is transport only | Agent-Workflow | KEEP |
+| Durable messages | append-only AW journal | Herdr prompt is transport only; herdr-tasks has append-only task events | Agent-Workflow kernel or selected task/workflow substrate | COMPARE |
 | Live steering delivery | control-file/external-host adapters | Herdr prompt | Herdr adapter | DELETE adapters |
 | Semantic acknowledgement | correlated AW ack | Herdr transport does not imply application | Agent-Workflow | KEEP |
 | Host event stream | polling/supervisor | Herdr events.subscribe | Herdr | HERDR |
@@ -54,7 +54,10 @@ Baseline: Agent-Workflow 0.11.6 at 63627e6ec73fa62c18da64ffc38c5189cced6458
 | Progress UI | AW status output | agent-progress, dashboards | plugin | PLUGIN |
 | Token/cost UI | metrics/reporting | token dashboard/usage plugins | plugin | PLUGIN |
 | Provider accounting evidence | provider evidence sealed in receipt | dashboards are observational | Agent-Workflow | KEEP |
-| Generic task board | workflow views | tsk, beads | plugin | DELETE UI |
+| Generic task board | workflow views | tsk, beads, herdr-tasks | plugin | DELETE UI |
+| Task claims/leases | workflow child ownership/name leasing | herdr-tasks has one-winner claims, renewable leases, pane-loss reconciliation | selected task/workflow substrate | COMPARE |
+| Criterion-level evidence entry | AW criteria commands | herdr-tasks supports evidence-for acceptance criteria | kernel or herdr-tasks adapter | COMPARE |
+| Reviewer recusal | AW review policy | herdr-tasks enforces producer/reviewer session recusal | kernel or herdr-tasks | COMPARE |
 | Generic project coordinator | orchestrator inbox/supervisor | Herdr Projects | compare | COMPARE |
 | Simple YAML workflow | AW workflow JSON | herdr-workflows | compare/integrate | COMPARE |
 | Scripted dynamic workflow | AW scheduler | herdr-dynamic-workflow | compare | COMPARE |
@@ -71,11 +74,15 @@ Baseline: Agent-Workflow 0.11.6 at 63627e6ec73fa62c18da64ffc38c5189cced6458
 | Independent reviewer constraint | yes/policy | some workflow projects support separate agents | Agent-Workflow or chosen reducer | KEEP |
 | Completion contract | typed | workflow plugins generally return result/status | Agent-Workflow | KEEP |
 | Criteria evidence | yes | some schema outputs/check helpers | Agent-Workflow | KEEP |
-| Command verification evidence | yes | workflow run steps exist | Agent-Workflow | KEEP |
+| Command verification evidence | yes | workflow run steps; herdr-testrun structured results | Agent-Workflow evidence receipt, optional plugin source | KEEP/PLUGIN |
+| Exact staged-tree validation | partial through Git/provenance/evaluation | Otito binds gate/convergence receipts to exact staged tree/base | Otito integration candidate | COMPARE |
+| Deterministic change convergence | Agent-Workflow semantic/eval paths | Otito deterministic convergence score | Otito/evaluation adapter | COMPARE |
 | Evaluation | yes | various judge helpers | Agent-Workflow | KEEP unless formally replaced |
 | Comparative evaluation | plugin/built-in integration | no direct equivalent identified | Agent-Workflow | KEEP |
 | TypeSafe/Jev decision audit | yes | agent-router uses TypeSafe for routing | divide by seam | COMPARE |
-| Review != acceptance | explicit | not universal in plugins | Agent-Workflow | KEEP |
+| Human sign-off UX | CLI lifecycle operation | herdr-approval-gate | plugin | PLUGIN |
+| Command risk policy | security/executor policy | herdr-guard pre-execution/audit policy | optional plugin | PLUGIN |
+| Review != acceptance | explicit | not universal in plugins; Otito explicitly keeps local gate distinct from merge/human approval | Agent-Workflow | KEEP |
 | Final sealed receipt | yes | no equivalent Herdr core primitive | Agent-Workflow | KEEP |
 | SQLite read projection | yes | many plugins have local DBs | optional AW projection | RE-EVALUATE |
 | Read-only MCP | yes | Herdr/plugin ecosystem may make it less necessary | optional | RE-EVALUATE |
@@ -227,3 +234,34 @@ When deciding whether a feature belongs in the fork, ask:
 5. Would losing the plugin change whether the work is accepted?
 
 If the answer is no to all five, it probably belongs in Herdr or a plugin, not Agent-Workflow.
+
+
+## Revised critical comparator set
+
+The gap-focused search requires the fork to compare four architectural building blocks before implementing a new coordination/evidence substrate:
+
+1. **Agent-Workflow 0.11.6** — current invariant/reference implementation.
+2. **XiaoConstantine/herdr-workflow** — event-sourced reducer/artifact/workflow architecture; currently no selected license in the reviewed source.
+3. **husniadil/herdr-tasks** — MIT task lifecycle, leases, evidence, recusal, events, policy gate, stable CLI/MCP contract.
+4. **BASHBOP/otito** — MIT deterministic exact-tree trust/convergence/evidence layer with a Herdr adapter.
+
+A plausible end-state is composition rather than reimplementation:
+
+~~~text
+Herdr
+  -> execution
+
+selected task/workflow substrate
+  -> claims / dependencies / review queue
+
+Otito or equivalent deterministic analyzers
+  -> exact-change evidence
+
+Agent-Workflow kernel
+  -> immutable run contract
+  -> source/evidence binding
+  -> evaluation + benchmark receipts
+  -> final review/acceptance disposition
+~~~
+
+The project must prove why any duplicated function belongs in the kernel.
