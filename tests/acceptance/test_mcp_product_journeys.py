@@ -98,12 +98,20 @@ def test_installed_stdio_mcp_reads_bounded_metadata_only(
     assert capabilities["command_catalog"]["leaf_command_count"] >= len(commands["commands"])
     represented = {item["command"] for item in commands["commands"]}
     assert {
-        "agent-run progress",
         "agent-run ack",
         "agent criterion",
+        "agent limitation",
+        "agent finish",
+    } <= represented
+    assert {
+        "agent-run progress",
+        "agent-run status",
+        "agent-run watch",
+        "agent context",
         "agent verify",
         "agent complete",
-    } <= represented
+        "agent completion-status",
+    }.isdisjoint(represented)
     assert "agent task-complete" not in represented
     assert "worktree create" not in represented
     assert unknown_commands["schema"] == "agent-workflow/mcp-error/v1"
