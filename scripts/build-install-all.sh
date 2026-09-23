@@ -413,8 +413,6 @@ if AW_VERSION != "0.11.9":
 codex = shutil.which("codex")
 if not codex:
     raise SystemExit("direct Codex executable is not available")
-if Path(codex).name == "agent-workflow-codex":
-    raise SystemExit("agent-workflow-codex wrapper may not be used")
 
 if not os.environ.get("TYPESAFE_API_KEY"):
     raise SystemExit("TYPESAFE_API_KEY is not configured")

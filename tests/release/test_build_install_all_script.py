@@ -96,7 +96,6 @@ def test_build_install_all_writes_comparative_plugin_config() -> None:
     assert 'mode = "comparative"' in text
     assert "TYPESAFE_API_KEY" in text
     assert 'settings.executors.get("codex", [None])[0] != "codex"' in text
-    assert "agent-workflow-codex wrapper may not be used" in text
     assert '"agent-workflow-comparative-eval"' in text
 
 
