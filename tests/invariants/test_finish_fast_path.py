@@ -115,6 +115,8 @@ def test_finish_runs_acceptance_once_and_derives_mapped_criterion(tmp_path: Path
     telemetry = json.loads((handoff / module.PROTOCOL_TELEMETRY_NAME).read_text(encoding="utf-8"))
     assert telemetry["acceptance"]["executed"] == 1
     assert telemetry["acceptance"]["cache_hits"] == 1
+    assert telemetry["schema"] == "agent-workflow/protocol-telemetry/v2"
+    assert telemetry["finish"]["invocations"] == 1
     assert telemetry["finish"]["outcomes"]["completed"] == 1
 
 
@@ -157,6 +159,9 @@ def test_finish_stops_on_failed_acceptance_and_requests_repair(tmp_path: Path, m
 
     draft = json.loads((handoff / module.DRAFT_NAME).read_text(encoding="utf-8"))
     assert draft["criteria"][0]["result"] == "fail"
+    telemetry = json.loads((handoff / module.PROTOCOL_TELEMETRY_NAME).read_text(encoding="utf-8"))
+    assert telemetry["finish"]["invocations"] == 1
+    assert telemetry["finish"]["outcomes"]["verification_failed"] == 1
 
 
 def test_finish_only_requests_unmapped_semantic_criteria(tmp_path: Path, monkeypatch) -> None:
