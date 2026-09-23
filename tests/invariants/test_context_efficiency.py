@@ -62,10 +62,10 @@ def test_executor_context_projects_durable_refs_and_runtime_amplification(tmp_pa
     )
     (handoff / "protocol-telemetry.json").write_text(
         json.dumps({
-            "schema": "agent-workflow/protocol-telemetry/v1",
+            "schema": "agent-workflow/protocol-telemetry/v2",
             "cli_command_counts": {"finish": 1},
             "acceptance": {"executed": 2, "reused": 1, "failed": 0, "cache_hits": 1, "cache_misses": 1},
-            "finish": {"attempts": 1, "outcomes": {"completed": 1}},
+            "finish": {"invocations": 2, "outcomes": {"completed": 1}},
         }) + "\n",
         encoding="utf-8",
     )
@@ -89,6 +89,8 @@ def test_executor_context_projects_durable_refs_and_runtime_amplification(tmp_pa
     assert updated["runtime"]["acceptance_command_executions"] == 2
     assert updated["runtime"]["verification_cache_hits"] == 1
     assert updated["runtime"]["verification_cache_misses"] == 1
+    assert updated["runtime"]["finish_invocations"] == 2
+    assert updated["runtime"]["finish_incomplete_invocations"] == 1
     assert updated["runtime"]["finish_outcomes"] == {"completed": 1}
     assert updated["runtime"]["message_kind_counts"] == {"ack": 1, "steer": 1}
 
