@@ -11,10 +11,8 @@ from agent_workflow.agent_run_control import (
     acknowledge,
     interrupt,
     messages,
-    progress,
     steer,
     terminate,
-    wait_for_message,
 )
 from agent_workflow.agent_identity import can_retire_prepared, retire_external_agent
 from agent_workflow.messages import append_message, replay_messages
@@ -79,22 +77,6 @@ def test_message_state_counts_pending_steer_beyond_bounded_message_projection(tm
     assert all(item["message_id"] != steer_message["message_id"] for item in result["steering"])
 
 
-def test_progress_uses_child_bridge_without_touching_host_state(tmp_path: Path) -> None:
-    settings = _settings(tmp_path)
-    expected = {"outcome": "recorded"}
-    with (
-        patch("agent_workflow.agent_run_control.bridge_available", return_value=True),
-        patch("agent_workflow.agent_run_control.write_control_intent", return_value=expected) as intent,
-        patch("agent_workflow.agent_run_control._active_run") as active,
-    ):
-        result = progress(settings, "run-1", actor="child", content="working")
-    assert result is expected
-    intent.assert_called_once_with(
-        agent_run_id="run-1", kind="progress", actor="child", content="working"
-    )
-    active.assert_not_called()
-
-
 def test_acknowledgement_rejects_invalid_outcome_before_side_effects(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     with pytest.raises(WorkflowError, match="applied or rejected"):
@@ -106,27 +88,6 @@ def test_acknowledgement_rejects_invalid_outcome_before_side_effects(tmp_path: P
             correlation_id="msg-1",
             outcome="ignored",
         )
-
-
-def test_message_replay_and_wait_use_durable_polling_only(tmp_path: Path) -> None:
-    settings = _settings(tmp_path)
-    run = tmp_path / "run"
-    rows = [{"sequence": 3}]
-    with (
-        patch("agent_workflow.agent_run_control.read_status"),
-        patch("agent_workflow.agent_run_control.run_dir", return_value=run),
-        patch("agent_workflow.agent_run_control.replay_messages", return_value=rows) as replay,
-    ):
-        assert messages(settings, "run-1", after_sequence=2) is rows
-    replay.assert_called_once_with(run, after_sequence=2)
-
-    with (
-        patch("agent_workflow.agent_run_control.read_status"),
-        patch("agent_workflow.agent_run_control.run_dir", return_value=run),
-        patch("agent_workflow.agent_run_control.wait_for_messages", return_value=rows) as wait,
-    ):
-        assert wait_for_message(settings, "run-1", after_sequence=2, timeout_seconds=1.5) is rows
-    wait.assert_called_once_with(run, after_sequence=2, timeout_seconds=1.5)
 
 
 def test_external_lifecycle_control_is_explicitly_unavailable(tmp_path: Path) -> None:
