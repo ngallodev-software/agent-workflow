@@ -368,7 +368,7 @@ def _write_launch_prompt(
         "- Runtime projection: $AGENT_WORKFLOW_EXECUTION_CONTEXT. Mid-run instructions/context arrive through durable steering; do not poll status, watch, or context during normal work.",
         "- Normal successful path: implement, commit ticket-scoped source, then run exactly one agent finish AGENT_RUN_ID --result completed. Finish runs/reuses declared acceptance commands and derives criteria mapped to those commands.",
         "- If finish reports verification_failed, repair only the reported defects and run finish again. If it reports semantic_evidence_required, record only those listed semantic criteria with agent criterion, then rerun finish.",
-        "- Use agent limitation only for a real controlled-environment limitation. Legacy agent verify/complete and progress/status polling are compatibility paths, not the normal protocol.",
+        "- Use agent limitation only for a real controlled-environment limitation. Verification, completion, and protocol bookkeeping are host-owned behind agent finish; deleted granular worker commands are not available.",
         "- Review/accept/reject/force-accept remain host-only authority; process exit and worker completion are not acceptance.",
     ]
     if role_instructions is not None:
