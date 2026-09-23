@@ -1,8 +1,29 @@
-# agent-workflow
+# Agent-Workflow
 
-`agent-workflow` is a headless workflow, evidence, evaluation, and delegation engine for coding-agent work.
+![Version](https://img.shields.io/badge/version-0.11.9-blue)
+![Python](https://img.shields.io/badge/python-%3E%3D3.11-3776AB)
+![License](https://img.shields.io/badge/license-Apache--2.0-green)
 
-The durable execution object is an **Agent Run**. A task may produce one or more Agent Runs over its lifetime; each Agent Run has an immutable execution contract, a worker plan, durable messaging, evidence, and a review/acceptance lifecycle.
+`agent-workflow` is a headless orchestration, evidence, evaluation, and delegation
+engine for coding-agent work. It keeps workflow authority in deterministic code
+while allowing coding agents and bounded semantic providers to operate inside
+explicit, inspectable contracts.
+
+The durable execution object is an **Agent Run**. A task may produce one or more
+Agent Runs over its lifetime; each Agent Run has an immutable execution contract,
+a worker plan, durable messaging, evidence, and a review/acceptance lifecycle.
+
+**Why it exists:** multi-step agent work becomes difficult to inspect when task
+state, worker identity, instructions, verification, and acceptance live only in
+chat or terminal history. Agent-Workflow makes those boundaries durable and
+restart-safe without owning the interactive host UI.
+
+Related projects: [SpecGen-AW](https://github.com/ngallodev-software/specgen-aw)
+compiles reviewable specifications into Agent-Workflow prompt packs;
+[agent-workflow-benchmark](https://github.com/ngallodev-software/agent-workflow-benchmark)
+provides the optional comparative benchmark surface; and
+[agent-workflow-benchmark-results](https://github.com/ngallodev-software/agent-workflow-benchmark-results)
+publishes finished benchmark software and evidence.
 
 ## Core model
 
