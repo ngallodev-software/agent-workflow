@@ -25,7 +25,7 @@ The core intentionally does not own workspace, pane, window, or interactive term
 - Git worktree isolation, source baselines, and provenance;
 - Agent Run contracts and worker policy;
 - restart-safe workflow DAGs and hierarchical delegation authority;
-- persist-first steering, progress, acknowledgement, replay, and correlation;
+- persist-first steering, acknowledgement, replay, and correlation;
 - controlled process execution and bounded supervision;
 - completion handoffs, sealed evidence, receipts, review, and acceptance;
 - evaluation plans, scoring, review/acceptance evidence, and optional plugin-provided comparative benchmarks;
