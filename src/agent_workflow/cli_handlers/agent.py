@@ -11,6 +11,12 @@ from ..config import Settings
 
 def handle_agent_command(settings: Settings, args: argparse.Namespace) -> Any:
     """Execute one parsed Agent Run worker-context command."""
+    if hasattr(args, "agent_run_id") and args.agent_command in {
+        "criterion", "limitation", "verify", "complete", "finish", "completion-status"
+    }:
+        from ..worker_completion import record_protocol_cli
+
+        record_protocol_cli(settings, args.agent_run_id, args.agent_command)
     if args.agent_command == "context":
         return read_agent_context(settings, args.agent_run_id)
     if args.agent_command == "roles":
@@ -54,6 +60,13 @@ def handle_agent_command(settings: Settings, args: argparse.Namespace) -> Any:
         from ..worker_completion import complete
 
         return complete(
+            settings, args.agent_run_id, result=args.result,
+            unresolved=args.unresolved, review_disposition=args.review_disposition,
+        )
+    if args.agent_command == "finish":
+        from ..worker_completion import finish
+
+        return finish(
             settings, args.agent_run_id, result=args.result,
             unresolved=args.unresolved, review_disposition=args.review_disposition,
         )
