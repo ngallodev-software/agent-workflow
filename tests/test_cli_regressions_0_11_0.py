@@ -282,6 +282,17 @@ def test_agent_verify_accepts_cwd_after_run_id_before_separator() -> None:
     assert args.argv == ["python", "-c", "raise SystemExit(0)"]
 
 
+def test_agent_finish_parser_is_single_normal_closeout_path() -> None:
+    parser = build_parser(command_scope="agent")
+    args = parser.parse_args(
+        ["agent", "finish", "run-1", "--result", "completed"]
+    )
+    assert args.agent_command == "finish"
+    assert args.agent_run_id == "run-1"
+    assert args.result == "completed"
+    assert args.unresolved == []
+
+
 def test_restart_parser_is_prepare_first_and_accepts_context_file() -> None:
     parser = build_parser(command_scope="agent-run")
     args = parser.parse_args(
@@ -330,7 +341,7 @@ def test_launch_prompt_records_dirty_authorization_retry_context_and_completion_
     assert "preserve unrelated drift" in text
     assert "## Operator retry context" in text
     assert "pass/fail/not_verified" in text
-    assert "agent complete AGENT_RUN_ID" in text
+    assert "agent finish AGENT_RUN_ID --result completed" in text
     assert "declared criterion IDs: P0-AC-01, P0-AC-02" in text
     assert "The deterministic protocol is used." not in text
 
@@ -1150,8 +1161,9 @@ def test_launch_prompt_is_compact_and_keeps_runtime_guardrails(tmp_path: Path) -
     assert injected < 2500
     assert "AGENT_WORKFLOW_EXECUTION_CONTEXT" in text
     assert "host-only authority" in text
-    assert "agent verify AGENT_RUN_ID" in text
-    assert "agent complete AGENT_RUN_ID" in text
+    assert "agent finish AGENT_RUN_ID --result completed" in text
+    assert "do not poll status, watch, or context" in text
+    assert "Legacy agent verify/complete" in text
     assert "process exit and completion are not acceptance" in text
     assert "Long description deliberately omitted" not in text
     assert "# Ticket" in text
@@ -1167,8 +1179,13 @@ def test_launch_command_card_is_common_path_but_json_catalog_stays_complete() ->
 
     catalog = filter_catalog(runtime_command_catalog(include_plugins=False), "implementation")
     card = render_launch_command_card(catalog, role="implementation")
+    assert "agent finish" in card
     assert "agent criterion" in card
-    assert "agent verify" in card
-    assert "agent complete" in card
+    assert "agent limitation" in card
+    assert "agent-run ack" in card
+    assert "agent verify" not in card
+    assert "agent complete" not in card
     assert "agent-run watch" not in card
+    assert "agent-run progress" not in card
+    assert "agent context" not in card
     assert {item["command"] for item in catalog["commands"]} == set(_PROFILE_COMMANDS["implementation"])
