@@ -177,7 +177,6 @@ def measure() -> dict:
             "normal_contract_surfaces": [
                 {"surface": "agent-run prepare", "fields": ["agent_class", "executor", "model"]},
                 {"surface": "agent-run status/status.json", "fields": ["agent_class", "executor", "model"]},
-                {"surface": "agent context/agent-context.json", "fields": ["agent_class", "executor", "model"]},
                 {"surface": "MCP public run status", "fields": ["agent_class", "executor", "model"]},
                 {"surface": "workflow snapshot node command", "fields": ["agent_class", "executor", "model"]},
             ],

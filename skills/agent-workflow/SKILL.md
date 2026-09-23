@@ -56,17 +56,22 @@ agent-workflow delegate RUN /path/to/prompt.md --workdir WORKTREE --worker-mode 
 
 External mode prepares only. Launch the returned worker contract with the external host. Normal agents choose a logical role, never provider/model/runtime routing. Use lower-level `worktree create`, `agent-run prepare`, and `agent-run start` only for recovery, diagnostics, or explicit operator control.
 
-Use the role-scoped launch card/catalog first; retrieve more detail only when needed:
+Use the role-scoped launch card/catalog first; retrieve more detail only when needed. Mid-run context and instructions use the single durable steering channel:
 
 ```bash
-agent-workflow agent-run status RUN
-agent-workflow agent context RUN
-agent-workflow agent-run progress RUN "checkpoint" --actor worker
-agent-workflow agent-run steer RUN "new instruction" --actor parent
+agent-workflow agent-run steer RUN "new instruction or context" --actor parent
 agent-workflow agent-run ack RUN MESSAGE_ID "applied" --actor worker
 ```
 
-Workers publish structured completion through the deterministic worker protocol: record declared criteria with `agent criterion`, record a final observed command with `agent verify`, then finish with `agent complete`. Required evaluation, independent review, and authorized acceptance/rejection remain separate gates. Do not infer success from worker exit or self-accept because implementation/tests finished.
+The normal worker completion path is one deterministic transaction:
+
+```bash
+agent-workflow agent finish RUN --result completed
+```
+
+`finish` runs or safely reuses declared acceptance commands, derives explicitly mapped deterministic criteria, and publishes completion only when those gates pass. If it returns a verification failure, repair the reported defect and rerun `finish`. If it requests semantic evidence, record only those listed criteria with `agent criterion`, then rerun `finish`. Use `agent limitation` only for a real controlled-environment limitation.
+
+Do not use routine worker-side status/context/progress/watch polling. Those commands are not part of the worker protocol. Required evaluation, independent review, and authorized acceptance/rejection remain separate host gates. Do not infer success from worker exit or self-accept because implementation/tests finished.
 
 ## Launch friction and operator overrides
 

@@ -206,6 +206,7 @@ def initialize(
 
 
 def read(settings: Settings, agent_run_id: str) -> dict[str, Any]:
+    """Read durable assignment state for host/operator summary APIs."""
     validate_id(agent_run_id, "agent run ID")
     value = _read_json(run_dir(settings, agent_run_id) / CONTEXT_NAME)
     if value.get("agent_run_id") != agent_run_id:

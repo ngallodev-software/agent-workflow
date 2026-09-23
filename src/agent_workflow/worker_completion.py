@@ -916,23 +916,3 @@ def finish(
     }
 
 
-def status(settings: Settings, agent_run_id: str) -> dict[str, Any]:
-    """Show the deterministic worker-completion protocol state."""
-    _, contract, _, handoff = _context(settings, agent_run_id)
-    draft = _load_draft(handoff, contract)
-    final = handoff / FINAL_NAME
-    expected = _expected_criteria(contract)
-    recorded = {str(item.get("id")) for item in draft.get("criteria", [])}
-    return {
-        "agent_run_id": agent_run_id,
-        "state": draft.get("state"),
-        "expected_criteria": list(expected),
-        "missing_criteria": [
-            str(item["id"]) for item in expected if str(item["id"]) not in recorded
-        ],
-        "criteria": draft.get("criteria", []),
-        "limitations": draft.get("limitations", []),
-        "commands": draft.get("commands", []),
-        "completion_path": str(final) if final.is_file() else None,
-        "completion_sha256": sha256_file(final) if final.is_file() else None,
-    }

@@ -72,7 +72,7 @@ def test_headless_completion_is_sealed_and_lifecycle_is_separate(
     assert summary["acceptance"]["actor"] == "maintainer"
 
 
-def test_persist_first_steer_progress_ack_and_replay_survive_process_boundaries(
+def test_persist_first_steer_ack_and_replay_survive_process_boundaries(
     installed_product: InstalledProduct,
     product_env: dict[str, str],
     fake_agent_path: Path,
@@ -94,11 +94,15 @@ def test_persist_first_steer_progress_ack_and_replay_survive_process_boundaries(
         "agent-run", "steer", "message-run", "Check the release docs too.",
         "--actor", "orchestrator", env=env,
     )
-    watched = installed_product.json(
-        "agent-run", "watch", "message-run", "--after", "0", "--timeout", "0.5", env=env,
-    )
-    assert watched[0]["message_id"] == steer["message_id"]
-    assert watched[0]["kind"] == "steer"
+    run = _run_dir(env, "message-run")
+    messages_path = run / "messages.jsonl"
+    persisted = [
+        json.loads(line)
+        for line in messages_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert persisted[0]["message_id"] == steer["message_id"]
+    assert persisted[0]["kind"] == "steer"
 
     ack = installed_product.json(
         "agent-run", "ack", "message-run", steer["message_id"], "Applied",
@@ -114,9 +118,11 @@ def test_persist_first_steer_progress_ack_and_replay_survive_process_boundaries(
     installed_product.json(
         "agent-run", "terminate", "message-run", "--grace-seconds", "0", env=env,
     )
-    replayed = installed_product.json(
-        "agent-run", "watch", "message-run", "--after", "0", "--timeout", "0", env=env,
-    )
+    replayed = [
+        json.loads(line)
+        for line in messages_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
     assert [item["kind"] for item in replayed] == ["steer", "ack"]
 
 

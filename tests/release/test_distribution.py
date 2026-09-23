@@ -96,10 +96,12 @@ def test_documented_commands_match_the_installed_public_surface(
     represented = {item["command"] for item in profile["commands"]}
     assert {
         "agent roles", "delegate", "worktree list", "agent-run list",
-        "agent-run status", "agent-run message-state", "agent-run progress",
+        "agent-run status", "agent-run message-state",
         "agent-run ack", "agent-run summary", "workflow validate",
         "workflow status", "workflow verify",
     } <= represented
+    assert "agent-run progress" not in represented
+    assert "agent-run watch" not in represented
     assert len(profile["commands"]) <= 20
     card = installed_product.run(
         "commands", "--format", "markdown", "--role", "orchestrator",

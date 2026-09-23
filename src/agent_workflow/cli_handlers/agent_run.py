@@ -30,12 +30,10 @@ from ..agent_runs import prepare as prepare_agent_run
 from ..agent_runs import start as start_agent_run
 from ..agent_runs import observe
 from ..agent_runs import public_agent_run_view
-from ..agent_runs import progress as record_progress
 from ..agent_runs import restart as restart_agent_run
 from ..agent_runs import steer as steer_agent_run
 from ..agent_runs import terminate as terminate_agent_run
 from ..agent_identity import retire_external_agent
-from ..agent_runs import wait_for_message
 from ..state import list_statuses, read_status, repair_status
 
 
@@ -204,16 +202,6 @@ def handle_agent_run_command(
             ),
             False,
         )
-    if command == "progress":
-        return (
-            record_progress(
-                settings,
-                args.agent_run_id,
-                actor=args.actor,
-                content=args.content,
-            ),
-            False,
-        )
     if command == "ack":
         return (
             acknowledge_message(
@@ -223,16 +211,6 @@ def handle_agent_run_command(
                 content=args.content,
                 correlation_id=args.correlation_id,
                 outcome=args.outcome,
-            ),
-            False,
-        )
-    if command == "watch":
-        return (
-            wait_for_message(
-                settings,
-                args.agent_run_id,
-                after_sequence=args.after,
-                timeout_seconds=args.timeout,
             ),
             False,
         )

@@ -47,7 +47,6 @@ _PROFILE_COMMANDS: dict[str, frozenset[str]] = {
             "agent-run list",
             "agent-run status",
             "agent-run message-state",
-            "agent-run progress",
             "agent-run ack",
             "agent-run summary",
             "workflow validate",
@@ -71,7 +70,7 @@ def command_profile_top_level_commands(profile: str) -> frozenset[str]:
 
 
 def role_for_agent_class(agent_class: str | None) -> str:
-    """Legacy compatibility mapping for callers that have not resolved an AgentRole."""
+    """Map an agent class to the minimal command profile used at launch."""
     value = (agent_class or "").strip().lower()
     if "orchestrat" in value or "coordinator" in value:
         return "orchestrator"
