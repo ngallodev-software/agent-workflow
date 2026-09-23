@@ -30,8 +30,10 @@ def test_installed_cli_exposes_headless_agent_run_surface(
     assert " launch " not in f" {help_text} "
 
     agent_run_help = installed_product.run("agent-run", "--help", env=product_env, check=True).stdout
-    for command in ("prepare", "start", "status", "steer", "progress", "ack", "interrupt", "terminate", "restart"):
+    for command in ("prepare", "start", "status", "steer", "ack", "interrupt", "terminate", "restart"):
         assert command in agent_run_help
+    for removed in ("progress", "watch"):
+        assert removed not in agent_run_help
 
     doctor = installed_product.json("doctor", env=product_env)
     assert doctor["version"] == expected_version
@@ -52,10 +54,18 @@ def test_installed_cli_exposes_headless_agent_run_surface(
         "agent-run start",
         "agent-run status",
         "agent criterion",
-        "agent verify",
-        "agent complete",
+        "agent limitation",
+        "agent finish",
         "worktree closeout",
     } <= represented
+    assert {
+        "agent context",
+        "agent verify",
+        "agent complete",
+        "agent completion-status",
+        "agent-run progress",
+        "agent-run watch",
+    }.isdisjoint(represented)
     assert "agent task-complete" not in represented
     assert "launch" not in represented
 
@@ -112,7 +122,7 @@ def test_headless_agent_run_prepare_start_and_provenance_journey(
     assert status.get("worker_pid") != status.get("worker_id")
 
     public_status = installed_product.json("agent-run", "status", "headless-basic", env=env)
-    public_context = installed_product.json("agent", "context", "headless-basic", env=env)
+    public_context = json.loads((run / "agent-context.json").read_text(encoding="utf-8"))
     handoff = repo / ".agent-workflow-handoff" / "headless-basic"
     public_handoff = "\n".join(
         path.read_text(encoding="utf-8", errors="replace")
@@ -247,9 +257,39 @@ def test_external_exit_completes_only_after_task_completion_and_rebuilds_receipt
     prompt = tmp_path / "external-success.md"
     prompt.write_text("Complete through the external exit contract.\n", encoding="utf-8")
     env = dict(product_env)
+    evaluation = tmp_path / "external-success-evaluation.json"
+    evaluation.write_text(
+        json.dumps(
+            {
+                "schema": "agent-workflow/evaluation-plan/v1",
+                "dataset_split": "development",
+                "task_ids": ["external-success"],
+                "repetitions": 1,
+                "timeout_seconds": 30,
+                "scorers": ["acceptance_commands"],
+                "acceptance_commands": [
+                    {
+                        "id": "external-exit",
+                        "argv": [
+                            str(installed_product.python),
+                            "-c",
+                            "raise SystemExit(0)",
+                        ],
+                        "cwd": ".",
+                        "timeout_seconds": 30,
+                        "result_format": "exit-code",
+                        "junit_path": None,
+                    }
+                ],
+                "sandbox": "docker",
+            }
+        ),
+        encoding="utf-8",
+    )
     installed_product.json(
         "agent-run", "prepare", "external-success", repo, prompt,
         "--worker-mode", "external", "--interactive", "--ticket", "EXT-HOST-002",
+        "--evaluation", evaluation,
         "--", fake_agent_path, env=env,
     )
     run = _run_dir(env, "external-success")
@@ -266,15 +306,13 @@ def test_external_exit_completes_only_after_task_completion_and_rebuilds_receipt
         "--evidence", "ordered integration journey", env=env,
     )
     assert criterion["criterion"]["result"] == "pass"
-    verification = installed_product.json(
-        "agent", "verify", "--cwd", repo, "external-success", "--",
-        installed_product.python, "-c", "raise SystemExit(0)", env=env,
-    )
-    assert verification["ok"] is True
     completed = installed_product.json(
-        "agent", "complete", "external-success", "--result", "completed", env=env,
+        "agent", "finish", "external-success", "--result", "completed", env=env,
     )
     assert completed["state"] == "finalized"
+    assert completed["fast_path"] is True
+    assert completed["verification"][0]["id"] == "external-exit"
+    assert completed["verification"][0]["ok"] is True
     assert not (run / "final-receipt.json").exists()
     exit_observation = installed_product.json(
         "agent-run", "external-exit", "external-success", "--generation", "1",
