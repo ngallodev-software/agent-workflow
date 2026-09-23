@@ -835,7 +835,11 @@ def finish(
             ),
         }
 
-    if result == "completed" and binding is None and not draft.get("commands"):
+    if (
+        result == "completed"
+        and (binding is None or not binding.get("acceptance_commands"))
+        and not draft.get("commands")
+    ):
         _record_finish_outcome(handoff, "verification_required")
         return {
             "agent_run_id": agent_run_id,
