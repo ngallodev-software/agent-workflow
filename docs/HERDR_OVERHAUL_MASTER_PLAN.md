@@ -144,12 +144,15 @@ Deliverable: HERDR_CAPABILITY_MATRIX.md with live-test evidence.
 Compare the remaining Agent-Workflow scheduler semantics against:
 
 - XiaoConstantine/herdr-workflow;
+- husniadil/herdr-tasks;
 - vekexasia/pi-extensible-workflows;
 - aorumbayev/herdr-workflows;
 - andthezhang/herdr-dynamic-workflow;
 - cyperx84/herdr-loop;
 - eliasstravik/herdr-projects;
 - mikhail-angelov/herdr-review-loop.
+
+Also compare evidence/trust responsibilities against BASHBOP/otito before porting Agent-Workflow's deterministic change-validation or convergence logic.
 
 The decision must answer:
 
@@ -183,6 +186,36 @@ Evaluate Herdr events plus waynewu411/herdr-event-log, progress plugins, and not
 ### Gate E — Runtime routing
 
 Evaluate nidhi-singh02/agent-router before retaining model/executor launch-routing machinery. Agent-Workflow may retain policy constraints and decision receipts while delegating host launch selection.
+
+### Gate F — Task/evidence substrate
+
+Evaluate husniadil/herdr-tasks before porting task claims, leases, generic task review state, criterion-evidence entry, reviewer recusal, event-following, or a task-board/MCP surface.
+
+### Gate G — Exact-change trust
+
+Evaluate BASHBOP/otito and its Herdr plugin before porting deterministic impact analysis, exact staged-tree gates, convergence scoring, or related change-trust calculations.
+
+The initial design hypothesis is composition:
+
+~~~text
+Herdr
+  execution fabric
+
+selected task/workflow substrate
+  coordination / claims / review queue
+
+Otito or equivalent analyzers
+  deterministic exact-change evidence
+
+Agent-Workflow kernel
+  immutable run contract
+  provenance binding
+  evaluation/benchmark receipts
+  evidence sealing
+  final review/acceptance disposition
+~~~
+
+This hypothesis must be tested rather than assumed.
 
 ## 6. Target component model
 
@@ -347,6 +380,8 @@ Integrate rather than rebuild:
 
 - Dagr for DAG visualization if its contract can consume AW projection safely;
 - reviewr/file-annotator for human review surfaces;
+- herdr-tasks for task/claim/review mechanics if its contract satisfies the fork;
+- Otito for deterministic exact-change evidence if integration proves suitable;
 - progress/event-log for live host observation;
 - notification/mobile plugins for attention routing;
 - worktree setup/layout plugins for convenience;
