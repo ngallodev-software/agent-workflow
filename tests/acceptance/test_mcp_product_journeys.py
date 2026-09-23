@@ -122,7 +122,8 @@ def test_installed_stdio_mcp_reads_bounded_metadata_only(
     assert context["cli_invocation"] == ["agent-workflow"]
     assert card["sha256"] == context["card_sha256"]
     assert "Do not run `--help`" in card["markdown"]
-    assert "agent-workflow agent-run progress" in card["markdown"]
+    assert "agent-workflow agent finish" in card["markdown"]
+    assert "agent-workflow agent-run progress" not in card["markdown"]
     assert "agent-workflow worktree create" not in card["markdown"]
     item = next(
         entry for entry in messages["items"]
