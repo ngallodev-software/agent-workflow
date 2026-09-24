@@ -7,6 +7,13 @@
 **Portfolio case study:** https://ngallodev-software.uk/projects/agent-workflow  
 **Public benchmark results:** https://github.com/ngallodev-software/agent-workflow-benchmark-results
 
+## Quick summary
+
+- **What it is:** a durable orchestration layer for coding-agent work: delegation, isolated execution, evidence, review, recovery, and acceptance.
+- **Why it matters:** model work does not have to disappear into chat history or a terminal session; execution state and proof survive restart and can be reviewed independently.
+- **Key boundary:** deterministic application code owns lifecycle and policy. Models work inside explicit contracts, and optional semantic providers return bounded evidence rather than taking control.
+- **Proof:** the public benchmark repository publishes finished outputs, timing/token measurements, scores, and limitations instead of only headline claims.
+
 `agent-workflow` is a headless orchestration, evidence, evaluation, and delegation
 engine for coding-agent work. It keeps workflow authority in deterministic code
 while allowing coding agents and bounded semantic providers to operate inside
