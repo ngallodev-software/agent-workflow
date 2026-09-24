@@ -7,7 +7,7 @@
 **Portfolio case study:** https://ngallodev-software.uk/projects/agent-workflow  
 **Public benchmark results:** https://github.com/ngallodev-software/agent-workflow-benchmark-results
 
-## Quick summary
+## Summary
 
 - **What it is:** a durable orchestration layer for coding-agent work: delegation, isolated execution, evidence, review, recovery, and acceptance.
 - **Why it matters:** model work does not have to disappear into chat history or a terminal session; execution state and proof survive restart and can be reviewed independently.
