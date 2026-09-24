@@ -4,6 +4,9 @@
 ![Python](https://img.shields.io/badge/python-%3E%3D3.11-3776AB)
 ![License](https://img.shields.io/badge/license-Apache--2.0-green)
 
+**Portfolio case study:** https://ngallodev-software.uk/projects/agent-workflow  
+**Public benchmark results:** https://github.com/ngallodev-software/agent-workflow-benchmark-results
+
 `agent-workflow` is a headless orchestration, evidence, evaluation, and delegation
 engine for coding-agent work. It keeps workflow authority in deterministic code
 while allowing coding agents and bounded semantic providers to operate inside
