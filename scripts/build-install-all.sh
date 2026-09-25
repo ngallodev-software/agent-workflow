@@ -7,10 +7,10 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PARENT="$(dirname "$ROOT")"
 
 EXPECTED_CONTRACTS_VERSION="0.2.1"
-EXPECTED_AGENT_WORKFLOW_VERSION="0.11.9"
-EXPECTED_COMPARATIVE_EVAL_VERSION="0.1.0"
-EXPECTED_SPECGEN_VERSION="0.2.8"
-EXPECTED_BENCHMARK_VERSION="0.3.9"
+EXPECTED_AGENT_WORKFLOW_VERSION="0.11.10"
+EXPECTED_COMPARATIVE_EVAL_VERSION="0.2.0"
+EXPECTED_SPECGEN_VERSION="0.2.10"
+EXPECTED_BENCHMARK_VERSION="0.4.0"
 EXPECTED_TYPESAFE_VERSION="0.6.0"
 
 VENV_ARG=""
@@ -52,10 +52,10 @@ Default sibling checkout layout:
 
 Required versions:
   specgen-agent-workflow-contracts  0.2.1
-  agent-workflow                    0.11.9
-  agent-workflow-comparative-eval   0.1.0
-  specgen                           0.2.8
-  agent-workflow-benchmark          0.3.9
+  agent-workflow                    0.11.10
+  agent-workflow-comparative-eval   0.2.0
+  specgen                           0.2.10
+  agent-workflow-benchmark          0.4.0
   typesafe-sdk                      0.6.0
 
 Normal build/install first fast-forwards every stack repository with
@@ -333,10 +333,10 @@ import json, os, shutil, sys
 
 expected = {
     "specgen-agent-workflow-contracts": "0.2.1",
-    "agent-workflow": "0.11.9",
-    "agent-workflow-comparative-eval": "0.1.0",
-    "specgen": "0.2.8",
-    "agent-workflow-benchmark": "0.3.9",
+    "agent-workflow": "0.11.10",
+    "agent-workflow-comparative-eval": "0.2.0",
+    "specgen": "0.2.10",
+    "agent-workflow-benchmark": "0.4.0",
     "typesafe-sdk": "0.6.0",
 }
 provenance_path = Path(sys.prefix) / "share" / "agent-workflow" / "source-provenance.json"
@@ -347,10 +347,10 @@ if provenance.get("schema") != "agent-workflow/source-provenance/v1":
     raise SystemExit(f"unexpected source provenance schema: {provenance.get('schema')}")
 local_expected = {
     "specgen-agent-workflow-contracts": "0.2.1",
-    "agent-workflow": "0.11.9",
-    "agent-workflow-comparative-eval": "0.1.0",
-    "specgen": "0.2.8",
-    "agent-workflow-benchmark": "0.3.9",
+    "agent-workflow": "0.11.10",
+    "agent-workflow-comparative-eval": "0.2.0",
+    "specgen": "0.2.10",
+    "agent-workflow-benchmark": "0.4.0",
 }
 for name, version in local_expected.items():
     item = provenance.get("components", {}).get(name)
@@ -407,8 +407,8 @@ loaded = tuple(item.descriptor.name for item in registry.loaded)
 if loaded != ("agent-workflow-spec", "agent-workflow-benchmark"):
     raise SystemExit(f"unexpected loaded plugins: {loaded!r}")
 
-if AW_VERSION != "0.11.9":
-    raise SystemExit(f"SpecGen target {AW_VERSION}; expected 0.11.9")
+if AW_VERSION != "0.11.10":
+    raise SystemExit(f"SpecGen target {AW_VERSION}; expected 0.11.10")
 
 codex = shutil.which("codex")
 if not codex:
