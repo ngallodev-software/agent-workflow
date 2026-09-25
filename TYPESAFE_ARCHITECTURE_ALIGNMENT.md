@@ -27,3 +27,10 @@ The SDK is optional (`agent-workflow[typesafe]`). `TYPESAFE_API_KEY` is the cred
 - `comparative`: TypeSafe is evaluated, deterministic control remains applied, and the counterfactual candidate is captured through the neutral comparative-eval capability.
 
 Current live semantic decisions are only `routing.task_class`, `routing.interaction_required`, and `routing.semantic_risk`. Skill evaluation is not a runtime routing decision and is not reintroduced by this integration.
+
+
+## Comparative-study evidence boundary
+
+Agent-Workflow 0.11.10 preserves the full typed semantic evidence at the comparative boundary instead of reducing it to the composed route. The neutral projection emits one observation for each live semantic seam plus one shared provider-request record for the batched System One call.
+
+This preserves the TypeSafe programming model: Jev supplies typed semantic judgment and probabilities; Agent-Workflow owns thresholds, fallback, applied routing, lifecycle authority, and side effects. Comparative-eval owns only provider-neutral evidence and metric semantics.
