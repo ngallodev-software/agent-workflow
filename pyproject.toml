@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-workflow"
-version = "0.11.9"
+version = "0.11.10"
 description = "Headless, observable workflow for durable coding-agent delegation"
 readme = "README.md"
 keywords = ["agentic-ai", "coding-agents", "orchestration", "workflow-automation", "evaluation", "evidence"]
@@ -41,7 +41,7 @@ eval = [
 ]
 stats = ["scipy>=1.11,<2"]
 typesafe = ["typesafe-sdk==0.6.0"]
-comparative-eval = ["agent-workflow-comparative-eval==0.1.0"]
+comparative-eval = ["agent-workflow-comparative-eval==0.2.0"]
 completion = ["shtab>=1.7,<2"]
 mcp = ["mcp==1.28.1"]
 

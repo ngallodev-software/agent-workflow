@@ -96,6 +96,9 @@ class DecisionEvidence:
     model: str | None = None
     question_set_version: str | None = None
     request_sha256: str | None = None
+    request_id: str | None = None
+    projector_version: str | None = None
+    usage: Mapping[str, object] = field(default_factory=dict)
     source_refs: tuple[str, ...] = ()
     error_class: str | None = None
 
