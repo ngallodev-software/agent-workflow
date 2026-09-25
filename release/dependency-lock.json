@@ -1,7 +1,7 @@
 {
   "schema": "agent-workflow/dependency-lock/v1",
   "project": "agent-workflow",
-  "version": "0.11.9",
+  "version": "0.11.10",
   "scope": "direct-dependencies",
   "follow_up": "HARD-010",
   "packages": [
@@ -118,12 +118,12 @@
     },
     {
       "name": "agent-workflow-comparative-eval",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "groups": [
         "comparative-eval"
       ],
       "source_requirements": [
-        "agent-workflow-comparative-eval==0.1.0"
+        "agent-workflow-comparative-eval==0.2.0"
       ]
     },
     {
