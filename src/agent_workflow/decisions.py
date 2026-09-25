@@ -107,7 +107,7 @@ def require_decision_runtime_ready(settings: Settings) -> dict[str, object]:
         if not shared.get("installed") or not shared.get("compatible"):
             raise WorkflowError(
                 "comparative decision mode requires "
-                "agent-workflow-comparative-eval==0.1.0 in the runtime environment"
+                "agent-workflow-comparative-eval==0.2.0 in the runtime environment"
             )
     return result
 
@@ -213,7 +213,9 @@ def _receipt(settings: Settings, decision_id: str, control: object, evidence_res
         "semantic": None if evidence is None else {
             "status": evidence.status, "semantic_type": evidence.semantic_type, "confidence": evidence.confidence,
             "probability": evidence.probability, "distribution": dict(evidence.distribution), "model": evidence.model,
-            "question_set_version": evidence.question_set_version, "request_sha256": evidence.request_sha256,
+            "question_set_version": evidence.question_set_version, "projector_version": evidence.projector_version,
+            "request_sha256": evidence.request_sha256, "request_id": evidence.request_id,
+            "usage": dict(evidence.usage),
             "source_refs": list(evidence.source_refs), "error_class": evidence.error_class,
         },
     }
