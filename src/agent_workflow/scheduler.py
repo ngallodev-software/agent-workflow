@@ -134,200 +134,53 @@ class SchedulerService:
         if not mode.capture_comparison:
             return None
 
-        receipts = advice.get("decision_receipts")
-        if not isinstance(receipts, Mapping):
-            raise WorkflowError("comparative decision mode produced no decision receipts")
-
         from . import __version__
         from .comparative_eval_runtime import (
             EvidenceStore,
-            make_precomputed_decision_observation,
-            make_provider_request_record,
+            persist_routing_comparison,
+            routing_comparison_records,
         )
 
-        feature_ids = {
-            "routing.task_class": "routing.task-class/v1",
-            "routing.interaction_required": "routing.interaction-required/v1",
-            "routing.semantic_risk": "routing.semantic-risk/v1",
-        }
-        expected = tuple(feature_ids)
-        missing = [decision_id for decision_id in expected if not isinstance(receipts.get(decision_id), Mapping)]
-        if missing:
-            raise WorkflowError(
-                "comparative decision mode missing receipts: " + ", ".join(missing)
-            )
+        receipts = advice.get("decision_receipts")
+        first_semantic = None
+        if isinstance(receipts, Mapping):
+            first = receipts.get("routing.task_class")
+            if isinstance(first, Mapping):
+                semantic = first.get("semantic")
+                if isinstance(semantic, Mapping):
+                    first_semantic = semantic
 
-        semantic_records: list[tuple[str, Mapping[str, Any], Mapping[str, Any]]] = []
-        for decision_id in expected:
-            receipt = receipts[decision_id]
-            semantic = receipt.get("semantic")
-            if not isinstance(semantic, Mapping):
-                raise WorkflowError(f"comparative receipt has no semantic evidence: {decision_id}")
-            semantic_records.append((decision_id, receipt, semantic))
-
-        first_semantic = semantic_records[0][2]
-        request_sha256 = first_semantic.get("request_sha256")
-        request_id = first_semantic.get("request_id")
-        if not isinstance(request_id, str) or not request_id:
-            request_id = (
-                f"typesafe:{str(request_sha256)[:32]}"
-                if isinstance(request_sha256, str) and request_sha256
-                else f"routing:{agent_run_id}"
-            )
-        for decision_id, _, semantic in semantic_records[1:]:
-            other = semantic.get("request_id") or (
-                f"typesafe:{str(semantic.get('request_sha256'))[:32]}"
-                if semantic.get("request_sha256")
-                else request_id
-            )
-            if other != request_id:
-                raise WorkflowError(
-                    f"batched comparative decisions do not share one provider request: {decision_id}"
-                )
-
-        timing = advice.get("decision_timing")
-        timing = timing if isinstance(timing, Mapping) else {}
-        provider_elapsed = timing.get("provider_elapsed_seconds")
-        statuses = [str(semantic.get("status") or "invalid_contract") for _, _, semantic in semantic_records]
-        request_status = (
-            "timeout"
-            if any(status == "timeout" for status in statuses)
-            else "success"
-            if all(status in {"success", "no_match"} for status in statuses)
-            else "error"
-        )
-        error_class = next(
-            (
-                str(semantic.get("error_class"))
-                for _, _, semantic in semantic_records
-                if semantic.get("error_class")
-            ),
-            None,
-        )
-        usage = first_semantic.get("usage")
-        usage = dict(usage) if isinstance(usage, Mapping) else {}
         identity = {
             "agent_workflow_version": __version__,
             "decision_mode": self.settings.decision_mode,
             "decision_profile": self.settings.decision_profile,
             "plugin": None,
             "provider": mode.provider,
-            "model": first_semantic.get("model"),
-            "question_set_version": first_semantic.get("question_set_version"),
-            "projector_version": first_semantic.get("projector_version"),
+            "model": first_semantic.get("model") if first_semantic else None,
+            "question_set_version": (
+                first_semantic.get("question_set_version") if first_semantic else None
+            ),
+            "projector_version": (
+                first_semantic.get("projector_version") if first_semantic else None
+            ),
         }
-
+        records = routing_comparison_records(
+            advice=advice,
+            identity=identity,
+            source_input={"task": task_text, "metadata": dict(source)},
+            projected_input={
+                "metadata": dict(source),
+                "source_ref": str(node.get("ticket_id") or node.get("node_id")),
+            },
+            case_id=agent_run_id,
+            observation_scope=(
+                f"{node.get('workflow_id')}:{node.get('node_id')}:"
+                f"{node.get('workflow_attempt')}"
+            ),
+        )
         store = EvidenceStore(self._comparative_store_path())
         try:
-            existing_request = store.provider_request(request_id)
-            if existing_request is None:
-                request_record = make_provider_request_record(
-                    request_id=request_id,
-                    identity=identity,
-                    decisions=expected,
-                    status=request_status,
-                    duration_seconds=(
-                        float(provider_elapsed)
-                        if isinstance(provider_elapsed, (int, float))
-                        and not isinstance(provider_elapsed, bool)
-                        else None
-                    ),
-                    usage=usage,
-                    request_sha256=(
-                        str(request_sha256)
-                        if isinstance(request_sha256, str) and request_sha256
-                        else None
-                    ),
-                    error_class=error_class,
-                )
-                store.put_provider_request(request_record)
-
-            observation_ids: list[str] = []
-            import hashlib
-
-            for decision_id, receipt, semantic in semantic_records:
-                semantic_type = str(semantic.get("semantic_type") or "")
-                evidence_result = receipt.get("evidence_result")
-                if semantic_type == "noul":
-                    probability = semantic.get("probability")
-                    candidate_decision = (
-                        float(probability) >= 0.5
-                        if isinstance(probability, (int, float))
-                        and not isinstance(probability, bool)
-                        else None
-                    )
-                else:
-                    probability = semantic.get("probability")
-                    candidate_decision = evidence_result
-
-                control_decision = receipt.get("control_result")
-                if decision_id == "routing.task_class":
-                    control_decision = {
-                        "exploratory": "diagnosis",
-                    }.get(str(control_decision), control_decision)
-
-                semantic_status = str(semantic.get("status") or "invalid_contract")
-                candidate_arm_status = (
-                    "success"
-                    if semantic_status in {"success", "no_match"}
-                    else "timeout"
-                    if semantic_status == "timeout"
-                    else "error"
-                )
-                key = (
-                    f"{node.get('workflow_id')}:{node.get('node_id')}:"
-                    f"{node.get('workflow_attempt')}:{decision_id}"
-                )
-                observation_id = "routing-" + hashlib.sha256(key.encode()).hexdigest()[:32]
-                observation_ids.append(observation_id)
-                if store.observation(observation_id) is not None:
-                    continue
-
-                record = make_precomputed_decision_observation(
-                    feature_id=feature_ids[decision_id],
-                    decision_id=decision_id,
-                    semantic_type=semantic_type,
-                    identity={**identity, "decision_id": decision_id},
-                    source_input={"task": task_text, "metadata": dict(source)},
-                    projected_input={
-                        "metadata": dict(source),
-                        "source_ref": str(node.get("ticket_id") or node.get("node_id")),
-                    },
-                    control_decision=control_decision,
-                    candidate_decision=candidate_decision,
-                    semantic_status=semantic_status,
-                    request_id=request_id,
-                    probability=(
-                        float(probability)
-                        if isinstance(probability, (int, float))
-                        and not isinstance(probability, bool)
-                        else None
-                    ),
-                    confidence=(
-                        float(semantic["confidence"])
-                        if isinstance(semantic.get("confidence"), (int, float))
-                        and not isinstance(semantic.get("confidence"), bool)
-                        else None
-                    ),
-                    probabilities=(
-                        semantic.get("distribution")
-                        if isinstance(semantic.get("distribution"), Mapping)
-                        else {}
-                    ),
-                    policy_candidate=receipt.get("policy_candidate_result"),
-                    applied_result=receipt.get("applied_result"),
-                    fallback=(
-                        receipt.get("fallback")
-                        if isinstance(receipt.get("fallback"), Mapping)
-                        else {}
-                    ),
-                    candidate_arm_status=candidate_arm_status,
-                    case_id=agent_run_id,
-                    observation_id=observation_id,
-                )
-                store.put_observation(record)
-
-            return {"observation_ids": observation_ids, "request_id": request_id}
+            return persist_routing_comparison(store, records)
         finally:
             store.close()
 
