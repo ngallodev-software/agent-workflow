@@ -130,7 +130,7 @@ def test_comparative_runtime_ready_requires_shared_library(monkeypatch):
         },
     )
     settings = replace(defaults(), decision_mode="comparative")
-    with pytest.raises(WorkflowError, match="agent-workflow-comparative-eval==0.1.0"):
+    with pytest.raises(WorkflowError, match="agent-workflow-comparative-eval==0.2.0"):
         require_decision_runtime_ready(settings)
 
 
@@ -147,7 +147,7 @@ def test_comparative_runtime_ready_accepts_key_and_library(monkeypatch):
         lambda: {
             "installed": True,
             "compatible": True,
-            "version": "0.1.0",
+            "version": "0.2.0",
             "distribution": "agent-workflow-comparative-eval",
         },
     )
