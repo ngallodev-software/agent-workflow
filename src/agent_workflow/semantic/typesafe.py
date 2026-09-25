@@ -245,6 +245,58 @@ def _answers(response: Any) -> Mapping[str, object]:
     return merged
 
 
+def _response_usage(response: Any) -> dict[str, object]:
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return {}
+    if isinstance(usage, Mapping):
+        raw = dict(usage)
+    elif hasattr(usage, "model_dump"):
+        try:
+            value = usage.model_dump()
+            raw = dict(value) if isinstance(value, Mapping) else {}
+        except Exception:
+            raw = {}
+    else:
+        raw = {
+            name: getattr(usage, name)
+            for name in (
+                "input_tokens", "output_tokens", "total_tokens",
+                "cached_input_tokens", "retry_count",
+            )
+            if getattr(usage, name, None) is not None
+        }
+    aliases = {
+        "total_tokens": "provider_total_tokens",
+    }
+    result: dict[str, object] = {}
+    for key, value in raw.items():
+        if value is None or isinstance(value, bool) or not isinstance(value, (int, float)):
+            continue
+        result[aliases.get(str(key), str(key))] = value
+    if (
+        "provider_total_tokens" not in result
+        and isinstance(result.get("input_tokens"), (int, float))
+        and isinstance(result.get("output_tokens"), (int, float))
+    ):
+        result["provider_total_tokens"] = float(result["input_tokens"]) + float(result["output_tokens"])
+    if result:
+        result["token_evidence_complete"] = all(
+            isinstance(result.get(name), (int, float))
+            for name in ("input_tokens", "output_tokens", "provider_total_tokens")
+        )
+        result["cost_evidence_complete"] = False
+    return result
+
+
+def _response_request_id(response: Any, request_sha256: str) -> str:
+    try:
+        value = response.request_id
+    except Exception:
+        value = None
+    return value if isinstance(value, str) and value else f"typesafe:{request_sha256[:32]}"
+
+
 def _record_call(
     settings: Any,
     *,
@@ -323,16 +375,44 @@ def evaluate(request: DecisionRequest, context: DecisionContext, *, client: Type
     digest = _request_hash(state, decision_ids, model)
     audit_questions = _audit_questions(decision_ids)
     if client is None and not os.environ.get("TYPESAFE_API_KEY"):
-        return {decision_id: DecisionEvidence(decision_id, "service_failure", str(QUESTION_SPECS[decision_id]["primitive"]), question_set_version=QUESTION_SET_VERSION, request_sha256=digest, source_refs=source_refs, error_class="typesafe_api_key_unavailable") for decision_id in decision_ids}
+        return {
+            decision_id: DecisionEvidence(
+                decision_id,
+                "service_failure",
+                str(QUESTION_SPECS[decision_id]["primitive"]),
+                question_set_version=QUESTION_SET_VERSION,
+                request_sha256=digest,
+                request_id=f"typesafe:{digest[:32]}",
+                projector_version=PROJECTOR_VERSION,
+                source_refs=source_refs,
+                error_class="typesafe_api_key_unavailable",
+            )
+            for decision_id in decision_ids
+        }
     started = monotonic()
     try:
         sdk_questions = _sdk_questions(decision_ids) if client is None else {str(QUESTION_SPECS[d]["answer_key"]): QUESTION_SPECS[d] for d in decision_ids}
         response = (client or _client()).system_one(state=state, questions=sdk_questions, model=model)
         answers = _answers(response)
         resolved_model = getattr(response, "model", None)
+        response_usage = _response_usage(response)
+        response_request_id = _response_request_id(response, digest)
     except Exception as exc:
         _record_call(context.settings, request_sha256=digest, state=state, questions=audit_questions, decision_ids=decision_ids, status="service_failure", requested_model=model, error_class=type(exc).__name__, duration_ms=(monotonic() - started) * 1000)
-        return {decision_id: DecisionEvidence(decision_id, "service_failure", str(QUESTION_SPECS[decision_id]["primitive"]), question_set_version=QUESTION_SET_VERSION, request_sha256=digest, source_refs=source_refs, error_class=type(exc).__name__) for decision_id in decision_ids}
+        return {
+            decision_id: DecisionEvidence(
+                decision_id,
+                "service_failure",
+                str(QUESTION_SPECS[decision_id]["primitive"]),
+                question_set_version=QUESTION_SET_VERSION,
+                request_sha256=digest,
+                request_id=f"typesafe:{digest[:32]}",
+                projector_version=PROJECTOR_VERSION,
+                source_refs=source_refs,
+                error_class=type(exc).__name__,
+            )
+            for decision_id in decision_ids
+        }
 
     result: dict[str, DecisionEvidence] = {}
     normalized_outputs: dict[str, object] = {}
@@ -341,7 +421,17 @@ def evaluate(request: DecisionRequest, context: DecisionContext, *, client: Type
         semantic_type = str(spec["primitive"])
         answer = answers.get(str(spec["answer_key"]))
         if answer is None:
-            result[decision_id] = DecisionEvidence(decision_id, "invalid_contract", semantic_type, model=resolved_model if isinstance(resolved_model, str) else None, question_set_version=QUESTION_SET_VERSION, request_sha256=digest, source_refs=source_refs, error_class="missing_answer")
+            result[decision_id] = DecisionEvidence(
+                decision_id, "invalid_contract", semantic_type,
+                model=resolved_model if isinstance(resolved_model, str) else None,
+                question_set_version=QUESTION_SET_VERSION,
+                request_sha256=digest,
+                request_id=response_request_id,
+                projector_version=PROJECTOR_VERSION,
+                usage=response_usage,
+                source_refs=source_refs,
+                error_class="missing_answer",
+            )
             continue
         value = confidence = probability = None
         distribution: dict[str, float] = {}
@@ -369,7 +459,12 @@ def evaluate(request: DecisionRequest, context: DecisionContext, *, client: Type
             probability=float(probability) if isinstance(probability, (int, float)) else None,
             distribution=distribution,
             model=resolved_model if isinstance(resolved_model, str) else None,
-            question_set_version=QUESTION_SET_VERSION, request_sha256=digest, source_refs=source_refs,
+            question_set_version=QUESTION_SET_VERSION,
+            request_sha256=digest,
+            request_id=response_request_id,
+            projector_version=PROJECTOR_VERSION,
+            usage=response_usage,
+            source_refs=source_refs,
         )
     _record_call(context.settings, request_sha256=digest, state=state, questions=audit_questions, decision_ids=decision_ids, status="success", requested_model=model, resolved_model=resolved_model if isinstance(resolved_model, str) else None, response=response, outputs=normalized_outputs, duration_ms=(monotonic() - started) * 1000)
     return result
