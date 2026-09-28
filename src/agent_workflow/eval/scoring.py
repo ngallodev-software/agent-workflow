@@ -29,6 +29,33 @@ KNOWN_SCORERS = {
 }
 
 
+def _command_identity(
+    value: Mapping[str, Any],
+    *,
+    worktree: Path | None,
+) -> tuple[tuple[str, ...], str | None, Any]:
+    """Return a comparable command identity using the executed cwd semantics.
+
+    Evaluation plans may retain a worktree-relative cwd such as "." while
+    worker completion records the resolved absolute path. Those are the same
+    execution location and must not become an evidence contradiction.
+    """
+    raw_cwd = value.get("cwd")
+    normalized_cwd: str | None
+    if isinstance(raw_cwd, str):
+        cwd_path = Path(raw_cwd)
+        if not cwd_path.is_absolute() and worktree is not None:
+            cwd_path = worktree / cwd_path
+        normalized_cwd = str(cwd_path.resolve()) if cwd_path.is_absolute() else raw_cwd
+    else:
+        normalized_cwd = None
+    return (
+        tuple(str(item) for item in value.get("argv", [])),
+        normalized_cwd,
+        value.get("exit_code"),
+    )
+
+
 def _load(path: Path, *, require_read_only: bool = False) -> dict[str, Any]:
     flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
     try:
@@ -303,8 +330,15 @@ def score_trial(
             )
         )
 
+        provenance = _sealed_load(run_dir, final, "run-provenance.json")
+        worktree_value = provenance.get("worktree")
+        worktree = (
+            Path(worktree_value).resolve()
+            if isinstance(worktree_value, str) and worktree_value
+            else None
+        )
         actual = {
-            (tuple(item.get("argv", [])), item.get("cwd"), item.get("exit_code"))
+            _command_identity(item, worktree=worktree)
             for item in commands
             if isinstance(item, dict)
         }
@@ -313,12 +347,7 @@ def score_trial(
             claim
             for claim in claims
             if isinstance(claim, dict)
-            and (
-                tuple(claim.get("argv", [])),
-                claim.get("cwd"),
-                claim.get("exit_code"),
-            )
-            not in actual
+            and _command_identity(claim, worktree=worktree) not in actual
         ]
         scores.append(
             _receipt(
@@ -329,7 +358,12 @@ def score_trial(
                     "claim_count": len(claims),
                     "contradiction_count": len(contradictions),
                 },
-                _evidence(final, "completion.json", "collections/commands-post.json"),
+                _evidence(
+                    final,
+                    "completion.json",
+                    "collections/commands-post.json",
+                    "run-provenance.json",
+                ),
             )
         )
 
