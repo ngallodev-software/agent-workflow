@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+import tempfile
 import traceback as traceback_module
 import uuid
 from pathlib import Path
@@ -134,12 +135,6 @@ def record_unexpected_failure(
     if not isinstance(state_root, Path):
         state_root = _fallback_state_root()
     directory = state_root / "diagnostics" / "unexpected"
-    directory.mkdir(parents=True, exist_ok=True)
-    try:
-        directory.chmod(0o700)
-    except OSError:
-        pass
-    path = directory / f"{correlation_id}.json"
     record: dict[str, Any] = {
         "schema": _SCHEMA,
         "correlation_id": correlation_id,
@@ -168,5 +163,25 @@ def record_unexpected_failure(
         validate_instance(record, _SCHEMA, artifact=str(path))
     except Exception:
         pass
-    atomic_write_json(path, record, mode=0o600)
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+        try:
+            directory.chmod(0o700)
+        except OSError:
+            pass
+        path = directory / f"{correlation_id}.json"
+        atomic_write_json(path, record, mode=0o600)
+    except OSError:
+        # Unexpected-error capture must survive a restricted or damaged state
+        # root. A unique tempfile directory is created with private permissions
+        # by the platform and remains a local, best-effort fallback.
+        fallback_directory = Path(
+            tempfile.mkdtemp(prefix="agent-workflow-unexpected-")
+        )
+        try:
+            fallback_directory.chmod(0o700)
+        except OSError:
+            pass
+        path = fallback_directory / f"{correlation_id}.json"
+        atomic_write_json(path, record, mode=0o600)
     return {"correlation_id": correlation_id, "path": str(path)}
