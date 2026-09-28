@@ -205,7 +205,7 @@ def test_finish_only_requests_unmapped_semantic_criteria(tmp_path: Path, monkeyp
     assert result["criteria"] == ["architecture-review"]
 
 
-def test_finish_compatibility_run_without_bound_commands_requests_legacy_verification(
+def test_finish_compatibility_run_without_bound_commands_requests_fresh_lineage(
     tmp_path: Path, monkeypatch
 ) -> None:
     import agent_workflow.worker_completion as module
@@ -234,4 +234,6 @@ def test_finish_compatibility_run_without_bound_commands_requests_legacy_verific
 
     result = finish(settings, "run-1", result="completed")
     assert result["state"] == "verification_required"
-    assert "legacy agent verify" in result["next_action"]
+    assert "legacy agent verify" not in result["next_action"]
+    assert "prepare a fresh lineage run" in result["next_action"]
+    assert "native job or evaluation plan" in result["next_action"]
