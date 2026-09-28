@@ -107,21 +107,24 @@
           "uniqueItems": true,
           "items": {
             "type": "string"
-          }
+          },
+          "description": "Exact paths that may be written. Directory entries do not authorize descendants; use writable_trees for recursive directory writes."
         },
         "writable_trees": {
           "type": "array",
           "uniqueItems": true,
           "items": {
             "type": "string"
-          }
+          },
+          "description": "Directory roots whose descendants may be written recursively."
         },
         "disposable_trees": {
           "type": "array",
           "uniqueItems": true,
           "items": {
             "type": "string"
-          }
+          },
+          "description": "Directory roots whose generated descendants are disposable and may be written recursively."
         }
       },
       "additionalProperties": false

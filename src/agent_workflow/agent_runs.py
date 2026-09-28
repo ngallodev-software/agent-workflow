@@ -30,7 +30,7 @@ from .context_efficiency import write_executor_context
 from .contracts import read_contract, read_agent_run_contract, schema_descriptor
 from .errors import WorkflowError
 from .eval.commands import collect_commands, specs_from_data
-from .eval.scope import ScopePolicy, collect_scope
+from .eval.scope import ScopePolicy, collect_scope, validate_scope_policy
 from .evaluation import validate_evaluation
 from .executors import (
     ExecutorPlan,
@@ -965,6 +965,7 @@ def _prepare_evaluation(
         writable_trees=tuple(scope_data.get("writable_trees", ())),
         disposable_trees=tuple(scope_data.get("disposable_trees", ())),
     )
+    validate_scope_policy(policy)
     collect_scope(
         workdir,
         phase="baseline",

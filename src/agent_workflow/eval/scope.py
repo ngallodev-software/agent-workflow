@@ -26,6 +26,27 @@ class ScopePolicy:
     disposable_trees: tuple[str, ...] = ()
 
 
+def validate_scope_policy(policy: ScopePolicy) -> None:
+    """Fail early when an exact-path entry is actually a directory.
+
+    `writable_paths` authorizes exact paths only. Recursive directory authority
+    belongs in `writable_trees`; accepting a directory here would let prepare
+    succeed only for scoring to reject its child files later.
+    """
+    root = policy.authorized_root.resolve()
+    for raw in policy.writable_paths:
+        candidate = (root / raw).resolve()
+        try:
+            candidate.relative_to(root)
+        except ValueError as exc:
+            raise WorkflowError(f"writable path escapes authorized root: {raw}") from exc
+        if candidate.is_dir():
+            raise WorkflowError(
+                f"writable_paths entry resolves to a directory: {raw}; "
+                "use writable_trees for recursive directory writes"
+            )
+
+
 def _nul_values(data: bytes) -> list[str]:
     return [item.decode("utf-8", errors="surrogateescape") for item in data.split(b"\0") if item]
 
