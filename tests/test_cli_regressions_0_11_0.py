@@ -1169,6 +1169,16 @@ def test_launch_prompt_is_compact_and_keeps_runtime_guardrails(tmp_path: Path) -
     assert "# Ticket" in text
 
 
+def test_worker_finish_compatibility_guidance_uses_supported_recovery_path() -> None:
+    from pathlib import Path
+
+    from agent_workflow import worker_completion
+
+    source = Path(worker_completion.__file__).read_text(encoding="utf-8")
+    assert "record required verification with legacy agent verify" not in source
+    assert "prepare a fresh lineage run with a native job or evaluation plan" in source
+
+
 def test_launch_command_card_is_common_path_but_json_catalog_stays_complete() -> None:
     from agent_workflow.command_catalog import (
         _PROFILE_COMMANDS,
