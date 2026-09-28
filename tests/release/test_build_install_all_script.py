@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 import os
+import re
 import subprocess
+import tomllib
 
 from tests.conftest import REPO_ROOT
 
@@ -43,8 +45,7 @@ def test_build_install_all_help_documents_stack_and_sources() -> None:
         "--allow-dirty-pull",
     ):
         assert option in text
-    for version in ("0.2.1", "0.11.10", "0.2.0", "0.2.10", "0.4.1", "0.6.0"):
-        assert version in text
+    assert "Required versions are defined once by the EXPECTED_* pins" in text
 
 
 def test_build_install_all_is_existing_venv_wheel_only() -> None:
@@ -103,14 +104,174 @@ def test_build_install_all_requires_exact_stack_versions() -> None:
     text = SCRIPT.read_text(encoding="utf-8")
     expected = {
         "EXPECTED_CONTRACTS_VERSION": "0.2.1",
-        "EXPECTED_AGENT_WORKFLOW_VERSION": "0.11.10",
-        "EXPECTED_COMPARATIVE_EVAL_VERSION": "0.2.0",
-        "EXPECTED_SPECGEN_VERSION": "0.2.10",
-        "EXPECTED_BENCHMARK_VERSION": "0.4.1",
+        "EXPECTED_AGENT_WORKFLOW_VERSION": "0.11.11",
+        "EXPECTED_COMPARATIVE_EVAL_VERSION": "0.3.0",
+        "EXPECTED_SPECGEN_VERSION": "0.2.11",
+        "EXPECTED_BENCHMARK_VERSION": "0.5.0",
         "EXPECTED_TYPESAFE_VERSION": "0.6.0",
     }
     for name, version in expected.items():
         assert f'{name}="{version}"' in text
+
+
+def test_build_install_all_core_pin_matches_project_version() -> None:
+    text = SCRIPT.read_text(encoding="utf-8")
+    match = re.search(r'^EXPECTED_AGENT_WORKFLOW_VERSION="([^"]+)"    env = os.environ.copy()
+    env.pop("AGENT_WORKFLOW_VENV", None)
+    env.pop("VIRTUAL_ENV", None)
+    env.pop("TYPESAFE_API_KEY", None)
+    env["PATH"] = "/usr/bin:/bin"
+
+    result = subprocess.run(
+        ["bash", str(SCRIPT), "--verify-only"],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=env,
+    )
+
+    assert "unbound variable" not in result.stderr.lower()
+
+
+def test_build_install_all_verify_only_does_not_rewrite_config() -> None:
+    text = SCRIPT.read_text(encoding="utf-8")
+
+    verify_body = text.split("verify_stack() {", 1)[1].split(
+        '\n}\n\nif [[ "$VERIFY_ONLY" -eq 1 ]]', 1
+    )[0]
+    assert "write_stack_config" not in verify_body
+
+    verify_only_block = text.split('if [[ "$VERIFY_ONLY" -eq 1 ]]; then', 1)[1].split(
+        "fi", 1
+    )[0]
+    assert "verify_stack" in verify_only_block
+    assert "write_stack_config" not in verify_only_block
+
+    last_install = text.index(
+        'install_wheel "agent-workflow-benchmark" "$BENCHMARK_WHEEL"'
+    )
+    config_write = text.index("write_stack_config", last_install)
+    final_verify = text.index("verify_stack", config_write)
+    assert last_install < config_write < final_verify
+
+
+def test_build_install_all_pulls_stack_before_build_and_reexecs() -> None:
+    text = SCRIPT.read_text(encoding="utf-8")
+    assert 'bash "$ROOT/scripts/git-pull-all.sh"' in text
+    assert 'exec bash "$ROOT/scripts/build-install-all.sh" --no-pull' in text
+    assert '--pull-only' in text
+    assert '--allow-dirty-pull' in text
+
+
+def test_build_install_all_verify_only_disables_pull() -> None:
+    text = SCRIPT.read_text(encoding="utf-8")
+    assert '--verify-only) VERIFY_ONLY=1; NO_PULL=1' in text
+
+
+def test_build_install_all_does_not_override_git_authentication() -> None:
+    text = SCRIPT.read_text(encoding="utf-8")
+    for forbidden in (
+        "ALLOW_CREDENTIAL_HELPER",
+        "--allow-credential-helper",
+        "GH_TOKEN",
+        "GITHUB_TOKEN",
+        "GIT_ASKPASS",
+        "credential.helper",
+    ):
+        assert forbidden not in text
+, text, re.MULTILINE)
+    assert match is not None
+    project = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    assert match.group(1) == project["version"]
+
+
+def test_build_install_all_verify_reuses_top_level_version_pins() -> None:
+    text = SCRIPT.read_text(encoding="utf-8")
+    verify_body = text.split("verify_stack() {", 1)[1].split(
+        '\n}\n\nif [[ "$VERIFY_ONLY" -eq 1 ]]', 1
+    )[0]
+    for name in (
+        "EXPECTED_CONTRACTS_VERSION",
+        "EXPECTED_AGENT_WORKFLOW_VERSION",
+        "EXPECTED_COMPARATIVE_EVAL_VERSION",
+        "EXPECTED_SPECGEN_VERSION",
+        "EXPECTED_BENCHMARK_VERSION",
+        "EXPECTED_TYPESAFE_VERSION",
+    ):
+        assert '"    env = os.environ.copy()
+    env.pop("AGENT_WORKFLOW_VENV", None)
+    env.pop("VIRTUAL_ENV", None)
+    env.pop("TYPESAFE_API_KEY", None)
+    env["PATH"] = "/usr/bin:/bin"
+
+    result = subprocess.run(
+        ["bash", str(SCRIPT), "--verify-only"],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=env,
+    )
+
+    assert "unbound variable" not in result.stderr.lower()
+
+
+def test_build_install_all_verify_only_does_not_rewrite_config() -> None:
+    text = SCRIPT.read_text(encoding="utf-8")
+
+    verify_body = text.split("verify_stack() {", 1)[1].split(
+        '\n}\n\nif [[ "$VERIFY_ONLY" -eq 1 ]]', 1
+    )[0]
+    assert "write_stack_config" not in verify_body
+
+    verify_only_block = text.split('if [[ "$VERIFY_ONLY" -eq 1 ]]; then', 1)[1].split(
+        "fi", 1
+    )[0]
+    assert "verify_stack" in verify_only_block
+    assert "write_stack_config" not in verify_only_block
+
+    last_install = text.index(
+        'install_wheel "agent-workflow-benchmark" "$BENCHMARK_WHEEL"'
+    )
+    config_write = text.index("write_stack_config", last_install)
+    final_verify = text.index("verify_stack", config_write)
+    assert last_install < config_write < final_verify
+
+
+def test_build_install_all_pulls_stack_before_build_and_reexecs() -> None:
+    text = SCRIPT.read_text(encoding="utf-8")
+    assert 'bash "$ROOT/scripts/git-pull-all.sh"' in text
+    assert 'exec bash "$ROOT/scripts/build-install-all.sh" --no-pull' in text
+    assert '--pull-only' in text
+    assert '--allow-dirty-pull' in text
+
+
+def test_build_install_all_verify_only_disables_pull() -> None:
+    text = SCRIPT.read_text(encoding="utf-8")
+    assert '--verify-only) VERIFY_ONLY=1; NO_PULL=1' in text
+
+
+def test_build_install_all_does_not_override_git_authentication() -> None:
+    text = SCRIPT.read_text(encoding="utf-8")
+    for forbidden in (
+        "ALLOW_CREDENTIAL_HELPER",
+        "--allow-credential-helper",
+        "GH_TOKEN",
+        "GITHUB_TOKEN",
+        "GIT_ASKPASS",
+        "credential.helper",
+    ):
+        assert forbidden not in text
+ + name + '"' in verify_body
+
+    for stale_literal in (
+        '"agent-workflow": "0.11.10"',
+        '"agent-workflow-comparative-eval": "0.2.0"',
+        '"specgen": "0.2.10"',
+        '"agent-workflow-benchmark": "0.4.1"',
+    ):
+        assert stale_literal not in verify_body
 
 
 def test_build_install_all_handles_unset_venv_without_unbound_variable(tmp_path: Path) -> None:
