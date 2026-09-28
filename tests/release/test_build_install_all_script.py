@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 import os
+import re
 import subprocess
+import tomllib
 
 from tests.conftest import REPO_ROOT
 
@@ -43,8 +45,7 @@ def test_build_install_all_help_documents_stack_and_sources() -> None:
         "--allow-dirty-pull",
     ):
         assert option in text
-    for version in ("0.2.1", "0.11.10", "0.2.0", "0.2.10", "0.4.1", "0.6.0"):
-        assert version in text
+    assert "Required versions are defined once by the EXPECTED_* pins" in text
 
 
 def test_build_install_all_is_existing_venv_wheel_only() -> None:
@@ -103,14 +104,48 @@ def test_build_install_all_requires_exact_stack_versions() -> None:
     text = SCRIPT.read_text(encoding="utf-8")
     expected = {
         "EXPECTED_CONTRACTS_VERSION": "0.2.1",
-        "EXPECTED_AGENT_WORKFLOW_VERSION": "0.11.10",
-        "EXPECTED_COMPARATIVE_EVAL_VERSION": "0.2.0",
-        "EXPECTED_SPECGEN_VERSION": "0.2.10",
-        "EXPECTED_BENCHMARK_VERSION": "0.4.1",
+        "EXPECTED_AGENT_WORKFLOW_VERSION": "0.11.11",
+        "EXPECTED_COMPARATIVE_EVAL_VERSION": "0.3.0",
+        "EXPECTED_SPECGEN_VERSION": "0.2.11",
+        "EXPECTED_BENCHMARK_VERSION": "0.5.0",
         "EXPECTED_TYPESAFE_VERSION": "0.6.0",
     }
     for name, version in expected.items():
         assert f'{name}="{version}"' in text
+
+
+def test_build_install_all_core_pin_matches_project_version() -> None:
+    text = SCRIPT.read_text(encoding="utf-8")
+    match = re.search(r'^EXPECTED_AGENT_WORKFLOW_VERSION="([^"]+)"$', text, re.MULTILINE)
+    assert match is not None
+    project = tomllib.loads(
+        (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    )["project"]
+    assert match.group(1) == project["version"]
+
+
+def test_build_install_all_verify_reuses_top_level_version_pins() -> None:
+    text = SCRIPT.read_text(encoding="utf-8")
+    verify_body = text.split("verify_stack() {", 1)[1].split(
+        '\n}\n\nif [[ "$VERIFY_ONLY" -eq 1 ]]', 1
+    )[0]
+    for name in (
+        "EXPECTED_CONTRACTS_VERSION",
+        "EXPECTED_AGENT_WORKFLOW_VERSION",
+        "EXPECTED_COMPARATIVE_EVAL_VERSION",
+        "EXPECTED_SPECGEN_VERSION",
+        "EXPECTED_BENCHMARK_VERSION",
+        "EXPECTED_TYPESAFE_VERSION",
+    ):
+        assert ('"$' + name + '"') in verify_body
+
+    for stale_literal in (
+        '"agent-workflow": "0.11.10"',
+        '"agent-workflow-comparative-eval": "0.2.0"',
+        '"specgen": "0.2.10"',
+        '"agent-workflow-benchmark": "0.4.1"',
+    ):
+        assert stale_literal not in verify_body
 
 
 def test_build_install_all_handles_unset_venv_without_unbound_variable(tmp_path: Path) -> None:
