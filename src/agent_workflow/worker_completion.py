@@ -912,7 +912,8 @@ def finish(
             "verification": [],
             "next_action": (
                 "this compatibility run has no bound native acceptance commands; "
-                "record required verification with legacy agent verify, then rerun agent finish"
+                "prepare a fresh lineage run with a native job or evaluation plan that binds "
+                "acceptance commands, then finish that run"
             ),
         }
 
