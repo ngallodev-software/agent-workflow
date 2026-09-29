@@ -219,6 +219,52 @@ initialization but before runner creation. Add rollback for only invocation-
 owned artifacts plus lease release, without altering intentional preflight
 failure records or sealed runs.
 
+### PREP-001 — Diagnose and recover restricted-host preparation failures
+
+A headless Agent Run prepared from a linked Git worktree in a restricted host
+failed with a generic `unexpected internal error` and a diagnostic-file path.
+The underlying errors were read-only access to the linked worktree's Git
+administrative directory and the Agent-Workflow name-lease lock. The worktree
+had already been created, so the operator had to inspect the diagnostic to
+identify the missing write scope. This is coordinator preflight, distinct from
+the completed `AW-GITDIR-001` worker launch scope.
+
+**Observed 2026-09-29:** `cbm-upstream-count-20260929` preparation succeeded only
+after the required Git/state writes were allowed. The configured comparative
+decision mode also required `TYPESAFE_API_KEY` in the launching shell; the
+initial error named that requirement, and sourcing the configured environment
+resolved it. A separate preparation for `cbm-upstream-coverage-scan-20260929`
+was interrupted before completion; `agent-run status` then returned
+`execution lifecycle is not initialized`. This partial-state symptom overlaps
+the transactional preparation requirement under `EXEC-001`; verify whether an
+interrupted invocation is covered without altering sealed or intentional
+preflight-failure evidence.
+
+**Done when:** preparation checks and reports Git administrative and state-lock
+write scope before creating a run, with an actionable error rather than an
+unexpected-internal-error wrapper. An interrupted preparation either rolls
+back its invocation-owned partial state or exposes a supported, idempotent
+recovery action. Cover read-only linked Git/state paths and interruption in
+focused lifecycle tests; never include secret values in diagnostics.
+
+### FINISH-001 — Recover committed implementation evidence after a failed run
+
+**Observed 2026-09-29:** `cbm-upstream-count-20260929` had a committed change
+(`5ef42e21`) and passed its declared store suites, production build, and
+`git diff --check`. Its commit hook also started the repository's full test
+target; after that process was interrupted, `agent finish --result completed`
+refused to publish the completion receipt with
+`worker completion operations require a running Agent Run (status='failed')`.
+The implementation commit and focused validation remain available, but the
+Agent Run has no completion receipt. Do not rewrite the failed run or infer
+acceptance from its commit/tests.
+
+**Done when:** the operator has a documented, supported recovery that preserves
+the failed run and its evidence while allowing committed work to continue under
+a new Agent Run lineage with the original source/worktree provenance and
+acceptance contract. A focused lifecycle test covers failure before finish and
+proves that terminal-state and acceptance authority remain unchanged.
+
 ### UX-RUN-001 — Align 0.11 runtime command surfaces and completion guidance — COMPLETE
 
 Prompt-pack execution on 2026-09-20 exposed three operator-facing contract
