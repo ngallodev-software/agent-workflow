@@ -259,11 +259,23 @@ The implementation commit and focused validation remain available, but the
 Agent Run has no completion receipt. Do not rewrite the failed run or infer
 acceptance from its commit/tests.
 
+**Additional observation (2026-09-29):** `cbm-upstream-lsp-decode-20260929`
+committed `3050a441` and passed its declared pipeline suite (274 tests),
+production build, and `git diff --check`. Its compatibility run had no bound
+acceptance commands; `agent finish --result completed` returned
+`verification_required` and instructed the worker to prepare a fresh lineage
+run with a native job or evaluation plan binding acceptance commands. The
+ticket had declared those checks, but they were absent from the run contract,
+so no completion receipt was sealed. Preserve this run and its commit; do not
+infer receipt or acceptance from the local checks.
+
 **Done when:** the operator has a documented, supported recovery that preserves
-the failed run and its evidence while allowing committed work to continue under
-a new Agent Run lineage with the original source/worktree provenance and
-acceptance contract. A focused lifecycle test covers failure before finish and
-proves that terminal-state and acceptance authority remain unchanged.
+unsealed runs and their evidence while allowing committed work to continue
+under a new Agent Run lineage with the original source/worktree provenance and
+acceptance contract, including compatibility runs prepared without bound
+acceptance commands. Focused lifecycle tests cover failure before finish and
+missing acceptance bindings, and prove that terminal-state and acceptance
+authority remain unchanged.
 
 ### UX-RUN-001 — Align 0.11 runtime command surfaces and completion guidance — COMPLETE
 
