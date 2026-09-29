@@ -10,8 +10,10 @@ EXPECTED_CONTRACTS_VERSION="0.2.1"
 EXPECTED_AGENT_WORKFLOW_VERSION="0.11.12"
 EXPECTED_COMPARATIVE_EVAL_VERSION="0.3.1"
 EXPECTED_SPECGEN_VERSION="0.2.12"
-EXPECTED_BENCHMARK_VERSION="0.6.1"
+EXPECTED_BENCHMARK_VERSION="0.6.2"
 EXPECTED_TYPESAFE_VERSION="0.6.0"
+EXPECTED_INSPECT_AI_VERSION="0.3.268"
+EXPECTED_INSPECT_SWE_VERSION="0.2.71"
 
 VENV_ARG=""
 CONTRACTS_SOURCE_ARG=""
@@ -328,7 +330,9 @@ verify_stack() {
     "$EXPECTED_COMPARATIVE_EVAL_VERSION" \
     "$EXPECTED_SPECGEN_VERSION" \
     "$EXPECTED_BENCHMARK_VERSION" \
-    "$EXPECTED_TYPESAFE_VERSION" <<'PY'
+    "$EXPECTED_TYPESAFE_VERSION" \
+    "$EXPECTED_INSPECT_AI_VERSION" \
+    "$EXPECTED_INSPECT_SWE_VERSION" <<'PY'
 from importlib import metadata
 from pathlib import Path
 import json, os, shutil, sys
@@ -340,6 +344,8 @@ import json, os, shutil, sys
     specgen_version,
     benchmark_version,
     typesafe_version,
+    inspect_ai_version,
+    inspect_swe_version,
 ) = sys.argv[1:]
 
 expected = {
@@ -349,6 +355,8 @@ expected = {
     "specgen": specgen_version,
     "agent-workflow-benchmark": benchmark_version,
     "typesafe-sdk": typesafe_version,
+    "inspect-ai": inspect_ai_version,
+    "inspect-swe": inspect_swe_version,
 }
 provenance_path = Path(sys.prefix) / "share" / "agent-workflow" / "source-provenance.json"
 if not provenance_path.is_file():
@@ -386,7 +394,7 @@ for name, version in expected.items():
     if observed != version:
         raise SystemExit(f"{name} version {observed}; expected {version}")
 
-for name in tuple(expected)[:-1]:
+for name in local_expected:
     dist = metadata.distribution(name)
     direct = Path(dist._path) / "direct_url.json"
     if direct.is_file():
@@ -399,6 +407,11 @@ from agent_workflow.decisions import require_decision_runtime_ready
 from agent_workflow.plugins import load_plugin_registry
 from agent_workflow.comparative_eval import shared_library_status
 from specgen.agent_workflow import AW_VERSION
+from agent_workflow_benchmark.compat.inspect_swe_output_schema import (
+    assert_runtime_capability,
+)
+
+structured_output = assert_runtime_capability()
 
 settings = load_settings()
 if settings.decision_mode != "comparative":
@@ -441,6 +454,7 @@ print(f"  {'decision-mode':<34} comparative")
 print(f"  {'semantic-provider':<34} typesafe")
 print(f"  {'plugins':<34} {', '.join(loaded)}")
 print(f"  {'codex':<34} {codex}")
+print(f"  {'structured-output':<34} {structured_output['capability']}")
 print(f"  {'TYPESAFE_API_KEY':<34} configured")
 PY
 
@@ -515,6 +529,13 @@ install_wheel "agent-workflow" "$AGENT_WORKFLOW_WHEEL"
 install_wheel "agent-workflow-comparative-eval" "$COMPARATIVE_EVAL_WHEEL"
 install_wheel "specgen" "$SPECGEN_WHEEL"
 install_wheel "agent-workflow-benchmark" "$BENCHMARK_WHEEL"
+
+echo "installing frozen Inspect adjudication runtime"
+"$PYTHON" -m pip install --upgrade \
+  "inspect-ai==$EXPECTED_INSPECT_AI_VERSION" \
+  "inspect-swe==$EXPECTED_INSPECT_SWE_VERSION" \
+  "openai>=1.0"
+"$PYTHON" "$BENCHMARK_SOURCE/scripts/compat/apply-inspect-swe-output-schema-patch.py"
 
 write_source_provenance
 write_stack_config
