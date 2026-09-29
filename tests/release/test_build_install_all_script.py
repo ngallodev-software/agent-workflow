@@ -73,6 +73,22 @@ def test_build_install_all_uses_required_dependency_order() -> None:
     assert positions == sorted(positions)
 
 
+def test_build_install_all_installs_and_patches_frozen_inspect_runtime() -> None:
+    text = SCRIPT.read_text(encoding="utf-8")
+    benchmark_install = text.index(
+        'install_wheel "agent-workflow-benchmark" "$BENCHMARK_WHEEL"'
+    )
+    inspect_install = text.index('"inspect-ai==$EXPECTED_INSPECT_AI_VERSION"')
+    inspect_swe_install = text.index('"inspect-swe==$EXPECTED_INSPECT_SWE_VERSION"')
+    patch = text.index("apply-inspect-swe-output-schema-patch.py")
+    final_verify = text.index("verify_stack", patch)
+
+    assert benchmark_install < inspect_install < patch < final_verify
+    assert benchmark_install < inspect_swe_install < patch < final_verify
+    assert "assert_runtime_capability" in text
+    assert "structured-output" in text
+
+
 def test_build_install_all_records_source_provenance() -> None:
     text = SCRIPT.read_text(encoding="utf-8")
     assert "write_source_provenance" in text
@@ -107,8 +123,10 @@ def test_build_install_all_requires_exact_stack_versions() -> None:
         "EXPECTED_AGENT_WORKFLOW_VERSION": "0.11.12",
         "EXPECTED_COMPARATIVE_EVAL_VERSION": "0.3.1",
         "EXPECTED_SPECGEN_VERSION": "0.2.12",
-        "EXPECTED_BENCHMARK_VERSION": "0.6.1",
+        "EXPECTED_BENCHMARK_VERSION": "0.6.2",
         "EXPECTED_TYPESAFE_VERSION": "0.6.0",
+        "EXPECTED_INSPECT_AI_VERSION": "0.3.268",
+        "EXPECTED_INSPECT_SWE_VERSION": "0.2.71",
     }
     for name, version in expected.items():
         assert f'{name}="{version}"' in text
@@ -136,6 +154,8 @@ def test_build_install_all_verify_reuses_top_level_version_pins() -> None:
         "EXPECTED_SPECGEN_VERSION",
         "EXPECTED_BENCHMARK_VERSION",
         "EXPECTED_TYPESAFE_VERSION",
+        "EXPECTED_INSPECT_AI_VERSION",
+        "EXPECTED_INSPECT_SWE_VERSION",
     ):
         assert ('"$' + name + '"') in verify_body
 
