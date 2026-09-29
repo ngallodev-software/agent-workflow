@@ -104,10 +104,10 @@ def test_build_install_all_requires_exact_stack_versions() -> None:
     text = SCRIPT.read_text(encoding="utf-8")
     expected = {
         "EXPECTED_CONTRACTS_VERSION": "0.2.1",
-        "EXPECTED_AGENT_WORKFLOW_VERSION": "0.11.11",
-        "EXPECTED_COMPARATIVE_EVAL_VERSION": "0.3.0",
-        "EXPECTED_SPECGEN_VERSION": "0.2.11",
-        "EXPECTED_BENCHMARK_VERSION": "0.5.4",
+        "EXPECTED_AGENT_WORKFLOW_VERSION": "0.11.12",
+        "EXPECTED_COMPARATIVE_EVAL_VERSION": "0.3.1",
+        "EXPECTED_SPECGEN_VERSION": "0.2.12",
+        "EXPECTED_BENCHMARK_VERSION": "0.6.0",
         "EXPECTED_TYPESAFE_VERSION": "0.6.0",
     }
     for name, version in expected.items():
