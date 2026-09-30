@@ -153,7 +153,16 @@ cat > "$policy" <<'EOF'
 }
 EOF
 
-agent-workflow --json pack import-openspec   "$source_repo" add-rate-limit "$pack" --job-policy "$policy"   > "$root/import.json"
+if ! agent-workflow --json pack import-openspec \
+  "$source_repo" add-rate-limit "$pack" --job-policy "$policy" \
+  > "$root/import.json"; then
+  diagnostic_root="${XDG_STATE_HOME:-$HOME/.local/state}/agent-workflow/diagnostics/unexpected"
+  if [[ -d "$diagnostic_root" ]]; then
+    echo "Agent-Workflow unexpected diagnostics:" >&2
+    find "$diagnostic_root" -maxdepth 1 -type f -name '*.json' -print -exec cat {} \; >&2 || true
+  fi
+  exit 1
+fi
 
 agent-workflow --json pack validate "$pack" --verify-checksums   > "$root/pack-validation.json"
 
