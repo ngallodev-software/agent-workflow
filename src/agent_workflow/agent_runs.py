@@ -1980,7 +1980,14 @@ def restart(
     job_path = None
     binding_path = paths.job_binding
     if binding_path.is_file():
-        binding = read_contract(binding_path, "agent-workflow/job-binding/v1")
+        binding = read_contract(binding_path)
+        if binding.get("schema") not in {
+            "agent-workflow/job-binding/v1",
+            "agent-workflow/job-binding/v2",
+        }:
+            raise WorkflowError(
+                f"cannot restart: unsupported job binding schema {binding.get('schema')!r}"
+            )
         source = Path(str(binding["job_source_path"]))
         expected = str(binding["job_source_sha256"])
         if not source.is_file() or sha256_file(source) != expected:
