@@ -377,6 +377,40 @@ def test_openspec_import_freezes_planning_and_keeps_acceptance_host_owned(
     assert job.source_specification is not None
     validate_source_specification_worktree(job, repo)
 
+    prompt_path = pack / "phase-0" / "tickets" / f"{TASK_ID}.md"
+    fake_agent = Path(product_env["PATH"].split(os.pathsep)[0]) / "fake-agent"
+    prepared = installed_product.json(
+        "agent-run",
+        "prepare",
+        "openspec-v2-prepare",
+        repo,
+        prompt_path,
+        "--pack",
+        pack,
+        "--job",
+        f"jobs/{TASK_ID}.json",
+        "--worker-mode",
+        "external",
+        "--interactive",
+        "--",
+        fake_agent,
+        env=product_env,
+    )
+    assert prepared["status"] == "prepared"
+    run_dir = (
+        Path(product_env["XDG_STATE_HOME"])
+        / "agent-workflow"
+        / "runs"
+        / "openspec-v2-prepare"
+    )
+    binding = json.loads((run_dir / "job-binding.json").read_text(encoding="utf-8"))
+    assert binding["schema"] == "agent-workflow/job-binding/v2"
+    assert "bundle_provenance" not in binding
+    assert binding["source_specification"]["schema"] == (
+        "agent-workflow/source-specification-import/v1"
+    )
+    assert (run_dir / "jobs" / "source-specification.json").is_file()
+
     report = pack / "source-reports" / "show.json"
     report.write_text('{"tampered": true}\n', encoding="utf-8")
     with pytest.raises(WorkflowError, match="report digest mismatch"):
