@@ -2,211 +2,87 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "agent-workflow/native-job/v2",
   "type": "object",
-  "additionalProperties": false,
   "required": [
-    "schema",
-    "job_id",
-    "ticket_id",
-    "source_specification",
-    "prompt_path",
-    "worktree_target",
-    "scope",
-    "acceptance_commands",
-    "review_requirement"
+    "schema", "job_id", "ticket_id", "source_specification", "prompt_path",
+    "worktree_target", "path_policy", "acceptance_commands", "review_requirement"
   ],
   "properties": {
-    "schema": {
-      "const": "agent-workflow/native-job/v2"
-    },
-    "job_id": {
-      "type": "string",
-      "minLength": 1
-    },
-    "ticket_id": {
-      "type": "string",
-      "minLength": 1
-    },
+    "schema": {"const": "agent-workflow/native-job/v2"},
+    "job_id": {"type": "string", "minLength": 1},
+    "ticket_id": {"type": "string", "minLength": 1},
     "source_specification": {
       "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "schema",
-        "path",
-        "sha256",
-        "task_refs"
-      ],
+      "required": ["schema", "path", "sha256", "task_refs"],
       "properties": {
-        "schema": {
-          "const": "agent-workflow/source-specification-import/v1"
-        },
-        "path": {
-          "type": "string",
-          "minLength": 1
-        },
-        "sha256": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{64}$"
-        },
+        "schema": {"const": "agent-workflow/source-specification-import/v1"},
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
         "task_refs": {
-          "type": "array",
-          "minItems": 1,
-          "uniqueItems": true,
-          "items": {
-            "type": "string",
-            "minLength": 1
-          }
-        }
-      }
-    },
-    "prompt_path": {
-      "type": "string",
-      "minLength": 1
-    },
-    "worktree_target": {
-      "const": "."
-    },
-    "scope": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "writable_paths",
-        "writable_trees",
-        "disposable_trees"
-      ],
-      "properties": {
-        "writable_paths": {
-          "type": "array",
-          "uniqueItems": true,
-          "items": {
-            "type": "string",
-            "minLength": 1
-          }
-        },
-        "writable_trees": {
-          "type": "array",
-          "uniqueItems": true,
-          "items": {
-            "type": "string",
-            "minLength": 1
-          }
-        },
-        "disposable_trees": {
-          "type": "array",
-          "uniqueItems": true,
-          "items": {
-            "type": "string",
-            "minLength": 1
-          }
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
         }
       },
-      "anyOf": [
-        {
-          "properties": {
-            "writable_paths": {
-              "minItems": 1
-            }
-          }
+      "additionalProperties": false
+    },
+    "prompt_path": {"type": "string", "minLength": 1},
+    "worktree_target": {"type": "string", "minLength": 1},
+    "path_policy": {
+      "type": "object",
+      "required": ["allowed_paths"],
+      "properties": {
+        "allowed_paths": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
         },
-        {
-          "properties": {
-            "writable_trees": {
-              "minItems": 1
-            }
-          }
+        "forbidden_paths": {
+          "type": "array", "uniqueItems": true, "default": [],
+          "items": {"type": "string", "minLength": 1}
         }
-      ]
+      },
+      "additionalProperties": false
     },
     "acceptance_commands": {
       "type": "array",
       "items": {
         "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "id",
-          "argv"
-        ],
+        "required": ["id", "argv"],
         "properties": {
-          "id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "argv": {
-            "type": "array",
-            "minItems": 1,
-            "items": {
-              "type": "string"
-            }
-          },
-          "cwd": {
-            "type": "string",
-            "default": "."
-          },
-          "timeout_seconds": {
-            "type": "integer",
-            "minimum": 1,
-            "default": 300
-          },
-          "result_format": {
-            "enum": [
-              "exit-code",
-              "junit"
-            ],
-            "default": "exit-code"
-          },
-          "junit_path": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        }
+          "id": {"type": "string", "minLength": 1},
+          "argv": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+          "cwd": {"type": "string", "default": "."},
+          "timeout_seconds": {"type": "integer", "minimum": 1, "default": 300},
+          "result_format": {"enum": ["exit-code", "junit"], "default": "exit-code"},
+          "junit_path": {"type": ["string", "null"]}
+        },
+        "additionalProperties": false
       }
     },
     "review_requirement": {
       "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "required"
-      ],
+      "required": ["required"],
       "properties": {
-        "required": {
-          "type": "boolean"
-        },
-        "independent": {
-          "type": "boolean",
-          "default": false
-        }
-      }
+        "required": {"type": "boolean"},
+        "independent": {"type": "boolean", "default": false}
+      },
+      "additionalProperties": false
     },
     "criteria": {
       "type": "array",
       "minItems": 1,
       "items": {
         "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "id"
-        ],
+        "required": ["id"],
         "properties": {
-          "id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "description": {
-            "type": "string",
-            "minLength": 1
-          },
+          "id": {"type": "string", "minLength": 1},
+          "description": {"type": "string", "minLength": 1},
           "acceptance_command_ids": {
-            "type": "array",
-            "uniqueItems": true,
-            "items": {
-              "type": "string",
-              "minLength": 1
-            },
-            "default": []
+            "type": "array", "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}, "default": []
           }
-        }
+        },
+        "additionalProperties": false
       }
     }
-  }
+  },
+  "additionalProperties": false
 }
