@@ -470,6 +470,103 @@ def test_openspec_import_fails_closed_outside_qualified_surface(
     assert not pack.exists()
 
 
+
+def test_openspec_import_keeps_hidden_oracle_in_host_evaluation_policy(
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+    tmp_path: Path,
+) -> None:
+    repo, pack, _ = _import_fixture(installed_product, product_env, tmp_path)
+    installed_product.json(
+        "pack",
+        "import-openspec",
+        repo,
+        CHANGE,
+        pack,
+        "--job-policy",
+        tmp_path / "job-policy.json",
+        env=product_env,
+    )
+
+    oracle_id = "hidden-fixture-oracle-v1"
+    oracle_sha = "7" * 64
+    evaluation_dir = pack / "evals"
+    evaluation_dir.mkdir()
+    evaluation = evaluation_dir / "hidden-evaluation.json"
+    evaluation.write_text(
+        json.dumps(
+            {
+                "schema": "agent-workflow/evaluation-plan/v1",
+                "dataset_split": "holdout",
+                "task_ids": [TASK_ID],
+                "repetitions": 1,
+                "timeout_seconds": 30,
+                "scorers": ["acceptance_commands"],
+                "sandbox": "docker",
+                "oracle_refs": {
+                    TASK_ID: {
+                        "id": oracle_id,
+                        "sha256": oracle_sha,
+                    }
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    installed_product.json("pack", "checksum", pack, env=product_env)
+
+    source_receipt_text = (pack / "source-specification.json").read_text(encoding="utf-8")
+    prompt = pack / "phase-0" / "tickets" / f"{TASK_ID}.md"
+    prompt_text = prompt.read_text(encoding="utf-8")
+    assert oracle_id not in source_receipt_text
+    assert oracle_sha not in source_receipt_text
+    assert oracle_id not in prompt_text
+    assert oracle_sha not in prompt_text
+
+    fake_agent = Path(product_env["PATH"].split(os.pathsep)[0]) / "fake-agent"
+    prepared = installed_product.json(
+        "agent-run",
+        "prepare",
+        "openspec-v2-hidden-oracle",
+        repo,
+        prompt,
+        "--pack",
+        pack,
+        "--job",
+        f"jobs/{TASK_ID}.json",
+        "--evaluation",
+        evaluation,
+        "--worker-mode",
+        "external",
+        "--interactive",
+        "--",
+        fake_agent,
+        env=product_env,
+    )
+    assert prepared["status"] == "prepared"
+
+    run_dir = (
+        Path(product_env["XDG_STATE_HOME"])
+        / "agent-workflow"
+        / "runs"
+        / "openspec-v2-hidden-oracle"
+    )
+    runtime = json.loads((run_dir / "evaluation-runtime.json").read_text(encoding="utf-8"))
+    assert runtime["oracle_refs"] == {
+        TASK_ID: {
+            "id": oracle_id,
+            "sha256": oracle_sha,
+        }
+    }
+    binding = json.loads((run_dir / "job-binding.json").read_text(encoding="utf-8"))
+    assert binding["schema"] == "agent-workflow/job-binding/v2"
+    assert "oracle_refs" not in binding
+    assert oracle_id not in json.dumps(binding)
+
+
+
 def test_native_job_v1_retains_legacy_bundle_negotiation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
