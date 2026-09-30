@@ -382,6 +382,38 @@ def test_external_delivery_rejects_stale_and_unbound_generations(
     assert "not bound" in unbound.stderr
 
 
+def test_generated_external_launcher_refuses_unbound_unstarted_dispatch(
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+    fake_agent_path: Path,
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "external-preflight"
+    git_repo(repo)
+    prompt = tmp_path / "external-preflight.md"
+    prompt.write_text("This worker must not launch before host activation.\n", encoding="utf-8")
+    env = dict(product_env)
+    installed_product.json(
+        "agent-run", "prepare", "external-preflight", repo, prompt,
+        "--worker-mode", "external", "--interactive", "--", fake_agent_path,
+        env=env,
+    )
+    run = _run_dir(env, "external-preflight")
+    launch = run / "run.sh"
+    launch.chmod(launch.stat().st_mode | 0o111)
+
+    attempted = subprocess.run(
+        [str(launch)], cwd=repo, env=env, stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+
+    assert attempted.returncode != 0
+    assert "bind-external" in attempted.stderr
+    status = json.loads((run / "status.json").read_text(encoding="utf-8"))
+    assert status["status"] == "prepared"
+    assert not (run / "process-result.json").exists()
+
+
 @pytest.mark.parametrize("host_mode", ["pipe", "pty"])
 def test_generated_external_launcher_records_durable_start_in_each_host_mode(
     installed_product: InstalledProduct,
@@ -403,6 +435,14 @@ def test_generated_external_launcher_records_durable_start_in_each_host_mode(
         env=env,
     )
     run = _run_dir(env, f"external-{host_mode}")
+    binding = installed_product.json(
+        "agent-run", "bind-external", f"external-{host_mode}", "test-host",
+        f"worker-{host_mode}", env=env,
+    )
+    installed_product.json(
+        "agent-run", "start-external", f"external-{host_mode}", "test-host",
+        f"worker-{host_mode}", "--generation", str(binding["generation"]), env=env,
+    )
     launch = run / "run.sh"
     launch.chmod(launch.stat().st_mode | 0o111)
 
