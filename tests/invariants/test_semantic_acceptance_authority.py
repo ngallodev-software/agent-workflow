@@ -9,6 +9,7 @@ from agent_workflow.errors import WorkflowError
 from agent_workflow.eval.scoring import (
     _has_file_backed_evidence,
     _semantic_criterion_ids,
+    _semantic_evidence_facts,
 )
 from agent_workflow.lifecycle import _check_acceptance_gates
 
@@ -29,6 +30,40 @@ def test_semantic_evidence_requires_host_hashed_file_reference() -> None:
             ]
         }
     )
+
+
+def test_text_only_semantic_claim_fails_closed() -> None:
+    verdict, facts = _semantic_evidence_facts(
+        ("source-inspection",),
+        {
+            "criteria": [
+                {
+                    "id": "source-inspection",
+                    "result": "pass",
+                    "evidence": ["I inspected the requested source files"],
+                }
+            ]
+        },
+    )
+    assert verdict == "fail"
+    assert facts["missing_file_backed_evidence"] == ["source-inspection"]
+
+    verdict, facts = _semantic_evidence_facts(
+        ("source-inspection",),
+        {
+            "criteria": [
+                {
+                    "id": "source-inspection",
+                    "result": "pass",
+                    "evidence": [
+                        "file:src/core.py#sha256=" + ("c" * 64) + ";bytes=128"
+                    ],
+                }
+            ]
+        },
+    )
+    assert verdict == "pass"
+    assert facts["missing_file_backed_evidence"] == []
 
 
 def test_semantic_criteria_are_derived_from_precommitted_job_binding(
