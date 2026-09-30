@@ -17,6 +17,7 @@ from typing import Any, BinaryIO
 from .agent_run_paths import AgentRunPaths
 from .run_collections import collect_completion
 from .errors import WorkflowError
+from .external_bindings import require_dispatch_ready
 from .contracts import read_agent_run_contract
 from .diagnostics import classify_failure
 from .health import (
@@ -353,14 +354,21 @@ def execute(
         else None
     )
 
-    transition_execution_path(
-        status_path,
-        "running",
-        actor="runner",
-        reason="executor started",
-        projection_source="runner",
-        started_at=utc_now(),
-    )
+    worker_mode = str(launch["worker_plan"].get("mode", "headless"))
+    if worker_mode == "external":
+        # External-host launch authority is generation-bound and must be
+        # consumed before this executable runner material can dispatch work.
+        # The runner deliberately cannot promote a merely prepared external run.
+        require_dispatch_ready(run_dir)
+    else:
+        transition_execution_path(
+            status_path,
+            "running",
+            actor="runner",
+            reason="executor started",
+            projection_source="runner",
+            started_at=utc_now(),
+        )
     secret_values = secret_values_from_argv(command)
     try:
         launch_command = command + ([prompt.decode("utf-8")] if interactive else [])
