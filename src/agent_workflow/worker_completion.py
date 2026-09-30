@@ -912,8 +912,9 @@ def finish(
             "verification": [],
             "next_action": (
                 "this compatibility run has no bound native acceptance commands; "
-                "prepare a fresh lineage run with a native job or evaluation plan that binds "
-                "acceptance commands, then finish that run"
+                "after it reaches terminal state, use agent-run restart AGENT_RUN_ID "
+                "--evaluation PLAN to preserve lineage while binding acceptance commands, "
+                "then finish the retry"
             ),
         }
 
