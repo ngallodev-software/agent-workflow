@@ -164,5 +164,9 @@ class AgentRunPaths:
     def native_job(self) -> Path:
         return self.jobs / "native-job.json"
 
+    @property
+    def source_specification(self) -> Path:
+        return self.jobs / "source-specification.json"
+
     def collection(self, name: str) -> Path:
         return self.collections / name

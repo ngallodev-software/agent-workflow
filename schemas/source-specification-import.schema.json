@@ -1,0 +1,385 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/source-specification-import/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "imported_at",
+    "importer",
+    "provider",
+    "workflow_schema",
+    "change",
+    "planning_root",
+    "repository",
+    "validation",
+    "status",
+    "apply",
+    "reports",
+    "artifacts",
+    "task_map"
+  ],
+  "properties": {
+    "schema": {
+      "const": "agent-workflow/source-specification-import/v1"
+    },
+    "imported_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "importer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "const": "agent-workflow"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version",
+        "executable_path",
+        "executable_sha256"
+      ],
+      "properties": {
+        "name": {
+          "const": "openspec"
+        },
+        "version": {
+          "const": "1.13.2"
+        },
+        "executable_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "executable_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "workflow_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version",
+        "source",
+        "schema_path",
+        "schema_sha256",
+        "templates"
+      ],
+      "properties": {
+        "name": {
+          "const": "spec-driven"
+        },
+        "version": {
+          "const": 1
+        },
+        "source": {
+          "const": "package"
+        },
+        "schema_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "schema_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "templates": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "path",
+              "sha256"
+            ],
+            "properties": {
+              "id": {
+                "enum": [
+                  "proposal",
+                  "specs",
+                  "design",
+                  "tasks"
+                ]
+              },
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            }
+          }
+        }
+      }
+    },
+    "change": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        }
+      }
+    },
+    "planning_root": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "source"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "const": "nearest"
+        }
+      }
+    },
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "revision",
+        "branch",
+        "dirty"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "revision": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "branch": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dirty": {
+          "const": false
+        }
+      }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "passed",
+        "report"
+      ],
+      "properties": {
+        "passed": {
+          "const": true
+        },
+        "report": {
+          "$ref": "#/$defs/report"
+        }
+      }
+    },
+    "status": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "is_complete",
+        "report"
+      ],
+      "properties": {
+        "is_complete": {
+          "const": true
+        },
+        "report": {
+          "$ref": "#/$defs/report"
+        }
+      }
+    },
+    "apply": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "report"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "ready",
+            "all_done"
+          ]
+        },
+        "report": {
+          "$ref": "#/$defs/report"
+        }
+      }
+    },
+    "reports": {
+      "type": "array",
+      "minItems": 7,
+      "items": {
+        "$ref": "#/$defs/report"
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "path",
+          "sha256"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "config",
+              "change_config",
+              "proposal",
+              "spec_delta",
+              "design",
+              "tasks",
+              "current_spec",
+              "planning_support"
+            ]
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      }
+    },
+    "task_map": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "agent_workflow_task_id",
+          "done_at_import",
+          "source",
+          "description",
+          "description_sha256"
+        ],
+        "properties": {
+          "agent_workflow_task_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._-]+$"
+          },
+          "done_at_import": {
+            "type": "boolean"
+          },
+          "source": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "artifact",
+              "locator",
+              "path",
+              "line",
+              "text_sha256"
+            ],
+            "properties": {
+              "artifact": {
+                "const": "tasks"
+              },
+              "locator": {
+                "type": "string",
+                "minLength": 1
+              },
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "line": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "text_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            }
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "id": {
+          "enum": [
+            "version",
+            "schemas",
+            "templates",
+            "status",
+            "validation",
+            "apply",
+            "show"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^source-reports/[A-Za-z0-9._-]+\\.json$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    }
+  }
+}

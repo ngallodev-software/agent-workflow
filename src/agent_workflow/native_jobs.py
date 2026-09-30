@@ -1,8 +1,8 @@
 """Validation boundary for versioned, JSON-only native prompt-pack jobs.
 
-This module deliberately validates only the native job contract.  It does not
-discover external packs, create runtime state, or authorize command execution.
-Those responsibilities begin with the Phase-B2 launch binding.
+``native-job/v1`` remains the immutable SpecGen/shared-bundle compatibility
+contract. ``native-job/v2`` is Agent-Workflow-owned and binds a frozen source
+specification import without requiring the SpecGen contract bundle.
 """
 
 from __future__ import annotations
@@ -16,10 +16,13 @@ from .contracts import validate_instance
 from .errors import WorkflowError
 from .eval.commands import CommandSpec, specs_from_data
 from .path import absolute_path, read_regular_file, require_directory
+from .process import run
 from .shared_contracts import negotiate_bundle
 
 
 NATIVE_JOB_SCHEMA = "agent-workflow/native-job/v1"
+NATIVE_JOB_V2_SCHEMA = "agent-workflow/native-job/v2"
+SOURCE_SPECIFICATION_SCHEMA = "agent-workflow/source-specification-import/v1"
 
 
 @dataclass(frozen=True)
@@ -42,6 +45,17 @@ class CriterionRequirement:
 
 
 @dataclass(frozen=True)
+class SourceSpecificationBinding:
+    schema: str
+    path: Path
+    relative_path: str
+    data: bytes
+    sha256: str
+    task_refs: tuple[str, ...]
+    receipt: dict[str, Any]
+
+
+@dataclass(frozen=True)
 class ValidatedNativeJob:
     """A native job whose schema and pack-relative paths have been checked."""
 
@@ -54,7 +68,8 @@ class ValidatedNativeJob:
     prompt_bytes: bytes
     job_bytes: bytes
     job_sha256: str
-    bundle_provenance: dict[str, Any]
+    bundle_provenance: dict[str, Any] | None
+    source_specification: SourceSpecificationBinding | None
     prompt_relative_path: str
     worktree_target: str
     path_policy: PathPolicy
@@ -71,7 +86,7 @@ def _resolve_relative(root: Path, value: str, label: str) -> Path:
     try:
         resolved.relative_to(root)
     except ValueError as exc:
-        raise WorkflowError(f"{label} escapes pack root: {value}") from exc
+        raise WorkflowError(f"{label} escapes authorized root: {value}") from exc
     return resolved
 
 
@@ -98,13 +113,118 @@ def _read_json_job(job_path: Path, raw: bytes | None = None) -> dict[str, Any]:
     return value
 
 
-def validate_native_job(job_path: Path, *, pack_root: Path) -> ValidatedNativeJob:
-    """Read and validate a native job without performing any runtime action.
+def _source_specification(
+    value: dict[str, Any],
+    *,
+    pack_root: Path,
+) -> SourceSpecificationBinding:
+    binding = value.get("source_specification")
+    if not isinstance(binding, dict):
+        raise WorkflowError("native-job/v2 is missing source_specification")
+    relative = str(binding.get("path", ""))
+    path = _resolve_relative(pack_root, relative, "source_specification.path")
+    read = read_regular_file(path, max_bytes=8 * 1024 * 1024)
+    expected_sha = str(binding.get("sha256", ""))
+    if read.sha256 != expected_sha:
+        raise WorkflowError(
+            "native-job/v2 source specification digest mismatch: "
+            f"expected {expected_sha}, got {read.sha256}"
+        )
+    try:
+        receipt = json.loads(read.data.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise WorkflowError("source specification receipt is not valid JSON") from exc
+    if not isinstance(receipt, dict):
+        raise WorkflowError("source specification receipt must be a JSON object")
+    validate_instance(receipt, SOURCE_SPECIFICATION_SCHEMA, artifact=str(path))
 
-    ``prompt_path`` is resolved against ``pack_root`` and must name an existing
-    regular file. ``worktree_target`` and path-policy entries are constrained to
-    relative, traversal-free paths; B2 binds them to a selected worktree.
+    for report in receipt.get("reports", []):
+        if not isinstance(report, dict):
+            raise WorkflowError("source specification receipt contains invalid report metadata")
+        report_path = _resolve_relative(pack_root, str(report.get("path", "")), "source report")
+        report_read = read_regular_file(report_path, max_bytes=8 * 1024 * 1024)
+        if report_read.sha256 != report.get("sha256"):
+            raise WorkflowError(
+                f"source specification report digest mismatch: {report.get('id')}"
+            )
+
+    task_refs = tuple(str(item) for item in binding.get("task_refs", []))
+    known = {
+        str(item.get("agent_workflow_task_id"))
+        for item in receipt.get("task_map", [])
+        if isinstance(item, dict)
+    }
+    unknown = sorted(set(task_refs) - known)
+    if unknown:
+        raise WorkflowError(
+            "native-job/v2 references unknown source specification tasks: "
+            + ", ".join(unknown)
+        )
+    return SourceSpecificationBinding(
+        schema=SOURCE_SPECIFICATION_SCHEMA,
+        path=path,
+        relative_path=relative,
+        data=read.data,
+        sha256=read.sha256,
+        task_refs=task_refs,
+        receipt=receipt,
+    )
+
+
+def _git(workdir: Path, *args: str) -> str:
+    return str(
+        run(
+            ["git", "-C", str(workdir), *args],
+            check=True,
+            timeout_seconds=30,
+            max_stdout_bytes=2 * 1024 * 1024,
+            max_stderr_bytes=512 * 1024,
+        ).stdout
+    ).strip()
+
+
+def validate_source_specification_worktree(
+    job: ValidatedNativeJob,
+    workdir: Path,
+) -> None:
+    """Bind a v2 job to a clean checkout of the imported planning revision.
+
+    The original absolute import path is provenance only. A delegated worktree
+    may live elsewhere, but it must be the same clean Git revision and contain
+    byte-identical planning inputs. OpenSpec itself is not required here.
     """
+
+    source = job.source_specification
+    if source is None:
+        return
+    root = require_directory(absolute_path(workdir), label="native-job/v2 source worktree")
+    repository = source.receipt["repository"]
+    head = _git(root, "rev-parse", "HEAD")
+    if head != repository["revision"]:
+        raise WorkflowError(
+            "native-job/v2 worktree revision does not match frozen OpenSpec import: "
+            f"{head} != {repository['revision']}"
+        )
+    dirty = bool(_git(root, "status", "--porcelain=v1", "--untracked-files=all"))
+    if dirty:
+        raise WorkflowError(
+            "native-job/v2 source worktree must be clean at launch; "
+            "prepare a fresh worktree from the imported revision"
+        )
+    for artifact in source.receipt.get("artifacts", []):
+        if not isinstance(artifact, dict):
+            raise WorkflowError("source specification contains invalid artifact metadata")
+        relative = str(artifact.get("path", ""))
+        path = _resolve_relative(root, relative, "source specification artifact")
+        read = read_regular_file(path, max_bytes=16 * 1024 * 1024)
+        if read.sha256 != artifact.get("sha256"):
+            raise WorkflowError(
+                "source specification artifact drifted since import: " + relative
+            )
+
+
+def validate_native_job(job_path: Path, *, pack_root: Path) -> ValidatedNativeJob:
+    """Read and validate a v1 or v2 native job without starting execution."""
 
     root = require_directory(pack_root, label="pack root")
     path = absolute_path(job_path)
@@ -114,15 +234,21 @@ def validate_native_job(job_path: Path, *, pack_root: Path) -> ValidatedNativeJo
         raise WorkflowError(f"native job is outside pack root: {job_path}") from exc
     job_read = read_regular_file(path)
     value = _read_json_job(path, job_read.data)
-    if value.get("schema") != NATIVE_JOB_SCHEMA:
+    schema = value.get("schema")
+    if schema not in {NATIVE_JOB_SCHEMA, NATIVE_JOB_V2_SCHEMA}:
         raise WorkflowError(
-            f"unsupported native job schema in {path}: {value.get('schema')!r}"
+            f"unsupported native job schema in {path}: {schema!r}; "
+            f"expected {NATIVE_JOB_SCHEMA} or {NATIVE_JOB_V2_SCHEMA}"
         )
-    validate_instance(value, NATIVE_JOB_SCHEMA, artifact=str(path))
-    # Provenance negotiation is deliberately before any worktree binding or
-    # execution preparation.  The bundle validates shared semantics; AW
-    # continues to own native-job interpretation below.
-    bundle_provenance = negotiate_bundle(value.get("bundle_provenance"))
+    assert isinstance(schema, str)
+    validate_instance(value, schema, artifact=str(path))
+
+    bundle_provenance: dict[str, Any] | None = None
+    source_specification: SourceSpecificationBinding | None = None
+    if schema == NATIVE_JOB_SCHEMA:
+        bundle_provenance = negotiate_bundle(value.get("bundle_provenance"))
+    else:
+        source_specification = _source_specification(value, pack_root=root)
 
     prompt_relative = str(value["prompt_path"])
     prompt_path = _resolve_relative(root, prompt_relative, "prompt_path")
@@ -132,7 +258,11 @@ def validate_native_job(job_path: Path, *, pack_root: Path) -> ValidatedNativeJo
         raise WorkflowError(f"prompt_path is not a regular file: {prompt_relative}") from exc
 
     worktree_target = str(value["worktree_target"])
-    _validate_policy_path(worktree_target, "worktree_target")
+    if schema == NATIVE_JOB_SCHEMA:
+        _validate_policy_path(worktree_target, "worktree_target")
+    elif worktree_target != ".":
+        raise WorkflowError("native-job/v2 Phase-0 worktree_target must be '.'")
+
     policy_data = value["path_policy"]
     allowed = tuple(
         _validate_policy_path(str(item), "allowed_paths entry")
@@ -144,6 +274,15 @@ def validate_native_job(job_path: Path, *, pack_root: Path) -> ValidatedNativeJo
     )
     if set(allowed) & set(forbidden):
         raise WorkflowError("path_policy contains paths that are both allowed and forbidden")
+    if schema == NATIVE_JOB_V2_SCHEMA:
+        if "openspec" not in forbidden:
+            raise WorkflowError(
+                "native-job/v2 must keep frozen OpenSpec planning artifacts outside writable scope"
+            )
+        if any(Path(item).parts[:1] == ("openspec",) for item in allowed):
+            raise WorkflowError(
+                "native-job/v2 may not authorize OpenSpec planning artifacts as writable"
+            )
 
     commands = tuple(specs_from_data(value["acceptance_commands"]))
     command_ids = [command.id for command in commands]
@@ -155,7 +294,7 @@ def validate_native_job(job_path: Path, *, pack_root: Path) -> ValidatedNativeJo
             id=str(item["id"]),
             description=(str(item["description"]) if item.get("description") is not None else None),
             acceptance_command_ids=tuple(
-                str(value) for value in item.get("acceptance_command_ids", [])
+                str(command_id) for command_id in item.get("acceptance_command_ids", [])
             ),
         )
         for item in raw_criteria
@@ -174,7 +313,7 @@ def validate_native_job(job_path: Path, *, pack_root: Path) -> ValidatedNativeJo
             )
     review_data = value["review_requirement"]
     return ValidatedNativeJob(
-        schema=NATIVE_JOB_SCHEMA,
+        schema=schema,
         job_path=path,
         pack_root=root,
         job_id=str(value["job_id"]),
@@ -184,6 +323,7 @@ def validate_native_job(job_path: Path, *, pack_root: Path) -> ValidatedNativeJo
         job_bytes=job_read.data,
         job_sha256=job_read.sha256,
         bundle_provenance=bundle_provenance,
+        source_specification=source_specification,
         prompt_relative_path=prompt_relative,
         worktree_target=worktree_target,
         path_policy=PathPolicy(allowed_paths=allowed, forbidden_paths=forbidden),
