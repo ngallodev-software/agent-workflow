@@ -345,7 +345,7 @@ def test_openspec_import_freezes_planning_and_keeps_acceptance_host_owned(
     validation = installed_product.json(
         "pack", "validate", pack, "--verify-checksums", env=product_env
     )
-    assert validation["valid"] is True
+    assert validation["ok"] is True
 
     job_path = pack / "jobs" / f"{TASK_ID}.json"
     job_value = json.loads(job_path.read_text(encoding="utf-8"))
