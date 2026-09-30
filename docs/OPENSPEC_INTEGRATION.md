@@ -17,6 +17,15 @@ The first qualified import surface is intentionally narrow:
 This is a versioned compatibility surface, not a claim that arbitrary future OpenSpec releases
 have equivalent semantics.
 
+The qualified upstream reference is the published `v1.13.2` release at
+`Fission-AI/OpenSpec@db2309783547a14e150dbcbfc19120e4028446c3`, not a later
+`main` checkout that may still report the same package version. In that release,
+`instructions apply --json` exposes task `id`, `description`, and `done`;
+the later `sourcePath` / `line` task fields are not part of the published
+1.13.2 surface. The importer therefore derives source locations from the frozen
+`tasks.md` and cross-checks that source projection against the release CLI
+before binding an Agent-Workflow task.
+
 ## Boundary
 
 ```text
