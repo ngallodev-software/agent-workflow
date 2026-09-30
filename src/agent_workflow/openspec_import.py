@@ -353,7 +353,7 @@ def _load_job_policy(path: Path) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise WorkflowError("OpenSpec import job policy must be a JSON object")
     allowed_keys = {
-        "path_policy",
+        "scope",
         "acceptance_commands",
         "criteria",
         "review_requirement",
@@ -363,30 +363,40 @@ def _load_job_policy(path: Path) -> dict[str, Any]:
         raise WorkflowError(
             "OpenSpec import job policy contains unsupported fields: " + ", ".join(unknown)
         )
-    path_policy = value.get("path_policy")
-    if not isinstance(path_policy, dict):
-        raise WorkflowError("OpenSpec import job policy requires path_policy")
-    allowed = path_policy.get("allowed_paths")
-    if not isinstance(allowed, list) or not allowed:
-        raise WorkflowError("OpenSpec import job policy requires non-empty allowed_paths")
-    forbidden = path_policy.get("forbidden_paths", [])
-    if not isinstance(forbidden, list):
-        raise WorkflowError("OpenSpec import job policy forbidden_paths must be a list")
-    for item in [*allowed, *forbidden]:
-        if (
-            not isinstance(item, str)
-            or not item
-            or Path(item).is_absolute()
-            or ".." in Path(item).parts
-        ):
-            raise WorkflowError(f"unsafe OpenSpec import path policy entry: {item!r}")
-        if item == ".":
-            raise WorkflowError("OpenSpec import path policy may not authorize the repository root")
-    if any(PurePosixPath(str(item)).parts[:1] == ("openspec",) for item in allowed):
-        raise WorkflowError("OpenSpec planning artifacts may not be writable execution scope")
-    forbidden_values = [str(item) for item in forbidden]
-    if "openspec" not in forbidden_values:
-        forbidden_values.append("openspec")
+    scope = value.get("scope")
+    if not isinstance(scope, dict):
+        raise WorkflowError("OpenSpec import job policy requires scope")
+    allowed_scope_keys = {"writable_paths", "writable_trees", "disposable_trees"}
+    unknown_scope = sorted(set(scope) - allowed_scope_keys)
+    if unknown_scope:
+        raise WorkflowError(
+            "OpenSpec import scope contains unsupported fields: " + ", ".join(unknown_scope)
+        )
+    writable_paths = scope.get("writable_paths", [])
+    writable_trees = scope.get("writable_trees", [])
+    disposable_trees = scope.get("disposable_trees", [])
+    if not all(isinstance(items, list) for items in (writable_paths, writable_trees, disposable_trees)):
+        raise WorkflowError("OpenSpec import scope entries must be arrays")
+    if not writable_paths and not writable_trees:
+        raise WorkflowError("OpenSpec import scope requires a writable path or writable tree")
+    for label, items in (
+        ("writable_paths", writable_paths),
+        ("writable_trees", writable_trees),
+        ("disposable_trees", disposable_trees),
+    ):
+        for item in items:
+            if (
+                not isinstance(item, str)
+                or not item
+                or Path(item).is_absolute()
+                or ".." in Path(item).parts
+                or item == "."
+            ):
+                raise WorkflowError(f"unsafe OpenSpec import {label} entry: {item!r}")
+            if PurePosixPath(item).parts[:1] == ("openspec",):
+                raise WorkflowError(
+                    "OpenSpec planning artifacts may not be writable or disposable execution scope"
+                )
 
     commands = value.get("acceptance_commands", [])
     criteria = value.get("criteria", [])
@@ -394,9 +404,10 @@ def _load_job_policy(path: Path) -> dict[str, Any]:
     if not isinstance(commands, list) or not isinstance(criteria, list) or not isinstance(review, dict):
         raise WorkflowError("OpenSpec import job policy has invalid execution fields")
     return {
-        "path_policy": {
-            "allowed_paths": [str(item) for item in allowed],
-            "forbidden_paths": forbidden_values,
+        "scope": {
+            "writable_paths": [str(item) for item in writable_paths],
+            "writable_trees": [str(item) for item in writable_trees],
+            "disposable_trees": [str(item) for item in disposable_trees],
         },
         "acceptance_commands": commands,
         "criteria": criteria,
@@ -611,7 +622,7 @@ def import_openspec(
         )
         job_rel = f"jobs/{task_id}.json"
         job_policy_fields = {
-            "path_policy": policy["path_policy"],
+            "scope": policy["scope"],
             "acceptance_commands": policy["acceptance_commands"],
             "review_requirement": policy["review_requirement"],
         }

@@ -48,9 +48,10 @@ Prepare an Agent-Workflow-owned execution policy separately from the OpenSpec ch
 
 ```json
 {
-  "path_policy": {
-    "allowed_paths": ["src"],
-    "forbidden_paths": []
+  "scope": {
+    "writable_paths": [],
+    "writable_trees": ["src"],
+    "disposable_trees": []
   },
   "acceptance_commands": [
     {
@@ -95,7 +96,9 @@ The importer records:
 - SHA-256 for the planning artifacts used by the import;
 - stable Agent-Workflow task IDs mapped to OpenSpec task locators and source-line hashes.
 
-Generated jobs automatically forbid `openspec/` from writable execution scope.
+Generated jobs reject any `openspec/` entry in writable or disposable execution scope. Paths
+and recursive trees remain distinct so a directory cannot accidentally be lowered as an exact
+writable file.
 
 ## Planning verification is not execution acceptance
 

@@ -248,9 +248,10 @@ def _write_job_policy(path: Path) -> None:
     path.write_text(
         json.dumps(
             {
-                "path_policy": {
-                    "allowed_paths": ["src"],
-                    "forbidden_paths": [],
+                "scope": {
+                    "writable_paths": [],
+                    "writable_trees": ["src"],
+                    "disposable_trees": [],
                 },
                 "acceptance_commands": [
                     {
@@ -351,8 +352,9 @@ def test_openspec_import_freezes_planning_and_keeps_acceptance_host_owned(
     job_value = json.loads(job_path.read_text(encoding="utf-8"))
     assert job_value["schema"] == NATIVE_JOB_V2_SCHEMA
     assert "bundle_provenance" not in job_value
-    assert job_value["path_policy"]["allowed_paths"] == ["src"]
-    assert "openspec" in job_value["path_policy"]["forbidden_paths"]
+    assert job_value["scope"]["writable_paths"] == []
+    assert job_value["scope"]["writable_trees"] == ["src"]
+    assert "openspec" not in json.dumps(job_value["scope"])
     assert [item["id"] for item in job_value["acceptance_commands"]] == ["compile-src"]
     serialized_commands = json.dumps(job_value["acceptance_commands"])
     assert "untrusted-check" not in serialized_commands

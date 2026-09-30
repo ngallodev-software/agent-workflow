@@ -27,8 +27,19 @@ SOURCE_SPECIFICATION_SCHEMA = "agent-workflow/source-specification-import/v1"
 
 @dataclass(frozen=True)
 class PathPolicy:
+    """Legacy native-job/v1 path policy."""
+
     allowed_paths: tuple[str, ...]
     forbidden_paths: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ExecutionScope:
+    """Agent-Workflow-native v2 scope vocabulary."""
+
+    writable_paths: tuple[str, ...]
+    writable_trees: tuple[str, ...]
+    disposable_trees: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -72,7 +83,8 @@ class ValidatedNativeJob:
     source_specification: SourceSpecificationBinding | None
     prompt_relative_path: str
     worktree_target: str
-    path_policy: PathPolicy
+    path_policy: PathPolicy | None
+    scope: ExecutionScope | None
     acceptance_commands: tuple[CommandSpec, ...]
     criteria: tuple[CriterionRequirement, ...]
     review_requirement: ReviewRequirement
@@ -263,26 +275,45 @@ def validate_native_job(job_path: Path, *, pack_root: Path) -> ValidatedNativeJo
     elif worktree_target != ".":
         raise WorkflowError("native-job/v2 Phase-0 worktree_target must be '.'")
 
-    policy_data = value["path_policy"]
-    allowed = tuple(
-        _validate_policy_path(str(item), "allowed_paths entry")
-        for item in policy_data["allowed_paths"]
-    )
-    forbidden = tuple(
-        _validate_policy_path(str(item), "forbidden_paths entry")
-        for item in policy_data.get("forbidden_paths", [])
-    )
-    if set(allowed) & set(forbidden):
-        raise WorkflowError("path_policy contains paths that are both allowed and forbidden")
-    if schema == NATIVE_JOB_V2_SCHEMA:
-        if "openspec" not in forbidden:
+    path_policy: PathPolicy | None = None
+    execution_scope: ExecutionScope | None = None
+    if schema == NATIVE_JOB_SCHEMA:
+        policy_data = value["path_policy"]
+        allowed = tuple(
+            _validate_policy_path(str(item), "allowed_paths entry")
+            for item in policy_data["allowed_paths"]
+        )
+        forbidden = tuple(
+            _validate_policy_path(str(item), "forbidden_paths entry")
+            for item in policy_data.get("forbidden_paths", [])
+        )
+        if set(allowed) & set(forbidden):
+            raise WorkflowError("path_policy contains paths that are both allowed and forbidden")
+        path_policy = PathPolicy(allowed_paths=allowed, forbidden_paths=forbidden)
+    else:
+        scope_data = value["scope"]
+        writable_paths = tuple(
+            _validate_policy_path(str(item), "writable_paths entry")
+            for item in scope_data.get("writable_paths", [])
+        )
+        writable_trees = tuple(
+            _validate_policy_path(str(item), "writable_trees entry")
+            for item in scope_data.get("writable_trees", [])
+        )
+        disposable_trees = tuple(
+            _validate_policy_path(str(item), "disposable_trees entry")
+            for item in scope_data.get("disposable_trees", [])
+        )
+        protected = (*writable_paths, *writable_trees, *disposable_trees)
+        if any(Path(item).parts[:1] == ("openspec",) for item in protected):
             raise WorkflowError(
-                "native-job/v2 must keep frozen OpenSpec planning artifacts outside writable scope"
+                "native-job/v2 may not authorize OpenSpec planning artifacts as writable or disposable"
             )
-        if any(Path(item).parts[:1] == ("openspec",) for item in allowed):
-            raise WorkflowError(
-                "native-job/v2 may not authorize OpenSpec planning artifacts as writable"
-            )
+        execution_scope = ExecutionScope(
+            writable_paths=writable_paths,
+            writable_trees=writable_trees,
+            disposable_trees=disposable_trees,
+        )
 
     commands = tuple(specs_from_data(value["acceptance_commands"]))
     command_ids = [command.id for command in commands]
@@ -326,7 +357,8 @@ def validate_native_job(job_path: Path, *, pack_root: Path) -> ValidatedNativeJo
         source_specification=source_specification,
         prompt_relative_path=prompt_relative,
         worktree_target=worktree_target,
-        path_policy=PathPolicy(allowed_paths=allowed, forbidden_paths=forbidden),
+        path_policy=path_policy,
+        scope=execution_scope,
         acceptance_commands=commands,
         criteria=criteria,
         review_requirement=ReviewRequirement(

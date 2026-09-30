@@ -310,10 +310,6 @@ def _write_job_binding(state_dir: Path, job: ValidatedNativeJob, *, agent_run_id
         "job_source_sha256": source_sha256,
         "job_stored_path": str(stored),
         "job_stored_sha256": stored_sha256,
-        "path_policy": {
-            "allowed_paths": list(job.path_policy.allowed_paths),
-            "forbidden_paths": list(job.path_policy.forbidden_paths),
-        },
         "criteria": [
             {
                 "id": item.id,
@@ -342,6 +338,12 @@ def _write_job_binding(state_dir: Path, job: ValidatedNativeJob, *, agent_run_id
         if job.bundle_provenance is None:
             raise WorkflowError("native-job/v1 has no negotiated bundle provenance")
         receipt["bundle_provenance"] = job.bundle_provenance
+        if job.path_policy is None:
+            raise WorkflowError("native-job/v1 has no path policy")
+        receipt["path_policy"] = {
+            "allowed_paths": list(job.path_policy.allowed_paths),
+            "forbidden_paths": list(job.path_policy.forbidden_paths),
+        }
     else:
         source = job.source_specification
         source_stored = paths.source_specification
@@ -358,6 +360,13 @@ def _write_job_binding(state_dir: Path, job: ValidatedNativeJob, *, agent_run_id
             "stored_path": "jobs/source-specification.json",
             "stored_sha256": stored_source_sha256,
             "task_refs": list(source.task_refs),
+        }
+        if job.scope is None:
+            raise WorkflowError("native-job/v2 has no execution scope")
+        receipt["scope"] = {
+            "writable_paths": list(job.scope.writable_paths),
+            "writable_trees": list(job.scope.writable_trees),
+            "disposable_trees": list(job.scope.disposable_trees),
         }
     receipt_path = paths.job_binding
     atomic_write_json(receipt_path, receipt, mode=0o444)
@@ -928,14 +937,24 @@ def _prepare_evaluation(
         if native_job is not None
         else evaluation_data.get("acceptance_commands", [])
     )
-    scope_data = (
-        {
+    if native_job is None:
+        scope_data = evaluation_data.get("scope", {})
+    elif native_job.scope is not None:
+        disposable_trees = list(native_job.scope.disposable_trees)
+        if ".delegations/" not in disposable_trees:
+            disposable_trees.append(".delegations/")
+        scope_data = {
+            "writable_paths": list(native_job.scope.writable_paths),
+            "writable_trees": list(native_job.scope.writable_trees),
+            "disposable_trees": disposable_trees,
+        }
+    else:
+        if native_job.path_policy is None:
+            raise WorkflowError("native-job/v1 has no path policy")
+        scope_data = {
             "writable_paths": list(native_job.path_policy.allowed_paths),
             "disposable_trees": [".delegations/"],
         }
-        if native_job is not None
-        else evaluation_data.get("scope", {})
-    )
     runtime = {
         "schema": "agent-workflow/evaluation-runtime/v1",
         "evaluation_path": str(evaluation.path) if evaluation is not None else None,

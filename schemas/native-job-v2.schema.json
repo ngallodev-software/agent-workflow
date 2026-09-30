@@ -10,7 +10,7 @@
     "source_specification",
     "prompt_path",
     "worktree_target",
-    "path_policy",
+    "scope",
     "acceptance_commands",
     "review_requirement"
   ],
@@ -65,32 +65,56 @@
     "worktree_target": {
       "const": "."
     },
-    "path_policy": {
+    "scope": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "allowed_paths"
+        "writable_paths",
+        "writable_trees",
+        "disposable_trees"
       ],
       "properties": {
-        "allowed_paths": {
+        "writable_paths": {
           "type": "array",
-          "minItems": 1,
           "uniqueItems": true,
           "items": {
             "type": "string",
             "minLength": 1
           }
         },
-        "forbidden_paths": {
+        "writable_trees": {
           "type": "array",
           "uniqueItems": true,
           "items": {
             "type": "string",
             "minLength": 1
-          },
-          "default": []
+          }
+        },
+        "disposable_trees": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
         }
-      }
+      },
+      "anyOf": [
+        {
+          "properties": {
+            "writable_paths": {
+              "minItems": 1
+            }
+          }
+        },
+        {
+          "properties": {
+            "writable_trees": {
+              "minItems": 1
+            }
+          }
+        }
+      ]
     },
     "acceptance_commands": {
       "type": "array",
