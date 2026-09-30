@@ -230,6 +230,7 @@ def handle_agent_run_command(
                 args.new_agent_run_id,
                 start_immediately=args.start,
                 retry_context_path=args.context_file,
+                evaluation_path=args.evaluation,
             ),
             False,
         )
