@@ -12,6 +12,7 @@ from .compatibility import probe_executor
 from .process import redact_argv, run, secret_values_from_argv
 from .config import trust_report
 from .errors import WorkflowError
+from .model_health import build_model_health_report
 
 
 def _executor_capability(
@@ -152,6 +153,7 @@ def run_doctor(settings: Settings) -> dict[str, Any]:
     security = trust_report(settings)
     plugins = _plugin_diagnostics(settings)
     decisions = _decision_runtime_diagnostics(settings)
+    model_health = build_model_health_report(settings)
     executors = {
         name: _executor_capability(
             name,
@@ -191,6 +193,7 @@ def run_doctor(settings: Settings) -> dict[str, Any]:
         "security": security,
         "plugins": plugins,
         "decisions": decisions,
+        "model_health": model_health,
         "archive_ready": _archive_commands_supported(commands),
         "state_root": str(settings.state_root),
         "worktree_root": str(settings.worktree_root),
