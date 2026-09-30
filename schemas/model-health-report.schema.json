@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/model-health-report/v1",
+  "type": "object",
+  "required": ["schema", "observed_at", "advisory", "routing_authority", "metadata", "models"],
+  "properties": {
+    "schema": {"const": "agent-workflow/model-health-report/v1"},
+    "observed_at": {"type": "string", "minLength": 1},
+    "advisory": {"const": true},
+    "routing_authority": {"const": false},
+    "metadata": {
+      "type": "object",
+      "required": ["path", "status", "source", "retrieved_at", "valid_until", "sha256", "error"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "status": {"enum": ["missing", "fresh", "stale", "invalid"]},
+        "source": {"type": ["string", "null"]},
+        "retrieved_at": {"type": ["string", "null"]},
+        "valid_until": {"type": ["string", "null"]},
+        "sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "error": {"type": ["string", "null"]}
+      },
+      "additionalProperties": false
+    },
+    "models": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["executor", "model", "availability", "lifecycle", "verification", "reason"],
+        "properties": {
+          "executor": {"type": "string", "minLength": 1},
+          "model": {"type": "string", "minLength": 1},
+          "availability": {"enum": ["available", "unavailable", "unknown"]},
+          "lifecycle": {"enum": ["active", "deprecated", "retired", "unknown"]},
+          "verification": {"enum": ["verified", "unavailable", "deprecated", "retired", "unverified", "unknown"]},
+          "reason": {"type": ["string", "null"]}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
