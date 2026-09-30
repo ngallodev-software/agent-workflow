@@ -308,3 +308,82 @@ def test_headless_codex_automatically_captures_structured_provider_usage(
     assert total["output_tokens"] == 3
     assert total["reasoning_output_tokens"] == 2
     assert total["provider_total_tokens"] == 8
+
+def test_terminal_retry_can_add_missing_evaluation_binding_without_replacing_existing_one(
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+    fake_agent_path: Path,
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "retry-evaluation-repo"
+    git_repo(repo)
+    prompt = tmp_path / "retry-evaluation.md"
+    prompt.write_text("Fail, then retry with a frozen acceptance plan.\n", encoding="utf-8")
+    evaluation = tmp_path / "retry-evaluation.json"
+    evaluation.write_text(
+        json.dumps(
+            {
+                "schema": "agent-workflow/evaluation-plan/v1",
+                "dataset_split": "development",
+                "task_ids": ["FINISH-001"],
+                "repetitions": 1,
+                "timeout_seconds": 30,
+                "scorers": ["acceptance_commands"],
+                "acceptance_commands": [
+                    {
+                        "id": "retry-check",
+                        "argv": [
+                            str(installed_product.python),
+                            "-c",
+                            "raise SystemExit(0)",
+                        ],
+                        "cwd": ".",
+                        "timeout_seconds": 30,
+                        "result_format": "exit-code",
+                        "junit_path": None,
+                    }
+                ],
+                "sandbox": "docker",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    env = dict(product_env)
+    env["FAKE_AGENT_MODE"] = "fail"
+    prepare_and_start_agent_run(
+        installed_product,
+        "retry-needs-evaluation", repo, prompt, "--tier", "low", "--", fake_agent_path,
+        env=env,
+    )
+    assert wait_for_status(env, "retry-needs-evaluation")["status"] == "failed"
+
+    restarted = installed_product.json(
+        "agent-run", "restart", "retry-needs-evaluation",
+        "--new-agent-run-id", "retry-with-evaluation",
+        "--evaluation", evaluation,
+        env=env,
+    )
+    assert restarted["status"] == "prepared"
+    assert restarted["retry_of_agent_run_id"] == "retry-needs-evaluation"
+    retry_run = _run_dir(env, "retry-with-evaluation")
+    runtime = json.loads((retry_run / "evaluation-runtime.json").read_text())
+    assert [item["id"] for item in runtime["acceptance_commands"]] == ["retry-check"]
+
+    prepare_and_start_agent_run(
+        installed_product,
+        "retry-already-bound", repo, prompt, "--tier", "low",
+        "--evaluation", evaluation, "--", fake_agent_path,
+        env=env,
+    )
+    assert wait_for_status(env, "retry-already-bound")["status"] == "failed"
+    replacement = installed_product.run(
+        "agent-run", "restart", "retry-already-bound",
+        "--new-agent-run-id", "retry-illegal-replacement",
+        "--evaluation", evaluation,
+        env=env,
+    )
+    assert replacement.returncode == 2
+    assert "cannot replace an existing acceptance binding" in replacement.stderr
+    assert not _run_dir(env, "retry-illegal-replacement").exists()
+
