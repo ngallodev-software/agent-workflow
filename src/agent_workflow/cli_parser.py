@@ -638,6 +638,14 @@ def build_parser(
         help="UTF-8 corrective context appended immutably to the retry launch prompt",
     )
     restart.add_argument(
+        "--evaluation",
+        type=Path,
+        help=(
+            "bind an evaluation plan when the predecessor had no native job or "
+            "evaluation acceptance binding"
+        ),
+    )
+    restart.add_argument(
         "--start",
         action="store_true",
         help="start a prepared headless retry immediately; default is prepare-only",
