@@ -48,6 +48,26 @@ def _safe_change_name(value: str) -> str:
     return value
 
 
+def _run_text(repository: Path, args: list[str]) -> tuple[str, bytes, Any]:
+    result = run(
+        ["openspec", *args],
+        cwd=repository,
+        check=False,
+        timeout_seconds=60,
+        max_stdout_bytes=2 * 1024 * 1024,
+        max_stderr_bytes=2 * 1024 * 1024,
+        digest_executable=True,
+    )
+    raw = str(result.stdout).encode("utf-8")
+    if result.returncode != 0:
+        detail = str(result.stderr).strip()
+        raise WorkflowError(
+            f"OpenSpec command failed ({result.returncode}): {' '.join(args)}"
+            + (f"; {detail}" if detail else "")
+        )
+    return raw.decode("utf-8").strip(), raw, result
+
+
 def _run_json(repository: Path, args: list[str]) -> tuple[Any, bytes, Any]:
     result = run(
         ["openspec", *args],
@@ -418,11 +438,13 @@ def _load_job_policy(path: Path) -> dict[str, Any]:
     }
 
 
-def _report_record(name: str, raw: bytes) -> dict[str, str]:
+def _report_record(name: str, raw: bytes, *, format: str = "json") -> dict[str, str]:
+    extension = "json" if format == "json" else "txt"
     return {
         "id": name,
-        "path": f"source-reports/{name}.json",
+        "path": f"source-reports/{name}.{extension}",
         "sha256": _sha256(raw),
+        "format": format,
     }
 
 
@@ -481,12 +503,12 @@ def import_openspec(
     policy = _load_job_policy(job_policy)
 
     reports: dict[str, tuple[Any, bytes, Any]] = {}
-    reports["version"] = _run_json(repository, ["version", "--json"])
+    reports["version"] = _run_text(repository, ["--version"])
     version_value = reports["version"][0]
-    if not isinstance(version_value, dict) or version_value.get("version") != OPENSPEC_VERSION:
+    if version_value != OPENSPEC_VERSION:
         raise WorkflowError(
             f"OpenSpec Phase-0 requires exact version {OPENSPEC_VERSION}; "
-            f"observed {version_value.get('version') if isinstance(version_value, dict) else None!r}"
+            f"observed {version_value!r}"
         )
 
     reports["schemas"] = _run_json(repository, ["schemas", "--json"])
@@ -560,7 +582,11 @@ def import_openspec(
     report_records: list[dict[str, str]] = []
     for name in ("version", "schemas", "templates", "status", "validation", "apply", "show"):
         raw = reports[name][1]
-        record = _report_record(name, raw)
+        record = _report_record(
+            name,
+            raw,
+            format="text" if name == "version" else "json",
+        )
         _write_report(destination, record, raw)
         report_records.append(record)
 

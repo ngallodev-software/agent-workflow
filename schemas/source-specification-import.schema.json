@@ -357,7 +357,8 @@
       "required": [
         "id",
         "path",
-        "sha256"
+        "sha256",
+        "format"
       ],
       "properties": {
         "id": {
@@ -373,11 +374,17 @@
         },
         "path": {
           "type": "string",
-          "pattern": "^source-reports/[A-Za-z0-9._-]+\\.json$"
+          "pattern": "^source-reports/[A-Za-z0-9._-]+\\.(?:json|txt)$"
         },
         "sha256": {
           "type": "string",
           "pattern": "^[0-9a-f]{64}$"
+        },
+        "format": {
+          "enum": [
+            "json",
+            "text"
+          ]
         }
       }
     }

@@ -91,7 +91,7 @@ The importer records:
 
 - OpenSpec executable identity and SHA-256;
 - resolved package schema and template SHA-256 values;
-- raw JSON reports from version/schema/template/status/validation/apply/show commands;
+- raw OpenSpec reports: plain text from `--version`, JSON from schema/template/status/validation/apply/show commands;
 - exact source Git revision and branch;
 - SHA-256 for the planning artifacts used by the import;
 - stable Agent-Workflow task IDs mapped to OpenSpec task locators and source-line hashes.
