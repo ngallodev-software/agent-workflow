@@ -18,7 +18,7 @@ from .contracts import read_agent_run_contract, validate_instance
 from .errors import WorkflowError
 from .journal import JournalTransactionResult, locked_file, read_jsonl, transact_jsonl
 from .run_lifecycle import authoritative_execution_status, transition_execution
-from .state import run_dir, status_path
+from .state import read_status_path, run_dir, status_path
 from .steering import pending_external_deliveries, record_external_delivery
 from .util import utc_now
 
@@ -326,6 +326,45 @@ def _require_generation(settings: Any, agent_run_id: str, generation: int) -> di
         raise WorkflowError("external Worker binding generation must be >= 1")
     if generation != projection["generation"]:
         raise WorkflowError("external Worker binding generation is stale")
+    return projection
+
+
+def require_dispatch_ready(run_root: Path) -> dict[str, Any]:
+    """Fail closed unless an external host consumed bind/start before dispatch.
+
+    The generated runner is executable host material, not lifecycle authority.
+    External hosts must establish a generation-bound binding and record the
+    external start before the runner is allowed to spawn the model process.
+    """
+    root = Path(run_root).resolve()
+    paths = AgentRunPaths(root)
+    contract = read_agent_run_contract(paths.contract)
+    if contract["worker_plan"].get("mode") != "external":
+        raise WorkflowError("external dispatch preflight requires worker_mode=external")
+    agent_run_id = str(contract["agent_run"]["id"])
+    events = read_jsonl(
+        root / "external-worker-bindings.jsonl",
+        validator=_validate_event,
+        missing_ok=True,
+        max_records=MAX_EVENTS,
+        sequence_field="sequence",
+    )
+    projection = _project(events, agent_run_id)
+    if not projection["bound"]:
+        raise WorkflowError(
+            "external Worker dispatch refused: bind-external must succeed before launch"
+        )
+    current = authoritative_execution_status(root)
+    if current != "running":
+        raise WorkflowError(
+            "external Worker dispatch refused: start-external must succeed before launch "
+            f"(status={current!r})"
+        )
+    status_value = read_status_path(paths.status)
+    if status_value.get("worker_id") != projection["worker_id"]:
+        raise WorkflowError(
+            "external Worker dispatch refused: active binding does not match running worker"
+        )
     return projection
 
 

@@ -14,7 +14,7 @@ from .contracts import validate_instance
 from .errors import WorkflowError
 from .events import append_lifecycle_event
 from .eval.scoring import validate_score_set
-from .receipts import read_sealed_contract, verify_seal_details
+from .receipts import read_sealed_contract, read_sealed_json, verify_seal_details
 from .state import run_dir, update_projection
 from .util import fsync_directory, utc_now
 from .path_security import open_relative, validate_directory
@@ -246,6 +246,25 @@ def _acceptance_revision(completion: dict[str, Any]) -> str:
     return expected_revision
 
 
+def _job_requires_independent_review(
+    run: Path, final_receipt: dict[str, Any]
+) -> bool:
+    sealed_paths = {
+        item.get("path")
+        for item in final_receipt.get("artifacts", [])
+        if isinstance(item, dict)
+    }
+    if "job-binding.json" not in sealed_paths:
+        return False
+    binding, _ = read_sealed_json(run, final_receipt, "job-binding.json")
+    if not isinstance(binding, dict):
+        raise WorkflowError("sealed job binding must be an object")
+    requirement = binding.get("review_requirement", {})
+    if not isinstance(requirement, dict):
+        raise WorkflowError("sealed job binding review requirement must be an object")
+    return bool(requirement.get("independent", False))
+
+
 def _check_acceptance_gates(
     *,
     final_status: dict[str, Any],
@@ -255,12 +274,17 @@ def _check_acceptance_gates(
     score_hash: str | None,
     reviewed: dict[str, Any],
     independent: bool,
+    independent_review_required: bool = False,
 ) -> None:
     """Execute the fixed ordered acceptance gate sequence."""
     if score is not None and score.get("verdict") != "pass":
         raise WorkflowError("acceptance requires a passing deterministic score set")
     if reviewed.get("score_receipt_sha256") != score_hash:
         raise WorkflowError("score set changed after review")
+    if independent_review_required and not reviewed.get("reviewer_independent"):
+        raise WorkflowError(
+            "precommitted job acceptance requires an independent prior review"
+        )
     if final_status.get("tier") in {"high", "critical"} and not reviewed.get(
         "reviewer_independent"
     ):
@@ -358,6 +382,9 @@ def record(
             score_hash=score_hash,
             reviewed=reviewed,
             independent=independent,
+            independent_review_required=_job_requires_independent_review(
+                run, final_receipt
+            ),
         )
         effective_revision = _acceptance_revision(completion)
 

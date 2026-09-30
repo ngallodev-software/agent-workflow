@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/model-lifecycle-metadata/v1",
+  "type": "object",
+  "required": ["schema", "source", "retrieved_at", "valid_until", "models"],
+  "properties": {
+    "schema": {"const": "agent-workflow/model-lifecycle-metadata/v1"},
+    "source": {"type": "string", "minLength": 1},
+    "retrieved_at": {"type": "string", "minLength": 1},
+    "valid_until": {"type": "string", "minLength": 1},
+    "models": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["executor", "model", "availability", "lifecycle"],
+        "properties": {
+          "executor": {"type": "string", "minLength": 1},
+          "model": {"type": "string", "minLength": 1},
+          "availability": {"enum": ["available", "unavailable", "unknown"]},
+          "lifecycle": {"enum": ["active", "deprecated", "retired", "unknown"]}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

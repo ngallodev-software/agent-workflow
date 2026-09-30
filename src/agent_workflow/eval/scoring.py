@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import stat
 from pathlib import Path
 from typing import Any, Mapping
@@ -23,6 +24,7 @@ KNOWN_SCORERS = {
     "patch_applicability",
     "regression_guard",
     "repository_cleanliness",
+    "semantic_evidence",
     "schema_validity",
     "static_quality_delta",
     "writable_scope",
@@ -85,6 +87,91 @@ def _sealed_load(
     if not isinstance(value, dict):
         raise WorkflowError(f"sealed evaluation artifact must be an object: {relative_path}")
     return value
+
+
+_FILE_EVIDENCE = re.compile(
+    r"^file:(?P<path>[^#]+)#sha256=(?P<sha256>[0-9a-f]{64});bytes=(?P<bytes>[0-9]+)$"
+)
+
+
+def _semantic_criterion_ids(
+    run_dir: Path, final_receipt: Mapping[str, Any]
+) -> tuple[str, ...]:
+    sealed = {
+        item.get("path")
+        for item in final_receipt.get("artifacts", [])
+        if isinstance(item, dict)
+    }
+    if "job-binding.json" not in sealed:
+        return ()
+    binding = _sealed_load(run_dir, final_receipt, "job-binding.json")
+    criteria = binding.get("criteria", [])
+    if not isinstance(criteria, list):
+        raise WorkflowError("sealed job binding criteria must be a list")
+    result: list[str] = []
+    for item in criteria:
+        if not isinstance(item, dict):
+            raise WorkflowError("sealed job binding contains an invalid criterion")
+        criterion_id = item.get("id")
+        if not isinstance(criterion_id, str) or not criterion_id:
+            raise WorkflowError("sealed job binding contains an empty criterion ID")
+        command_ids = item.get("acceptance_command_ids", [])
+        if not isinstance(command_ids, list):
+            raise WorkflowError("sealed job binding criterion command IDs must be a list")
+        if not command_ids:
+            result.append(criterion_id)
+    return tuple(result)
+
+
+def _has_file_backed_evidence(item: Mapping[str, Any]) -> bool:
+    evidence = item.get("evidence", [])
+    if not isinstance(evidence, list):
+        return False
+    for claim in evidence:
+        if not isinstance(claim, str):
+            continue
+        match = _FILE_EVIDENCE.fullmatch(claim)
+        if match is None:
+            continue
+        relative = Path(match.group("path"))
+        if relative.is_absolute() or ".." in relative.parts:
+            continue
+        return True
+    return False
+
+
+def _semantic_evidence_facts(
+    semantic_criteria: tuple[str, ...],
+    completion: Mapping[str, Any],
+) -> tuple[str, dict[str, Any]]:
+    recorded = {
+        str(item.get("id")): item
+        for item in completion.get("criteria", [])
+        if isinstance(item, dict) and isinstance(item.get("id"), str)
+    }
+    missing = sorted(
+        criterion_id for criterion_id in semantic_criteria if criterion_id not in recorded
+    )
+    nonpassing = sorted(
+        criterion_id
+        for criterion_id in semantic_criteria
+        if criterion_id in recorded and recorded[criterion_id].get("result") != "pass"
+    )
+    ungrounded = sorted(
+        criterion_id
+        for criterion_id in semantic_criteria
+        if criterion_id in recorded
+        and recorded[criterion_id].get("result") == "pass"
+        and not _has_file_backed_evidence(recorded[criterion_id])
+    )
+    facts = {
+        "required_criteria": list(semantic_criteria),
+        "missing": missing,
+        "nonpassing": nonpassing,
+        "missing_file_backed_evidence": ungrounded,
+        "authority": "precommitted-native-job",
+    }
+    return ("pass" if not missing and not nonpassing and not ungrounded else "fail"), facts
 
 
 def _evidence(receipt: Mapping[str, Any], *paths: str) -> list[dict[str, str]]:
@@ -152,6 +239,9 @@ def validate_score_set(
         if isinstance(item, dict)
     }
     required = {"schema_validity", "completion_presence"}
+    semantic_criteria = _semantic_criterion_ids(run_dir, final_receipt)
+    if semantic_criteria:
+        required.add("semantic_evidence")
     policy = evaluation_policy_for_run(run_dir, final_receipt)
     if policy:
         required.update(str(item) for item in policy.get("scorers", []))
@@ -308,6 +398,22 @@ def score_trial(
             _evidence(final, "completion.json", "run-provenance.json"),
         )
     )
+
+    semantic_criteria = _semantic_criterion_ids(run_dir, final)
+    if semantic_criteria:
+        required_scorers.add("semantic_evidence")
+        semantic_verdict, semantic_facts = _semantic_evidence_facts(
+            semantic_criteria, completion
+        )
+        scores.append(
+            _receipt(
+                "semantic_evidence",
+                final_hash,
+                semantic_verdict,
+                semantic_facts,
+                _evidence(final, "completion.json", "job-binding.json"),
+            )
+        )
 
     post_commands_path = run_dir / "collections" / "commands-post.json"
     if post_commands_path.is_file():
