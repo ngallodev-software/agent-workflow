@@ -610,6 +610,13 @@ def import_openspec(
             encoding="utf-8",
         )
         job_rel = f"jobs/{task_id}.json"
+        job_policy_fields = {
+            "path_policy": policy["path_policy"],
+            "acceptance_commands": policy["acceptance_commands"],
+            "review_requirement": policy["review_requirement"],
+        }
+        if policy["criteria"]:
+            job_policy_fields["criteria"] = policy["criteria"]
         job = {
             "schema": NATIVE_JOB_V2_SCHEMA,
             "job_id": task_id,
@@ -622,30 +629,30 @@ def import_openspec(
             },
             "prompt_path": prompt_rel,
             "worktree_target": ".",
-            **policy,
+            **job_policy_fields,
         }
         validate_instance(job, NATIVE_JOB_V2_SCHEMA, artifact=job_rel)
         atomic_write_json(destination / job_rel, job, mode=0o444)
-        manifest_tasks.append(
-            {
-                "id": task_id,
-                "tier": "implementation",
-                "agent_run_id": task_id,
-                "prompt": prompt_rel,
-                "criteria": [
-                    {
-                        "id": str(item["id"]),
-                        **(
-                            {"description": str(item["description"])}
-                            if item.get("description") is not None
-                            else {}
-                        ),
-                    }
-                    for item in policy["criteria"]
-                    if isinstance(item, dict) and item.get("id")
-                ],
-            }
-        )
+        manifest_task = {
+            "id": task_id,
+            "tier": "implementation",
+            "agent_run_id": task_id,
+            "prompt": prompt_rel,
+        }
+        if policy["criteria"]:
+            manifest_task["criteria"] = [
+                {
+                    "id": str(item["id"]),
+                    **(
+                        {"description": str(item["description"])}
+                        if item.get("description") is not None
+                        else {}
+                    ),
+                }
+                for item in policy["criteria"]
+                if isinstance(item, dict) and item.get("id")
+            ]
+        manifest_tasks.append(manifest_task)
 
     manifest = {
         "schema": "agent-workflow/prompt-pack/v1",
