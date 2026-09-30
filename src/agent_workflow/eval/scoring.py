@@ -140,6 +140,40 @@ def _has_file_backed_evidence(item: Mapping[str, Any]) -> bool:
     return False
 
 
+def _semantic_evidence_facts(
+    semantic_criteria: tuple[str, ...],
+    completion: Mapping[str, Any],
+) -> tuple[str, dict[str, Any]]:
+    recorded = {
+        str(item.get("id")): item
+        for item in completion.get("criteria", [])
+        if isinstance(item, dict) and isinstance(item.get("id"), str)
+    }
+    missing = sorted(
+        criterion_id for criterion_id in semantic_criteria if criterion_id not in recorded
+    )
+    nonpassing = sorted(
+        criterion_id
+        for criterion_id in semantic_criteria
+        if criterion_id in recorded and recorded[criterion_id].get("result") != "pass"
+    )
+    ungrounded = sorted(
+        criterion_id
+        for criterion_id in semantic_criteria
+        if criterion_id in recorded
+        and recorded[criterion_id].get("result") == "pass"
+        and not _has_file_backed_evidence(recorded[criterion_id])
+    )
+    facts = {
+        "required_criteria": list(semantic_criteria),
+        "missing": missing,
+        "nonpassing": nonpassing,
+        "missing_file_backed_evidence": ungrounded,
+        "authority": "precommitted-native-job",
+    }
+    return ("pass" if not missing and not nonpassing and not ungrounded else "fail"), facts
+
+
 def _evidence(receipt: Mapping[str, Any], *paths: str) -> list[dict[str, str]]:
     artifacts = {
         item.get("path"): item.get("sha256")
@@ -368,40 +402,15 @@ def score_trial(
     semantic_criteria = _semantic_criterion_ids(run_dir, final)
     if semantic_criteria:
         required_scorers.add("semantic_evidence")
-        recorded = {
-            str(item.get("id")): item
-            for item in completion.get("criteria", [])
-            if isinstance(item, dict) and isinstance(item.get("id"), str)
-        }
-        missing = sorted(
-            criterion_id
-            for criterion_id in semantic_criteria
-            if criterion_id not in recorded
-        )
-        nonpassing = sorted(
-            criterion_id
-            for criterion_id in semantic_criteria
-            if criterion_id in recorded and recorded[criterion_id].get("result") != "pass"
-        )
-        ungrounded = sorted(
-            criterion_id
-            for criterion_id in semantic_criteria
-            if criterion_id in recorded
-            and recorded[criterion_id].get("result") == "pass"
-            and not _has_file_backed_evidence(recorded[criterion_id])
+        semantic_verdict, semantic_facts = _semantic_evidence_facts(
+            semantic_criteria, completion
         )
         scores.append(
             _receipt(
                 "semantic_evidence",
                 final_hash,
-                "pass" if not missing and not nonpassing and not ungrounded else "fail",
-                {
-                    "required_criteria": list(semantic_criteria),
-                    "missing": missing,
-                    "nonpassing": nonpassing,
-                    "missing_file_backed_evidence": ungrounded,
-                    "authority": "precommitted-native-job",
-                },
+                semantic_verdict,
+                semantic_facts,
                 _evidence(final, "completion.json", "job-binding.json"),
             )
         )
