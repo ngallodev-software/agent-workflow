@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -294,6 +295,57 @@ def _planning_artifacts(repository: Path, change: str) -> list[dict[str, str]]:
     return records
 
 
+def _parse_release_tasks(path: Path) -> list[dict[str, Any]]:
+    """Parse the task surface actually published by OpenSpec 1.13.2.
+
+    The 1.13.2 apply JSON reports task id/description/done but does not expose
+    sourcePath or line.  Those source-location fields were added later on
+    upstream main.  For the pinned release we therefore derive locations from
+    the frozen built-in tasks.md and cross-check the parsed sequence against
+    the CLI report instead of pretending a later API existed.
+    """
+
+    read = read_regular_file(path, max_bytes=4 * 1024 * 1024)
+    try:
+        lines = read.data.decode("utf-8").splitlines()
+    except UnicodeDecodeError as exc:
+        raise WorkflowError("OpenSpec tasks.md is not UTF-8") from exc
+
+    # Conservative port of the 1.13.2 checkbox semantics for the built-in
+    # spec-driven task file.  Only x/X is done; every other single-character
+    # marker is unfinished.  Link-like [A](...) / [A][...] bullets are not
+    # accepted as tasks.
+    pattern = re.compile(
+        r"^\\s*(?:[-*+]|\\d{1,9}[.)])\\s*"
+        r"\\[\\s*([^\\]\\s]?)\\s*\\](?![([])\\s*(.*)"
+    )
+
+    parsed: list[dict[str, Any]] = []
+    for line_number, source_line in enumerate(lines, 1):
+        match = pattern.match(source_line)
+        if match is None:
+            continue
+        description = match.group(2).strip()
+        if not description:
+            continue
+        locator_match = re.match(r"^([0-9]+(?:\\.[0-9]+)+)\\s+(.+)$", description)
+        if locator_match is None:
+            raise WorkflowError(
+                "OpenSpec Phase-0 spec-driven tasks must begin with a dotted "
+                f"task locator such as 1.1; line {line_number} did not"
+            )
+        parsed.append(
+            {
+                "locator": locator_match.group(1),
+                "description": description,
+                "done": (match.group(1) or "").lower() == "x",
+                "line": line_number,
+                "source_line": source_line,
+            }
+        )
+    return parsed
+
+
 def _task_map(repository: Path, change: str, apply_report: Any) -> list[dict[str, Any]]:
     if not isinstance(apply_report, dict):
         raise WorkflowError("OpenSpec apply instructions returned an unexpected shape")
@@ -308,54 +360,80 @@ def _task_map(repository: Path, change: str, apply_report: Any) -> list[dict[str
     if not isinstance(tasks, list) or not tasks:
         raise WorkflowError("OpenSpec apply instructions contain no tracked tasks")
 
+    context_files = apply_report.get("contextFiles")
+    if not isinstance(context_files, dict):
+        raise WorkflowError(
+            "OpenSpec 1.13.2 apply instructions must expose contextFiles by artifact ID"
+        )
+    task_files = context_files.get("tasks")
+    if (
+        not isinstance(task_files, list)
+        or len(task_files) != 1
+        or not isinstance(task_files[0], str)
+    ):
+        raise WorkflowError(
+            "OpenSpec Phase-0 spec-driven import requires exactly one concrete tasks file"
+        )
+    source_path = Path(task_files[0]).expanduser().resolve()
+    relative = _relative_repository_path(
+        repository, source_path, label="OpenSpec tasks source"
+    )
+    expected_source = f"openspec/changes/{change}/tasks.md"
+    if relative != expected_source:
+        raise WorkflowError(
+            f"OpenSpec Phase-0 expects tasks from {expected_source}, got {relative}"
+        )
+
+    parsed = _parse_release_tasks(source_path)
+    if len(parsed) != len(tasks):
+        raise WorkflowError(
+            "OpenSpec 1.13.2 apply task list disagrees with frozen tasks.md; "
+            "refuse to invent source mappings"
+        )
+
     records: list[dict[str, Any]] = []
     seen: set[str] = set()
-    for item in tasks:
+    for index, (item, source_task) in enumerate(zip(tasks, parsed), 1):
         if not isinstance(item, dict):
             raise WorkflowError("OpenSpec apply task is not an object")
-        locator = str(item.get("id", "")).strip()
+        api_id = str(item.get("id", "")).strip()
         description = str(item.get("description", "")).strip()
-        source_value = item.get("sourcePath")
-        line = item.get("line")
-        if not locator or not description or not isinstance(source_value, str):
-            raise WorkflowError("OpenSpec apply task is missing id, description, or sourcePath")
-        if not isinstance(line, int) or isinstance(line, bool) or line < 1:
-            raise WorkflowError(f"OpenSpec task {locator!r} has invalid source line")
-        source_path = Path(source_value).expanduser().resolve()
-        relative = _relative_repository_path(
-            repository, source_path, label=f"OpenSpec task {locator} source"
-        )
-        expected_source = f"openspec/changes/{change}/tasks.md"
-        if relative != expected_source:
+        done = item.get("done")
+        if not api_id or not description or not isinstance(done, bool):
             raise WorkflowError(
-                f"OpenSpec Phase-0 expects tasks from {expected_source}, got {relative}"
+                "OpenSpec 1.13.2 apply task is missing id, description, or done"
             )
-        read = read_regular_file(source_path, max_bytes=4 * 1024 * 1024)
-        try:
-            lines = read.data.decode("utf-8").splitlines()
-        except UnicodeDecodeError as exc:
-            raise WorkflowError("OpenSpec tasks.md is not UTF-8") from exc
-        if line > len(lines):
-            raise WorkflowError(f"OpenSpec task {locator!r} line is outside tasks.md")
-        source_line = lines[line - 1]
-        if locator not in source_line:
+        # v1.13.2 assigns sequential API ids (1, 2, ...).  Preserve the
+        # authored dotted task locator from tasks.md as the durable source
+        # locator and verify the CLI view describes the same line.
+        if api_id != str(index):
             raise WorkflowError(
-                f"OpenSpec task {locator!r} source line no longer contains its locator"
+                "OpenSpec 1.13.2 apply task IDs are not the qualified sequential form"
             )
+        if description != source_task["description"] or done != source_task["done"]:
+            raise WorkflowError(
+                "OpenSpec 1.13.2 apply task projection disagrees with frozen tasks.md"
+            )
+
+        locator = str(source_task["locator"])
         aw_id = f"openspec-{slug(change)}-{slug(locator)}"
         if aw_id in seen:
-            raise WorkflowError(f"OpenSpec task mapping collides on Agent-Workflow ID: {aw_id}")
+            raise WorkflowError(
+                f"OpenSpec task mapping collides on Agent-Workflow ID: {aw_id}"
+            )
         seen.add(aw_id)
         records.append(
             {
                 "agent_workflow_task_id": aw_id,
-                "done_at_import": bool(item.get("done", False)),
+                "done_at_import": done,
                 "source": {
                     "artifact": "tasks",
                     "locator": locator,
                     "path": relative,
-                    "line": line,
-                    "text_sha256": _sha256((source_line + "\n").encode("utf-8")),
+                    "line": int(source_task["line"]),
+                    "text_sha256": _sha256(
+                        (str(source_task["source_line"]) + "\\n").encode("utf-8")
+                    ),
                 },
                 "description": description,
                 "description_sha256": _sha256(description.encode("utf-8")),
