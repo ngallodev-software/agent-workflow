@@ -17,6 +17,7 @@ from .agent_context import initialize as initialize_agent_context
 from .agent_run_paths import AgentRunPaths
 from .agent_identity import (
     AgentNameInUseError,
+    assert_agent_name_lease_writable,
     claim_agent_name,
     release_agent_name,
     resolve_agent_identity,
@@ -1009,11 +1010,16 @@ def prepare(
                 handoff_dir.unlink()
             else:
                 shutil.rmtree(handoff_dir)
-        release_agent_name(
-            settings,
-            agent_name=None,
-            agent_run_id=agent_run_id,
-        )
+        try:
+            release_agent_name(
+                settings,
+                agent_name=None,
+                agent_run_id=agent_run_id,
+            )
+        except OSError:
+            # Preserve the preparation failure when restricted state storage also
+            # prevents best-effort rollback of a lease claimed by this process.
+            pass
         raise
 
 
@@ -1143,6 +1149,7 @@ def _prepare(
         if preflight_snapshot is not None:
             raise
         # Non-Git workdirs are supported for general terminal delegation.
+    assert_agent_name_lease_writable(settings)
     if (
         preflight_snapshot is not None
         and preflight_snapshot.dirty
@@ -1896,6 +1903,7 @@ def restart(
     *,
     start_immediately: bool = False,
     retry_context_path: Path | None = None,
+    evaluation_path: Path | None = None,
 ) -> dict[str, Any]:
     """Prepare a lineage-preserving retry from a prior immutable contract.
 
@@ -1957,6 +1965,22 @@ def restart(
             raise WorkflowError("cannot restart: native job binding source is missing or changed")
         job_path = source
 
+    prior_evaluation_path = contract["evaluation_policy"].get("path")
+    if evaluation_path is not None:
+        if job_path is not None or prior_evaluation_path:
+            raise WorkflowError(
+                "cannot replace an existing acceptance binding during restart; "
+                "--evaluation is only allowed when the predecessor had no native "
+                "job or evaluation plan"
+            )
+        selected_evaluation_path = absolute_path(evaluation_path)
+    else:
+        selected_evaluation_path = (
+            Path(str(prior_evaluation_path))
+            if prior_evaluation_path
+            else None
+        )
+
     prepared = prepare(
         settings,
         agent_run_id=new_id,
@@ -1983,11 +2007,7 @@ def restart(
         interactive=(worker_plan.get("mode") == "external"),
         prompt_source_override=prompt_source,
         prompt_pack_root_override=Path(str(pack["root"])) if pack.get("root") else None,
-        evaluation_path=(
-            Path(str(contract["evaluation_policy"]["path"]))
-            if contract["evaluation_policy"].get("path")
-            else None
-        ),
+        evaluation_path=selected_evaluation_path,
         tier=agent_run.get("tier"),
         job_path=job_path,
         allow_active_agent_name=True,
