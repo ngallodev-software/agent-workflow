@@ -316,8 +316,8 @@ def _parse_release_tasks(path: Path) -> list[dict[str, Any]]:
     # marker is unfinished.  Link-like [A](...) / [A][...] bullets are not
     # accepted as tasks.
     pattern = re.compile(
-        r"^\\s*(?:[-*+]|\\d{1,9}[.)])\\s*"
-        r"\\[\\s*([^\\]\\s]?)\\s*\\](?![([])\\s*(.*)"
+        r"^\s*(?:[-*+]|\d{1,9}[.)])\s*"
+        r"\[\s*([^\]\s]?)\s*\](?![([])\s*(.*)"
     )
 
     parsed: list[dict[str, Any]] = []
@@ -328,7 +328,7 @@ def _parse_release_tasks(path: Path) -> list[dict[str, Any]]:
         description = match.group(2).strip()
         if not description:
             continue
-        locator_match = re.match(r"^([0-9]+(?:\\.[0-9]+)+)\\s+(.+)$", description)
+        locator_match = re.match(r"^([0-9]+(?:\.[0-9]+)+)\s+(.+)$", description)
         if locator_match is None:
             raise WorkflowError(
                 "OpenSpec Phase-0 spec-driven tasks must begin with a dotted "
@@ -432,7 +432,7 @@ def _task_map(repository: Path, change: str, apply_report: Any) -> list[dict[str
                     "path": relative,
                     "line": int(source_task["line"]),
                     "text_sha256": _sha256(
-                        (str(source_task["source_line"]) + "\\n").encode("utf-8")
+                        (str(source_task["source_line"]) + "\n").encode("utf-8")
                     ),
                 },
                 "description": description,
