@@ -45,43 +45,7 @@ This corpus should also be usable as reusable prompt-pack/corpus-body benchmark 
 **Done when:** current versioned benchmark assets cover the six task classes (or a documented non-redundant subset), each task has frozen canonical input and deterministic/public evaluation where feasible, human reviewability/friction is recorded separately from quality, treatment leakage is prevented, and repeated real-executor runs can be consolidated under the existing comparative operating policy.
 
 
-### ASSURE-001 — Precommit semantic evidence and acceptance authority
-
-R6D12 dogfooding exposed a class of false confidence that deterministic shape
-checks cannot solve by themselves: a report can satisfy existence/keyword
-commands while making a source-inspection claim that the worker never actually
-tested. A passing formatting command is evidence about report shape, not about
-whether the required sources were inspected or whether a semantic conclusion is
-warranted.
-
-Preparation should freeze the minimum completion claims, required evidence,
-acceptance authorities, and repair policy before delegation. Worker-visible
-instructions may name the evidence the worker must return, while host-owned
-validators, hidden expected values, and independent reviewer bindings remain
-outside the worker's authority where independence matters. Post-run review must
-not invent, weaken, or waive acceptance criteria after seeing the result.
-
-**Done when:** versioned native job/evaluation contracts can require direct
-source-inspection evidence for semantic claims, the host can bind an
-independent validator or reviewer before execution, missing required evidence
-fails closed even when report-shape commands pass, and focused tests prove that
-completion, evaluation, review, and acceptance remain separate authorities.
-
 ## P1 — Public integration contracts
-
-### EXT-HOST-001 — Make external-host launch consumption mandatory and observable
-
-An external Codex host can dispatch a Worker after `agent-run prepare` without
-consuming the returned launch contract. The Worker then produces evidence, but
-the Agent Run remains unbound and `prepared`, so `agent task-complete` correctly
-refuses to seal it. Preserve that refusal: fix the host adapter to bind the
-external Worker, call `start-external` with the active generation before work,
-and surface a clear preflight error when either step is absent.
-
-**Done when:** an external-host integration test proves the ordered
-`prepared -> bound -> running -> task-complete` path and proves that a failed
-binding/start prevents dispatch rather than stranding a completed Worker in
-`prepared`.
 
 ### EXT-HOST-002 — Record authorized external Worker exit without fabricating process evidence
 
@@ -135,6 +99,13 @@ without duplicate-keyword or schema failures.
 idempotent public operation and recovery path without process fabrication.
 Focused invariant and CLI-product coverage passed; independent release
 acceptance remains pending Jenkins evidence.
+
+**2026-09-30 readiness update:** PR #51 / `f5a0aa4` also makes external
+dispatch fail closed until the active generation has been bound and
+`start-external` has recorded the run as running. The full GitHub Actions
+matrix passed. The remaining work in this item is the independent external-host
+R6D12/Jenkins acceptance exercise; no additional source implementation is
+currently identified.
 
 ### TERM-001 — Retire external host terminals after terminal Agent Run state
 
@@ -251,18 +222,6 @@ When authorized, bounded mutation tools may wrap existing application services f
 Only after `ROLE-001`, `BIND-001`, and `API-001` stabilize, write and approve a separate Herdr plugin specification, then implement it as a one-way consumer of public Agent-Workflow contracts.
 
 The plugin may own workspace/presentation, launching a prepared external worker, best-effort live delivery after persistence, focus/navigation, review presentation, and binding recovery. It must not become a core dependency, durable-message authority, review/acceptance authority, worktree-provenance authority, or source of Agent Run identity.
-
-## P2 — Advisory executor/provider metadata
-
-### EXEC-META-001 — Provider capability and model-lifecycle freshness evidence
-
-The retired `invoke-codex-from-claude` project maintained a local model registry and EOL checker. Preserve the useful freshness-checking intent without restoring a hand-maintained routing authority.
-
-A future operator-facing health capability may collect current executor/provider model availability, lifecycle/deprecation metadata, and compatibility evidence from authoritative provider surfaces. It must be advisory evidence only: normal agents continue to choose logical roles, configured runtime policy remains authoritative, and an unavailable/stale metadata source must degrade to `unknown` rather than silently changing routing.
-
-Do not store subjective benchmark scores, guessed prices, or manually asserted context windows as runtime truth. Pin/cache any fetched metadata with source identity, retrieval time, and digest so release/compatibility claims remain reproducible.
-
-**Done when:** a bounded health/report command can identify configured models that are unavailable, deprecated, or unverified without mutating workflow state or model selection; fixtures prove stale/offline behavior fails open only to `unknown`, never to a routing change.
 
 ## P2 — Upstream specification integration
 
