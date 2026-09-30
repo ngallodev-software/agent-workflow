@@ -101,18 +101,30 @@ def administrative_dirs(path: Path) -> tuple[Path, ...]:
 
 
 def assert_administrative_dir_writable(path: Path) -> Path:
-    """Prove Git administrative storage is writable before launching a worker."""
-    git_dir = administrative_dir(path)
-    try:
-        fd, probe = tempfile.mkstemp(prefix=".agent-workflow-write-probe-", dir=git_dir)
-        os.close(fd)
-        os.unlink(probe)
-    except OSError as exc:
-        raise WorkflowError(
-            f"Git administrative directory is not writable: {git_dir}; "
-            "coordinate a commit from the coordinator and retry"
-        ) from exc
-    return git_dir
+    """Prove every Git administrative directory required for writes is writable."""
+    git_dirs = administrative_dirs(path)
+    for git_dir in git_dirs:
+        probe: str | None = None
+        try:
+            fd, probe = tempfile.mkstemp(
+                prefix=".agent-workflow-write-probe-",
+                dir=git_dir,
+            )
+            os.close(fd)
+            os.unlink(probe)
+            probe = None
+        except OSError as exc:
+            if probe is not None:
+                try:
+                    os.unlink(probe)
+                except OSError:
+                    pass
+            raise WorkflowError(
+                f"Git administrative directory is not writable: {git_dir}; "
+                "Agent-Workflow preparation requires write access to the linked "
+                "worktree and shared Git administrative storage before launch"
+            ) from exc
+    return git_dirs[0]
 
 
 def assert_clean(repo: Path) -> GitSnapshot:

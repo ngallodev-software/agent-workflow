@@ -235,5 +235,5 @@ def test_finish_compatibility_run_without_bound_commands_requests_fresh_lineage(
     result = finish(settings, "run-1", result="completed")
     assert result["state"] == "verification_required"
     assert "legacy agent verify" not in result["next_action"]
-    assert "prepare a fresh lineage run" in result["next_action"]
-    assert "native job or evaluation plan" in result["next_action"]
+    assert "agent-run restart AGENT_RUN_ID --evaluation PLAN" in result["next_action"]
+    assert "preserve lineage" in result["next_action"]

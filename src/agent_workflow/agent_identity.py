@@ -10,6 +10,7 @@ from __future__ import annotations
 import fcntl
 import json
 import os
+import tempfile
 from dataclasses import dataclass
 from typing import Any
 
@@ -397,6 +398,36 @@ def resolve_agent_identity(
         allow_no_go_model=allow_no_go_model,
         interactive=bool(interactive),
     )
+
+
+def assert_agent_name_lease_writable(settings: Settings) -> None:
+    """Fail preparation early when Agent-Workflow lease storage is not writable."""
+    lease_root = settings.state_root / "agent-name-leases"
+    probe: str | None = None
+    try:
+        lease_root.mkdir(parents=True, exist_ok=True)
+        fd, probe = tempfile.mkstemp(
+            prefix=".agent-workflow-write-probe-",
+            dir=lease_root,
+        )
+        os.close(fd)
+        os.unlink(probe)
+        probe = None
+        lock_path = lease_root / ".lock"
+        with lock_path.open("a+b") as lock:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+    except OSError as exc:
+        if probe is not None:
+            try:
+                os.unlink(probe)
+            except OSError:
+                pass
+        raise WorkflowError(
+            f"Agent-Workflow name-lease storage is not writable: {lease_root}; "
+            "preparation requires write access to the configured state directory "
+            "before any Agent Run state is created"
+        ) from exc
 
 
 def claim_agent_name(

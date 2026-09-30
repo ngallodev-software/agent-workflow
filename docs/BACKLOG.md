@@ -1,12 +1,8 @@
 # Backlog
 
-This is the **only unfinished-work register** for Agent-Workflow. Completed implementation plans, phase reports, and handoff documents belong in source-control/release history rather than the active documentation tree.
+This is the **only unfinished-work register** for Agent-Workflow. Completed implementation plans, phase reports, and handoff documents belong in source-control/release history rather than the active documentation tree. Completed identifiers are intentionally absent from the sections below.
 
 Priorities are ordered within each section. An identifier retained here may also be referenced by a machine release policy or ADR. The accepted architecture and execution sequence for the 0.9 product-surface work is [`SKILL_FIRST_SIMPLIFICATION_PLAN.md`](SKILL_FIRST_SIMPLIFICATION_PLAN.md); this backlog remains the sole status register.
-
-## P0 — 0.9 skill-first simplification
-
-Phases 2–4 implementation are complete. `SURFACE-001`, `FLOW-001`, and `PERF-001` were removed after Phase 2 landed the role-scoped command surface, deterministic delegation facade, and common-path startup/context reductions; the facade satisfied the work originally sequenced as Phase 4. `SKILL-001` was removed after the verified Phase 3 primary-skill hardening and behavioral evals landed. Verification remains separate per project policy.
 
 ## P0 — Release closeout blockers
 
@@ -47,6 +43,29 @@ Retain the strongest neutrality rules from the historical suite: do not reward s
 This corpus should also be usable as reusable prompt-pack/corpus-body benchmark data so ordinary implementation prompt packs can contribute comparable task-shape evidence without weakening benchmark isolation.
 
 **Done when:** current versioned benchmark assets cover the six task classes (or a documented non-redundant subset), each task has frozen canonical input and deterministic/public evaluation where feasible, human reviewability/friction is recorded separately from quality, treatment leakage is prevented, and repeated real-executor runs can be consolidated under the existing comparative operating policy.
+
+
+### ASSURE-001 — Precommit semantic evidence and acceptance authority
+
+R6D12 dogfooding exposed a class of false confidence that deterministic shape
+checks cannot solve by themselves: a report can satisfy existence/keyword
+commands while making a source-inspection claim that the worker never actually
+tested. A passing formatting command is evidence about report shape, not about
+whether the required sources were inspected or whether a semantic conclusion is
+warranted.
+
+Preparation should freeze the minimum completion claims, required evidence,
+acceptance authorities, and repair policy before delegation. Worker-visible
+instructions may name the evidence the worker must return, while host-owned
+validators, hidden expected values, and independent reviewer bindings remain
+outside the worker's authority where independence matters. Post-run review must
+not invent, weaken, or waive acceptance criteria after seeing the result.
+
+**Done when:** versioned native job/evaluation contracts can require direct
+source-inspection evidence for semantic claims, the host can bind an
+independent validator or reviewer before execution, missing required evidence
+fails closed even when report-shape commands pass, and focused tests prove that
+completion, evaluation, review, and acceptance remain separate authorities.
 
 ## P1 — Public integration contracts
 
@@ -219,146 +238,6 @@ initialization but before runner creation. Add rollback for only invocation-
 owned artifacts plus lease release, without altering intentional preflight
 failure records or sealed runs.
 
-### PREP-001 — Diagnose and recover restricted-host preparation failures
-
-A headless Agent Run prepared from a linked Git worktree in a restricted host
-failed with a generic `unexpected internal error` and a diagnostic-file path.
-The underlying errors were read-only access to the linked worktree's Git
-administrative directory and the Agent-Workflow name-lease lock. The worktree
-had already been created, so the operator had to inspect the diagnostic to
-identify the missing write scope. This is coordinator preflight, distinct from
-the completed `AW-GITDIR-001` worker launch scope.
-
-**Observed 2026-09-29:** `cbm-upstream-count-20260929` preparation succeeded only
-after the required Git/state writes were allowed. The configured comparative
-decision mode also required `TYPESAFE_API_KEY` in the launching shell; the
-initial error named that requirement, and sourcing the configured environment
-resolved it. A separate preparation for `cbm-upstream-coverage-scan-20260929`
-was interrupted before completion; `agent-run status` then returned
-`execution lifecycle is not initialized`. This partial-state symptom overlaps
-the transactional preparation requirement under `EXEC-001`; verify whether an
-interrupted invocation is covered without altering sealed or intentional
-preflight-failure evidence.
-
-**Done when:** preparation checks and reports Git administrative and state-lock
-write scope before creating a run, with an actionable error rather than an
-unexpected-internal-error wrapper. An interrupted preparation either rolls
-back its invocation-owned partial state or exposes a supported, idempotent
-recovery action. Cover read-only linked Git/state paths and interruption in
-focused lifecycle tests; never include secret values in diagnostics.
-
-### FINISH-001 — Recover committed implementation evidence after a failed run
-
-**Observed 2026-09-29:** `cbm-upstream-count-20260929` had a committed change
-(`5ef42e21`) and passed its declared store suites, production build, and
-`git diff --check`. Its commit hook also started the repository's full test
-target; after that process was interrupted, `agent finish --result completed`
-refused to publish the completion receipt with
-`worker completion operations require a running Agent Run (status='failed')`.
-The implementation commit and focused validation remain available, but the
-Agent Run has no completion receipt. Do not rewrite the failed run or infer
-acceptance from its commit/tests.
-
-**Additional observation (2026-09-29):** `cbm-upstream-lsp-decode-20260929`
-committed `3050a441` and passed its declared pipeline suite (274 tests),
-production build, and `git diff --check`. Its compatibility run had no bound
-acceptance commands; `agent finish --result completed` returned
-`verification_required` and instructed the worker to prepare a fresh lineage
-run with a native job or evaluation plan binding acceptance commands. The
-ticket had declared those checks, but they were absent from the run contract,
-so no completion receipt was sealed. Preserve this run and its commit; do not
-infer receipt or acceptance from the local checks.
-
-**Done when:** the operator has a documented, supported recovery that preserves
-unsealed runs and their evidence while allowing committed work to continue
-under a new Agent Run lineage with the original source/worktree provenance and
-acceptance contract, including compatibility runs prepared without bound
-acceptance commands. Focused lifecycle tests cover failure before finish and
-missing acceptance bindings, and prove that terminal-state and acceptance
-authority remain unchanged.
-
-### UX-RUN-001 — Align 0.11 runtime command surfaces and completion guidance — COMPLETE
-
-Prompt-pack execution on 2026-09-20 exposed three operator-facing contract
-gaps. First, a configured optional plugin prevented all commands from starting
-when its distribution was absent; the error was actionable, but `doctor` could
-not run to report it. Second, the installed `agent-run watch` exposes
-`--after`/`--timeout`, while current orchestration guidance references an
-unsupported `--max-cycles` option. Third, a read-only task required one
-successful `agent verify` receipt before terminal completion, but a worker can
-easily place `--cwd` after the run ID even though the command card requires it
-before the ID. The first failed receipt correctly remained terminally blocking;
-that strictness is intended and must not be weakened.
-
-**Evidence:** `ce-boundary-audit-luna3` (`completion_invalid`, recorded exit 1),
-`ce-boundary-audit-luna4` (`completion_invalid`, recorded exit 127 from option
-ordering), `ce-boundary-audit-luna5` (`completion_missing`), and successful
-retry `ce-boundary-audit-luna6` (completion receipt
-`52f63e122f8fa5a4d26959baf78e6649ae0504e8837989ce6d0ba39415f07e94`).
-
-**Done when:** configuration diagnostics remain available with missing optional
-plugins; shipped skills/runbooks match the installed CLI; and the worker launch
-card includes one copy-safe, zero-exit read-only verification example. Preserve
-the invariant that a recorded failing verification cannot be hidden by a later
-successful command.
-
-**Implementation evidence (2026-09-20):** `1aac6f5` keeps prompt-pack
-diagnostics recovery-safe; `ed2c3b8`, `da688a2`, `7babf87`, and `fd3219c`
-normalize and document canonical `agent verify` option ordering and the
-copy-safe zero-exit example; the focused journey and release gates pass.
-
-### COMP-001 — Preflight completion sidecars and classify their failures correctly — COMPLETE
-
-Workers can finish scoped implementation and tests yet submit an intuitive but
-schema-invalid criterion value such as `verified` instead of `pass`. Preserve
-strict evidence semantics, but add an authoritative preflight validator,
-field-level corrective feedback, a bounded handoff-only repair path, and a
-completion-schema failure category that cannot be misreported as a missing
-command. Details and byte-bound evidence:
-[`repo-analysis/AGENT_WORKFLOW_COMPLETION_HANDOFF_AND_NAME_LEASE_INCIDENT_20260830.md`](repo-analysis/AGENT_WORKFLOW_COMPLETION_HANDOFF_AND_NAME_LEASE_INCIDENT_20260830.md).
-
-**Research-backed scope:** expose a read-only field-level preflight validator;
-match completion-schema diagnostics before generic command/path patterns; allow
-only in-flight (`prepared`, `running`, or `blocked`) handoff correction while
-retaining the rejected bytes. Prove `verified` rejection, `pass` acceptance,
-diagnostic precedence, correction, and post-terminal refusal. See
-[`repo-analysis/COMP-001-FINDINGS-20260830.md`](repo-analysis/COMP-001-FINDINGS-20260830.md).
-
-**Implementation:** worker-facing schema preflight, completion-first
-diagnostics, and byte-preserving rejected-sidecar evidence are implemented;
-independent review and full release validation remain required.
-
-### LEASE-001 — Retire explicitly abandoned external prepared runs
-
-External `prepared` runs without a worker previously retained preferred agent
-names indefinitely: `terminate` correctly cannot control an external host but
-does not supply an auditable lifecycle retirement. Add a narrowly guarded,
-idempotent abandonment action that records authority before releasing the
-name; do not use wall-clock expiry or manual state edits. Details and evidence:
-[`repo-analysis/AGENT_WORKFLOW_COMPLETION_HANDOFF_AND_NAME_LEASE_INCIDENT_20260830.md`](repo-analysis/AGENT_WORKFLOW_COMPLETION_HANDOFF_AND_NAME_LEASE_INCIDENT_20260830.md).
-
-**Research-backed scope:** add an explicit, idempotent retirement action only
-for an unbound external `prepared` run; append durable retirement authority
-before releasing its name. Refuse bound, running, completed, and self-retire
-requests; prove name reuse and historical-record preservation. No expiry or
-manual lease/status edits.
-### AW-GITDIR-001 — Headless linked-worktree Git administrative scope — COMPLETE
-
-Headless Codex launches now include the resolved Git administrative directory
-in their writable scope, with regression coverage for linked Git worktrees.
-
-### BIND-001 — Host-neutral external Worker binding/reconciliation contract — COMPLETE
-
-Implemented in Phase 5. The rebuildable binding projection, idempotent bind/rebind/unbind semantics, generation-guarded pending-delivery retrieval, and transport-attempt reporting are host-neutral and preserve the delivery/acknowledgement boundary. The paired API review found no need for host-specific binding fields.
-
-### API-001 — Stable structured public JSON contracts — COMPLETE
-
-Implemented in Phase 5. Existing structured prepare/status/context, workflow status, benchmark status, and external-binding outputs were retained; bounded message/ack state, completion/evaluation/review summary, and an explicit restricted provenance view were added. `docs/PUBLIC_JSON_API.md` is the integration contract. Normal role-scoped command profiles remain unchanged.
-
-### CAP-001 — Progressive advanced-capability isolation — COMPLETE
-
-Completed in Phase 6. Common-path parser/plugin imports were reduced; publication/visual benchmark implementation is lazy behind explicit benchmark operations; dormant OpenTelemetry/MLflow adapters and dependency surface were deleted; read-only stdio MCP was confirmed already optional and isolated; hook installation now canonicalizes historical duplicate/stale managed state; and Inspect/SWE-bench/SciPy paths are isolated to explicit evaluation operations. No package extraction was justified by measured runtime, cognitive, or maintenance benefit. See `docs/PHASE6_CAPABILITY_ISOLATION.md`.
-
 ### MCP-003 / HARD-007 — Authenticated, idempotent MCP mutation phase
 
 The current MCP server remains local-stdio and read-only. Mutation work is blocked on authenticated principal semantics plus durable idempotency/replay-safe result mapping.
@@ -385,64 +264,32 @@ Do not store subjective benchmark scores, guessed prices, or manually asserted c
 
 **Done when:** a bounded health/report command can identify configured models that are unavailable, deprecated, or unverified without mutating workflow state or model selection; fixtures prove stale/offline behavior fails open only to `unknown`, never to a routing change.
 
-## P2 — Independent spec-generation integration
+## P2 — Upstream specification integration
 
-### SPEC-001 — AW-optimized spec/eval producer boundary
 
-Integrate the independent spec-generation app/skill only through stable machine-readable spec/eval contracts. It should operate without Agent-Workflow while optionally producing AW-optimized prompt-pack/evaluation inputs; do not absorb general planning/spec generation into the already-dense core.
+### OPENSPEC-001 — Complete the qualified OpenSpec migration boundary
 
-Agent-Workflow retains interpretation of its native target projection: it
-chooses the actual implementation flow, logical roles and available models,
-serial versus parallel scheduling, execution, evaluation, independent review,
-and sealing. A SpecGen task DAG or parallelism annotation is evidence and a
-planning opportunity, never a forced schedule or runtime routing decision.
+OpenSpec is the selected upstream planning/change authority. Agent-Workflow
+should consume a narrow, version-qualified import surface rather than continue
+growing a local SpecGen planning representation. The first implementation slice
+is under review in PR #49 and targets published OpenSpec 1.13.2, built-in
+`spec-driven` v1, one local Git repository/change, strict CLI validation,
+content-addressed source-specification import evidence, and Agent-Workflow-owned
+`native-job/v2` / `job-binding/v2` execution contracts.
 
-**Done when:** the pinned SpecGen release and exact target schemas are captured
-as compatibility fixtures or an approved immutable shared-contract bundle;
-generated-pack conformance tests exercise the public validator and a
-representative execution/review path; incompatible versions or unsupported
-target fields fail closed with an actionable diagnostic. If `CONTRACT-001`
-adopts the bundle, Agent-Workflow retains semantic ownership and interpretation
-of its prompt-pack schema while importing shared schema/descriptor/validation
-and negotiation helpers. A SpecGen-generated native target must match the
-consumer's exact immutable bundle version and digest. Portable SpecGen packs
-remain outside Agent-Workflow's native `prompt-pack/v1` parser until a
-separately approved adapter exists. When the shared bundle changes a native
-artifact, Agent-Workflow consumes only the bundle's deterministic validated
-migration output; it never rewrites sealed historical runs or pack evidence.
+Keep planning authority and execution authority separate: OpenSpec owns planning
+state; Agent-Workflow owns launch, scope, evidence, evaluation, independent
+review, acceptance, and sealed historical receipts. Legacy `native-job/v1`
+and SpecGen-derived historical runs remain readable compatibility evidence and
+must not be rewritten.
 
-### CONTRACT-001 — Negotiate bundle provenance for generated prompt packs
-
-**Status:** complete 2026-08-30
-
-SpecGen pins the bundle dependency and emits bundle/digest strings in
-`workflow.requires`, but the generated `prompt-pack/v1` manifest has no
-structured provenance. Agent-Workflow's pack validator reads its local schema
-and does not negotiate the bundle; only the separate native-job path does. A
-real compiled prompt pack can therefore validate without exercising the
-promised exact-version consumer gate.
-
-**Done when:** the versioned shared prompt-pack contract carries structured
-bundle provenance; Agent-Workflow validates it with the installed bundle
-before run preparation; exact installed producer/consumer agreement is
-accepted and version/digest mismatch fails closed; the prior supported pack
-version has a deterministic non-mutating migration with source/target digest
-provenance; and installed-wheel conformance proves the full journey.
-
-### GIT-LEASE-001 — Reject completion revisions absent from repository object storage
-
-**Status:** complete 2026-08-30
-
-`contract-001-bundle-20260830` submitted a schema-valid completion naming
-`77add218...`, but the linked worktree HEAD pointed at that missing object and
-`git fsck --full` reported an invalid SHA pointer. Completion validation must
-verify that the declared head revision exists and resolves in the recorded
-repository before the run can be treated as integration evidence.
-
-**Done when:** a missing completion revision fails closed before review or
-acceptance, the sealed sidecar remains preserved, and a coordinator can recover
-visible uncommitted source changes only through a fresh valid revision plus
-independent rebuild/test evidence.
+**Done when:** the Phase-0 import path is independently reviewed and accepted;
+the real compatibility gate passes against the pinned published OpenSpec
+release with the legacy SpecGen contract package absent; new OpenSpec-backed
+runs no longer require SpecGen planning authority; and the remaining SpecGen
+compatibility surface is explicitly frozen or retired without changing sealed
+historical evidence. Custom OpenSpec schemas/stores and multi-repository
+planning remain out of scope until separately justified.
 
 ### TYPE-001 — Expand TypeSafe only at proven semantic seams
 

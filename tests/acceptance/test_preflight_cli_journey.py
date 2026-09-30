@@ -27,3 +27,26 @@ def test_installed_cli_records_failed_preflight_without_starting_worker(
     assert status.get("worker_id") is None
     assert status.get("worker_pid") is None
     assert not (run / "final-receipt.json").exists()
+
+def test_installed_cli_preflights_name_lease_storage_before_run_creation(
+    installed_product: InstalledProduct, product_env: dict[str, str], tmp_path: Path
+) -> None:
+    repo = tmp_path / "repo-lease"
+    git_repo(repo)
+    prompt = tmp_path / "prompt-lease.md"
+    prompt.write_text("lease preflight test\n", encoding="utf-8")
+
+    state_root = Path(product_env["XDG_STATE_HOME"]) / "agent-workflow"
+    lease_root = state_root / "agent-name-leases"
+    lease_root.mkdir(parents=True)
+    (lease_root / ".lock").mkdir()
+
+    result = installed_product.run(
+        "agent-run", "prepare", "lease-preflight-failure", repo, prompt,
+        env=product_env,
+    )
+    assert result.returncode == 2
+    assert "name-lease storage is not writable" in result.stderr
+    run = state_root / "runs" / "lease-preflight-failure"
+    assert not run.exists()
+

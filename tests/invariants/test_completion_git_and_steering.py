@@ -366,3 +366,57 @@ def test_review_schema_rejects_disposition_as_result() -> None:
     value = _completion(result="changes_requested")
     with pytest.raises(WorkflowError, match="invalid artifact"):
         validate_instance(value, "agent-workflow/completion/v1")
+
+def test_git_write_preflight_checks_linked_and_shared_admin_dirs(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import agent_workflow.git as git_module
+
+    primary = tmp_path / "primary"
+    common = tmp_path / "common"
+    primary.mkdir()
+    common.mkdir()
+    monkeypatch.setattr(
+        git_module,
+        "administrative_dirs",
+        lambda _path: (primary, common),
+    )
+    observed: list[Path] = []
+    real_mkstemp = git_module.tempfile.mkstemp
+
+    def recording_mkstemp(*, prefix: str, dir: Path):
+        observed.append(Path(dir))
+        return real_mkstemp(prefix=prefix, dir=dir)
+
+    monkeypatch.setattr(git_module.tempfile, "mkstemp", recording_mkstemp)
+
+    assert git_module.assert_administrative_dir_writable(tmp_path) == primary
+    assert observed == [primary, common]
+
+
+def test_git_write_preflight_names_the_unwritable_required_admin_dir(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import agent_workflow.git as git_module
+
+    primary = tmp_path / "primary"
+    common = tmp_path / "common"
+    primary.mkdir()
+    common.mkdir()
+    monkeypatch.setattr(
+        git_module,
+        "administrative_dirs",
+        lambda _path: (primary, common),
+    )
+    real_mkstemp = git_module.tempfile.mkstemp
+
+    def selective_mkstemp(*, prefix: str, dir: Path):
+        if Path(dir) == common:
+            raise PermissionError("read-only")
+        return real_mkstemp(prefix=prefix, dir=dir)
+
+    monkeypatch.setattr(git_module.tempfile, "mkstemp", selective_mkstemp)
+
+    with pytest.raises(WorkflowError, match=str(common)):
+        git_module.assert_administrative_dir_writable(tmp_path)
+
