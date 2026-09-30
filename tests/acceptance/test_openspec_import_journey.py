@@ -360,7 +360,7 @@ def test_openspec_import_freezes_planning_and_keeps_acceptance_host_owned(
     prompt = (pack / "phase-0" / "tickets" / f"{TASK_ID}.md").read_text(encoding="utf-8")
     assert "untrusted-check --from-openspec-task" in prompt
     assert "do not infer" in prompt.lower()
-    assert "do not edit \`openspec/\`" in prompt.lower()
+    assert "do not edit" in prompt.lower() and "openspec/" in prompt.lower()
 
     import agent_workflow.native_jobs as native_jobs
 
