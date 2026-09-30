@@ -264,7 +264,7 @@ Do not store subjective benchmark scores, guessed prices, or manually asserted c
 
 **Done when:** a bounded health/report command can identify configured models that are unavailable, deprecated, or unverified without mutating workflow state or model selection; fixtures prove stale/offline behavior fails open only to `unknown`, never to a routing change.
 
-## P2 — Independent spec-generation integration
+## P2 — Upstream specification integration
 
 
 ### OPENSPEC-001 — Complete the qualified OpenSpec migration boundary
