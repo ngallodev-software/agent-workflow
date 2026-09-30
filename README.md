@@ -28,8 +28,9 @@ state, worker identity, instructions, verification, and acceptance live only in
 chat or terminal history. Agent-Workflow makes those boundaries durable and
 restart-safe without owning the interactive host UI.
 
-Related projects: [SpecGen-AW](https://github.com/ngallodev-software/specgen-aw)
-compiles reviewable specifications into Agent-Workflow prompt packs;
+OpenSpec is the preferred upstream planning/specification source. Agent-Workflow provides a
+qualified, content-addressed OpenSpec import boundary while retaining legacy SpecGen job
+compatibility; see [OpenSpec integration](docs/OPENSPEC_INTEGRATION.md).
 [agent-workflow-benchmark](https://github.com/ngallodev-software/agent-workflow-benchmark)
 provides the optional comparative benchmark surface; and
 [agent-workflow-benchmark-results](https://github.com/ngallodev-software/agent-workflow-benchmark-results)
@@ -225,6 +226,7 @@ See [docs/TESTING.md](docs/TESTING.md).
 - [Operations and recovery](docs/OPERATIONS.md)
 - [Testing strategy](docs/TESTING.md)
 - [Prompt packs](docs/PROMPT_PACKS.md)
+- [OpenSpec integration](docs/OPENSPEC_INTEGRATION.md)
 - [Comparative benchmarks](docs/BENCHMARKS.md)
 - [BM3 TypeSafe/Jev optimization audit](docs/BM3_TYPESAFE_JEV_OPTIMIZATION_AUDIT.md)
 - [Benchmark plugin migration](BENCHMARK_PLUGIN_MIGRATION.md)
