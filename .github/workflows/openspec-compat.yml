@@ -1,0 +1,54 @@
+name: OpenSpec compatibility
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "src/agent_workflow/openspec_import.py"
+      - "src/agent_workflow/native_jobs.py"
+      - "src/agent_workflow/agent_runs.py"
+      - "schemas/native-job-v2.schema.json"
+      - "schemas/job-binding-v2.schema.json"
+      - "schemas/source-specification-import.schema.json"
+      - "tests/compat/openspec-phase0-smoke.sh"
+      - ".github/workflows/openspec-compat.yml"
+  pull_request:
+    paths:
+      - "src/agent_workflow/openspec_import.py"
+      - "src/agent_workflow/native_jobs.py"
+      - "src/agent_workflow/agent_runs.py"
+      - "schemas/native-job-v2.schema.json"
+      - "schemas/job-binding-v2.schema.json"
+      - "schemas/source-specification-import.schema.json"
+      - "tests/compat/openspec-phase0-smoke.sh"
+      - ".github/workflows/openspec-compat.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  upstream-openspec-1-13-2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Agent-Workflow without legacy SpecGen contracts
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "jsonschema>=4.18,<5" "PyYAML>=6.0.3,<7"
+          python -m pip install --no-deps .
+
+      - name: Install qualified OpenSpec
+        run: npm install --global @fission-ai/openspec@1.13.2
+
+      - name: Run real upstream Phase-0 smoke
+        run: bash tests/compat/openspec-phase0-smoke.sh

@@ -781,6 +781,20 @@ def build_parser(
     scaffold.add_argument("--phases", type=int, default=3)
     scaffold.add_argument("--name")
 
+    import_openspec = pack_commands.add_parser(
+        "import-openspec",
+        help="freeze a qualified OpenSpec change into an Agent-Workflow native pack",
+    )
+    import_openspec.add_argument("repository", type=Path)
+    import_openspec.add_argument("change")
+    import_openspec.add_argument("destination", type=Path)
+    import_openspec.add_argument(
+        "--job-policy",
+        type=Path,
+        required=True,
+        help="Agent-Workflow-owned JSON path/acceptance/review policy for generated jobs",
+    )
+
     validate = pack_commands.add_parser(
         "validate", help="validate pack structure and contracts"
     )

@@ -1,0 +1,258 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/job-binding/v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "bound_at",
+    "agent_run_id",
+    "run_dir",
+    "job_id",
+    "ticket_id",
+    "pack_root",
+    "worktree",
+    "worktree_target",
+    "prompt_source_path",
+    "job_source_path",
+    "job_source_sha256",
+    "job_stored_path",
+    "job_stored_sha256",
+    "source_specification",
+    "scope",
+    "acceptance_commands",
+    "review_requirement"
+  ],
+  "properties": {
+    "schema": {
+      "const": "agent-workflow/job-binding/v2"
+    },
+    "bound_at": {
+      "type": "string"
+    },
+    "agent_run_id": {
+      "type": "string"
+    },
+    "run_dir": {
+      "type": "string"
+    },
+    "job_id": {
+      "type": "string"
+    },
+    "ticket_id": {
+      "type": "string"
+    },
+    "pack_root": {
+      "type": "string"
+    },
+    "worktree": {
+      "type": "string"
+    },
+    "worktree_target": {
+      "const": "."
+    },
+    "prompt_source_path": {
+      "type": "string"
+    },
+    "job_source_path": {
+      "type": "string"
+    },
+    "job_source_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "job_stored_path": {
+      "type": "string"
+    },
+    "job_stored_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "source_specification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "source_path",
+        "source_sha256",
+        "stored_path",
+        "stored_sha256",
+        "task_refs"
+      ],
+      "properties": {
+        "schema": {
+          "const": "agent-workflow/source-specification-import/v1"
+        },
+        "source_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "stored_path": {
+          "const": "jobs/source-specification.json"
+        },
+        "stored_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "task_refs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "writable_paths",
+        "writable_trees",
+        "disposable_trees"
+      ],
+      "properties": {
+        "writable_paths": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "writable_trees": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "disposable_trees": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "anyOf": [
+        {
+          "properties": {
+            "writable_paths": {
+              "minItems": 1
+            }
+          }
+        },
+        {
+          "properties": {
+            "writable_trees": {
+              "minItems": 1
+            }
+          }
+        }
+      ]
+    },
+    "acceptance_commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "argv"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "argv": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          },
+          "cwd": {
+            "type": "string",
+            "default": "."
+          },
+          "timeout_seconds": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 300
+          },
+          "result_format": {
+            "enum": [
+              "exit-code",
+              "junit"
+            ],
+            "default": "exit-code"
+          },
+          "junit_path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "review_requirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "required"
+      ],
+      "properties": {
+        "required": {
+          "type": "boolean"
+        },
+        "independent": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "criteria": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "description",
+          "acceptance_command_ids"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "acceptance_command_ids": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    }
+  }
+}

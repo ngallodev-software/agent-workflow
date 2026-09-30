@@ -154,7 +154,13 @@ def _job_binding(state_dir: Path) -> dict[str, Any] | None:
     path = AgentRunPaths(state_dir).job_binding
     if not path.is_file():
         return None
-    return read_contract(path, "agent-workflow/job-binding/v1")
+    value = read_contract(path)
+    if value.get("schema") not in {
+        "agent-workflow/job-binding/v1",
+        "agent-workflow/job-binding/v2",
+    }:
+        raise WorkflowError(f"unsupported job binding schema: {value.get('schema')!r}")
+    return value
 
 
 def _declared_acceptance_commands(state_dir: Path) -> list[dict[str, Any]]:

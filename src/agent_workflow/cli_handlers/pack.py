@@ -25,6 +25,15 @@ def handle_pack_command(
     """
     if args.pack_command == "scaffold":
         return scaffold_pack(args.destination, args.phases, args.name), None
+    if args.pack_command == "import-openspec":
+        from ..openspec_import import import_openspec
+
+        return import_openspec(
+            args.repository,
+            args.change,
+            args.destination,
+            job_policy=args.job_policy,
+        ), None
     if args.pack_command == "validate":
         report = validate_pack(
             absolute_path(args.source),

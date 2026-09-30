@@ -27,26 +27,30 @@ packaging/runtime consumption, semantic equivalence, and a reversible validation
 3. Use `codebase-memory-mcp` first for definitions, callers, imports, fan-in/out, and impact.
    If its exact-worktree index is absent or stale, create a fresh non-persistent index and compare
    Git porcelain before and after. Use `rg` for literals, docs, manifests, and configuration.
-4. Before any SpecGen command, run the bundled safety check:
+4. If the repository uses OpenSpec, run the bundled pinned-version safety check before querying
+   planning state:
 
    ```bash
-   bash skills/repo-simplification/scripts/ensure-specgen.sh
+   bash skills/repo-simplification/scripts/ensure-openspec.sh
    ```
 
-   If SpecGen is absent, the check stops and prints the explicit GitHub installation command.
-   To opt into installation, run `--install`; it shallow-clones the upstream repository into a
-   temporary directory and delegates to SpecGen's own `scripts/install.sh`. Never download or
-   execute a remote installer implicitly during analysis.
-5. If a canonical specification exists or the work needs durable requirements/evaluation intent,
-   use the installed SpecGen application rather than inventing a report parser:
+   The check requires the qualified OpenSpec version used by Agent-Workflow's import boundary.
+   If it is absent or different, it stops and prints the explicit pinned npm installation command.
+   Installation is opt-in through `--install`; never download or execute a remote installer
+   implicitly during analysis.
+5. Treat OpenSpec as planning/specification authority when present, not as repository-analysis or
+   execution authority. Inspect only the planning material needed for the audit:
 
    ```bash
-   specgen repo analyze TARGET [--spec SPEC] --mode agent-workflow > repository-analysis.json
-   specgen repo drift repository-analysis.json TARGET
-   specgen evals intent SPEC
+   openspec list --specs --json
+   openspec show SPEC_ID --type spec --json
+   openspec validate --all --strict --json
    ```
 
-   These commands are optional; do not invent a spec or assume an Agent-Workflow target.
+   Use Codebase Memory, `rg`, Git, and Agent-Workflow's own evaluation/evidence contracts for
+   repository reachability, runtime provenance, executable acceptance, and evaluation intent.
+   Do not recreate SpecGen repository-analysis or evaluation-intent objects merely because older
+   workflows used them, and do not invent an OpenSpec change when the target repository has none.
 6. Triangulate every candidate across four surfaces:
    - source and call graph: reachable callers, entry points, imports, and tests;
    - runtime/configuration: CLI, environment, hooks, paths, databases, and live boundaries;
@@ -75,10 +79,10 @@ packaging/runtime consumption, semantic equivalence, and a reversible validation
   change impact, durable evidence projection, and exact-worktree indexing;
 - Git porcelain and `git archive`: provenance, dirty-state preservation, and source-release proof;
 - `rg`: fast literal/config/document reference search;
-- SpecGen's `repo analyze`, `repo drift`, `evals intent`, and contract validation: generic
-  repository evidence and machine-readable evaluation intent when applicable;
-- `scripts/ensure-specgen.sh`: a fail-closed presence/version check and explicit, opt-in GitHub
-  bootstrap through SpecGen's maintained installer;
+- OpenSpec's spec/change inventory, show, and strict validation commands: planning truth when the
+  target repository already uses OpenSpec;
+- `scripts/ensure-openspec.sh`: a fail-closed exact-version check and explicit, opt-in pinned npm
+  installation path for OpenSpec;
 - `scripts/ensure-codebase-memory.sh`: a fail-closed executable/configuration check and explicit,
   opt-in GitHub bootstrap through codebase-memory-mcp's maintained installer;
 - Agent-Workflow's `eval validate`, `eval score`, `eval report`, `assess-sealed-runs`,
