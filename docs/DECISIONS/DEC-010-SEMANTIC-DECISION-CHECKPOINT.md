@@ -86,9 +86,10 @@ The first branch introduces mechanism-level contracts and a pure checkpoint engi
 - exact decision identity `implementation.proposal_selection/v1`;
 - 2–16 bounded candidate IDs;
 - the agent's tentative selection;
+- a bounded, observable decision rationale;
 - stable evidence references.
 
-The initial choice is reconciliation evidence. It is **not** semantic-provider input.
+The initial choice and bounded rationale are observable reconciliation evidence. Neither is semantic-provider input. This captures decision justification without claiming access to hidden chain-of-thought.
 
 ### Neutral projection
 
@@ -109,7 +110,7 @@ Confidence and probability are evidence, not correctness. A configured minimum c
 
 ### Reconciliation
 
-`agent-workflow/decision-resolution/v1` makes disagreement handling explicit.
+`agent-workflow/decision-resolution/v1` makes disagreement handling explicit and records both the reconciler actor and a bounded observable reason.
 
 Permitted successful dispositions are:
 
@@ -131,7 +132,7 @@ An unsupported provider value, wrong primitive, low-confidence/close distributio
 - initial agent choice;
 - normalized semantic candidate and complete typed distribution;
 - agreement/disagreement/uncertainty/provider-failure classification;
-- structured resolution when present;
+- structured resolution, reconciler identity, and bounded rationale when present;
 - applied result;
 - `advance_allowed`;
 - provider failure policy;
@@ -216,7 +217,7 @@ No ownership boundary changes:
 
 - ship DecisionDraft, DecisionResolution, and checkpoint-receipt schemas;
 - ship pure `implementation.proposal_selection/v1` projection/reconciliation mechanics;
-- prove that initial agent preference is absent from provider state;
+- prove that initial agent preference and rationale are absent from provider state;
 - prove disagreement blocks without reconciliation;
 - prove split distributions remain uncertainty;
 - prove provider failure is fail-closed unless explicit policy permits fallback.

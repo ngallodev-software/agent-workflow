@@ -20,6 +20,7 @@ def _draft(initial: str = "proposal_1") -> dict[str, object]:
         "decision_id": "implementation.proposal_selection/v1",
         "candidate_ids": ["proposal_0", "proposal_1"],
         "initial_agent_choice": initial,
+        "rationale": "Proposal 1 appears to fit the observed mechanism with the narrowest scope.",
         "evidence_refs": ["issue.md", "proposal-0.diff", "proposal-1.diff"],
     }
 
@@ -76,6 +77,7 @@ def test_checkpoint_request_excludes_tentative_agent_choice() -> None:
     request = build_checkpoint_request(_draft(), _context())
     serialized_state = json.dumps(request["state"], sort_keys=True)
     assert "initial_agent_choice" not in serialized_state
+    assert "narrowest scope" not in serialized_state
     assert "proposal_1" in serialized_state  # candidate artifact identity remains visible
     assert request["state"]["provider_authority"] == "evidence_only"
 
@@ -118,6 +120,8 @@ def test_disagreement_can_accept_semantic_candidate_explicitly() -> None:
             "resolved_choice": "proposal_0",
             "disposition": "accept_semantic_candidate",
             "basis": "semantic_evidence",
+            "actor": "agent:luna",
+            "reason": "The independent semantic comparison identifies proposal 0 as the stronger match.",
             "evidence_refs": [],
         },
     )
@@ -140,6 +144,8 @@ def test_rejecting_semantic_candidate_requires_independent_evidence() -> None:
                 "resolved_choice": "proposal_1",
                 "disposition": "reject_semantic_candidate",
                 "basis": "additional_evidence",
+                "actor": "agent:luna",
+                "reason": "Attempted override without an actual evidence reference.",
                 "evidence_refs": [],
             },
         )
@@ -157,6 +163,8 @@ def test_rejecting_semantic_candidate_requires_independent_evidence() -> None:
             "resolved_choice": "proposal_1",
             "disposition": "reject_semantic_candidate",
             "basis": "deterministic_authority",
+            "actor": "agent:luna",
+            "reason": "A deterministic type-check failure invalidates the semantic candidate.",
             "evidence_refs": ["typecheck.txt"],
         },
     )
@@ -210,11 +218,55 @@ def test_provider_failure_fallback_requires_explicit_application_policy_and_rece
             "resolved_choice": "proposal_1",
             "disposition": "provider_fallback",
             "basis": "provider_failure_policy",
+            "actor": "agent-workflow",
+            "reason": "Configured provider-failure policy permits retaining the initial choice.",
             "evidence_refs": [],
         },
     )
     assert receipt["advance_allowed"] is True
     assert receipt["applied_result"] == "proposal_1"
+
+
+def test_provider_success_requires_complete_candidate_distribution() -> None:
+    receipt = run_checkpoint(
+        draft=_draft(),
+        context=_context(),
+        provider=lambda request: DecisionEvidence(
+            "implementation.proposal_selection/v1",
+            "success",
+            "choice",
+            value="proposal_1",
+            confidence=0.95,
+            distribution={"proposal_1": 0.95},
+        ),
+    )
+    assert receipt["outcome"] == "provider_failure"
+    assert receipt["advance_allowed"] is False
+
+
+def test_provider_evidence_identity_mismatch_fails_closed() -> None:
+    receipt = run_checkpoint(
+        draft=_draft(),
+        context=_context(),
+        provider=lambda request: DecisionEvidence(
+            "implementation.proposal_selection/v1",
+            "success",
+            "choice",
+            value="proposal_1",
+            confidence=0.95,
+            distribution={"proposal_0": 0.05, "proposal_1": 0.95},
+            request_sha256="0" * 64,
+        ),
+    )
+    assert receipt["outcome"] == "provider_failure"
+    assert receipt["semantic"]["error_class"] == "provider_evidence_identity_mismatch"
+
+
+def test_draft_evidence_refs_must_be_present_in_neutral_context() -> None:
+    draft = _draft()
+    draft["evidence_refs"] = list(draft["evidence_refs"]) + ["missing.txt"]
+    with pytest.raises(WorkflowError, match="missing draft evidence refs"):
+        build_checkpoint_request(draft, _context())
 
 
 def test_context_must_contain_exactly_the_draft_candidates() -> None:

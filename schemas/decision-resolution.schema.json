@@ -12,15 +12,42 @@
     "resolved_choice",
     "disposition",
     "basis",
+    "actor",
+    "reason",
     "evidence_refs"
   ],
   "properties": {
-    "schema": {"const": "agent-workflow/decision-resolution/v1"},
-    "decision_id": {"const": "implementation.proposal_selection/v1"},
-    "draft_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"},
-    "initial_agent_choice": {"type": "string", "minLength": 1, "maxLength": 128},
-    "semantic_candidate": {"type": ["string", "null"], "minLength": 1, "maxLength": 128},
-    "resolved_choice": {"type": ["string", "null"], "minLength": 1, "maxLength": 128},
+    "schema": {
+      "const": "agent-workflow/decision-resolution/v1"
+    },
+    "decision_id": {
+      "const": "implementation.proposal_selection/v1"
+    },
+    "draft_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+    },
+    "initial_agent_choice": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "semantic_candidate": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "resolved_choice": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 128
+    },
     "disposition": {
       "enum": [
         "retain_initial_on_agreement",
@@ -46,7 +73,21 @@
       "type": "array",
       "maxItems": 256,
       "uniqueItems": true,
-      "items": {"type": "string", "minLength": 1, "maxLength": 512}
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 512
+      }
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
     }
   }
 }

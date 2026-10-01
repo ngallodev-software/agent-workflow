@@ -9,26 +9,51 @@
     "decision_id",
     "candidate_ids",
     "initial_agent_choice",
+    "rationale",
     "evidence_refs"
   ],
   "properties": {
-    "schema": {"const": "agent-workflow/decision-draft/v1"},
-    "draft_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"},
-    "decision_id": {"const": "implementation.proposal_selection/v1"},
+    "schema": {
+      "const": "agent-workflow/decision-draft/v1"
+    },
+    "draft_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+    },
+    "decision_id": {
+      "const": "implementation.proposal_selection/v1"
+    },
     "candidate_ids": {
       "type": "array",
       "minItems": 2,
       "maxItems": 16,
       "uniqueItems": true,
-      "items": {"type": "string", "minLength": 1, "maxLength": 128}
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      }
     },
-    "initial_agent_choice": {"type": "string", "minLength": 1, "maxLength": 128},
+    "initial_agent_choice": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
     "evidence_refs": {
       "type": "array",
       "minItems": 1,
       "maxItems": 256,
       "uniqueItems": true,
-      "items": {"type": "string", "minLength": 1, "maxLength": 512}
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 512
+      }
+    },
+    "rationale": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
     }
   }
 }

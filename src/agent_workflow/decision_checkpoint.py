@@ -203,6 +203,11 @@ def build_checkpoint_request(
     """
     draft = normalize_decision_draft(draft_value)
     state, source_refs = _normalize_context(draft, context)
+    missing_refs = sorted(set(draft["evidence_refs"]) - set(source_refs))
+    if missing_refs:
+        raise WorkflowError(
+            "checkpoint context is missing draft evidence refs: " + ", ".join(missing_refs)
+        )
     candidate_ids = list(draft["candidate_ids"])
     question = {
         "primitive": "choice",
@@ -248,22 +253,32 @@ def _evidence_outcome(
     candidate = _semantic_candidate(draft, evidence)
     if candidate is None:
         return "provider_failure"
-    if evidence.confidence is None or evidence.confidence < policy.minimum_confidence:
+    if (
+        evidence.confidence is None
+        or isinstance(evidence.confidence, bool)
+        or not 0.0 <= float(evidence.confidence) <= 1.0
+    ):
+        return "provider_failure"
+    if evidence.confidence < policy.minimum_confidence:
         return "uncertainty"
-    if policy.minimum_margin > 0:
-        distribution = {
-            str(key): float(value)
-            for key, value in evidence.distribution.items()
-            if isinstance(value, (int, float)) and not isinstance(value, bool)
-        }
-        if set(distribution) != set(draft["candidate_ids"]):
-            return "uncertainty"
-        ranked = sorted(distribution.values(), reverse=True)
-        if len(ranked) < 2 or ranked[0] - ranked[1] < policy.minimum_margin:
-            return "uncertainty"
-        top = max(distribution, key=distribution.get)
-        if top != candidate:
-            return "provider_failure"
+    distribution = {
+        str(key): float(value)
+        for key, value in evidence.distribution.items()
+        if isinstance(value, (int, float)) and not isinstance(value, bool)
+    }
+    if set(distribution) != set(draft["candidate_ids"]):
+        return "provider_failure"
+    if any(not 0.0 <= value <= 1.0 for value in distribution.values()):
+        return "provider_failure"
+    ranked = sorted(distribution.values(), reverse=True)
+    if len(ranked) < 2:
+        return "provider_failure"
+    margin = ranked[0] - ranked[1]
+    if margin == 0.0 or margin < policy.minimum_margin:
+        return "uncertainty"
+    top = max(distribution, key=distribution.get)
+    if top != candidate:
+        return "provider_failure"
     return "agreement" if candidate == draft["initial_agent_choice"] else "disagreement"
 
 
@@ -428,6 +443,8 @@ def run_checkpoint(
             "resolved_choice": normalized_draft["initial_agent_choice"],
             "disposition": "retain_initial_on_agreement",
             "basis": "semantic_agreement",
+            "actor": "agent-workflow",
+            "reason": "Initial agent choice and independent semantic candidate agree.",
             "evidence_refs": [],
         }
         validate_instance(
