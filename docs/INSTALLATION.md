@@ -135,7 +135,10 @@ curl -fsSL https://github.com/ngallodev-software/agent-workflow/releases/downloa
   sh -s -- --version v0.12.0
 ```
 
-The version is intentional: the 0.9 line builds on the breaking Agent Run/headless-core rewrite and does not carry terminal-host compatibility.
+The tag pin is intentional: release bootstrap has no mutable-branch fallback. The
+0.12 line is the first GitHub preview release and retains the frozen
+`native-job/v1` compatibility path while new planning integrations use the
+Agent-Workflow-owned v2 boundary.
 
 ## Repository-only CI assets
 
