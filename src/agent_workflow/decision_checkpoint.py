@@ -37,9 +37,9 @@ SemanticProvider = Callable[[Mapping[str, object]], DecisionEvidence]
 class CheckpointPolicy:
     """Application-owned evidence thresholds and provider-failure behavior."""
 
-    minimum_confidence: float = 0.80
-    minimum_margin: float = 0.10
-    provider_failure: ProviderFailurePolicy = "block"
+    minimum_confidence: float
+    minimum_margin: float
+    provider_failure: ProviderFailurePolicy
 
     def __post_init__(self) -> None:
         for name, value in (
@@ -383,7 +383,7 @@ def run_checkpoint(
     context: Mapping[str, object],
     provider: SemanticProvider,
     provider_name: str,
-    policy: CheckpointPolicy | None = None,
+    policy: CheckpointPolicy,
     resolution: Mapping[str, object] | None = None,
 ) -> dict[str, Any]:
     """Evaluate one proposal-selection checkpoint and return a validated receipt.
@@ -392,7 +392,7 @@ def run_checkpoint(
     artifact is supplied. A provider failure is blocking unless the application-owned
     policy explicitly permits the initial choice as a deterministic fallback.
     """
-    effective_policy = policy or CheckpointPolicy()
+    effective_policy = policy
     if not isinstance(provider_name, str) or not provider_name.strip():
         raise WorkflowError("provider_name must be non-empty")
     normalized_draft = normalize_decision_draft(draft)

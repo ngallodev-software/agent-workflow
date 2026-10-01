@@ -54,6 +54,14 @@ def _context() -> dict[str, object]:
     }
 
 
+def _policy(*, provider_failure: str = "block") -> CheckpointPolicy:
+    return CheckpointPolicy(
+        minimum_confidence=0.8,
+        minimum_margin=0.1,
+        provider_failure=provider_failure,
+    )
+
+
 def _choice(
     candidate: str,
     *,
@@ -87,6 +95,7 @@ def test_agreement_auto_resolves_and_allows_advance() -> None:
         draft=_draft("proposal_1"),
         context=_context(),
         provider_name="test-provider",
+        policy=_policy(),
         provider=lambda request: _choice("proposal_1"),
     )
     assert receipt["outcome"] == "agreement"
@@ -111,6 +120,7 @@ def test_disagreement_blocks_without_reconciliation() -> None:
         draft=_draft("proposal_1"),
         context=_context(),
         provider_name="test-provider",
+        policy=_policy(),
         provider=lambda request: _choice("proposal_0"),
     )
     assert receipt["outcome"] == "disagreement"
@@ -124,6 +134,7 @@ def test_disagreement_can_accept_semantic_candidate_explicitly() -> None:
         draft=_draft("proposal_1"),
         context=_context(),
         provider_name="test-provider",
+        policy=_policy(),
         provider=lambda request: _choice("proposal_0"),
         resolution={
             "schema": "agent-workflow/decision-resolution/v1",
@@ -149,6 +160,7 @@ def test_rejecting_semantic_candidate_requires_independent_evidence() -> None:
             draft=_draft("proposal_1"),
             context=_context(),
             provider_name="test-provider",
+            policy=_policy(),
             provider=lambda request: _choice("proposal_0"),
             resolution={
                 "schema": "agent-workflow/decision-resolution/v1",
@@ -169,6 +181,7 @@ def test_rejecting_semantic_candidate_requires_independent_evidence() -> None:
         draft=_draft("proposal_1"),
         context=_context(),
         provider_name="test-provider",
+        policy=_policy(),
         provider=lambda request: _choice("proposal_0"),
         resolution={
             "schema": "agent-workflow/decision-resolution/v1",
@@ -193,12 +206,12 @@ def test_close_distribution_is_uncertainty_not_a_plurality_decision() -> None:
         draft=_draft("proposal_1"),
         context=_context(),
         provider_name="test-provider",
+        policy=_policy(),
         provider=lambda request: _choice(
             "proposal_0",
             confidence=0.91,
             probabilities={"proposal_0": 0.52, "proposal_1": 0.48},
         ),
-        policy=CheckpointPolicy(minimum_confidence=0.8, minimum_margin=0.1),
     )
     assert receipt["outcome"] == "uncertainty"
     assert receipt["advance_allowed"] is False
@@ -209,6 +222,7 @@ def test_uncertainty_can_only_advance_after_explicit_new_evidence_resolution() -
         draft=_draft("proposal_1"),
         context=_context(),
         provider_name="test-provider",
+        policy=_policy(),
         provider=lambda request: _choice(
             "proposal_0",
             confidence=0.91,
@@ -239,6 +253,7 @@ def test_defer_or_escalate_cannot_claim_a_resolved_choice() -> None:
             draft=_draft("proposal_1"),
             context=_context(),
             provider_name="test-provider",
+            policy=_policy(),
             provider=lambda request: _choice("proposal_0"),
             resolution={
                 "schema": "agent-workflow/decision-resolution/v1",
@@ -264,6 +279,7 @@ def test_provider_failure_blocks_by_default() -> None:
         draft=_draft(),
         context=_context(),
         provider_name="test-provider",
+        policy=_policy(),
         provider=failed,
     )
     assert receipt["outcome"] == "provider_failure"
@@ -276,10 +292,10 @@ def test_provider_failure_fallback_requires_explicit_application_policy_and_rece
         draft=_draft("proposal_1"),
         context=_context(),
         provider_name="test-provider",
+        policy=_policy(provider_failure="fallback_initial"),
         provider=lambda request: DecisionEvidence(
             "implementation.proposal_selection/v1", "service_failure", "choice"
         ),
-        policy=CheckpointPolicy(provider_failure="fallback_initial"),
         resolution={
             "schema": "agent-workflow/decision-resolution/v1",
             "decision_id": "implementation.proposal_selection/v1",
@@ -303,6 +319,7 @@ def test_provider_success_requires_complete_candidate_distribution() -> None:
         draft=_draft(),
         context=_context(),
         provider_name="test-provider",
+        policy=_policy(),
         provider=lambda request: DecisionEvidence(
             "implementation.proposal_selection/v1",
             "success",
@@ -321,6 +338,7 @@ def test_provider_evidence_identity_mismatch_fails_closed() -> None:
         draft=_draft(),
         context=_context(),
         provider_name="test-provider",
+        policy=_policy(),
         provider=lambda request: DecisionEvidence(
             "implementation.proposal_selection/v1",
             "success",

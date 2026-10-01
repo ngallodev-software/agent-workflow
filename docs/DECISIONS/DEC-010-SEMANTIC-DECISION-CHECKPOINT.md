@@ -106,7 +106,7 @@ It does not accept an agent verdict, confidence, preferred candidate, rationale,
 
 The provider returns the existing provider-neutral `DecisionEvidence` shape. The first seam requires Choice evidence whose selected value is one of the bounded candidate IDs. The complete returned distribution is retained.
 
-Confidence and probability are evidence, not correctness. A configured minimum confidence and minimum top-two margin determine whether the checkpoint has enough semantic separation to call the result agreement/disagreement. A close distribution is `uncertainty`, not a strong decision.
+Confidence and probability are evidence, not correctness. An explicit application-owned minimum confidence and minimum top-two margin determine whether the checkpoint has enough semantic separation to call the result agreement/disagreement. The checkpoint library supplies no implicit production policy; callers must provide the complete policy and comparative studies must freeze it before outcomes are observed. A close distribution is `uncertainty`, not a strong decision.
 
 ### Reconciliation
 
