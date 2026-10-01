@@ -86,18 +86,28 @@ def test_agreement_auto_resolves_and_allows_advance() -> None:
     receipt = run_checkpoint(
         draft=_draft("proposal_1"),
         context=_context(),
+        provider_name="test-provider",
         provider=lambda request: _choice("proposal_1"),
     )
     assert receipt["outcome"] == "agreement"
     assert receipt["advance_allowed"] is True
     assert receipt["applied_result"] == "proposal_1"
     assert receipt["resolution"]["basis"] == "semantic_agreement"
+    assert receipt["provider"] == "test-provider"
+    assert receipt["provider_elapsed_seconds"] >= 0
+    assert receipt["policy"] == {
+        "minimum_confidence": 0.8,
+        "minimum_margin": 0.1,
+        "provider_failure": "block",
+    }
+    assert receipt["candidate_ids"] == ["proposal_0", "proposal_1"]
 
 
 def test_disagreement_blocks_without_reconciliation() -> None:
     receipt = run_checkpoint(
         draft=_draft("proposal_1"),
         context=_context(),
+        provider_name="test-provider",
         provider=lambda request: _choice("proposal_0"),
     )
     assert receipt["outcome"] == "disagreement"
@@ -110,6 +120,7 @@ def test_disagreement_can_accept_semantic_candidate_explicitly() -> None:
     receipt = run_checkpoint(
         draft=_draft("proposal_1"),
         context=_context(),
+        provider_name="test-provider",
         provider=lambda request: _choice("proposal_0"),
         resolution={
             "schema": "agent-workflow/decision-resolution/v1",
@@ -134,6 +145,7 @@ def test_rejecting_semantic_candidate_requires_independent_evidence() -> None:
         run_checkpoint(
             draft=_draft("proposal_1"),
             context=_context(),
+            provider_name="test-provider",
             provider=lambda request: _choice("proposal_0"),
             resolution={
                 "schema": "agent-workflow/decision-resolution/v1",
@@ -153,6 +165,7 @@ def test_rejecting_semantic_candidate_requires_independent_evidence() -> None:
     receipt = run_checkpoint(
         draft=_draft("proposal_1"),
         context=_context(),
+        provider_name="test-provider",
         provider=lambda request: _choice("proposal_0"),
         resolution={
             "schema": "agent-workflow/decision-resolution/v1",
@@ -176,6 +189,7 @@ def test_close_distribution_is_uncertainty_not_a_plurality_decision() -> None:
     receipt = run_checkpoint(
         draft=_draft("proposal_1"),
         context=_context(),
+        provider_name="test-provider",
         provider=lambda request: _choice(
             "proposal_0",
             confidence=0.91,
@@ -194,6 +208,7 @@ def test_provider_failure_blocks_by_default() -> None:
     receipt = run_checkpoint(
         draft=_draft(),
         context=_context(),
+        provider_name="test-provider",
         provider=failed,
     )
     assert receipt["outcome"] == "provider_failure"
@@ -205,6 +220,7 @@ def test_provider_failure_fallback_requires_explicit_application_policy_and_rece
     receipt = run_checkpoint(
         draft=_draft("proposal_1"),
         context=_context(),
+        provider_name="test-provider",
         provider=lambda request: DecisionEvidence(
             "implementation.proposal_selection/v1", "service_failure", "choice"
         ),
@@ -231,6 +247,7 @@ def test_provider_success_requires_complete_candidate_distribution() -> None:
     receipt = run_checkpoint(
         draft=_draft(),
         context=_context(),
+        provider_name="test-provider",
         provider=lambda request: DecisionEvidence(
             "implementation.proposal_selection/v1",
             "success",
@@ -248,6 +265,7 @@ def test_provider_evidence_identity_mismatch_fails_closed() -> None:
     receipt = run_checkpoint(
         draft=_draft(),
         context=_context(),
+        provider_name="test-provider",
         provider=lambda request: DecisionEvidence(
             "implementation.proposal_selection/v1",
             "success",

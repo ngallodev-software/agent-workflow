@@ -128,14 +128,14 @@ An unsupported provider value, wrong primitive, low-confidence/close distributio
 `agent-workflow/semantic-checkpoint-receipt/v1` records at minimum:
 
 - draft and projected-state digests;
-- request identity and projector/question-set versions;
-- initial agent choice;
+- request identity, provider/model identity, host-measured provider latency, and projector/question-set versions;
+- candidate set and initial agent choice;
 - normalized semantic candidate and complete typed distribution;
 - agreement/disagreement/uncertainty/provider-failure classification;
 - structured resolution, reconciler identity, and bounded rationale when present;
 - applied result;
 - `advance_allowed`;
-- provider failure policy;
+- the exact confidence/margin/provider-failure policy applied;
 - source refs, model/request identity, usage, and error class where supplied.
 
 The receipt contains observable decision evidence only. It does not claim access to hidden chain-of-thought.

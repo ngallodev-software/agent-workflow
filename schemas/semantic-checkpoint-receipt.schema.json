@@ -12,13 +12,16 @@
     "request_sha256",
     "question_set_version",
     "projector_version",
+    "candidate_ids",
     "initial_agent_choice",
+    "provider",
+    "provider_elapsed_seconds",
+    "policy",
     "semantic",
     "outcome",
     "resolution",
     "applied_result",
-    "advance_allowed",
-    "provider_failure_policy"
+    "advance_allowed"
   ],
   "properties": {
     "schema": {
@@ -162,11 +165,52 @@
     "advance_allowed": {
       "type": "boolean"
     },
-    "provider_failure_policy": {
-      "enum": [
-        "block",
-        "fallback_initial"
-      ]
+    "candidate_ids": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      }
+    },
+    "provider": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "provider_elapsed_seconds": {
+      "type": "number",
+      "minimum": 0
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minimum_confidence",
+        "minimum_margin",
+        "provider_failure"
+      ],
+      "properties": {
+        "minimum_confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "minimum_margin": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "provider_failure": {
+          "enum": [
+            "block",
+            "fallback_initial"
+          ]
+        }
+      }
     }
   },
   "$defs": {

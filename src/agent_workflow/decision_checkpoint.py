@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import json
+import time
 from typing import Any, Callable, Literal, Mapping
 
 from .contracts import validate_instance
@@ -377,6 +378,7 @@ def run_checkpoint(
     draft: Mapping[str, object],
     context: Mapping[str, object],
     provider: SemanticProvider,
+    provider_name: str,
     policy: CheckpointPolicy | None = None,
     resolution: Mapping[str, object] | None = None,
 ) -> dict[str, Any]:
@@ -387,8 +389,11 @@ def run_checkpoint(
     policy explicitly permits the initial choice as a deterministic fallback.
     """
     effective_policy = policy or CheckpointPolicy()
+    if not isinstance(provider_name, str) or not provider_name.strip():
+        raise WorkflowError("provider_name must be non-empty")
     normalized_draft = normalize_decision_draft(draft)
     request = build_checkpoint_request(normalized_draft, context)
+    provider_started = time.perf_counter()
     try:
         evidence = provider(request)
     except Exception as exc:
@@ -402,6 +407,7 @@ def run_checkpoint(
             source_refs=tuple(request["source_refs"]),
             error_class=type(exc).__name__,
         )
+    provider_elapsed_seconds = max(0.0, time.perf_counter() - provider_started)
     if not isinstance(evidence, DecisionEvidence):
         evidence = DecisionEvidence(
             PROPOSAL_SELECTION_DECISION_ID,
@@ -471,7 +477,15 @@ def run_checkpoint(
         "request_sha256": request["request_sha256"],
         "question_set_version": QUESTION_SET_VERSION,
         "projector_version": PROJECTOR_VERSION,
+        "candidate_ids": list(normalized_draft["candidate_ids"]),
         "initial_agent_choice": normalized_draft["initial_agent_choice"],
+        "provider": provider_name.strip(),
+        "provider_elapsed_seconds": provider_elapsed_seconds,
+        "policy": {
+            "minimum_confidence": float(effective_policy.minimum_confidence),
+            "minimum_margin": float(effective_policy.minimum_margin),
+            "provider_failure": effective_policy.provider_failure,
+        },
         "semantic": {
             "status": evidence.status,
             "candidate": semantic_candidate,
@@ -490,7 +504,6 @@ def run_checkpoint(
             normalized_resolution.get("resolved_choice") if advance_allowed and normalized_resolution else None
         ),
         "advance_allowed": advance_allowed,
-        "provider_failure_policy": effective_policy.provider_failure,
     }
     validate_instance(
         receipt,
