@@ -169,6 +169,25 @@ jobs:
           test -f build/release-evidence/release-evidence.json
           test -f build/release-evidence/sbom.cdx.json
           test -f build/release-evidence/build-provenance.json
+      - name: Build curated release notes
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          version = os.environ["RELEASE_TAG"].removeprefix("v")
+          changelog = Path("CHANGELOG.md").read_text(encoding="utf-8")
+          match = re.search(
+              rf"(?ms)^## {re.escape(version)}(?:\s+[^\n]*)?\n(.*?)(?=^## |\Z)",
+              changelog,
+          )
+          if match is None:
+              raise SystemExit(f"CHANGELOG.md has no release notes for {version}")
+          notes = match.group(1).strip() + "\n"
+          Path("build/release-notes.md").write_text(notes, encoding="utf-8")
+          PY
       - name: Publish tagged GitHub release
         env:
           PRERELEASE: ${{ steps.publication.outputs.prerelease }}
@@ -178,7 +197,7 @@ jobs:
           args=(
             release create "$RELEASE_TAG"
             --verify-tag
-            --generate-notes
+            --notes-file build/release-notes.md
             --title "Agent-Workflow $RELEASE_TAG$TITLE_SUFFIX"
           )
           if [[ "$PRERELEASE" == "true" ]]; then
