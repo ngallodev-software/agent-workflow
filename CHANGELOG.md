@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.12.0 — initial public preview
+
+This is the first tagged GitHub release of Agent-Workflow. It is intentionally
+published as a **prerelease** while clean-host compatibility evidence remains a
+release-policy blocker; the attached release evidence records that boundary.
+
+- Add the qualified OpenSpec 1.13.2 -> `source-specification-import/v1` ->
+  `native-job/v2` planning import path while preserving legacy
+  `native-job/v1` SpecGen/shared-contract compatibility.
+- Keep execution scope, deterministic acceptance commands, hidden evaluation
+  authority, review, sealing, and lifecycle acceptance owned by Agent-Workflow.
+- Ship the durable Agent Run orchestration/evidence lifecycle, restart-safe
+  workflows, read-only evidence index, trusted plugin boundary, and optional
+  TypeSafe semantic decision provider as GitHub release artifacts.
+- Publish wheel, sdist, platform installer bundles, checksums, SBOM, build
+  provenance, structured test evidence, and the direct bootstrap installer.
+- Distinguish preview publication from a supported release: technical failures
+  always block; the currently accepted `REL-003` compatibility-policy blocker
+  forces GitHub's prerelease flag rather than being silently waived.
+
+PyPI publication is not part of this release. The base package still has a
+digest-pinned direct URL dependency for the frozen legacy shared-contract
+wheel; public Python indexes are not the current publication target.
+
+
 ## 0.11.10
 
 - Preserve Choice/Noul/Score probability evidence through the comparative persistence boundary.
