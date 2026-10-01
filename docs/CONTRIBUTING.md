@@ -43,6 +43,33 @@ python3 scripts/bump-version.py --bump major|minor|patch
 
 The tool updates `VERSION` and `pyproject.toml` together. It deliberately does not infer release significance from commit messages. CI runs `python3 scripts/bump-version.py --check` and rejects a mismatch between the two version authorities.
 
+## Release publication
+
+The tag-triggered release workflow has two publication states:
+
+- **preview** — all technical release checks pass, but durable release evidence
+  remains `blocked` only by the explicitly allowed `REL-003` clean-host
+  compatibility gate. GitHub publication is allowed only as a **prerelease**,
+  and the release evidence, SBOM, provenance, test results, checksums, wheel,
+  sdist, and installer bundles are attached.
+- **supported** — release evidence is `ready`; the workflow may publish a
+  normal GitHub release.
+
+A `technical_failure` is never publishable. A newly introduced blocker other
+than the explicitly allowed preview blocker is also not publishable. Manual
+`workflow_dispatch` runs validate a proposed tag but never publish.
+
+The pushed tag must exactly match `VERSION` / package metadata. For example:
+
+```bash
+git tag v0.12.0
+git push origin v0.12.0
+```
+
+The current preview publication target is GitHub Releases. PyPI publication is
+deferred while the base package carries the digest-pinned direct URL dependency
+needed for legacy `native-job/v1` compatibility.
+
 ## Jenkins and repository-only CI assets
 
 Jenkins is a maintained repository development/release workflow, not an installed application feature.
