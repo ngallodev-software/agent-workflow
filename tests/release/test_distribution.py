@@ -42,6 +42,9 @@ def test_release_workflow_distinguishes_preview_from_supported_publication() -> 
     assert "install.ps1" in workflow
     assert "technical_failure" in workflow
     assert "workflow_dispatch" in workflow
+    assert "agent-workflow-comparative-eval.git@master" not in workflow
+    assert "0d7510735958a00d1e12d3eb5277b5bb1964f6e9" in workflow
+    assert "d254a0b13f2fd1de732dab2abd33da35db9ea365b50b3214e92308fea79d85c2" in workflow
 
 
 def test_all_published_json_schemas_are_valid_draft_2020_12() -> None:
