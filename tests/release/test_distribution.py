@@ -36,7 +36,7 @@ def test_release_workflow_distinguishes_preview_from_supported_publication() -> 
         encoding="utf-8"
     )
     assert 'allowed_preview_blockers = {"REL-003"}' in workflow
-    assert '"--prerelease"' in workflow
+    assert "args+=(--prerelease)" in workflow
     assert "build/release-evidence/*" in workflow
     assert "install.sh" in workflow
     assert "install.ps1" in workflow
