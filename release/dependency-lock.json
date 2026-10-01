@@ -1,7 +1,7 @@
 {
   "schema": "agent-workflow/dependency-lock/v1",
   "project": "agent-workflow",
-  "version": "0.11.12",
+  "version": "0.12.0",
   "scope": "direct-dependencies",
   "follow_up": "HARD-010",
   "packages": [
