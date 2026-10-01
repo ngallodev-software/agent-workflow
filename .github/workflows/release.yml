@@ -7,9 +7,8 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Version tag to validate (publishing is disabled for manual runs)"
+        description: "Version tag to validate (manual runs never publish)"
         required: true
-        default: "v0.8.0"
         type: string
 
 permissions:
@@ -49,7 +48,13 @@ jobs:
         run: brew install zstd
       - name: Install validation dependencies
         shell: bash
-        run: python -m pip install 'setuptools>=61' 'pytest>=8,<10' 'jsonschema>=4.18,<5' 'PyYAML>=6.0.3,<7' 'mcp==1.28.1' 'build>=1.2,<2'
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            'setuptools>=61' 'pytest>=8,<10' 'jsonschema>=4.18,<5' \
+            'PyYAML>=6.0.3,<7' 'mcp==1.28.1' 'build>=1.2,<2' \
+            'specgen-agent-workflow-contracts @ https://github.com/ngallodev-software/agent-workflow-spec-contracts/releases/download/v0.2.1/specgen_agent_workflow_contracts-0.2.1-py3-none-any.whl#sha256=d254a0b13f2fd1de732dab2abd33da35db9ea365b50b3214e92308fea79d85c2' \
+            'agent-workflow-comparative-eval @ git+https://github.com/ngallodev-software/agent-workflow-comparative-eval.git@0d7510735958a00d1e12d3eb5277b5bb1964f6e9'
       - name: Verify tag matches package version
         shell: bash
         run: |
@@ -59,37 +64,34 @@ jobs:
           import re
 
           tag = os.environ["RELEASE_TAG"]
-          match = re.search(r'^version = "([^"]+)"$', pathlib.Path("pyproject.toml").read_text(), re.MULTILINE)
-          if not match or tag.removeprefix("v") != match.group(1):
-              raise SystemExit(f"tag {tag!r} does not match pyproject version {match.group(1) if match else None!r}")
+          match = re.search(
+              r'^version = "([^"]+)"$',
+              pathlib.Path("pyproject.toml").read_text(),
+              re.MULTILINE,
+          )
+          version = match.group(1) if match else None
+          if tag != f"v{version}":
+              raise SystemExit(
+                  f"tag {tag!r} does not exactly match package version {version!r}"
+              )
           PY
-      - name: Acceptance and invariant suite
+      - name: Require publishing tag from master history
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          git fetch origin master --depth=64
+          tagged="$(git rev-parse HEAD)"
+          if ! git merge-base --is-ancestor "$tagged" origin/master; then
+            echo "release tag must point to a commit already merged into master: $tagged" >&2
+            exit 2
+          fi
+      - name: Full technical release gate
         if: matrix.suite == 'full'
         shell: bash
-        run: |
-            python -m pytest
-      - name: Build wheel and source distribution
+        run: ./scripts/release-check.sh
+      - name: Cross-platform release build validation
         shell: bash
-        run: |
-          python -m build --sdist --wheel --outdir dist
-      - name: Build release installer bundles
-        shell: bash
-        run: |
-          wheel=$(python -c 'from pathlib import Path; print(next(Path("dist").glob("agent_workflow-*.whl")))')
-          sdist=$(python -c 'from pathlib import Path; print(next(Path("dist").glob("agent_workflow-*.tar.gz")))')
-          python scripts/build-release-bundles.py \
-            --version "$RELEASE_TAG" \
-            --wheel "$wheel" \
-            --sdist "$sdist" \
-            --output-dir dist
-      - name: Write checksum manifest
-        shell: bash
-        run: |
-          find dist -maxdepth 1 -type f \( -name '*.whl' -o -name '*.tar.gz' -o -name '*.zip' \) -print0 \
-            | sort -z | xargs -0 sha256sum > dist/SHA256SUMS
-      - name: Audit release assets
-        shell: bash
-        run: python scripts/audit-release-assets.py
+        run: ./scripts/ci-release-build.sh
       - name: Upload platform validation artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -110,22 +112,109 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Build publishable release assets
+      - name: Install release dependencies
         shell: bash
         run: |
-          python -m pip install 'setuptools>=61' 'pytest>=8,<10' 'jsonschema>=4.18,<5' 'PyYAML>=6.0.3,<7' 'mcp==1.28.1' 'build>=1.2,<2'
-          python -m build --sdist --wheel --outdir dist
-          wheel=$(python -c 'from pathlib import Path; print(next(Path("dist").glob("agent_workflow-*.whl")))')
-          sdist=$(python -c 'from pathlib import Path; print(next(Path("dist").glob("agent_workflow-*.tar.gz")))')
-          python scripts/build-release-bundles.py \
-            --version "$RELEASE_TAG" --wheel "$wheel" --sdist "$sdist" --output-dir dist
-          find dist -maxdepth 1 -type f \( -name '*.whl' -o -name '*.tar.gz' -o -name '*.zip' \) -print0 \
-            | sort -z | xargs -0 sha256sum > dist/SHA256SUMS
-          python scripts/audit-release-assets.py
-      - name: Enforce release policy
-        env:
-          AGENT_WORKFLOW_ENFORCE_RELEASE_BLOCKERS: "1"
-        run: ./scripts/release-check.sh
-      - name: Publish tagged release
+          sudo apt-get update
+          sudo apt-get install -y zstd
+          python -m pip install --upgrade pip
+          python -m pip install \
+            'setuptools>=61' 'pytest>=8,<10' 'jsonschema>=4.18,<5' \
+            'PyYAML>=6.0.3,<7' 'mcp==1.28.1' 'build>=1.2,<2' \
+            'specgen-agent-workflow-contracts @ https://github.com/ngallodev-software/agent-workflow-spec-contracts/releases/download/v0.2.1/specgen_agent_workflow_contracts-0.2.1-py3-none-any.whl#sha256=d254a0b13f2fd1de732dab2abd33da35db9ea365b50b3214e92308fea79d85c2' \
+            'agent-workflow-comparative-eval @ git+https://github.com/ngallodev-software/agent-workflow-comparative-eval.git@0d7510735958a00d1e12d3eb5277b5bb1964f6e9'
+      - name: Build canonical release assets
+        shell: bash
+        run: ./scripts/ci-release-build.sh
+      - name: Generate canonical release evidence
+        shell: bash
         run: |
-          gh release create "$RELEASE_TAG" --verify-tag --generate-notes dist/*
+          artifacts="$(
+            find dist -maxdepth 1 -type f -print | sort | paste -sd: -
+          )"
+          AGENT_WORKFLOW_RELEASE_ARTIFACTS="$artifacts" ./scripts/release-check.sh
+      - name: Classify publication tier
+        id: publication
+        shell: bash
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          from pathlib import Path
+
+          evidence = json.loads(
+              Path("build/release-evidence/release-evidence.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          status = evidence["status"]
+          if status == "technical_failure":
+              raise SystemExit("technical release failure is never publishable")
+          if status == "ready":
+              print("prerelease=false")
+              print("title_suffix=")
+              raise SystemExit(0)
+          if status != "blocked":
+              raise SystemExit(f"unsupported release evidence status: {status!r}")
+
+          allowed_preview_blockers = {"REL-003"}
+          blockers = {
+              check.get("backlog_id")
+              for check in evidence.get("checks", [])
+              if check.get("status") in {"blocked", "not_run"}
+          }
+          if not blockers or not blockers <= allowed_preview_blockers:
+              raise SystemExit(
+                  "preview publication refused; unexpected blockers: "
+                  + ", ".join(sorted(str(item) for item in blockers))
+              )
+          print("prerelease=true")
+          print("title_suffix= (preview)")
+          PY
+      - name: Verify public bootstrap assets
+        shell: bash
+        run: |
+          test -f install.sh
+          test -f install.ps1
+          test -f dist/SHA256SUMS
+          test -f build/release-evidence/release-evidence.json
+          test -f build/release-evidence/sbom.cdx.json
+          test -f build/release-evidence/build-provenance.json
+      - name: Build curated release notes
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          version = os.environ["RELEASE_TAG"].removeprefix("v")
+          changelog = Path("CHANGELOG.md").read_text(encoding="utf-8")
+          match = re.search(
+              rf"(?ms)^## {re.escape(version)}(?:\s+[^\n]*)?\n(.*?)(?=^## |\Z)",
+              changelog,
+          )
+          if match is None:
+              raise SystemExit(f"CHANGELOG.md has no release notes for {version}")
+          notes = match.group(1).strip() + "\n"
+          Path("build/release-notes.md").write_text(notes, encoding="utf-8")
+          PY
+      - name: Publish tagged GitHub release
+        env:
+          PRERELEASE: ${{ steps.publication.outputs.prerelease }}
+          TITLE_SUFFIX: ${{ steps.publication.outputs.title_suffix }}
+        shell: bash
+        run: |
+          args=(
+            release create "$RELEASE_TAG"
+            --verify-tag
+            --notes-file build/release-notes.md
+            --title "Agent-Workflow $RELEASE_TAG$TITLE_SUFFIX"
+          )
+          if [[ "$PRERELEASE" == "true" ]]; then
+            args+=(--prerelease)
+          fi
+          gh "${args[@]}" \
+            dist/* \
+            build/release-evidence/* \
+            install.sh \
+            install.ps1

@@ -18,7 +18,7 @@ esac
 
 usage() {
   cat <<'EOF'
-Usage: curl -fsSL https://github.com/ngallodev-software/agent-workflow/raw/<tag>/install.sh \
+Usage: curl -fsSL https://github.com/ngallodev-software/agent-workflow/releases/download/<tag>/install.sh \
   | sh -s -- --version <tag>
 
 The release reference is required and must be an immutable semantic-version

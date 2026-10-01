@@ -31,6 +31,22 @@ def test_release_asset_audit_is_the_single_static_repository_gate() -> None:
     assert "export PYTEST_DISABLE_PLUGIN_AUTOLOAD=1" in release_check
 
 
+def test_release_workflow_distinguishes_preview_from_supported_publication() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(
+        encoding="utf-8"
+    )
+    assert 'allowed_preview_blockers = {"REL-003"}' in workflow
+    assert "args+=(--prerelease)" in workflow
+    assert "build/release-evidence/*" in workflow
+    assert "install.sh" in workflow
+    assert "install.ps1" in workflow
+    assert "technical_failure" in workflow
+    assert "workflow_dispatch" in workflow
+    assert "agent-workflow-comparative-eval.git@master" not in workflow
+    assert "0d7510735958a00d1e12d3eb5277b5bb1964f6e9" in workflow
+    assert "d254a0b13f2fd1de732dab2abd33da35db9ea365b50b3214e92308fea79d85c2" in workflow
+
+
 def test_all_published_json_schemas_are_valid_draft_2020_12() -> None:
     schemas = sorted((REPO_ROOT / "schemas").glob("*.json"))
     assert schemas
@@ -229,7 +245,7 @@ def test_release_evidence_contract_and_cli_outcomes_are_one_release_gate(tmp_pat
     assert summary["status"] == "blocked"
     checks = {item["id"]: item for item in summary["checks"]}
     assert checks["license-metadata"]["status"] == "pass"
-    assert checks["security-channel"]["status"] == "pass"
+    assert checks["security-channel"]["status"] == "blocked"
     assert checks["compatibility-matrix"]["status"] == "blocked"
     assert checks["dependency-lock"]["status"] == "pass"
     assert checks["structured-tests"]["status"] == "pass"

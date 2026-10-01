@@ -7,7 +7,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PARENT="$(dirname "$ROOT")"
 
 EXPECTED_CONTRACTS_VERSION="0.2.1"
-EXPECTED_AGENT_WORKFLOW_VERSION="0.11.12"
+EXPECTED_AGENT_WORKFLOW_VERSION="$(tr -d '\\r\\n' < "$ROOT/VERSION")"
 EXPECTED_COMPARATIVE_EVAL_VERSION="0.3.1"
 EXPECTED_SPECGEN_VERSION="0.2.12"
 EXPECTED_BENCHMARK_VERSION="0.6.4"
@@ -52,9 +52,10 @@ Default sibling checkout layout:
   ../specgen-aw
   ../agent-workflow-benchmark
 
-Required versions are defined once by the EXPECTED_* pins at the top of this
-script. Every source checkout, built wheel, installed distribution, and source
-provenance record is validated against those same pins.
+External stack versions are defined once by the EXPECTED_* pins at the top of
+this script. The Agent-Workflow core version is read from the repository's
+canonical VERSION file. Every source checkout, built wheel, installed
+distribution, and source provenance record is validated against those values.
 
 Normal build/install first fast-forwards every stack repository with
 scripts/git-pull-all.sh, then re-execs the freshly pulled installer. Pulls use

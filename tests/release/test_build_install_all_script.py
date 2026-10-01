@@ -45,7 +45,9 @@ def test_build_install_all_help_documents_stack_and_sources() -> None:
         "--allow-dirty-pull",
     ):
         assert option in text
-    assert "Required versions are defined once by the EXPECTED_* pins" in text
+    assert "External stack versions are defined once by the EXPECTED_* pins" in text
+    assert "core version is read from the repository's" in text
+    assert "canonical VERSION file" in text
 
 
 def test_build_install_all_is_existing_venv_wheel_only() -> None:
@@ -120,7 +122,6 @@ def test_build_install_all_requires_exact_stack_versions() -> None:
     text = SCRIPT.read_text(encoding="utf-8")
     expected = {
         "EXPECTED_CONTRACTS_VERSION": "0.2.1",
-        "EXPECTED_AGENT_WORKFLOW_VERSION": "0.11.12",
         "EXPECTED_COMPARATIVE_EVAL_VERSION": "0.3.1",
         "EXPECTED_SPECGEN_VERSION": "0.2.12",
         "EXPECTED_BENCHMARK_VERSION": "0.6.4",
@@ -132,14 +133,16 @@ def test_build_install_all_requires_exact_stack_versions() -> None:
         assert f'{name}="{version}"' in text
 
 
-def test_build_install_all_core_pin_matches_project_version() -> None:
+def test_build_install_all_core_version_uses_repository_authority() -> None:
     text = SCRIPT.read_text(encoding="utf-8")
-    match = re.search(r'^EXPECTED_AGENT_WORKFLOW_VERSION="([^"]+)"$', text, re.MULTILINE)
-    assert match is not None
+    assert (
+        'EXPECTED_AGENT_WORKFLOW_VERSION="$(tr -d \'\\\\r\\\\n\' < "$ROOT/VERSION")"'
+        in text
+    )
     project = tomllib.loads(
         (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
     )["project"]
-    assert match.group(1) == project["version"]
+    assert (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip() == project["version"]
 
 
 def test_build_install_all_verify_reuses_top_level_version_pins() -> None:
