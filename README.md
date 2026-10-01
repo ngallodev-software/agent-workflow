@@ -248,7 +248,8 @@ The core is deliberately host-independent. A future plugin may project Agent Run
 
 ## Version
 
-Version `0.12.0` is the initial GitHub public-preview release. It includes the
+Version `0.12.0` builds on the current headless core as the initial GitHub
+public-preview release. It includes the
 qualified OpenSpec 1.13.2 import boundary for new planning work while retaining
 the frozen SpecGen/shared-contract `native-job/v1` compatibility path. The
 release remains a GitHub **prerelease** while clean-host compatibility evidence
