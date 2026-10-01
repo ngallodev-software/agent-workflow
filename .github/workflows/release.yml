@@ -75,6 +75,17 @@ jobs:
                   f"tag {tag!r} does not exactly match package version {version!r}"
               )
           PY
+      - name: Require publishing tag at current master
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          git fetch origin master --depth=1
+          tagged="$(git rev-parse HEAD)"
+          master="$(git rev-parse origin/master)"
+          if [[ "$tagged" != "$master" ]]; then
+            echo "release tag must point at current master: $tagged != $master" >&2
+            exit 2
+          fi
       - name: Full technical release gate
         if: matrix.suite == 'full'
         shell: bash
