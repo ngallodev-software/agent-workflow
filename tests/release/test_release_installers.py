@@ -187,7 +187,8 @@ def test_release_workflow_is_tag_only_and_bundle_builder_is_reproducible(tmp_pat
     workflow = (REPO_ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
     assert "pull_request" not in workflow
     assert 'tags:' in workflow
-    assert "gh release create \"$RELEASE_TAG\"" in workflow
+    assert 'release create "$RELEASE_TAG"' in workflow
+    assert 'gh "${args[@]}"' in workflow
 
     wheel = tmp_path / f"agent_workflow-{CURRENT_VERSION}-py3-none-any.whl"
     sdist = tmp_path / f"agent_workflow-{CURRENT_VERSION}.tar.gz"
@@ -413,6 +414,9 @@ def test_mcp_installer_registers_and_cleans_only_owned_entries(tmp_path: Path) -
     assert "agent-workflow" not in json.loads(claude_mcp.read_text(encoding="utf-8"))["mcpServers"]
 
 
-def test_ci_release_build_strips_crlf_from_version() -> None:
+def test_ci_release_build_strips_crlf_and_writes_root_relative_checksums() -> None:
     script = (REPO_ROOT / "scripts" / "ci-release-build.sh").read_text(encoding="utf-8")
     assert "tr -d '\\r\\n' < VERSION" in script
+    assert "cd dist" in script
+    assert "release checksum manifest must use release-root basenames" in script
+    assert "sha256sum > dist/SHA256SUMS" not in script
