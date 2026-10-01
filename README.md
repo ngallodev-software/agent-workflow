@@ -248,7 +248,13 @@ The core is deliberately host-independent. A future plugin may project Agent Run
 
 ## Version
 
-Version `0.12.0` builds on 0.11.8 with post-BM5 telemetry hardening: worker-issued `agent finish` commands, entered finish transactions, terminal finish outcomes, and incomplete invocations are recorded as distinct evidence. The steering-first worker protocol and host-owned lifecycle, review, acceptance, scope, provenance, and sealing authority remain unchanged.
+Version `0.12.0` is the initial GitHub public-preview release. It includes the
+qualified OpenSpec 1.13.2 import boundary for new planning work while retaining
+the frozen SpecGen/shared-contract `native-job/v1` compatibility path. The
+release remains a GitHub **prerelease** while clean-host compatibility evidence
+is still pending; the attached release-evidence artifact records that status.
+Deterministic lifecycle, review, acceptance, scope, provenance, and sealing
+authority remain Agent-Workflow-owned.
 
 ## Repository-only CI assets
 
