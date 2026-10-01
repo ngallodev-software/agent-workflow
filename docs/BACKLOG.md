@@ -260,4 +260,6 @@ Treat additive semantic evidence separately from comparative replacement: a usef
 
 **Done when:** each promoted seam has a versioned question set, reachable production boundary, deterministic fallback/authority path, shadow evaluation evidence, explicit policy, and regression coverage preventing silent bypass.
 
+**Checkpoint mechanism work (2026-10-01):** [DEC-010](DECISIONS/DEC-010-SEMANTIC-DECISION-CHECKPOINT.md) records the provider-neutral semantic checkpoint direction after the Agentic-Jev manager self-gating finding. The first mechanism seam is `implementation.proposal_selection/v1`: DecisionDraft -> neutral evidence projection -> semantic evidence -> mandatory reconciliation -> DecisionResolution. Phase 1 is intentionally a pure checkpoint prototype; production workflow-node gating, replay on the six known manager cases, and any disjoint preregistered effectiveness cohort remain separate later phases. LangGraph and Temporal are deferred because they would duplicate current Agent-Workflow durability/state authority for this seam.
+
 TypeSafe packaging simplification completed in the integrated 0.11.x source: the Agent-Workflow-specific external plugin is retired in favor of a lazy optional built-in provider using official SDK primitives. Historical comparative schema namespaces remain readable only for compatibility.

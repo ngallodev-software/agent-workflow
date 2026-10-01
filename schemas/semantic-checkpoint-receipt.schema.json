@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/semantic-checkpoint-receipt/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "decision_id",
+    "draft_id",
+    "draft_sha256",
+    "projected_state_sha256",
+    "request_sha256",
+    "question_set_version",
+    "projector_version",
+    "initial_agent_choice",
+    "semantic",
+    "outcome",
+    "resolution",
+    "applied_result",
+    "advance_allowed",
+    "provider_failure_policy"
+  ],
+  "properties": {
+    "schema": {"const": "agent-workflow/semantic-checkpoint-receipt/v1"},
+    "decision_id": {"const": "implementation.proposal_selection/v1"},
+    "draft_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"},
+    "draft_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "projected_state_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "request_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "question_set_version": {"const": "implementation-proposal-selection/v1"},
+    "projector_version": {"const": "implementation-proposal-selection-state/v1"},
+    "initial_agent_choice": {"type": "string", "minLength": 1, "maxLength": 128},
+    "semantic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "candidate",
+        "confidence",
+        "probability",
+        "distribution",
+        "model",
+        "request_id",
+        "usage",
+        "source_refs",
+        "error_class"
+      ],
+      "properties": {
+        "status": {"type": "string", "minLength": 1},
+        "candidate": {"type": ["string", "null"]},
+        "confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "probability": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "distribution": {
+          "type": "object",
+          "additionalProperties": {"type": "number", "minimum": 0, "maximum": 1}
+        },
+        "model": {"type": ["string", "null"]},
+        "request_id": {"type": ["string", "null"]},
+        "usage": {"type": "object"},
+        "source_refs": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "error_class": {"type": ["string", "null"]}
+      }
+    },
+    "outcome": {"enum": ["agreement", "disagreement", "uncertainty", "provider_failure"]},
+    "resolution": {"type": ["object", "null"]},
+    "applied_result": {"type": ["string", "null"]},
+    "advance_allowed": {"type": "boolean"},
+    "provider_failure_policy": {"enum": ["block", "fallback_initial"]}
+  }
+}

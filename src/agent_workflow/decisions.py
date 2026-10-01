@@ -8,6 +8,7 @@ from typing import Any, Mapping
 
 from . import __version__
 from .config import DecisionPolicyRule, Settings
+from .contracts import validate_instance
 from .errors import WorkflowError
 from .plugin_api import DecisionContext, DecisionEvidence, DecisionRequest
 
@@ -203,7 +204,7 @@ def execute_decision_set(*, settings: Settings, registry: object | None, decisio
 
 
 def _receipt(settings: Settings, decision_id: str, control: object, evidence_result: object | None, policy_candidate: object | None, disposition: str, applied: object, fallback: str | None, *, evidence: DecisionEvidence | None = None, provider: str | None = None, provider_elapsed_seconds: float | None = None) -> dict[str, Any]:
-    return {
+    receipt = {
         "schema": DECISION_RECEIPT_SCHEMA, "decision_id": decision_id, "decision_version": 1,
         "classification": DECISIONS[decision_id].classification, "consequence": DECISIONS[decision_id].consequence,
         "mode": settings.decision_mode, "profile": settings.decision_profile, "control_result": control,
@@ -219,3 +220,5 @@ def _receipt(settings: Settings, decision_id: str, control: object, evidence_res
             "source_refs": list(evidence.source_refs), "error_class": evidence.error_class,
         },
     }
+    validate_instance(receipt, DECISION_RECEIPT_SCHEMA, artifact=f"decision receipt:{decision_id}")
+    return receipt
