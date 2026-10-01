@@ -45,7 +45,9 @@ def test_build_install_all_help_documents_stack_and_sources() -> None:
         "--allow-dirty-pull",
     ):
         assert option in text
-    assert "Required versions are defined once by the EXPECTED_* pins" in text
+    assert "External stack versions are defined once by the EXPECTED_* pins" in text
+    assert "core version is read from the repository's" in text
+    assert "canonical VERSION file" in text
 
 
 def test_build_install_all_is_existing_venv_wheel_only() -> None:
