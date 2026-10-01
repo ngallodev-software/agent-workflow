@@ -31,6 +31,19 @@ def test_release_asset_audit_is_the_single_static_repository_gate() -> None:
     assert "export PYTEST_DISABLE_PLUGIN_AUTOLOAD=1" in release_check
 
 
+def test_release_workflow_distinguishes_preview_from_supported_publication() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(
+        encoding="utf-8"
+    )
+    assert 'allowed_preview_blockers = {"REL-003"}' in workflow
+    assert '"--prerelease"' in workflow
+    assert "build/release-evidence/*" in workflow
+    assert "install.sh" in workflow
+    assert "install.ps1" in workflow
+    assert "technical_failure" in workflow
+    assert "workflow_dispatch" in workflow
+
+
 def test_all_published_json_schemas_are_valid_draft_2020_12() -> None:
     schemas = sorted((REPO_ROOT / "schemas").glob("*.json"))
     assert schemas
