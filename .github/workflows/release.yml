@@ -75,15 +75,14 @@ jobs:
                   f"tag {tag!r} does not exactly match package version {version!r}"
               )
           PY
-      - name: Require publishing tag at current master
+      - name: Require publishing tag from master history
         if: github.event_name == 'push'
         shell: bash
         run: |
-          git fetch origin master --depth=1
+          git fetch origin master --depth=64
           tagged="$(git rev-parse HEAD)"
-          master="$(git rev-parse origin/master)"
-          if [[ "$tagged" != "$master" ]]; then
-            echo "release tag must point at current master: $tagged != $master" >&2
+          if ! git merge-base --is-ancestor "$tagged" origin/master; then
+            echo "release tag must point to a commit already merged into master: $tagged" >&2
             exit 2
           fi
       - name: Full technical release gate
