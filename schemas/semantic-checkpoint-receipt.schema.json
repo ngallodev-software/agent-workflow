@@ -17,6 +17,7 @@
     "provider",
     "provider_elapsed_seconds",
     "policy",
+    "projected_source_refs",
     "semantic",
     "outcome",
     "resolution",
@@ -211,6 +212,16 @@
           ]
         }
       }
+    },
+    "projected_source_refs": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 512
+      }
     }
   },
   "$defs": {
@@ -267,6 +278,7 @@
             "retain_initial_on_agreement",
             "accept_semantic_candidate",
             "reject_semantic_candidate",
+            "resolve_uncertainty",
             "defer_for_evidence",
             "escalate_review",
             "provider_fallback"

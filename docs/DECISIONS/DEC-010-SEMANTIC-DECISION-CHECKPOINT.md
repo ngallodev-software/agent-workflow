@@ -119,7 +119,7 @@ Permitted successful dispositions are:
 - reject the semantic candidate only with deterministic authority, additional evidence, independent review, or human authority plus evidence references;
 - use the initial choice on provider failure only when an application-owned provider-failure policy explicitly permits that fallback.
 
-`defer_for_evidence` and `escalate_review` remain non-advancing dispositions.
+`resolve_uncertainty` is the only advancing uncertainty disposition and requires additional evidence, independent review, or human authority plus evidence references. `defer_for_evidence` and `escalate_review` remain non-advancing and cannot claim a resolved choice.
 
 An unsupported provider value, wrong primitive, low-confidence/close distribution, or provider failure cannot be converted into an advancing choice merely because one label has the highest decimal probability.
 
@@ -136,7 +136,7 @@ An unsupported provider value, wrong primitive, low-confidence/close distributio
 - applied result;
 - `advance_allowed`;
 - the exact confidence/margin/provider-failure policy applied;
-- source refs, model/request identity, usage, and error class where supplied.
+- host-projected source refs separately from provider-reported refs, plus model/request identity, usage, and error class where supplied.
 
 The receipt contains observable decision evidence only. It does not claim access to hidden chain-of-thought.
 

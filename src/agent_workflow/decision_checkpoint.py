@@ -308,6 +308,8 @@ def _validate_resolution(
     refs = resolution.get("evidence_refs", [])
     if resolved is not None and resolved not in draft["candidate_ids"]:
         raise WorkflowError("resolved_choice must name a candidate_id")
+    if disposition in {"defer_for_evidence", "escalate_review"} and resolved is not None:
+        raise WorkflowError("defer/escalate dispositions cannot carry a resolved_choice")
 
     if outcome == "agreement":
         if not (
@@ -339,9 +341,11 @@ def _validate_resolution(
     elif outcome == "uncertainty":
         if disposition in {"defer_for_evidence", "escalate_review"}:
             pass
-        elif basis in {"additional_evidence", "independent_review", "human_authority"}:
+        elif disposition == "resolve_uncertainty" and basis in {
+            "additional_evidence", "independent_review", "human_authority"
+        }:
             if resolved is None or not refs:
-                raise WorkflowError("uncertainty override requires resolved_choice and evidence_refs")
+                raise WorkflowError("uncertainty resolution requires resolved_choice and evidence_refs")
         else:
             raise WorkflowError("uncertainty cannot be collapsed without new authority/evidence")
     else:
@@ -486,6 +490,7 @@ def run_checkpoint(
             "minimum_margin": float(effective_policy.minimum_margin),
             "provider_failure": effective_policy.provider_failure,
         },
+        "projected_source_refs": list(request["source_refs"]),
         "semantic": {
             "status": evidence.status,
             "candidate": semantic_candidate,

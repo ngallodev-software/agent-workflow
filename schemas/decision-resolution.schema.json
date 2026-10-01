@@ -53,6 +53,7 @@
         "retain_initial_on_agreement",
         "accept_semantic_candidate",
         "reject_semantic_candidate",
+        "resolve_uncertainty",
         "defer_for_evidence",
         "escalate_review",
         "provider_fallback"

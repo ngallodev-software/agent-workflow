@@ -101,6 +101,9 @@ def test_agreement_auto_resolves_and_allows_advance() -> None:
         "provider_failure": "block",
     }
     assert receipt["candidate_ids"] == ["proposal_0", "proposal_1"]
+    assert set(receipt["projected_source_refs"]) == {
+        "issue.md", "proposal-0.diff", "proposal-1.diff", "tests.txt"
+    }
 
 
 def test_disagreement_blocks_without_reconciliation() -> None:
@@ -199,6 +202,58 @@ def test_close_distribution_is_uncertainty_not_a_plurality_decision() -> None:
     )
     assert receipt["outcome"] == "uncertainty"
     assert receipt["advance_allowed"] is False
+
+
+def test_uncertainty_can_only_advance_after_explicit_new_evidence_resolution() -> None:
+    receipt = run_checkpoint(
+        draft=_draft("proposal_1"),
+        context=_context(),
+        provider_name="test-provider",
+        provider=lambda request: _choice(
+            "proposal_0",
+            confidence=0.91,
+            probabilities={"proposal_0": 0.52, "proposal_1": 0.48},
+        ),
+        resolution={
+            "schema": "agent-workflow/decision-resolution/v1",
+            "decision_id": "implementation.proposal_selection/v1",
+            "draft_id": "draft-1",
+            "initial_agent_choice": "proposal_1",
+            "semantic_candidate": "proposal_0",
+            "resolved_choice": "proposal_1",
+            "disposition": "resolve_uncertainty",
+            "basis": "additional_evidence",
+            "actor": "reviewer:independent",
+            "reason": "A newly captured integration test distinguishes the candidates.",
+            "evidence_refs": ["integration-test.txt"],
+        },
+    )
+    assert receipt["outcome"] == "uncertainty"
+    assert receipt["advance_allowed"] is True
+    assert receipt["applied_result"] == "proposal_1"
+
+
+def test_defer_or_escalate_cannot_claim_a_resolved_choice() -> None:
+    with pytest.raises(WorkflowError, match="cannot carry a resolved_choice"):
+        run_checkpoint(
+            draft=_draft("proposal_1"),
+            context=_context(),
+            provider_name="test-provider",
+            provider=lambda request: _choice("proposal_0"),
+            resolution={
+                "schema": "agent-workflow/decision-resolution/v1",
+                "decision_id": "implementation.proposal_selection/v1",
+                "draft_id": "draft-1",
+                "initial_agent_choice": "proposal_1",
+                "semantic_candidate": "proposal_0",
+                "resolved_choice": "proposal_1",
+                "disposition": "escalate_review",
+                "basis": "independent_review",
+                "actor": "agent:luna",
+                "reason": "Independent review is required before choosing.",
+                "evidence_refs": [],
+            },
+        )
 
 
 def test_provider_failure_blocks_by_default() -> None:
