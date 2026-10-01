@@ -12,7 +12,7 @@ projected application state
 
 ## Authority
 
-Agent-Workflow owns stable decision IDs, deterministic control values, thresholds, fallback, policy composition, lifecycle/review/acceptance authority, and `agent-workflow/decision-execution-receipt/v1`. TypeSafe cannot bypass executor/model allowlists, lifecycle state, evidence checks, review, or acceptance.
+Agent-Workflow owns stable decision IDs, deterministic control values, thresholds, fallback, policy composition, lifecycle/review/acceptance authority, and `agent-workflow/decision-execution-receipt/v2`. TypeSafe cannot bypass executor/model allowlists, lifecycle state, evidence checks, review, or acceptance.
 
 ## Provider
 

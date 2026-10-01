@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/decision-resolution/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "decision_id",
+    "draft_id",
+    "initial_agent_choice",
+    "semantic_candidate",
+    "resolved_choice",
+    "disposition",
+    "basis",
+    "actor",
+    "reason",
+    "evidence_refs"
+  ],
+  "properties": {
+    "schema": {
+      "const": "agent-workflow/decision-resolution/v1"
+    },
+    "decision_id": {
+      "const": "implementation.proposal_selection/v1"
+    },
+    "draft_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+    },
+    "initial_agent_choice": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "semantic_candidate": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "resolved_choice": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "disposition": {
+      "enum": [
+        "retain_initial_on_agreement",
+        "accept_semantic_candidate",
+        "reject_semantic_candidate",
+        "resolve_uncertainty",
+        "defer_for_evidence",
+        "escalate_review",
+        "provider_fallback"
+      ]
+    },
+    "basis": {
+      "enum": [
+        "semantic_agreement",
+        "semantic_evidence",
+        "deterministic_authority",
+        "additional_evidence",
+        "independent_review",
+        "human_authority",
+        "provider_failure_policy"
+      ]
+    },
+    "evidence_refs": {
+      "type": "array",
+      "maxItems": 256,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 512
+      }
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    }
+  }
+}

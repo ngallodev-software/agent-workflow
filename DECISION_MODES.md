@@ -32,7 +32,7 @@ minimum_confidence = 0.80
 
 `--decision-mode` and `--decision-profile` override policy for one invocation. `--no-plugins` affects external plugins only and does not alter built-in semantic policy.
 
-Semantic transport failure, no-match, uncertainty, and policy rejection remain distinct in `agent-workflow/decision-execution-receipt/v1`. TypeSafe credentials are read only from `TYPESAFE_API_KEY`.
+Semantic transport failure, no-match, uncertainty, and policy rejection remain distinct in `agent-workflow/decision-execution-receipt/v2`. TypeSafe credentials are read only from `TYPESAFE_API_KEY`.
 
 ## Comparative evidence
 
