@@ -1,6 +1,6 @@
 # Agent-Workflow
 
-![Version](https://img.shields.io/badge/version-0.12.0-blue)
+![Version](https://img.shields.io/badge/version-0.12.1-blue)
 ![Python](https://img.shields.io/badge/python-%3E%3D3.11-3776AB)
 ![License](https://img.shields.io/badge/license-Apache--2.0-green)
 
@@ -248,7 +248,7 @@ The core is deliberately host-independent. A future plugin may project Agent Run
 
 ## Version
 
-Version `0.12.0` builds on the current headless core as the initial GitHub
+Version `0.12.1` builds on the current headless core as the initial GitHub
 public-preview release. It includes the
 qualified OpenSpec 1.13.2 import boundary for new planning work while retaining
 the frozen SpecGen/shared-contract `native-job/v1` compatibility path. The
