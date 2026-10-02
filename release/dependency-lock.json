@@ -118,12 +118,12 @@
     },
     {
       "name": "agent-workflow-comparative-eval",
-      "version": "0.3.1",
+      "version": "0.3.4",
       "groups": [
         "comparative-eval"
       ],
       "source_requirements": [
-        "agent-workflow-comparative-eval==0.3.1"
+        "agent-workflow-comparative-eval>=0.3.1,<0.3.5"
       ]
     },
     {

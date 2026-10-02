@@ -13,7 +13,8 @@ from .errors import WorkflowError
 
 DISTRIBUTION="agent-workflow-comparative-eval"
 IMPORT_NAME="agent_workflow_comparative_eval"
-REQUIRED_VERSION="0.3.1"
+REQUIRED_VERSION="0.3.4"
+SUPPORTED_VERSIONS=frozenset({"0.3.1","0.3.2","0.3.3","0.3.4"})
 
 def _version(module: Any)->str|None:
     value=getattr(module,"__version__",None)
@@ -28,15 +29,16 @@ def shared_library_status()->dict[str,object]:
         if exc.name!=IMPORT_NAME: raise
         return {"installed":False,"compatible":False,"version":None,"distribution":DISTRIBUTION}
     version=_version(module)
-    return {"installed":True,"compatible":version==REQUIRED_VERSION,"version":version,"distribution":DISTRIBUTION}
+    return {"installed":True,"compatible":version in SUPPORTED_VERSIONS,"version":version,"distribution":DISTRIBUTION}
 
 def require_shared_library()->Any:
     try: module=importlib.import_module(IMPORT_NAME)
     except ImportError as exc:
         if exc.name==IMPORT_NAME:
-            raise WorkflowError("comparative decision mode requires agent-workflow-comparative-eval==0.3.1; install agent-workflow[comparative-eval]") from exc
+            raise WorkflowError("comparative decision mode requires agent-workflow-comparative-eval>=0.3.1,<0.3.5; install agent-workflow[comparative-eval]") from exc
         raise
     version=_version(module)
-    if version!=REQUIRED_VERSION:
-        raise WorkflowError(f"unsupported {DISTRIBUTION} version {version!r}; expected {REQUIRED_VERSION}")
+    if version not in SUPPORTED_VERSIONS:
+        supported=", ".join(sorted(SUPPORTED_VERSIONS))
+        raise WorkflowError(f"unsupported {DISTRIBUTION} version {version!r}; supported versions: {supported}")
     return module
