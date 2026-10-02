@@ -38,6 +38,7 @@ def require_shared_library()->Any:
             raise WorkflowError("comparative decision mode requires agent-workflow-comparative-eval>=0.3.1,<0.3.3; install agent-workflow[comparative-eval]") from exc
         raise
     version=_version(module)
-    if version!=REQUIRED_VERSION:
-        raise WorkflowError(f"unsupported {DISTRIBUTION} version {version!r}; expected {REQUIRED_VERSION}")
+    if version not in SUPPORTED_VERSIONS:
+        supported=", ".join(sorted(SUPPORTED_VERSIONS))
+        raise WorkflowError(f"unsupported {DISTRIBUTION} version {version!r}; supported versions: {supported}")
     return module
