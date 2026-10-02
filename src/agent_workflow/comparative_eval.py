@@ -13,7 +13,8 @@ from .errors import WorkflowError
 
 DISTRIBUTION="agent-workflow-comparative-eval"
 IMPORT_NAME="agent_workflow_comparative_eval"
-REQUIRED_VERSION="0.3.2"\nSUPPORTED_VERSIONS=frozenset({"0.3.1","0.3.2"})
+REQUIRED_VERSION="0.3.2"
+SUPPORTED_VERSIONS=frozenset({"0.3.1","0.3.2"})
 
 def _version(module: Any)->str|None:
     value=getattr(module,"__version__",None)
