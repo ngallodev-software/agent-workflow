@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.12.1 — comparative-eval compatibility patch
+
+- Make the Agent-Workflow package identity unambiguous after the comparative-eval compatibility update: the runtime boundary now requires comparative-eval 0.3.4 while continuing to accept the additive 0.3.1–0.3.4 compatibility range.
+- Keep the comparative-eval adoption test in the release gate so future compatibility changes cannot pass CI without exercising the installed-library boundary.
+- Preserve all existing Agent-Workflow lifecycle, authority, decision-provider, and evaluation semantics; this patch changes release identity and compatibility gating, not workflow behavior.
+
+
 ## 0.12.0 — initial public preview
 
 This is the first tagged GitHub release of Agent-Workflow. It is intentionally
