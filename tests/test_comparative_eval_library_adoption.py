@@ -99,15 +99,27 @@ def _stub_shared(version: str = "0.3.1") -> ModuleType:
 
 def test_base_mode_reports_optional_shared_library_absent(monkeypatch) -> None:
     monkeypatch.delitem(sys.modules, "agent_workflow_comparative_eval", raising=False)
+    real_import = comparative_eval.importlib.import_module
+
+    def import_without_shared(name: str):
+        if name == comparative_eval.IMPORT_NAME:
+            raise ModuleNotFoundError(
+                f"No module named {name!r}",
+                name=comparative_eval.IMPORT_NAME,
+            )
+        return real_import(name)
+
+    monkeypatch.setattr(comparative_eval.importlib, "import_module", import_without_shared)
     status = comparative_eval.shared_library_status()
     assert status["installed"] is False
     assert status["compatible"] is False
 
 
-def test_shared_library_accepts_additive_0_3_2(monkeypatch) -> None:
-    monkeypatch.setitem(sys.modules, "agent_workflow_comparative_eval", _stub_shared("0.3.2"))
+@pytest.mark.parametrize("version", ["0.3.2", "0.3.3"])
+def test_shared_library_accepts_additive_versions(monkeypatch, version: str) -> None:
+    monkeypatch.setitem(sys.modules, "agent_workflow_comparative_eval", _stub_shared(version))
     assert comparative_eval.shared_library_status()["compatible"] is True
-    assert comparative_eval.require_shared_library().__version__ == "0.3.2"
+    assert comparative_eval.require_shared_library().__version__ == version
 
 
 def test_shared_library_delegation_and_runtime_persistence(monkeypatch, tmp_path: Path) -> None:
