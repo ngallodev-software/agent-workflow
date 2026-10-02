@@ -104,6 +104,12 @@ def test_base_mode_reports_optional_shared_library_absent(monkeypatch) -> None:
     assert status["compatible"] is False
 
 
+def test_shared_library_accepts_additive_0_3_2(monkeypatch) -> None:
+    monkeypatch.setitem(sys.modules, "agent_workflow_comparative_eval", _stub_shared("0.3.2"))
+    assert comparative_eval.shared_library_status()["compatible"] is True
+    assert comparative_eval.require_shared_library().__version__ == "0.3.2"
+
+
 def test_shared_library_delegation_and_runtime_persistence(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setitem(sys.modules, "agent_workflow_comparative_eval", _stub_shared())
     assert comparative_eval.shared_library_status()["compatible"] is True
