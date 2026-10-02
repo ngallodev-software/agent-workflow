@@ -36,6 +36,29 @@ External hosts are execution/presentation adapters only. They do not replace Age
 5. Restart/retry creates lineage; never rewrite prior sealed evidence.
 6. Mutable status, indexes, and host bindings are projections, not lifecycle authority.
 
+## Worktree indexing before launch
+
+For each new implementation worktree, follow
+[references/worktree-index-preflight.md](references/worktree-index-preflight.md)
+before starting its worker. Create the worktree, run/wait for a full exact-worktree
+`cbm` index with persistence disabled, verify ready graph/root and Git porcelain,
+record durable index evidence, then include that receipt in the prompt before
+preparing the run. Only start/spawn the worker after this succeeds. Split a
+create-and-start facade into explicit stages when it cannot provide this boundary.
+This applies equally to headless and external interactive workers; the core
+remains independent of the optional indexing tool.
+
+## Initial worker prompt
+
+For every authorized delegated/forked worker, read
+`/home/nate/.codex/skills/jev-decision-support/references/worker-prompt.md`
+and append its contents once to the prompt source before `delegate` or
+`agent-run prepare`. This preserves the exact launch instructions in the durable
+prompt digest. Do not rewrite prepared/sealed prompts to add the footer; steer
+existing workers through the durable message channel and require acknowledgement.
+The footer makes Jev advisory for qualifying semantic decisions, not a launch,
+execution, verification or acceptance gate.
+
 ## Default flow
 
 Prefer the deterministic facade; it composes existing worktree/Agent Run authorities rather than creating another lifecycle.
@@ -54,7 +77,7 @@ For an external worker:
 agent-workflow delegate RUN /path/to/prompt.md --workdir WORKTREE --worker-mode external --interactive --role implementation
 ```
 
-External mode prepares only. Launch the returned worker contract with the external host. Normal agents choose a logical role, never provider/model/runtime routing. Use lower-level `worktree create`, `agent-run prepare`, and `agent-run start` only for recovery, diagnostics, or explicit operator control.
+External mode prepares only. Launch the returned worker contract with the external host. For a new Herdr worker pane, set its presentation label to `<agent-kind> - <agent-name>` (for example `codex - ralph`) using the returned pane ID; keep it aligned on worker rename/replacement without changing durable identity. Normal agents choose a logical role, never provider/model/runtime routing. Use lower-level `worktree create`, `agent-run prepare`, and `agent-run start` only for recovery, diagnostics, or explicit operator control.
 
 Use the role-scoped launch card/catalog first; retrieve more detail only when needed. Mid-run context and instructions use the single durable steering channel:
 

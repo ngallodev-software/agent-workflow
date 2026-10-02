@@ -223,6 +223,90 @@ Only after `ROLE-001`, `BIND-001`, and `API-001` stabilize, write and approve a 
 
 The plugin may own workspace/presentation, launching a prepared external worker, best-effort live delivery after persistence, focus/navigation, review presentation, and binding recovery. It must not become a core dependency, durable-message authority, review/acceptance authority, worktree-provenance authority, or source of Agent Run identity.
 
+**2026-10-02 live Herdr launch friction — implementation still open:**
+Three prepared interactive Codex GPT-6-Luna runs in Codebase Memory CLI were
+successfully launched and observed working in Herdr panes `wC:p5`, `wC:p6`,
+`wC:p7`. Each uses an independent worktree at base `51aa7a86`, an external
+binding at generation 1, and correlated worker acknowledgement of initial
+steering. This proves launch/delivery/acknowledgement for this host, not worker
+completion, evaluation, review, acceptance or terminal retirement.
+
+Observed friction to address in the separate host adapter/specification:
+
+- **Caller context propagation:** the agent's shell tool had no `HERDR_ENV`,
+  `HERDR_WORKSPACE_ID`, `HERDR_TAB_ID` or `HERDR_PANE_ID`, despite the user
+  confirming Herdr and the live server showing this Codex session in `wC:p1`.
+  An initial skill preflight therefore blocked launch. After explicit user
+  correction, setting the flag and verifying current pane/process/cwd resolved
+  it. Determine where the runtime drops context; a flag alone is not proof of
+  ownership. Recover via verified host identity or report a precise mismatch,
+  without silently selecting another client's focused pane.
+- **Manual launch choreography:** the operator had to read native command argv,
+  create shell panes, start/detect each named interactive agent, bind each run,
+  record `start-external`, persist steering, submit prompts, report delivery,
+  and inspect correlated acknowledgements in separate calls/custom temporary
+  scripts. Provide one restart-safe host adapter operation consuming an already
+  prepared contract and returning run/name/pane/generation/delivery references.
+  Persist each stage so retry after any failure does not duplicate panes,
+  workers or submitted prompts; preserve user focus and requested geometry.
+- **Per-run permission intent:** installed Codex interactive defaults requested
+  approvals (`on-request`) while the user explicitly authorized full permissions
+  and `never`. A task-scoped copy of runtime configuration was needed before
+  prepare so immutable argv recorded `danger-full-access` / `never`; global
+  config was preserved. Provide explicit authorized per-run overrides with
+  contract provenance, rather than post-prepare mutation or global edits.
+- **Credential/configuration coupling:** prepare initially failed with
+  `decision mode 'comparative' requires TYPESAFE_API_KEY in the runtime
+  environment`, even with explicit executor/model and external interactive
+  mode. Sourcing the authorized environment fixed it. Investigate whether this
+  launch genuinely requires a semantic decision; do not assume a core defect
+  without tracing policy. Surface the dependency before worktree/launch work,
+  and support deterministic launch when policy permits. Secret availability
+  in the controller must not imply availability in a new interactive pane.
+- **State/provenance clarity:** `agent-run provenance` exposed `started_at`
+  while external status was still `prepared`, `worker_alive` was null, and no
+  Herdr worker had launched. `start-external` later supplied actual start
+  evidence. Clarify preparation/process start/host activity in public views;
+  no timestamps or host `working` badge may imply completion or acceptance.
+- **Bidirectional synchronization:** initial and Jev follow-up steering needed
+  manual persist -> Herdr prompt -> delivery report -> worker ack handling.
+  Consume pending delivery through the active generation and correlate acks;
+  recover after host restart, moved/closed panes, changed worker sessions and
+  stale bindings. Collect bounded host observations/evidence references without
+  fabricating process exits or making terminal-manager state authoritative.
+
+The per-run JSON contracts correctly carried GPT-6-Luna and full permission
+arguments; generation-bound binding/start and worker acknowledgements worked.
+Reuse those public contracts rather than adding a competing lifecycle or
+making Herdr a core dependency. Controller-created temporary scripts are launch
+evidence/observed friction, not accepted product implementation.
+
+**Closeout observation (2026-10-02):** both daemon/cache workers reported
+successful `agent finish --result partial`, and valid current-SHA
+`handoff/completion.json` existed, while the controller public summary remained
+running with a blocked placeholder completion at the base SHA. After verified
+Herdr pane closure, generation-bound `external-exit` and `finalize` correctly
+sealed valid partial completion at `028a4bfb` / `fa5a180b` and closed assignments.
+Clarify the interactive `finish` versus host-exit/finalization boundary so workers
+cannot imply durable finalization from handoff publication alone. Preserve the
+successful recovery path; partial completion must remain unevaluated/unaccepted.
+
+**Acceptance for this follow-up:** the adapter/spec handles the three-worker
+right-column journey with preserved focus and isolated worktrees; injected
+failure/retry at every launch/delivery stage yields one binding/worker/prompt;
+missing caller context and stale/moved pane identity fail safely or recover from
+verified identity; authorized permissions and credential requirements are
+visible before launch; delivered/unacknowledged/applied states remain distinct;
+external completion/exit/review/acceptance retain their existing authority.
+Require real-host evidence in addition to deterministic adapter tests. These
+launches do not close `HERDR-001`, `EXT-HOST-002`, or `TERM-001`.
+
+**Evidence:** Agent Runs `CBM-DAEMON-OWNERSHIP-20261002`,
+`CBM-RESCRIPT-HANG-20261002`, `CBM-CACHE-STORES-20261002`; native launch contracts,
+external binding/event journals and message-state in their run directories.
+Host start/prompt/ack captures and assignment manifest:
+`/home/nate/.local/state/agent-workflow/handoffs/CBM-THREE-VERTICALS-20261002/`.
+
 ## P2 — Upstream specification integration
 
 
