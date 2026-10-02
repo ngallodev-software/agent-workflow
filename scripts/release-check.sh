@@ -26,7 +26,7 @@ export PIP_IGNORE_INSTALLED=1
 
 EVIDENCE_DIR="${AGENT_WORKFLOW_RELEASE_EVIDENCE_DIR:-$ROOT/build/release-evidence}"
 JUNIT_PATH="$EVIDENCE_DIR/pytest-junit.xml"
-TEST_PATHS=(tests/acceptance tests/invariants tests/release)
+TEST_PATHS=(tests/acceptance tests/invariants tests/release tests/test_comparative_eval_library_adoption.py)
 mkdir -p "$EVIDENCE_DIR"
 rm -f "$JUNIT_PATH"
 
