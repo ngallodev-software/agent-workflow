@@ -13,8 +13,8 @@ from .errors import WorkflowError
 
 DISTRIBUTION="agent-workflow-comparative-eval"
 IMPORT_NAME="agent_workflow_comparative_eval"
-REQUIRED_VERSION="0.3.2"
-SUPPORTED_VERSIONS=frozenset({"0.3.1","0.3.2"})
+REQUIRED_VERSION="0.3.3"
+SUPPORTED_VERSIONS=frozenset({"0.3.1","0.3.2","0.3.3"})
 
 def _version(module: Any)->str|None:
     value=getattr(module,"__version__",None)
@@ -35,7 +35,7 @@ def require_shared_library()->Any:
     try: module=importlib.import_module(IMPORT_NAME)
     except ImportError as exc:
         if exc.name==IMPORT_NAME:
-            raise WorkflowError("comparative decision mode requires agent-workflow-comparative-eval>=0.3.1,<0.3.3; install agent-workflow[comparative-eval]") from exc
+            raise WorkflowError("comparative decision mode requires agent-workflow-comparative-eval>=0.3.1,<0.3.4; install agent-workflow[comparative-eval]") from exc
         raise
     version=_version(module)
     if version not in SUPPORTED_VERSIONS:
