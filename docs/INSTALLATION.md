@@ -128,11 +128,11 @@ bootstrap asset. PyPI publication is intentionally deferred while the legacy
 shared-contract dependency remains a digest-pinned direct URL.
 
 
-For a published release, pin the release explicitly. For version `0.12.0`:
+For a published release, pin the release explicitly. For version `0.12.1`:
 
 ```bash
-curl -fsSL https://github.com/ngallodev-software/agent-workflow/releases/download/v0.12.0/install.sh | \
-  sh -s -- --version v0.12.0
+curl -fsSL https://github.com/ngallodev-software/agent-workflow/releases/download/v0.12.1/install.sh | \
+  sh -s -- --version v0.12.1
 ```
 
 The tag pin is intentional: release bootstrap has no mutable-branch fallback. The
@@ -235,7 +235,7 @@ The installer builds local wheels and installs this exact stack:
 
 ```text
 specgen-agent-workflow-contracts  0.2.1
-agent-workflow                    0.12.0
+agent-workflow                    0.12.1
 agent-workflow-comparative-eval   0.1.0
 specgen                           0.2.8
 agent-workflow-benchmark          0.3.9
@@ -249,7 +249,7 @@ and sets `decision_policy.mode = "comparative"`.
 listed as a plugin.
 
 The verification gate requires `TYPESAFE_API_KEY`, a compatible comparative
-runtime, both plugins loaded, SpecGen targeting Agent-Workflow 0.12.0,
+runtime, both plugins loaded, SpecGen targeting Agent-Workflow 0.12.1,
 `pip check` success, and direct `codex` execution rather than the obsolete
 `agent-workflow-codex` wrapper.
 
