@@ -21,9 +21,9 @@ from agent_workflow.comparative_eval_runtime import (
 )
 
 
-def _stub_shared() -> ModuleType:
+def _stub_shared(version: str = "0.3.1") -> ModuleType:
     module = ModuleType("agent_workflow_comparative_eval")
-    module.__version__ = "0.3.1"
+    module.__version__ = version
 
     def sha256(value):
         payload = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
