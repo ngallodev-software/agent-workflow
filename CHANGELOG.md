@@ -11,13 +11,23 @@ release-policy blocker; the attached release evidence records that boundary.
   `native-job/v1` SpecGen/shared-contract compatibility.
 - Keep execution scope, deterministic acceptance commands, hidden evaluation
   authority, review, sealing, and lifecycle acceptance owned by Agent-Workflow.
+- Add the provider-neutral semantic decision checkpoint prototype for
+  `implementation.proposal_selection/v1`: DecisionDraft -> neutral evidence
+  projection -> bounded semantic evidence -> mandatory reconciliation ->
+  DecisionResolution, without moving deterministic workflow authority to the
+  semantic provider.
+- Align the optional comparative-eval integration with 0.3.4 and bind its
+  release source revision through the durable dependency lock rather than an
+  independent workflow literal.
 - Ship the durable Agent Run orchestration/evidence lifecycle, restart-safe
   workflows, read-only evidence index, trusted plugin boundary, and optional
   TypeSafe semantic decision provider as GitHub release artifacts.
 - Publish wheel, sdist, platform installer bundles, checksums, SBOM, build
   provenance, structured test evidence, and the direct bootstrap installer.
+- Complete and record the GitHub Private Vulnerability Reporting enablement and
+  notification drill required by REL-002.
 - Distinguish preview publication from a supported release: technical failures
-  always block; the currently accepted `REL-003` compatibility-policy blocker
+  always block; the remaining `REL-003` clean-host compatibility-policy blocker
   forces GitHub's prerelease flag rather than being silently waived.
 
 PyPI publication is not part of this release. The base package still has a
