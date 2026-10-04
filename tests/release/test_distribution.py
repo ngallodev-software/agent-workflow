@@ -259,8 +259,9 @@ def test_release_evidence_contract_and_cli_outcomes_are_one_release_gate(tmp_pat
     assert summary["status"] == "blocked"
     checks = {item["id"]: item for item in summary["checks"]}
     assert checks["license-metadata"]["status"] == "pass"
-    assert checks["security-channel"]["status"] == "blocked"
+    assert checks["security-channel"]["status"] == "pass"
     assert checks["compatibility-matrix"]["status"] == "blocked"
+    assert "REL-002-private-vulnerability-reporting-closeout.md" in _load_json(REPO_ROOT / "release" / "release-policy.json")["security_channel"]["response_policy"]
     assert checks["dependency-lock"]["status"] == "pass"
     assert checks["structured-tests"]["status"] == "pass"
     for filename, schema_name in (
