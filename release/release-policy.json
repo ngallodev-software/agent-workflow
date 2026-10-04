@@ -10,10 +10,10 @@
         "distribution_policy": "Source and binary distributions are licensed under Apache-2.0 and must preserve the license text."
     },
     "security_channel": {
-        "status": "blocked",
+        "status": "configured",
         "backlog_id": "REL-002",
         "contact": "GitHub Private Vulnerability Reporting",
-        "response_policy": "SECURITY.md; closeout requires administrator enablement and a successful private notification drill"
+        "response_policy": "SECURITY.md; GitHub Private Vulnerability Reporting administrator enablement and notification drill completed 2026-10-04; closeout evidence: release/REL-002-private-vulnerability-reporting-closeout.md"
     },
     "compatibility": {
         "status": "candidate",
