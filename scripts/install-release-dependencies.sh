@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 PYTHON_BIN="${AGENT_WORKFLOW_RELEASE_PYTHON:-python}"
+# release/dependency-lock.json is the single authority for VCS-only source pins.
 
 read_lock_field() {
   local field="$1"
