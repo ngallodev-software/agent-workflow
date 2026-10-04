@@ -43,8 +43,11 @@ def test_release_workflow_distinguishes_preview_from_supported_publication() -> 
     assert "technical_failure" in workflow
     assert "workflow_dispatch" in workflow
     assert "agent-workflow-comparative-eval.git@master" not in workflow
-    assert "0d7510735958a00d1e12d3eb5277b5bb1964f6e9" in workflow
+    assert "70e2ee9442426d556bc4209997572d10094cab58" in workflow
     assert "d254a0b13f2fd1de732dab2abd33da35db9ea365b50b3214e92308fea79d85c2" in workflow
+    lock = _load_json(REPO_ROOT / "release" / "dependency-lock.json")
+    comparative = next(package for package in lock["packages"] if package["name"] == "agent-workflow-comparative-eval")
+    assert comparative["version"] == "0.3.4"
 
 
 def test_all_published_json_schemas_are_valid_draft_2020_12() -> None:
