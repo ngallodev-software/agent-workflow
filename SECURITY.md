@@ -18,7 +18,7 @@ Provide the affected version or revision, impact, reproduction steps, relevant e
 
 ## Response policy
 
-A repository administrator must enable private vulnerability reporting and complete a notification drill before the public-preview gate may pass. Incoming reports should be acknowledged, triaged, discussed, fixed, and disclosed through a private repository security advisory. Timelines depend on severity and reproducibility; the project does not promise a response SLA before a named response rotation exists.
+GitHub Private Vulnerability Reporting was administrator-enabled and its initial notification drill was completed before the public-preview gate was closed on 2026-10-04. Incoming reports should be acknowledged, triaged, discussed, fixed, and disclosed through a private repository security advisory. Timelines depend on severity and reproducibility; the project does not promise a response SLA before a named response rotation exists. If the reporting channel or notification ownership changes, the private-reporting path must be revalidated before a stronger release-support claim.
 
 ## Architecture boundary
 

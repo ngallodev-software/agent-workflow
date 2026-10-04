@@ -6,10 +6,6 @@ Priorities are ordered within each section. An identifier retained here may also
 
 ## P0 — Release closeout blockers
 
-### REL-002 — Enable and drill private vulnerability reporting
-
-GitHub Private Vulnerability Reporting is the selected channel, but public-preview closeout still requires administrator enablement and a successful private notification drill consistent with root `SECURITY.md` and `release/release-policy.json`.
-
 ### REL-003 — Accept clean-host compatibility evidence
 
 Pin the intended support hosts/executor versions, execute the candidate matrix on clean hosts, seal the evidence references, and change the release compatibility status from `candidate` only when the evidence justifies a support claim.
