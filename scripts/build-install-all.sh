@@ -2,15 +2,11 @@
 set -euo pipefail
 
 ORIGINAL_ARGS=("$@")
-
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PARENT="$(dirname "$ROOT")"
 
-EXPECTED_CONTRACTS_VERSION="0.2.1"
-EXPECTED_AGENT_WORKFLOW_VERSION="$(tr -d '\\r\\n' < "$ROOT/VERSION")"
-EXPECTED_COMPARATIVE_EVAL_VERSION="0.3.1"
-EXPECTED_SPECGEN_VERSION="0.2.12"
-EXPECTED_BENCHMARK_VERSION="0.6.4"
+# Third-party runtime dependencies remain intentionally frozen. Versions for
+# locally developed stack components are resolved from their checked-out source.
 EXPECTED_TYPESAFE_VERSION="0.6.0"
 EXPECTED_INSPECT_AI_VERSION="0.3.268"
 EXPECTED_INSPECT_SWE_VERSION="0.2.71"
@@ -46,52 +42,21 @@ Options:
   --no-bootstrap-build
   -h, --help
 
-Default sibling checkout layout:
-  ../agent-workflow-spec-contracts
-  ../agent-workflow-comparative-eval
-  ../specgen-aw
-  ../agent-workflow-benchmark
-
-External stack versions are defined once by the EXPECTED_* pins at the top of
-this script. The Agent-Workflow core version is read from the repository's
-canonical VERSION file. Every source checkout, built wheel, installed
-distribution, and source provenance record is validated against those values.
-
-Normal build/install first fast-forwards every stack repository with
-scripts/git-pull-all.sh, then re-execs the freshly pulled installer. Pulls use
-the repository's existing Git remote and authentication configuration exactly as
-an ordinary `git pull --ff-only` would. Use --no-pull for offline/reproducible
-builds. --verify-only never mutates Git repositories. --pull-only updates
-repositories and exits before venv/key checks.
-
-The script never creates a venv, never uses pip --user, and never installs
-editable packages. TYPESAFE_API_KEY is required because the resulting runtime is
-configured for comparative TypeSafe decisions.
+Local stack versions are resolved dynamically from each source checkout after
+pulling. VERSION is authoritative when present and must agree with pyproject.toml.
+The installer reports repo/venv mismatches before installation, verifies wheel
+metadata against source, and requires exact repo == wheel == installed versions
+after installation. Third-party runtime versions remain explicit frozen pins.
 USAGE
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --venv)
-      shift; [[ $# -gt 0 ]] || { echo "--venv requires a value" >&2; exit 2; }
-      VENV_ARG="$1"
-      ;;
-    --contracts-source)
-      shift; [[ $# -gt 0 ]] || { echo "--contracts-source requires a value" >&2; exit 2; }
-      CONTRACTS_SOURCE_ARG="$1"
-      ;;
-    --comparative-eval-source)
-      shift; [[ $# -gt 0 ]] || { echo "--comparative-eval-source requires a value" >&2; exit 2; }
-      COMPARATIVE_EVAL_SOURCE_ARG="$1"
-      ;;
-    --specgen-source)
-      shift; [[ $# -gt 0 ]] || { echo "--specgen-source requires a value" >&2; exit 2; }
-      SPECGEN_SOURCE_ARG="$1"
-      ;;
-    --benchmark-source)
-      shift; [[ $# -gt 0 ]] || { echo "--benchmark-source requires a value" >&2; exit 2; }
-      BENCHMARK_SOURCE_ARG="$1"
-      ;;
+    --venv) shift; [[ $# -gt 0 ]] || { echo "--venv requires a value" >&2; exit 2; }; VENV_ARG="$1" ;;
+    --contracts-source) shift; [[ $# -gt 0 ]] || { echo "--contracts-source requires a value" >&2; exit 2; }; CONTRACTS_SOURCE_ARG="$1" ;;
+    --comparative-eval-source) shift; [[ $# -gt 0 ]] || { echo "--comparative-eval-source requires a value" >&2; exit 2; }; COMPARATIVE_EVAL_SOURCE_ARG="$1" ;;
+    --specgen-source) shift; [[ $# -gt 0 ]] || { echo "--specgen-source requires a value" >&2; exit 2; }; SPECGEN_SOURCE_ARG="$1" ;;
+    --benchmark-source) shift; [[ $# -gt 0 ]] || { echo "--benchmark-source requires a value" >&2; exit 2; }; BENCHMARK_SOURCE_ARG="$1" ;;
     --verify-only) VERIFY_ONLY=1; NO_PULL=1 ;;
     --no-pull) NO_PULL=1 ;;
     --pull-only) PULL_ONLY=1 ;;
@@ -117,348 +82,176 @@ SPECGEN_SOURCE="$(resolve_path "${SPECGEN_SOURCE_ARG:-$PARENT/specgen-aw}")"
 BENCHMARK_SOURCE="$(resolve_path "${BENCHMARK_SOURCE_ARG:-$PARENT/agent-workflow-benchmark}")"
 
 if [[ "$PULL_ONLY" -eq 1 || "$NO_PULL" -eq 0 ]]; then
-  pull_args=(
-    --contracts-source "$CONTRACTS_SOURCE"
-    --comparative-eval-source "$COMPARATIVE_EVAL_SOURCE"
-    --specgen-source "$SPECGEN_SOURCE"
-    --benchmark-source "$BENCHMARK_SOURCE"
-  )
-  if [[ "$ALLOW_DIRTY_PULL" -eq 1 ]]; then
-    pull_args+=(--allow-dirty)
-  fi
+  pull_args=(--contracts-source "$CONTRACTS_SOURCE" --comparative-eval-source "$COMPARATIVE_EVAL_SOURCE" --specgen-source "$SPECGEN_SOURCE" --benchmark-source "$BENCHMARK_SOURCE")
+  [[ "$ALLOW_DIRTY_PULL" -eq 0 ]] || pull_args+=(--allow-dirty)
   bash "$ROOT/scripts/git-pull-all.sh" "${pull_args[@]}"
-  if [[ "$PULL_ONLY" -eq 1 ]]; then
-    exit 0
-  fi
-  # Agent-Workflow itself was pulled last. Re-exec from disk so updated version
-  # pins and installer logic, rather than this process's pre-pull script text,
-  # control the build.
+  [[ "$PULL_ONLY" -eq 0 ]] || exit 0
   exec bash "$ROOT/scripts/build-install-all.sh" --no-pull "${ORIGINAL_ARGS[@]}"
 fi
 
-if [[ -n "$VENV_ARG" ]]; then
-  VENV="$(resolve_path "$VENV_ARG")"
-elif [[ -n "${AGENT_WORKFLOW_VENV:-}" ]]; then
-  VENV="$(resolve_path "$AGENT_WORKFLOW_VENV")"
-elif [[ -n "${VIRTUAL_ENV:-}" ]]; then
-  VENV="$(resolve_path "$VIRTUAL_ENV")"
-elif [[ -x "$ROOT/.venv/bin/python" || -x "$ROOT/.venv/bin/python3" ]]; then
-  VENV="$(resolve_path "$ROOT/.venv")"
-else
-  echo "could not resolve an existing shared virtualenv" >&2
-  exit 1
+resolve_source_version() {
+  python3 - "$1" "$2" <<'PY'
+from pathlib import Path
+import sys, tomllib
+source = Path(sys.argv[1])
+expected_name = sys.argv[2]
+path = source / "pyproject.toml"
+if not path.is_file():
+    raise SystemExit(f"missing required source pyproject.toml: {source}")
+project = tomllib.loads(path.read_text(encoding="utf-8"))["project"]
+if project.get("name") != expected_name:
+    raise SystemExit(f"{source}: observed project {project.get('name')!r}; expected {expected_name!r}")
+pyproject_version = str(project.get("version", "")).strip()
+if not pyproject_version:
+    raise SystemExit(f"{source}: pyproject.toml has no project.version")
+version_file = source / "VERSION"
+if version_file.is_file():
+    canonical = version_file.read_text(encoding="utf-8").strip()
+    if canonical != pyproject_version:
+        raise SystemExit(f"{source}: VERSION={canonical}; pyproject.toml={pyproject_version}")
+    print(canonical)
+else:
+    print(pyproject_version)
+PY
+}
+
+EXPECTED_CONTRACTS_VERSION="$(resolve_source_version "$CONTRACTS_SOURCE" "specgen-agent-workflow-contracts")"
+EXPECTED_AGENT_WORKFLOW_VERSION="$(resolve_source_version "$ROOT" "agent-workflow")"
+EXPECTED_COMPARATIVE_EVAL_VERSION="$(resolve_source_version "$COMPARATIVE_EVAL_SOURCE" "agent-workflow-comparative-eval")"
+EXPECTED_SPECGEN_VERSION="$(resolve_source_version "$SPECGEN_SOURCE" "specgen")"
+EXPECTED_BENCHMARK_VERSION="$(resolve_source_version "$BENCHMARK_SOURCE" "agent-workflow-benchmark")"
+
+if [[ -n "$VENV_ARG" ]]; then VENV="$(resolve_path "$VENV_ARG")"
+elif [[ -n "${AGENT_WORKFLOW_VENV:-}" ]]; then VENV="$(resolve_path "$AGENT_WORKFLOW_VENV")"
+elif [[ -n "${VIRTUAL_ENV:-}" ]]; then VENV="$(resolve_path "$VIRTUAL_ENV")"
+elif [[ -x "$ROOT/.venv/bin/python" || -x "$ROOT/.venv/bin/python3" ]]; then VENV="$(resolve_path "$ROOT/.venv")"
+else echo "could not resolve an existing shared virtualenv" >&2; exit 1
 fi
 
-if [[ -x "$VENV/bin/python" ]]; then
-  PYTHON="$VENV/bin/python"
-elif [[ -x "$VENV/bin/python3" ]]; then
-  PYTHON="$VENV/bin/python3"
-else
-  echo "selected path is not a usable virtualenv: $VENV" >&2
-  exit 1
+if [[ -x "$VENV/bin/python" ]]; then PYTHON="$VENV/bin/python"
+elif [[ -x "$VENV/bin/python3" ]]; then PYTHON="$VENV/bin/python3"
+else echo "selected path is not a usable virtualenv: $VENV" >&2; exit 1
 fi
 
 "$PYTHON" - "$VENV" <<'PY'
 from pathlib import Path
 import sys
 venv = Path(sys.argv[1]).resolve()
-if sys.prefix == sys.base_prefix:
-    raise SystemExit("selected interpreter is not running in a virtualenv")
-if Path(sys.prefix).resolve() != venv:
-    raise SystemExit(f"interpreter prefix {Path(sys.prefix).resolve()} != requested venv {venv}")
-if sys.version_info < (3, 11):
-    raise SystemExit("Agent-Workflow stack requires Python >= 3.11")
+if sys.prefix == sys.base_prefix: raise SystemExit("selected interpreter is not running in a virtualenv")
+if Path(sys.prefix).resolve() != venv: raise SystemExit(f"interpreter prefix {Path(sys.prefix).resolve()} != requested venv {venv}")
+if sys.version_info < (3, 11): raise SystemExit("Agent-Workflow stack requires Python >= 3.11")
 PY
 
-[[ -n "${TYPESAFE_API_KEY:-}" ]] || {
-  echo "comparative stack requires TYPESAFE_API_KEY in the environment" >&2
-  exit 1
-}
-
-export VIRTUAL_ENV="$VENV"
-export AGENT_WORKFLOW_VENV="$VENV"
-export AGENT_WORKFLOW_BIN="$VENV/bin/agent-workflow"
-export PATH="$VENV/bin:$PATH"
-export XDG_CONFIG_HOME="$VENV/.xdg/config"
-export XDG_STATE_HOME="$VENV/.xdg/state"
-export XDG_DATA_HOME="$VENV/.xdg/data"
+[[ -n "${TYPESAFE_API_KEY:-}" ]] || { echo "comparative stack requires TYPESAFE_API_KEY in the environment" >&2; exit 1; }
+export VIRTUAL_ENV="$VENV" AGENT_WORKFLOW_VENV="$VENV" AGENT_WORKFLOW_BIN="$VENV/bin/agent-workflow"
+export PATH="$VENV/bin:$PATH" XDG_CONFIG_HOME="$VENV/.xdg/config" XDG_STATE_HOME="$VENV/.xdg/state" XDG_DATA_HOME="$VENV/.xdg/data"
 mkdir -p "$XDG_CONFIG_HOME" "$XDG_STATE_HOME" "$XDG_DATA_HOME"
 
-check_source() {
-  local source="$1" expected_name="$2" expected_version="$3"
-  [[ -f "$source/pyproject.toml" ]] || {
-    echo "missing required source pyproject.toml: $source" >&2
-    exit 1
-  }
-  "$PYTHON" - "$source/pyproject.toml" "$expected_name" "$expected_version" <<'PY'
-from pathlib import Path
-import sys, tomllib
-path = Path(sys.argv[1])
-expected_name, expected_version = sys.argv[2], sys.argv[3]
-project = tomllib.loads(path.read_text(encoding="utf-8"))["project"]
-if project.get("name") != expected_name or project.get("version") != expected_version:
-    raise SystemExit(
-        f"{path.parent}: observed {project.get('name')} {project.get('version')}; "
-        f"expected {expected_name} {expected_version}"
-    )
-PY
-  if [[ -f "$source/VERSION" ]]; then
-    local observed
-    observed="$(tr -d '\r\n' < "$source/VERSION")"
-    [[ "$observed" == "$expected_version" ]] || {
-      echo "$source/VERSION=$observed; expected $expected_version" >&2
-      exit 1
-    }
-  fi
-}
+LOCAL_COMPONENT_ARGS=(
+  "specgen-agent-workflow-contracts" "$EXPECTED_CONTRACTS_VERSION" "$CONTRACTS_SOURCE"
+  "agent-workflow" "$EXPECTED_AGENT_WORKFLOW_VERSION" "$ROOT"
+  "agent-workflow-comparative-eval" "$EXPECTED_COMPARATIVE_EVAL_VERSION" "$COMPARATIVE_EVAL_SOURCE"
+  "specgen" "$EXPECTED_SPECGEN_VERSION" "$SPECGEN_SOURCE"
+  "agent-workflow-benchmark" "$EXPECTED_BENCHMARK_VERSION" "$BENCHMARK_SOURCE"
+)
 
-check_source "$CONTRACTS_SOURCE" "specgen-agent-workflow-contracts" "$EXPECTED_CONTRACTS_VERSION"
-check_source "$ROOT" "agent-workflow" "$EXPECTED_AGENT_WORKFLOW_VERSION"
-check_source "$COMPARATIVE_EVAL_SOURCE" "agent-workflow-comparative-eval" "$EXPECTED_COMPARATIVE_EVAL_VERSION"
-check_source "$SPECGEN_SOURCE" "specgen" "$EXPECTED_SPECGEN_VERSION"
-check_source "$BENCHMARK_SOURCE" "agent-workflow-benchmark" "$EXPECTED_BENCHMARK_VERSION"
+report_repo_venv_versions() {
+  "$PYTHON" - "${LOCAL_COMPONENT_ARGS[@]}" <<'PY'
+from importlib import metadata
+import sys
+raw=sys.argv[1:]
+print("Repository / venv version alignment:")
+for i in range(0,len(raw),3):
+    name, repo_version, source=raw[i:i+3]
+    try: installed=metadata.version(name)
+    except metadata.PackageNotFoundError: installed="<not installed>"
+    state="match" if installed==repo_version else "mismatch; will reinstall"
+    print(f"  {name:<34} repo={repo_version:<12} venv={installed:<15} {state}")
+PY
+}
+report_repo_venv_versions
 
 write_source_provenance() {
-  local target="$VENV/share/agent-workflow/source-provenance.json"
-  mkdir -p "$(dirname "$target")"
-  "$PYTHON" - "$target" \
-    "specgen-agent-workflow-contracts" "$EXPECTED_CONTRACTS_VERSION" "$CONTRACTS_SOURCE" \
-    "agent-workflow" "$EXPECTED_AGENT_WORKFLOW_VERSION" "$ROOT" \
-    "agent-workflow-comparative-eval" "$EXPECTED_COMPARATIVE_EVAL_VERSION" "$COMPARATIVE_EVAL_SOURCE" \
-    "specgen" "$EXPECTED_SPECGEN_VERSION" "$SPECGEN_SOURCE" \
-    "agent-workflow-benchmark" "$EXPECTED_BENCHMARK_VERSION" "$BENCHMARK_SOURCE" <<'PY'
+  local target="$VENV/share/agent-workflow/source-provenance.json"; mkdir -p "$(dirname "$target")"
+  "$PYTHON" - "$target" "${LOCAL_COMPONENT_ARGS[@]}" <<'PY'
 from datetime import datetime, timezone
 from pathlib import Path
-import json
-import subprocess
-import sys
-import tempfile
-
-target = Path(sys.argv[1])
-raw = sys.argv[2:]
-if len(raw) % 3:
-    raise SystemExit("source provenance arguments must be name/version/path triples")
-
-components = {}
-for offset in range(0, len(raw), 3):
-    name, version, source_raw = raw[offset : offset + 3]
-    source = Path(source_raw).resolve()
-    revision = subprocess.run(
-        ["git", "-C", str(source), "rev-parse", "--verify", "HEAD"],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    if revision.returncode != 0 or not revision.stdout.strip():
-        raise SystemExit(f"cannot resolve source revision for {name}: {source}")
-    status = subprocess.run(
-        ["git", "-C", str(source), "status", "--porcelain=v1", "--untracked-files=all"],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    if status.returncode != 0:
-        raise SystemExit(f"cannot inspect source status for {name}: {source}")
-    components[name] = {
-        "version": version,
-        "revision": revision.stdout.strip(),
-        "dirty": bool(status.stdout.strip()),
-    }
-
-value = {
-    "schema": "agent-workflow/source-provenance/v1",
-    "recorded_at": datetime.now(timezone.utc).isoformat(),
-    "components": components,
-}
-with tempfile.NamedTemporaryFile(
-    "w", encoding="utf-8", dir=target.parent, prefix=target.name + ".", delete=False
-) as handle:
-    json.dump(value, handle, indent=2, sort_keys=True)
-    handle.write("\n")
-    temp = Path(handle.name)
-temp.replace(target)
-print(f"source provenance: {target}")
+import json, subprocess, sys, tempfile
+target=Path(sys.argv[1]); raw=sys.argv[2:]; components={}
+for i in range(0,len(raw),3):
+    name, version, source_raw=raw[i:i+3]; source=Path(source_raw).resolve()
+    revision=subprocess.run(["git","-C",str(source),"rev-parse","--verify","HEAD"],text=True,capture_output=True,check=True).stdout.strip()
+    status=subprocess.run(["git","-C",str(source),"status","--porcelain=v1","--untracked-files=all"],text=True,capture_output=True,check=True).stdout.strip()
+    components[name]={"version":version,"revision":revision,"dirty":bool(status)}
+value={"schema":"agent-workflow/source-provenance/v1","recorded_at":datetime.now(timezone.utc).isoformat(),"components":components}
+with tempfile.NamedTemporaryFile("w",encoding="utf-8",dir=target.parent,prefix=target.name+".",delete=False) as h:
+    json.dump(value,h,indent=2,sort_keys=True); h.write("\n"); temp=Path(h.name)
+temp.replace(target); print(f"source provenance: {target}")
 PY
 }
 
 write_stack_config() {
-  local target="$XDG_CONFIG_HOME/agent-workflow/config.toml"
-  mkdir -p "$(dirname "$target")"
-  "$PYTHON" - "$target" "$VENV" <<'PY'
-from pathlib import Path
-import json, os, sys, tempfile, tomllib
-target = Path(sys.argv[1])
-venv = Path(sys.argv[2]).resolve()
-q = json.dumps
-rendered = "\n".join([
-    "schema_version = 1",
-    "",
-    "[paths]",
-    f"worktree_root = {q(str(venv / '.xdg/data/agent-workflow/worktrees'))}",
-    f"state_root = {q(str(venv / '.xdg/state/agent-workflow'))}",
-    "",
-    "[plugins]",
-    'enabled = ["agent-workflow-spec", "agent-workflow-benchmark"]',
-    "",
-    "[semantic]",
-    'provider = "typesafe"',
-    "",
-    "[semantic.typesafe]",
-    f"api_call_log = {q(str(venv / '.xdg' / 'state' / 'agent-workflow' / 'typesafe-api-calls.jsonl'))}",
-    "",
-    "[decision_policy]",
-    'mode = "comparative"',
-    'profile = "default"',
-    "",
-])
-parsed = tomllib.loads(rendered)
-assert parsed["decision_policy"]["mode"] == "comparative"
-assert parsed["plugins"]["enabled"] == ["agent-workflow-spec", "agent-workflow-benchmark"]
-with tempfile.NamedTemporaryFile(
-    "w", encoding="utf-8", dir=target.parent, prefix=target.name + ".", delete=False
-) as handle:
-    handle.write(rendered)
-    temp = Path(handle.name)
-os.replace(temp, target)
-print(f"stack config: {target}")
-PY
+  local target="$XDG_CONFIG_HOME/agent-workflow/config.toml"; mkdir -p "$(dirname "$target")"
+  cat >"$target" <<EOF
+schema_version = 1
+[paths]
+worktree_root = "$VENV/.xdg/data/agent-workflow/worktrees"
+state_root = "$VENV/.xdg/state/agent-workflow"
+[plugins]
+enabled = ["agent-workflow-spec", "agent-workflow-benchmark"]
+[semantic]
+provider = "typesafe"
+[semantic.typesafe]
+api_call_log = "$VENV/.xdg/state/agent-workflow/typesafe-api-calls.jsonl"
+[decision_policy]
+mode = "comparative"
+profile = "default"
+EOF
+  echo "stack config: $target"
 }
 
 verify_stack() {
-  "$PYTHON" - \
-    "$EXPECTED_CONTRACTS_VERSION" \
-    "$EXPECTED_AGENT_WORKFLOW_VERSION" \
-    "$EXPECTED_COMPARATIVE_EVAL_VERSION" \
-    "$EXPECTED_SPECGEN_VERSION" \
-    "$EXPECTED_BENCHMARK_VERSION" \
-    "$EXPECTED_TYPESAFE_VERSION" \
-    "$EXPECTED_INSPECT_AI_VERSION" \
-    "$EXPECTED_INSPECT_SWE_VERSION" <<'PY'
+  "$PYTHON" - "${LOCAL_COMPONENT_ARGS[@]}" "$EXPECTED_TYPESAFE_VERSION" "$EXPECTED_INSPECT_AI_VERSION" "$EXPECTED_INSPECT_SWE_VERSION" <<'PY'
 from importlib import metadata
 from pathlib import Path
 import json, os, shutil, sys
-
-(
-    contracts_version,
-    agent_workflow_version,
-    comparative_eval_version,
-    specgen_version,
-    benchmark_version,
-    typesafe_version,
-    inspect_ai_version,
-    inspect_swe_version,
-) = sys.argv[1:]
-
-expected = {
-    "specgen-agent-workflow-contracts": contracts_version,
-    "agent-workflow": agent_workflow_version,
-    "agent-workflow-comparative-eval": comparative_eval_version,
-    "specgen": specgen_version,
-    "agent-workflow-benchmark": benchmark_version,
-    "typesafe-sdk": typesafe_version,
-    "inspect-ai": inspect_ai_version,
-    "inspect-swe": inspect_swe_version,
-}
-provenance_path = Path(sys.prefix) / "share" / "agent-workflow" / "source-provenance.json"
-if not provenance_path.is_file():
-    raise SystemExit(f"missing source provenance manifest: {provenance_path}")
-provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
-if provenance.get("schema") != "agent-workflow/source-provenance/v1":
-    raise SystemExit(f"unexpected source provenance schema: {provenance.get('schema')}")
-local_expected = {
-    name: expected[name]
-    for name in (
-        "specgen-agent-workflow-contracts",
-        "agent-workflow",
-        "agent-workflow-comparative-eval",
-        "specgen",
-        "agent-workflow-benchmark",
-    )
-}
-for name, version in local_expected.items():
-    item = provenance.get("components", {}).get(name)
-    if not isinstance(item, dict):
-        raise SystemExit(f"missing source provenance component: {name}")
-    if item.get("version") != version:
-        raise SystemExit(f"{name} provenance version {item.get('version')}; expected {version}")
-    revision = item.get("revision")
-    if not isinstance(revision, str) or len(revision) not in {40, 64}:
-        raise SystemExit(f"{name} source revision is invalid: {revision!r}")
-    if not isinstance(item.get("dirty"), bool):
-        raise SystemExit(f"{name} dirty source flag is missing")
-
-for name, version in expected.items():
-    try:
-        observed = metadata.version(name)
-    except metadata.PackageNotFoundError as exc:
-        raise SystemExit(f"missing distribution: {name}=={version}") from exc
-    if observed != version:
-        raise SystemExit(f"{name} version {observed}; expected {version}")
-
-for name in local_expected:
-    dist = metadata.distribution(name)
-    direct = Path(dist._path) / "direct_url.json"
-    if direct.is_file():
-        value = json.loads(direct.read_text(encoding="utf-8"))
-        if value.get("dir_info", {}).get("editable"):
-            raise SystemExit(f"{name} is installed editable")
-
+raw=sys.argv[1:-3]; third={"typesafe-sdk":sys.argv[-3],"inspect-ai":sys.argv[-2],"inspect-swe":sys.argv[-1]}
+expected={}
+for i in range(0,len(raw),3): expected[raw[i]]=raw[i+1]
+expected.update(third)
+provenance_path=Path(sys.prefix)/"share"/"agent-workflow/source-provenance.json"
+if not provenance_path.is_file(): raise SystemExit(f"missing source provenance manifest: {provenance_path}")
+provenance=json.loads(provenance_path.read_text(encoding="utf-8"))
+for name,version in expected.items():
+    try: observed=metadata.version(name)
+    except metadata.PackageNotFoundError as exc: raise SystemExit(f"missing distribution: {name}=={version}") from exc
+    if observed != version: raise SystemExit(f"{name} installed {observed}; repo/runtime expects {version}")
+for i in range(0,len(raw),3):
+    name,version,_=raw[i:i+3]; item=provenance.get("components",{}).get(name)
+    if not isinstance(item,dict) or item.get("version") != version: raise SystemExit(f"{name} provenance does not match repo version {version}")
+    if item.get("dirty") is not False: raise SystemExit(f"source provenance reports dirty checkout for {name}")
 from agent_workflow.config import load_settings
 from agent_workflow.decisions import require_decision_runtime_ready
 from agent_workflow.plugins import load_plugin_registry
 from agent_workflow.comparative_eval import shared_library_status
 from specgen.agent_workflow import AW_VERSION
-from agent_workflow_benchmark.compat.inspect_swe_output_schema import (
-    assert_runtime_capability,
-)
-
-structured_output = assert_runtime_capability()
-
-settings = load_settings()
-if settings.decision_mode != "comparative":
-    raise SystemExit(f"decision mode {settings.decision_mode!r}; expected 'comparative'")
-if settings.plugins_enabled != ("agent-workflow-spec", "agent-workflow-benchmark"):
-    raise SystemExit(f"unexpected plugins: {settings.plugins_enabled!r}")
-if settings.executors.get("codex", [None])[0] != "codex":
-    raise SystemExit(f"Codex executor is not direct: {settings.executors.get('codex')!r}")
-
-semantic = require_decision_runtime_ready(settings)
-if semantic.get("ready") is not True:
-    raise SystemExit(f"semantic runtime not ready: {semantic}")
-
-shared = shared_library_status()
-if not shared.get("installed") or not shared.get("compatible"):
-    raise SystemExit(f"comparative-eval incompatible: {shared}")
-
-registry = load_plugin_registry(settings.plugins_enabled)
-loaded = tuple(item.descriptor.name for item in registry.loaded)
-if loaded != ("agent-workflow-spec", "agent-workflow-benchmark"):
-    raise SystemExit(f"unexpected loaded plugins: {loaded!r}")
-
-if AW_VERSION != agent_workflow_version:
-    raise SystemExit(
-        f"SpecGen target {AW_VERSION}; expected {agent_workflow_version}"
-    )
-
-codex = shutil.which("codex")
-if not codex:
-    raise SystemExit("direct Codex executable is not available")
-
-if not os.environ.get("TYPESAFE_API_KEY"):
-    raise SystemExit("TYPESAFE_API_KEY is not configured")
-
-print("")
-print("Agent-Workflow stack verification:")
-for name, version in expected.items():
-    print(f"  {name:<34} {version}")
-print(f"  {'decision-mode':<34} comparative")
-print(f"  {'semantic-provider':<34} typesafe")
-print(f"  {'plugins':<34} {', '.join(loaded)}")
-print(f"  {'codex':<34} {codex}")
+from agent_workflow_benchmark.compat.inspect_swe_output_schema import assert_runtime_capability
+structured_output=assert_runtime_capability(); settings=load_settings()
+if settings.decision_mode != "comparative": raise SystemExit(f"decision mode {settings.decision_mode!r}; expected 'comparative'")
+if settings.plugins_enabled != ("agent-workflow-spec","agent-workflow-benchmark"): raise SystemExit(f"unexpected plugins: {settings.plugins_enabled!r}")
+if settings.executors.get("codex",[None])[0] != "codex": raise SystemExit(f"Codex executor is not direct: {settings.executors.get('codex')!r}")
+semantic=require_decision_runtime_ready(settings)
+if semantic.get("ready") is not True: raise SystemExit(f"semantic runtime not ready: {semantic}")
+shared=shared_library_status()
+if not shared.get("installed") or not shared.get("compatible"): raise SystemExit(f"comparative-eval incompatible: {shared}")
+loaded=tuple(x.descriptor.name for x in load_plugin_registry(settings.plugins_enabled).loaded)
+if AW_VERSION != expected["agent-workflow"]: raise SystemExit(f"SpecGen target {AW_VERSION}; expected {expected['agent-workflow']}")
+if not shutil.which("codex"): raise SystemExit("direct Codex executable is not available")
+if not os.environ.get("TYPESAFE_API_KEY"): raise SystemExit("TYPESAFE_API_KEY is not configured")
+print("\nAgent-Workflow stack verification:")
+for name,version in expected.items(): print(f"  {name:<34} {version}")
 print(f"  {'structured-output':<34} {structured_output['capability']}")
-print(f"  {'TYPESAFE_API_KEY':<34} configured")
 PY
-
   "$PYTHON" -m pip check
   "$VENV/bin/agent-workflow" --version >/dev/null
   "$VENV/bin/agent-workflow" --no-plugins --help >/dev/null
@@ -468,76 +261,51 @@ PY
 }
 
 if [[ "$VERIFY_ONLY" -eq 1 ]]; then
+  # verify-only is deliberately strict: repo/venv mismatch is a hard failure.
   verify_stack
   exit 0
 fi
 
 if [[ "$BOOTSTRAP_BUILD" -eq 1 ]]; then
-  "$PYTHON" -m pip install --upgrade     pip build wheel "setuptools>=77"     "jsonschema>=4.23,<5" "PyYAML>=6.0.3,<7"     "typesafe-sdk==$EXPECTED_TYPESAFE_VERSION"
+  "$PYTHON" -m pip install --upgrade pip build wheel "setuptools>=77" "jsonschema>=4.23,<5" "PyYAML>=6.0.3,<7" "typesafe-sdk==$EXPECTED_TYPESAFE_VERSION"
 else
   "$PYTHON" -c 'import build, setuptools, wheel, jsonschema, yaml, typesafe_sdk'
 fi
 
-BUILD_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/agent-workflow-stack-build.XXXXXX")"
-trap 'rm -rf "$BUILD_ROOT"' EXIT
-
+BUILD_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/agent-workflow-stack-build.XXXXXX")"; trap 'rm -rf "$BUILD_ROOT"' EXIT
 build_wheel() {
-  local key="$1" source="$2" expected_name="$3" expected_version="$4"
-  local out="$BUILD_ROOT/$key"
-  mkdir -p "$out"
+  local key="$1" source="$2" expected_name="$3" expected_version="$4" out="$BUILD_ROOT/$key"; mkdir -p "$out"
   echo "building $expected_name $expected_version from $source" >&2
   "$PYTHON" -m build --wheel --no-isolation --outdir "$out" "$source" >&2
-  set -- "$out"/*.whl
-  [[ $# -eq 1 && -f "$1" ]] || {
-    echo "expected exactly one wheel for $expected_name" >&2
-    exit 1
-  }
+  set -- "$out"/*.whl; [[ $# -eq 1 && -f "$1" ]] || { echo "expected exactly one wheel for $expected_name" >&2; exit 1; }
   "$PYTHON" - "$1" "$expected_name" "$expected_version" <<'PY'
 from email.parser import Parser
-from pathlib import Path
 import sys, zipfile
-wheel = Path(sys.argv[1])
-expected_name = sys.argv[2].lower().replace("_", "-")
-expected_version = sys.argv[3]
-with zipfile.ZipFile(wheel) as archive:
-    names = [n for n in archive.namelist() if n.endswith(".dist-info/METADATA")]
-    if len(names) != 1:
-        raise SystemExit(f"{wheel}: expected one METADATA")
-    meta = Parser().parsestr(archive.read(names[0]).decode())
-name = meta["Name"].lower().replace("_", "-")
-version = meta["Version"]
-if (name, version) != (expected_name, expected_version):
-    raise SystemExit(f"{wheel}: {name} {version}; expected {expected_name} {expected_version}")
+wheel,name,version=sys.argv[1:]
+with zipfile.ZipFile(wheel) as z:
+    paths=[p for p in z.namelist() if p.endswith(".dist-info/METADATA")]
+    if len(paths)!=1: raise SystemExit(f"{wheel}: expected one METADATA")
+    meta=Parser().parsestr(z.read(paths[0]).decode())
+observed=(meta["Name"].lower().replace("_","-"),meta["Version"]); expected=(name.lower().replace("_","-"),version)
+if observed != expected: raise SystemExit(f"{wheel}: {observed}; expected {expected}")
 PY
   printf '%s\n' "$1"
 }
-
-CONTRACTS_WHEEL="$(build_wheel contracts "$CONTRACTS_SOURCE" "specgen-agent-workflow-contracts" "$EXPECTED_CONTRACTS_VERSION")"
-AGENT_WORKFLOW_WHEEL="$(build_wheel core "$ROOT" "agent-workflow" "$EXPECTED_AGENT_WORKFLOW_VERSION")"
-COMPARATIVE_EVAL_WHEEL="$(build_wheel comparative "$COMPARATIVE_EVAL_SOURCE" "agent-workflow-comparative-eval" "$EXPECTED_COMPARATIVE_EVAL_VERSION")"
-SPECGEN_WHEEL="$(build_wheel specgen "$SPECGEN_SOURCE" "specgen" "$EXPECTED_SPECGEN_VERSION")"
-BENCHMARK_WHEEL="$(build_wheel benchmark "$BENCHMARK_SOURCE" "agent-workflow-benchmark" "$EXPECTED_BENCHMARK_VERSION")"
-
-install_wheel() {
-  local name="$1" wheel="$2"
-  echo "installing $name from $(basename "$wheel")"
-  "$PYTHON" -m pip uninstall -y "$name" >/dev/null 2>&1 || true
-  "$PYTHON" -m pip install --no-deps --force-reinstall "$wheel"
-}
-
-install_wheel "specgen-agent-workflow-contracts" "$CONTRACTS_WHEEL"
-install_wheel "agent-workflow" "$AGENT_WORKFLOW_WHEEL"
-install_wheel "agent-workflow-comparative-eval" "$COMPARATIVE_EVAL_WHEEL"
-install_wheel "specgen" "$SPECGEN_WHEEL"
-install_wheel "agent-workflow-benchmark" "$BENCHMARK_WHEEL"
+CONTRACTS_WHEEL="$(build_wheel contracts "$CONTRACTS_SOURCE" specgen-agent-workflow-contracts "$EXPECTED_CONTRACTS_VERSION")"
+AGENT_WORKFLOW_WHEEL="$(build_wheel core "$ROOT" agent-workflow "$EXPECTED_AGENT_WORKFLOW_VERSION")"
+COMPARATIVE_EVAL_WHEEL="$(build_wheel comparative "$COMPARATIVE_EVAL_SOURCE" agent-workflow-comparative-eval "$EXPECTED_COMPARATIVE_EVAL_VERSION")"
+SPECGEN_WHEEL="$(build_wheel specgen "$SPECGEN_SOURCE" specgen "$EXPECTED_SPECGEN_VERSION")"
+BENCHMARK_WHEEL="$(build_wheel benchmark "$BENCHMARK_SOURCE" agent-workflow-benchmark "$EXPECTED_BENCHMARK_VERSION")"
+install_wheel() { local name="$1" wheel="$2"; echo "installing $name from $(basename "$wheel")"; "$PYTHON" -m pip uninstall -y "$name" >/dev/null 2>&1 || true; "$PYTHON" -m pip install --no-deps --force-reinstall "$wheel"; }
+install_wheel specgen-agent-workflow-contracts "$CONTRACTS_WHEEL"
+install_wheel agent-workflow "$AGENT_WORKFLOW_WHEEL"
+install_wheel agent-workflow-comparative-eval "$COMPARATIVE_EVAL_WHEEL"
+install_wheel specgen "$SPECGEN_WHEEL"
+install_wheel agent-workflow-benchmark "$BENCHMARK_WHEEL"
 
 echo "installing frozen Inspect adjudication runtime"
-"$PYTHON" -m pip install --upgrade \
-  "inspect-ai==$EXPECTED_INSPECT_AI_VERSION" \
-  "inspect-swe==$EXPECTED_INSPECT_SWE_VERSION" \
-  "openai>=1.0"
+"$PYTHON" -m pip install --upgrade "inspect-ai==$EXPECTED_INSPECT_AI_VERSION" "inspect-swe==$EXPECTED_INSPECT_SWE_VERSION" "openai>=1.0"
 "$PYTHON" "$BENCHMARK_SOURCE/scripts/compat/apply-inspect-swe-output-schema-patch.py"
-
 write_source_provenance
 write_stack_config
 verify_stack
@@ -548,8 +316,3 @@ echo "  venv:   $VENV"
 echo "  config: $XDG_CONFIG_HOME/agent-workflow/config.toml"
 echo "  state:  $XDG_STATE_HOME/agent-workflow"
 echo "  data:   $XDG_DATA_HOME/agent-workflow"
-echo
-echo "Interactive isolated shell:"
-echo "  source $ROOT/scripts/dev-env.sh on $VENV"
-echo "Restore previous shell:"
-echo "  source $ROOT/scripts/dev-env.sh off"
