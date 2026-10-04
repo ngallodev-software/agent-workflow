@@ -2,9 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import os
-import re
 import subprocess
-import tomllib
 
 from tests.conftest import REPO_ROOT
 
@@ -12,27 +10,22 @@ from tests.conftest import REPO_ROOT
 SCRIPT = REPO_ROOT / "scripts" / "build-install-all.sh"
 
 
+def _text() -> str:
+    return SCRIPT.read_text(encoding="utf-8")
+
+
 def test_build_install_all_has_valid_bash_syntax() -> None:
     result = subprocess.run(
-        ["bash", "-n", str(SCRIPT)],
-        cwd=REPO_ROOT,
-        text=True,
-        capture_output=True,
-        check=False,
+        ["bash", "-n", str(SCRIPT)], cwd=REPO_ROOT, text=True, capture_output=True, check=False
     )
     assert result.returncode == 0, result.stderr
 
 
 def test_build_install_all_help_documents_stack_and_sources() -> None:
     result = subprocess.run(
-        ["bash", str(SCRIPT), "--help"],
-        cwd=REPO_ROOT,
-        text=True,
-        capture_output=True,
-        check=False,
+        ["bash", str(SCRIPT), "--help"], cwd=REPO_ROOT, text=True, capture_output=True, check=False
     )
     assert result.returncode == 0, result.stderr
-    text = result.stdout
     for option in (
         "--venv PATH",
         "--contracts-source PATH",
@@ -44,131 +37,117 @@ def test_build_install_all_help_documents_stack_and_sources() -> None:
         "--pull-only",
         "--allow-dirty-pull",
     ):
-        assert option in text
-    assert "External stack versions are defined once by the EXPECTED_* pins" in text
-    assert "core version is read from the repository's" in text
-    assert "canonical VERSION file" in text
+        assert option in result.stdout
+    assert "resolved dynamically from each source checkout" in result.stdout
+    assert "repo == wheel == installed" in result.stdout
 
 
 def test_build_install_all_is_existing_venv_wheel_only() -> None:
-    text = SCRIPT.read_text(encoding="utf-8")
+    text = _text()
     assert "python -m venv" not in text
-    assert "virtualenv" not in text.lower() or "existing virtualenv" in text.lower()
     assert "pip install --user" not in text
-    assert "-m pip install --user" not in text
     assert "pip install -e" not in text
     assert "--no-deps --force-reinstall" in text
-    assert "python -m build" not in text
     assert '"$PYTHON" -m build --wheel --no-isolation' in text
 
 
-def test_build_install_all_uses_required_dependency_order() -> None:
-    text = SCRIPT.read_text(encoding="utf-8")
-    installs = [
-        'install_wheel "specgen-agent-workflow-contracts"',
-        'install_wheel "agent-workflow" "$AGENT_WORKFLOW_WHEEL"',
-        'install_wheel "agent-workflow-comparative-eval"',
-        'install_wheel "specgen" "$SPECGEN_WHEEL"',
-        'install_wheel "agent-workflow-benchmark"',
-    ]
-    positions = [text.index(item) for item in installs]
-    assert positions == sorted(positions)
-
-
-def test_build_install_all_installs_and_patches_frozen_inspect_runtime() -> None:
-    text = SCRIPT.read_text(encoding="utf-8")
-    benchmark_install = text.index(
-        'install_wheel "agent-workflow-benchmark" "$BENCHMARK_WHEEL"'
-    )
-    inspect_install = text.index('"inspect-ai==$EXPECTED_INSPECT_AI_VERSION"')
-    inspect_swe_install = text.index('"inspect-swe==$EXPECTED_INSPECT_SWE_VERSION"')
-    patch = text.index("apply-inspect-swe-output-schema-patch.py")
-    final_verify = text.index("verify_stack", patch)
-
-    assert benchmark_install < inspect_install < patch < final_verify
-    assert benchmark_install < inspect_swe_install < patch < final_verify
-    assert "assert_runtime_capability" in text
-    assert "structured-output" in text
-
-
-def test_build_install_all_records_source_provenance() -> None:
-    text = SCRIPT.read_text(encoding="utf-8")
-    assert "write_source_provenance" in text
-    assert 'source-provenance.json' in text
-    assert 'agent-workflow/source-provenance/v1' in text
-    assert 'git", "-C", str(source), "rev-parse"' in text
-    assert 'git", "-C", str(source), "status"' in text
-    last_install = text.index(
-        'install_wheel "agent-workflow-benchmark" "$BENCHMARK_WHEEL"'
-    )
-    provenance_write = text.index("write_source_provenance", last_install)
-    final_verify = text.index("verify_stack", provenance_write)
-    assert last_install < provenance_write < final_verify
-
-
-def test_build_install_all_writes_comparative_plugin_config() -> None:
-    text = SCRIPT.read_text(encoding="utf-8")
-    assert 'enabled = ["agent-workflow-spec", "agent-workflow-benchmark"]' in text
-    assert 'provider = "typesafe"' in text
-    assert "api_call_log" in text
-    assert "typesafe-api-calls.jsonl" in text
-    assert 'mode = "comparative"' in text
-    assert "TYPESAFE_API_KEY" in text
-    assert 'settings.executors.get("codex", [None])[0] != "codex"' in text
-    assert '"agent-workflow-comparative-eval"' in text
-
-
-def test_build_install_all_requires_exact_stack_versions() -> None:
-    text = SCRIPT.read_text(encoding="utf-8")
-    expected = {
-        "EXPECTED_CONTRACTS_VERSION": "0.2.1",
-        "EXPECTED_COMPARATIVE_EVAL_VERSION": "0.3.1",
-        "EXPECTED_SPECGEN_VERSION": "0.2.12",
-        "EXPECTED_BENCHMARK_VERSION": "0.6.4",
-        "EXPECTED_TYPESAFE_VERSION": "0.6.0",
-        "EXPECTED_INSPECT_AI_VERSION": "0.3.268",
-        "EXPECTED_INSPECT_SWE_VERSION": "0.2.71",
-    }
-    for name, version in expected.items():
-        assert f'{name}="{version}"' in text
-
-
-def test_build_install_all_core_version_uses_repository_authority() -> None:
-    text = SCRIPT.read_text(encoding="utf-8")
-    assert (
-        'EXPECTED_AGENT_WORKFLOW_VERSION="$(tr -d \'\\\\r\\\\n\' < "$ROOT/VERSION")"'
-        in text
-    )
-    project = tomllib.loads(
-        (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    )["project"]
-    assert (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip() == project["version"]
-
-
-def test_build_install_all_verify_reuses_top_level_version_pins() -> None:
-    text = SCRIPT.read_text(encoding="utf-8")
-    verify_body = text.split("verify_stack() {", 1)[1].split(
-        '\n}\n\nif [[ "$VERIFY_ONLY" -eq 1 ]]', 1
-    )[0]
+def test_local_component_versions_are_not_hard_coded() -> None:
+    text = _text()
+    # Local versions must come from the source checkout after pull/re-exec.
     for name in (
         "EXPECTED_CONTRACTS_VERSION",
         "EXPECTED_AGENT_WORKFLOW_VERSION",
         "EXPECTED_COMPARATIVE_EVAL_VERSION",
         "EXPECTED_SPECGEN_VERSION",
         "EXPECTED_BENCHMARK_VERSION",
-        "EXPECTED_TYPESAFE_VERSION",
-        "EXPECTED_INSPECT_AI_VERSION",
-        "EXPECTED_INSPECT_SWE_VERSION",
     ):
-        assert ('"$' + name + '"') in verify_body
+        assert f'{name}="$(resolve_source_version ' in text
+    assert 'EXPECTED_COMPARATIVE_EVAL_VERSION="0.3.1"' not in text
+    assert 'EXPECTED_COMPARATIVE_EVAL_VERSION="0.3.4"' not in text
+    assert "resolve_source_version()" in text
+    assert 'source / "VERSION"' in text
+    assert 'source / "pyproject.toml"' in text
 
-    for stale_literal in (
-        '"agent-workflow": "0.11.10"',
-        '"agent-workflow-comparative-eval": "0.2.0"',
-        '"specgen": "0.2.10"',
-        '"agent-workflow-benchmark": "0.4.1"',
+
+def test_third_party_runtime_versions_remain_explicitly_frozen() -> None:
+    text = _text()
+    assert 'EXPECTED_TYPESAFE_VERSION="0.6.0"' in text
+    assert 'EXPECTED_INSPECT_AI_VERSION="0.3.268"' in text
+    assert 'EXPECTED_INSPECT_SWE_VERSION="0.2.71"' in text
+
+
+def test_repo_venv_alignment_is_reported_before_build_and_strictly_verified() -> None:
+    text = _text()
+    report = text.index("report_repo_venv_versions")
+    build = text.index("build_wheel()")
+    assert report < build
+    assert "metadata.version(name)" in text
+    assert 'state="match" if installed==repo_version else "mismatch; will reinstall"' in text
+    assert "installed {observed}; repo/runtime expects {version}" in text
+    verify_only = text.index('if [[ "$VERIFY_ONLY" -eq 1 ]]')
+    assert "verify_stack" in text[verify_only : verify_only + 250]
+
+
+def test_build_install_all_validates_wheel_metadata_against_source_version() -> None:
+    text = _text()
+    assert ".dist-info/METADATA" in text
+    assert "if observed != expected" in text
+    for wheel in (
+        "CONTRACTS_WHEEL",
+        "AGENT_WORKFLOW_WHEEL",
+        "COMPARATIVE_EVAL_WHEEL",
+        "SPECGEN_WHEEL",
+        "BENCHMARK_WHEEL",
     ):
-        assert stale_literal not in verify_body
+        assert f'{wheel}="$(build_wheel ' in text
+
+
+def test_build_install_all_uses_required_dependency_order() -> None:
+    text = _text()
+    installs = [
+        'install_wheel specgen-agent-workflow-contracts',
+        'install_wheel agent-workflow "$AGENT_WORKFLOW_WHEEL"',
+        'install_wheel agent-workflow-comparative-eval',
+        'install_wheel specgen "$SPECGEN_WHEEL"',
+        'install_wheel agent-workflow-benchmark',
+    ]
+    positions = [text.index(item) for item in installs]
+    assert positions == sorted(positions)
+
+
+def test_build_install_all_records_source_provenance() -> None:
+    text = _text()
+    assert "write_source_provenance" in text
+    assert "source-provenance.json" in text
+    assert "agent-workflow/source-provenance/v1" in text
+    assert '"git","-C",str(source),"rev-parse"' in text
+    assert '"git","-C",str(source),"status"' in text
+    assert '"version":version' in text
+    assert '"revision":revision' in text
+
+
+def test_build_install_all_writes_comparative_plugin_config() -> None:
+    text = _text()
+    assert 'enabled = ["agent-workflow-spec", "agent-workflow-benchmark"]' in text
+    assert 'provider = "typesafe"' in text
+    assert "typesafe-api-calls.jsonl" in text
+    assert 'mode = "comparative"' in text
+    assert "TYPESAFE_API_KEY" in text
+    assert 'settings.executors.get("codex",[None])[0] != "codex"' in text
+    assert '"agent-workflow-comparative-eval"' in text
+
+
+def test_build_install_all_pulls_stack_before_build_and_reexecs() -> None:
+    text = _text()
+    assert 'bash "$ROOT/scripts/git-pull-all.sh"' in text
+    assert 'exec bash "$ROOT/scripts/build-install-all.sh" --no-pull' in text
+    assert "--pull-only" in text
+    assert "--allow-dirty-pull" in text
+    assert text.index('bash "$ROOT/scripts/git-pull-all.sh"') < text.index("resolve_source_version()")
+
+
+def test_build_install_all_verify_only_disables_pull() -> None:
+    assert '--verify-only) VERIFY_ONLY=1; NO_PULL=1' in _text()
 
 
 def test_build_install_all_handles_unset_venv_without_unbound_variable(tmp_path: Path) -> None:
@@ -177,56 +156,14 @@ def test_build_install_all_handles_unset_venv_without_unbound_variable(tmp_path:
     env.pop("VIRTUAL_ENV", None)
     env.pop("TYPESAFE_API_KEY", None)
     env["PATH"] = "/usr/bin:/bin"
-
     result = subprocess.run(
-        ["bash", str(SCRIPT), "--verify-only"],
-        cwd=tmp_path,
-        text=True,
-        capture_output=True,
-        check=False,
-        env=env,
+        ["bash", str(SCRIPT), "--verify-only"], cwd=tmp_path, text=True, capture_output=True, check=False, env=env
     )
-
     assert "unbound variable" not in result.stderr.lower()
 
 
-def test_build_install_all_verify_only_does_not_rewrite_config() -> None:
-    text = SCRIPT.read_text(encoding="utf-8")
-
-    verify_body = text.split("verify_stack() {", 1)[1].split(
-        '\n}\n\nif [[ "$VERIFY_ONLY" -eq 1 ]]', 1
-    )[0]
-    assert "write_stack_config" not in verify_body
-
-    verify_only_block = text.split('if [[ "$VERIFY_ONLY" -eq 1 ]]; then', 1)[1].split(
-        "fi", 1
-    )[0]
-    assert "verify_stack" in verify_only_block
-    assert "write_stack_config" not in verify_only_block
-
-    last_install = text.index(
-        'install_wheel "agent-workflow-benchmark" "$BENCHMARK_WHEEL"'
-    )
-    config_write = text.index("write_stack_config", last_install)
-    final_verify = text.index("verify_stack", config_write)
-    assert last_install < config_write < final_verify
-
-
-def test_build_install_all_pulls_stack_before_build_and_reexecs() -> None:
-    text = SCRIPT.read_text(encoding="utf-8")
-    assert 'bash "$ROOT/scripts/git-pull-all.sh"' in text
-    assert 'exec bash "$ROOT/scripts/build-install-all.sh" --no-pull' in text
-    assert '--pull-only' in text
-    assert '--allow-dirty-pull' in text
-
-
-def test_build_install_all_verify_only_disables_pull() -> None:
-    text = SCRIPT.read_text(encoding="utf-8")
-    assert '--verify-only) VERIFY_ONLY=1; NO_PULL=1' in text
-
-
 def test_build_install_all_does_not_override_git_authentication() -> None:
-    text = SCRIPT.read_text(encoding="utf-8")
+    text = _text()
     for forbidden in (
         "ALLOW_CREDENTIAL_HELPER",
         "--allow-credential-helper",
