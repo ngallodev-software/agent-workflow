@@ -50,6 +50,7 @@ def test_release_workflow_distinguishes_preview_from_supported_publication() -> 
     assert "source_revision" in installer
     assert "metadata.version(\"agent-workflow-comparative-eval\")" in installer
     assert "d254a0b13f2fd1de732dab2abd33da35db9ea365b50b3214e92308fea79d85c2" in installer
+    # VCS-only release inputs must be bound by the durable dependency lock.
     lock = _load_json(REPO_ROOT / "release" / "dependency-lock.json")
     comparative = next(
         package
