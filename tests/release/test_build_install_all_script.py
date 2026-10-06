@@ -173,3 +173,15 @@ def test_build_install_all_does_not_override_git_authentication() -> None:
         "credential.helper",
     ):
         assert forbidden not in text
+
+
+def test_build_wheel_initializes_key_before_using_it_under_nounset() -> None:
+    text = _text()
+    start = text.index("build_wheel() {")
+    end = text.index("CONTRACTS_WHEEL=", start)
+    block = text[start:end]
+
+    assert 'local key="$1" source="$2"' not in block
+    assert 'local key="$1"' in block
+    assert 'local out="$BUILD_ROOT/$key"' in block
+    assert block.index('local key="$1"') < block.index('local out="$BUILD_ROOT/$key"')
