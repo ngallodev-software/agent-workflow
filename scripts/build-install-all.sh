@@ -274,7 +274,12 @@ fi
 
 BUILD_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/agent-workflow-stack-build.XXXXXX")"; trap 'rm -rf "$BUILD_ROOT"' EXIT
 build_wheel() {
-  local key="$1" source="$2" expected_name="$3" expected_version="$4" out="$BUILD_ROOT/$key"; mkdir -p "$out"
+  local key="$1"
+  local source="$2"
+  local expected_name="$3"
+  local expected_version="$4"
+  local out="$BUILD_ROOT/$key"
+  mkdir -p "$out"
   echo "building $expected_name $expected_version from $source" >&2
   "$PYTHON" -m build --wheel --no-isolation --outdir "$out" "$source" >&2
   set -- "$out"/*.whl; [[ $# -eq 1 && -f "$1" ]] || { echo "expected exactly one wheel for $expected_name" >&2; exit 1; }
