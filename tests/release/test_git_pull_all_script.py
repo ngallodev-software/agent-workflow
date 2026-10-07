@@ -86,3 +86,20 @@ def test_git_pull_all_leaves_authentication_to_git() -> None:
         "remote set-url",
     ):
         assert forbidden not in text
+
+
+def test_specgen_pull_is_explicitly_opt_in() -> None:
+    text = SCRIPT.read_text(encoding="utf-8")
+    assert "WITH_SPECGEN=0" in text
+    assert "--with-specgen) WITH_SPECGEN=1" in text
+    assert 'SPECGEN_SOURCE=""' in text
+    assert 'if [[ "$WITH_SPECGEN" -eq 1 ]]; then' in text
+    assert 'pull_repo "specgen" "$SPECGEN_SOURCE"' in text
+    assert "optional and excluded unless --with-specgen is supplied." in text
+
+
+def test_specgen_source_implies_specgen_pull() -> None:
+    text = SCRIPT.read_text(encoding="utf-8")
+    block = text[text.index("--specgen-source)") : text.index("--benchmark-source)")]
+    assert 'SPECGEN_SOURCE="$1"' in block
+    assert "WITH_SPECGEN=1" in block

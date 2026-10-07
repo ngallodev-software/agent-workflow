@@ -9,16 +9,19 @@ COMPARATIVE_EVAL_SOURCE=""
 SPECGEN_SOURCE=""
 BENCHMARK_SOURCE=""
 ALLOW_DIRTY=0
+WITH_SPECGEN=0
 
 usage() {
   cat <<'USAGE'
 Usage: scripts/git-pull-all.sh [options]
 
-Fast-forward all repositories used by the local Agent-Workflow stack.
+Fast-forward repositories used by the local Agent-Workflow stack. SpecGen is
+optional and excluded unless --with-specgen is supplied.
 
 Options:
   --contracts-source PATH
   --comparative-eval-source PATH
+  --with-specgen
   --specgen-source PATH
   --benchmark-source PATH
   --allow-dirty
@@ -38,7 +41,7 @@ inspect, replace, suppress, or persist authentication state.
 Default sibling checkout layout:
   ../agent-workflow-spec-contracts
   ../agent-workflow-comparative-eval
-  ../specgen-aw
+  ../specgen-aw  (only with --with-specgen)
   ../agent-workflow-benchmark
 
 Agent-Workflow itself is updated last so a caller can safely re-exec a freshly
@@ -64,9 +67,11 @@ while [[ $# -gt 0 ]]; do
       shift; [[ $# -gt 0 ]] || { echo "--comparative-eval-source requires a value" >&2; exit 2; }
       COMPARATIVE_EVAL_SOURCE="$1"
       ;;
+    --with-specgen) WITH_SPECGEN=1 ;;
     --specgen-source)
       shift; [[ $# -gt 0 ]] || { echo "--specgen-source requires a value" >&2; exit 2; }
       SPECGEN_SOURCE="$1"
+      WITH_SPECGEN=1
       ;;
     --benchmark-source)
       shift; [[ $# -gt 0 ]] || { echo "--benchmark-source requires a value" >&2; exit 2; }
@@ -81,7 +86,10 @@ done
 
 CONTRACTS_SOURCE="$(resolve_path "${CONTRACTS_SOURCE:-$PARENT/agent-workflow-spec-contracts}")"
 COMPARATIVE_EVAL_SOURCE="$(resolve_path "${COMPARATIVE_EVAL_SOURCE:-$PARENT/agent-workflow-comparative-eval}")"
-SPECGEN_SOURCE="$(resolve_path "${SPECGEN_SOURCE:-$PARENT/specgen-aw}")"
+SPECGEN_SOURCE=""
+if [[ "$WITH_SPECGEN" -eq 1 ]]; then
+  SPECGEN_SOURCE="$(resolve_path "${SPECGEN_SOURCE:-$PARENT/specgen-aw}")"
+fi
 BENCHMARK_SOURCE="$(resolve_path "${BENCHMARK_SOURCE:-$PARENT/agent-workflow-benchmark}")"
 
 pull_repo() {
@@ -125,7 +133,9 @@ pull_repo() {
 # installer after all repositories have been updated.
 pull_repo "contracts" "$CONTRACTS_SOURCE"
 pull_repo "comparative-eval" "$COMPARATIVE_EVAL_SOURCE"
-pull_repo "specgen" "$SPECGEN_SOURCE"
+if [[ "$WITH_SPECGEN" -eq 1 ]]; then
+  pull_repo "specgen" "$SPECGEN_SOURCE"
+fi
 pull_repo "benchmark" "$BENCHMARK_SOURCE"
 pull_repo "agent-workflow" "$ROOT"
 

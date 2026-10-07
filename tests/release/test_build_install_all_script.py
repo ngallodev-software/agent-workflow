@@ -30,6 +30,7 @@ def test_build_install_all_help_documents_stack_and_sources() -> None:
         "--venv PATH",
         "--contracts-source PATH",
         "--comparative-eval-source PATH",
+        "--with-specgen",
         "--specgen-source PATH",
         "--benchmark-source PATH",
         "--verify-only",
@@ -128,7 +129,9 @@ def test_build_install_all_records_source_provenance() -> None:
 
 def test_build_install_all_writes_comparative_plugin_config() -> None:
     text = _text()
-    assert 'enabled = ["agent-workflow-spec", "agent-workflow-benchmark"]' in text
+    assert "SpecGen is an optional integration and is excluded by default." in text
+    assert 'plugins=\'["agent-workflow-benchmark"]\'' in text
+    assert 'plugins=\'["agent-workflow-spec", "agent-workflow-benchmark"]\'' in text
     assert 'provider = "typesafe"' in text
     assert "typesafe-api-calls.jsonl" in text
     assert 'mode = "comparative"' in text
@@ -185,3 +188,22 @@ def test_build_wheel_initializes_key_before_using_it_under_nounset() -> None:
     assert 'local key="$1"' in block
     assert 'local out="$BUILD_ROOT/$key"' in block
     assert block.index('local key="$1"') < block.index('local out="$BUILD_ROOT/$key"')
+
+
+def test_specgen_is_opt_in_not_default_stack_authority() -> None:
+    text = _text()
+    assert 'WITH_SPECGEN=0' in text
+    assert '--with-specgen) WITH_SPECGEN=1' in text
+    assert 'SPECGEN_SOURCE=""' in text
+    assert 'EXPECTED_SPECGEN_VERSION=""' in text
+    assert 'if [[ "$WITH_SPECGEN" -eq 1 ]]; then' in text
+    assert 'LOCAL_COMPONENT_ARGS+=("specgen" "$EXPECTED_SPECGEN_VERSION" "$SPECGEN_SOURCE")' in text
+    assert 'expected_plugins = ("agent-workflow-spec","agent-workflow-benchmark") if with_specgen else ("agent-workflow-benchmark",)' in text
+    assert 'if with_specgen:' in text
+    assert 'from specgen.agent_workflow import AW_VERSION' in text
+    assert 'if [[ "$WITH_SPECGEN" -eq 1 ]]; then "$VENV/bin/specgen" --help >/dev/null; fi' in text
+
+
+def test_specgen_source_option_implies_optional_integration() -> None:
+    text = _text()
+    assert 'SPECGEN_SOURCE_ARG="$1"; WITH_SPECGEN=1' in text
