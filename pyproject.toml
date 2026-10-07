@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "agent-workflow"
 version = "0.12.0"
-description = "Headless, observable workflow for durable coding-agent delegation"
+description = "Durable orchestration, delegation, evidence, evaluation, review, and recovery for coding-agent workflows."
 readme = "README.md"
 keywords = ["agentic-ai", "coding-agents", "orchestration", "workflow-automation", "evaluation", "evidence"]
 license = "Apache-2.0"
@@ -29,6 +29,8 @@ classifiers = [
 
 [project.urls]
 Homepage = "https://ngallodev-software.uk/projects/agent-workflow"
+Portfolio = "https://ngallodev-software.uk/"
+JevHunt = "https://jevhunt.com/projects/ngallodev-software/agent-workflow/"
 Repository = "https://github.com/ngallodev-software/agent-workflow"
 Changelog = "https://github.com/ngallodev-software/agent-workflow/blob/master/CHANGELOG.md"
 Issues = "https://github.com/ngallodev-software/agent-workflow/issues"

@@ -1,13 +1,28 @@
-# Agent-Workflow
+<p align="center">
+  <a href="https://ngallodev-software.uk/" title="Nate G. / ngallodev-software portfolio">
+    <img src="https://raw.githubusercontent.com/ngallodev-software/portfolio-site/master/public/icon-husky-r1-192.png" width="88" alt="Nate G. portfolio husky mark">
+  </a>
+</p>
 
-![Version](https://img.shields.io/badge/version-0.12.0-blue)
-![Python](https://img.shields.io/badge/python-%3E%3D3.11-3776AB)
-![License](https://img.shields.io/badge/license-Apache--2.0-green)
+<h1 align="center">Agent-Workflow</h1>
 
-**Portfolio case study:** https://ngallodev-software.uk/projects/agent-workflow  
-**Public benchmark results:** https://github.com/ngallodev-software/agent-workflow-benchmark-results
+<p align="center"><strong>Durable orchestration, delegation, evidence, review, recovery, and acceptance for coding-agent workflows.</strong></p>
+
+<p align="center">
+  <a href="https://ngallodev-software.uk/projects/agent-workflow">Portfolio case study</a> ·
+  <a href="https://jevhunt.com/projects/ngallodev-software/agent-workflow/">JevHunt listing</a> ·
+  <a href="https://github.com/ngallodev-software/agent-workflow-benchmark-results">Benchmark evidence</a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/version-0.12.0-blue" alt="">
+  <img src="https://img.shields.io/badge/python-%3E%3D3.11-3776AB" alt="">
+  <img src="https://img.shields.io/badge/license-Apache--2.0-green" alt="">
+</p>
 
 ## Summary
+
+> **Evidence & chronology:** this repository is part of the wider Agent-Workflow engineering ecosystem. A private `agent-workflow-lab-notebook` preserves dated decisions, failures, corrections, and evidence lineage; public README and portfolio claims are curated from public artifacts and reviewed notebook history. JevHunt is an independent discovery/indexing surface, not an endorsement or independent validation.
 
 - **What it is:** a durable orchestration layer for coding-agent work: delegation, isolated execution, evidence, review, recovery, and acceptance.
 - **Why it matters:** model work does not have to disappear into chat history or a terminal session; execution state and proof survive restart and can be reviewed independently.
@@ -248,14 +263,13 @@ The core is deliberately host-independent. A future plugin may project Agent Run
 
 ## Version
 
-Version `0.12.0` builds on the current headless core as the initial GitHub
-public-preview release. It includes the
-qualified OpenSpec 1.13.2 import boundary for new planning work while retaining
+Version `0.12.0` is the current tagged public-preview candidate. It includes
+the qualified OpenSpec 1.13.2 import boundary for new planning work while retaining
 the frozen SpecGen/shared-contract `native-job/v1` compatibility path. The
-release remains a GitHub **prerelease** while clean-host compatibility evidence
-is still pending; the attached release-evidence artifact records that status.
-Deterministic lifecycle, review, acceptance, scope, provenance, and sealing
-authority remain Agent-Workflow-owned.
+`v0.12.0` tag exists, but a GitHub Release is not yet published; clean-host
+compatibility evidence remains the release-policy boundary. Deterministic lifecycle,
+review, acceptance, scope, provenance, and sealing authority remain
+Agent-Workflow-owned.
 
 ## Repository-only CI assets
 
