@@ -263,14 +263,13 @@ The core is deliberately host-independent. A future plugin may project Agent Run
 
 ## Version
 
-Version `0.12.0` builds on the current headless core as the initial GitHub
-public-preview release. It includes the
-qualified OpenSpec 1.13.2 import boundary for new planning work while retaining
+Version `0.12.0` is the current tagged public-preview candidate. It includes
+the qualified OpenSpec 1.13.2 import boundary for new planning work while retaining
 the frozen SpecGen/shared-contract `native-job/v1` compatibility path. The
-release remains a GitHub **prerelease** while clean-host compatibility evidence
-is still pending; the attached release-evidence artifact records that status.
-Deterministic lifecycle, review, acceptance, scope, provenance, and sealing
-authority remain Agent-Workflow-owned.
+`v0.12.0` tag exists, but a GitHub Release is not yet published; clean-host
+compatibility evidence remains the release-policy boundary. Deterministic lifecycle,
+review, acceptance, scope, provenance, and sealing authority remain
+Agent-Workflow-owned.
 
 ## Repository-only CI assets
 
