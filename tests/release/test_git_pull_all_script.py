@@ -64,8 +64,8 @@ def test_git_pull_all_fails_closed_without_destructive_git_operations() -> None:
 def test_agent_workflow_is_pulled_last_for_safe_reexec() -> None:
     text = SCRIPT.read_text(encoding="utf-8")
     positions = [
-        text.rindex('pull_repo "contracts"'),
         text.rindex('pull_repo "comparative-eval"'),
+        text.rindex('pull_repo "contracts"'),
         text.rindex('pull_repo "specgen"'),
         text.rindex('pull_repo "benchmark"'),
         text.rindex('pull_repo "agent-workflow"'),
@@ -95,11 +95,21 @@ def test_specgen_pull_is_explicitly_opt_in() -> None:
     assert 'SPECGEN_SOURCE=""' in text
     assert 'if [[ "$WITH_SPECGEN" -eq 1 ]]; then' in text
     assert 'pull_repo "specgen" "$SPECGEN_SOURCE"' in text
-    assert "optional and excluded unless --with-specgen is supplied." in text
+    assert "optional legacy inputs and are" in text
+    assert "excluded unless --with-specgen is supplied." in text
+    block = text[text.index('if [[ "$WITH_SPECGEN" -eq 1 ]]; then', text.index('pull_repo "comparative-eval"')) : text.index('pull_repo "benchmark"')]
+    assert 'pull_repo "contracts" "$CONTRACTS_SOURCE"' in block
 
 
 def test_specgen_source_implies_specgen_pull() -> None:
     text = SCRIPT.read_text(encoding="utf-8")
     block = text[text.index("--specgen-source)") : text.index("--benchmark-source)")]
     assert 'SPECGEN_SOURCE="$1"' in block
+    assert "WITH_SPECGEN=1" in block
+
+
+def test_contracts_source_implies_legacy_specgen_pull() -> None:
+    text = SCRIPT.read_text(encoding="utf-8")
+    block = text[text.index("--contracts-source)") : text.index("--comparative-eval-source)")]
+    assert 'CONTRACTS_SOURCE="$1"' in block
     assert "WITH_SPECGEN=1" in block
