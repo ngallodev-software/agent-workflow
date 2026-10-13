@@ -131,7 +131,7 @@ def test_jenkins_does_not_run_extracted_benchmark_contracts() -> None:
     assert 'git -C "$compat/source" checkout --detach "$benchmark_revision"' in jenkinsfile
     assert "stage('Built-in TypeSafe provider')" in jenkinsfile
     assert "stage('TypeSafe plugin')" not in jenkinsfile
-    assert "stage('Shared contract bundle')" in jenkinsfile
+    assert "stage('Legacy shared contract bundle')" in jenkinsfile
     assert "codebase-memory-cli" not in jenkinsfile
     assert "jenkins-artifacts" not in jenkinsfile
     assert "./scripts/ci-release-build.sh" in jenkinsfile
