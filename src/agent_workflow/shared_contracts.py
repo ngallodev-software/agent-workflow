@@ -22,7 +22,8 @@ def negotiate_bundle(provenance: Any) -> dict[str, Any]:
         from specgen_contracts import negotiate
     except ImportError as exc:
         raise WorkflowError(
-            "native job requires the specgen-agent-workflow-contracts bundle"
+            "native-job/v1 requires the frozen legacy SpecGen compatibility bundle; "
+            "install Agent-Workflow with the 'legacy-specgen' extra"
         ) from exc
 
     version = provenance.get("bundle_version")
