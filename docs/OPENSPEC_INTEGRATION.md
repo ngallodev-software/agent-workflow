@@ -139,6 +139,49 @@ long as the revision and imported planning bytes match.
 
 The source specification receipt is copied into run-local evidence and sealed with the run.
 
+## Phase-0 execution qualification
+
+`tests/compat/openspec-phase0-smoke.sh` qualifies the real published OpenSpec
+1.13.2 surface through host acceptance, with `specgen_contracts` absent. It
+initializes and strictly validates a committed `spec-driven` change, imports
+its pack, and verifies checksums, source/task hashes, v2 scope, and the absence
+of `bundle_provenance`.
+
+Immediately after import, the smoke replaces `openspec` on PATH with a logging
+shim that exits 97. It checks the guard and resets the sentinel log before pack
+validation, preparation, and execution; the worker also verifies that the shim
+is selected. The completed lifecycle must leave that log empty.
+
+The fixture uses the existing external-worker lifecycle:
+
+1. Prepare the imported job at low tier, bind the fixture host, and start the
+   generation-bound external worker.
+2. Launch the prepared command as a real process. The worker commits only
+   `src/rate_limiter.py` and calls public `agent finish --result completed`.
+   Agent-Workflow runs `compile-src` and derives the mapped `source-compiles`
+   criterion from its passing command evidence.
+3. After observing the process exit successfully, record public `external-exit`
+   and finalize the run. Sealing validates both supported job-binding versions
+   and includes the byte-identical source-specification receipt, completion,
+   and verification evidence.
+4. Record host review and acceptance through public commands and check the
+   terminal summary and seal.
+
+An external worker has a host-observed exit receipt rather than an
+Agent-Workflow-owned process-result record. The fixture does not fabricate
+such a record. Its job policy does not require independent review, but host
+acceptance still requires a recorded review. No separate semantic assertion or
+additional evaluation plan is needed for the command-mapped criterion; the
+fixture qualifies deterministic execution rather than a production limiter or
+an independent semantic review policy.
+
+Execution preserves every frozen `openspec/` file and changes only the
+permitted source file. OpenSpec is neither invoked nor used as lifecycle
+authority after import, and v2 needs no SpecGen/shared-contract negotiation.
+The installed-product journey provides regression coverage for the same public
+external lifecycle; the real-upstream smoke is the gate that proves contract
+package absence.
+
 ## Compatibility and retirement boundary
 
 This integration does **not** archive SpecGen or rewrite historical artifacts.
@@ -149,8 +192,12 @@ Current compatibility policy:
 - `native-job/v2`: OpenSpec source-specification path, no SpecGen negotiation;
 - the shared contract package remains installed while supported v1 jobs exist;
 - new planning work should prefer OpenSpec rather than creating new SpecGen authoring state;
-- removal of the mandatory shared-contract dependency is a later compatibility change after v2
-  migration evidence is complete.
+- execution qualification does not freeze or retire legacy authoring compatibility;
+- before retirement, inventory remaining SpecGen authoring consumers and supported v1 jobs,
+  complete their migration or explicitly freeze their support boundary, and obtain review and
+  acceptance of that compatibility decision;
+- removal of the mandatory shared-contract dependency requires a separate packaging change with
+  v1 compatibility and sealed historical evidence preserved.
 
 SpecGen capabilities that were actually execution invariants—source binding, fail-closed lowering,
 result contracts, writable scope, evaluation/oracle identity, and review requirements—remain

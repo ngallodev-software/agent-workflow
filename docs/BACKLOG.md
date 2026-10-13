@@ -12,6 +12,39 @@ Pin the intended support hosts/executor versions, execute the candidate matrix o
 
 ## P1 — Release, evidence, and publication hardening
 
+### WORKER-001 — Qualify headless public completion against isolated state
+
+During OpenSpec execution qualification, a real prepared/started headless
+fixture committed its scoped source change, then its public `agent finish`
+subprocess exited 2 before completion. The runner sets worker `XDG_STATE_HOME`
+to the control-bridge parent, while `worker_completion._context` reads the
+launch contract and lifecycle from the configured host run root. The isolated
+worker root contains no corresponding launch contract; the control bridge
+currently handles progress/acknowledgement rather than finish.
+
+Retain this as a separate headless worker-protocol issue. The OpenSpec gate uses
+the existing external-worker protocol and does not change state isolation or
+external-host architecture. Reproduce with a headless explicit Python worker
+calling the advertised `agent finish`, retain its stderr, and qualify the
+intended public completion route without granting workers host lifecycle
+write authority or weakening isolation.
+
+**Done when:** an actual headless worker can complete through the advertised
+public protocol with passing command evidence, while host-owned state and
+sealing/review/acceptance authority remain protected.
+
+### TEST-001 — Isolate configuration trust fixtures from caller umask
+
+The phase-end configuration trust test
+`test_missing_policy_file_warns_locally_and_fails_governed` fails under umask
+`0002`: its temporary config is group-writable, so governed loading rejects
+configuration trust before the intended missing-policy check. The same failure
+reproduces on unchanged master `72685b3`; umask `022` is the qualification
+workaround, not a product fix.
+
+**Done when:** the fixture explicitly establishes its intended trusted config
+permissions and reaches the missing-policy assertion under both umasks.
+
 ### HARD-010 — Reproducible dependency/supply-chain evidence
 
 The committed dependency lock is currently direct-only. Add complete transitive resolution/hashes and the independent reproducibility plus authenticated signing/attestation policy required for a stronger release claim.
@@ -311,10 +344,26 @@ Host start/prompt/ack captures and assignment manifest:
 OpenSpec is the selected upstream planning/change authority. Agent-Workflow
 should consume a narrow, version-qualified import surface rather than continue
 growing a local SpecGen planning representation. The first implementation slice
-is under review in PR #49 and targets published OpenSpec 1.13.2, built-in
+merged in PR #49 and targets published OpenSpec 1.13.2, built-in
 `spec-driven` v1, one local Git repository/change, strict CLI validation,
 content-addressed source-specification import evidence, and Agent-Workflow-owned
 `native-job/v2` / `job-binding/v2` execution contracts.
+
+PR #66 adds real Phase-0 execution qualification for an imported v2 job through
+source-only implementation, public worker completion with passing acceptance
+command evidence, sealing, host review, and host acceptance. OpenSpec is
+replaced with a fail-fast guard after import and receives no execution-time
+calls; `specgen_contracts` is absent. Sealing validates v2 bindings as well
+as legacy v1 bindings. Once PR #66 is merged, the Phase-0 import/execution
+qualification portion of this backlog item is complete; the remaining work is
+the legacy-authoring compatibility and shared-contract retirement boundary below.
+
+Remaining migration work: inventory and migrate or explicitly freeze legacy
+SpecGen authoring consumers and supported v1 jobs, approve that compatibility
+boundary, and separately qualify removal of the mandatory shared-contract
+dependency while preserving v1 support and sealed historical evidence.
+OPENSPEC-001 remains open; execution qualification alone does not satisfy all
+of its Done-when conditions.
 
 Keep planning authority and execution authority separate: OpenSpec owns planning
 state; Agent-Workflow owns launch, scope, evidence, evaluation, independent
