@@ -49,7 +49,7 @@ def test_release_workflow_distinguishes_preview_from_supported_publication() -> 
     assert "agent-workflow-comparative-eval.git@master" not in installer
     assert "source_revision" in installer
     assert "metadata.version(\"agent-workflow-comparative-eval\")" in installer
-    assert "d254a0b13f2fd1de732dab2abd33da35db9ea365b50b3214e92308fea79d85c2" in installer
+    assert "specgen-agent-workflow-contracts" not in installer
     # VCS-only release inputs must be bound by the durable dependency lock.
     lock = _load_json(REPO_ROOT / "release" / "dependency-lock.json")
     comparative = next(
@@ -153,6 +153,34 @@ def test_built_wheel_excludes_repository_only_ci_assets(
     assert not any("__pycache__/" in name or name.endswith(".pyc") for name in names)
 
 
+def test_built_wheel_keeps_legacy_specgen_out_of_default_requires_dist(
+    installed_product: InstalledProduct,
+) -> None:
+    with zipfile.ZipFile(installed_product.wheel) as archive:
+        metadata_name = next(
+            name for name in archive.namelist()
+            if name.endswith(".dist-info/METADATA")
+        )
+        metadata_text = archive.read(metadata_name).decode("utf-8")
+    requirements = [
+        line.removeprefix("Requires-Dist: ").strip()
+        for line in metadata_text.splitlines()
+        if line.startswith("Requires-Dist: ")
+    ]
+    legacy = [
+        requirement for requirement in requirements
+        if requirement.lower().startswith("specgen-agent-workflow-contracts")
+    ]
+    assert len(legacy) == 1
+    assert "legacy-specgen" in legacy[0]
+    assert "extra ==" in legacy[0]
+    assert not any(
+        requirement.lower().startswith("specgen-agent-workflow-contracts")
+        and "extra ==" not in requirement
+        for requirement in requirements
+    )
+
+
 def test_wheel_source_preflight_rejects_stale_build_components() -> None:
     built = REPO_ROOT / "build" / "lib" / "agent_workflow"
     source = REPO_ROOT / "src" / "agent_workflow" / "cli_contract.py"
@@ -242,11 +270,26 @@ def test_release_evidence_contract_and_cli_outcomes_are_one_release_gate(tmp_pat
     assert "mcp==1.28.1" not in metadata["project"]["dependencies"]
     assert metadata["project"]["optional-dependencies"]["mcp"] == ["mcp==1.28.1"]
     assert "PyYAML>=6.0.3,<7" in metadata["project"]["dependencies"]
+    assert not any(
+        requirement.startswith("specgen-agent-workflow-contracts")
+        for requirement in metadata["project"]["dependencies"]
+    )
+    legacy_specgen = metadata["project"]["optional-dependencies"]["legacy-specgen"]
+    assert len(legacy_specgen) == 1
+    assert legacy_specgen[0].startswith("specgen-agent-workflow-contracts @ ")
+    assert "v0.2.1/specgen_agent_workflow_contracts-0.2.1-py3-none-any.whl" in legacy_specgen[0]
+    assert "sha256=d254a0b13f2fd1de732dab2abd33da35db9ea365b50b3214e92308fea79d85c2" in legacy_specgen[0]
     lock = _load_json(REPO_ROOT / "release" / "dependency-lock.json")
     mcp = next(package for package in lock["packages"] if package["name"] == "mcp")
     pyyaml = next(package for package in lock["packages"] if package["name"] == "PyYAML")
+    legacy = next(
+        package for package in lock["packages"]
+        if package["name"] == "specgen-agent-workflow-contracts"
+    )
     assert set(mcp["groups"]) == {"mcp"}
     assert set(pyyaml["groups"]) == {"runtime"}
+    assert set(legacy["groups"]) == {"legacy-specgen"}
+    assert legacy["source_requirements"] == legacy_specgen
 
     happy_output = tmp_path / "evidence-happy"
     summary = collect_release_evidence(
