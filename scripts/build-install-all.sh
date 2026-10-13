@@ -28,11 +28,12 @@ usage() {
 Usage: scripts/build-install-all.sh [options]
 
 Build/install the local Agent-Workflow development stack into one EXISTING
-virtualenv. SpecGen is an optional integration and is excluded by default.
+virtualenv. SpecGen and its frozen native-job/v1 contract bundle are an optional
+legacy integration and are excluded by default.
 
 Options:
   --venv PATH
-  --contracts-source PATH
+  --contracts-source PATH  (implies --with-specgen)
   --comparative-eval-source PATH
   --with-specgen
   --specgen-source PATH
@@ -55,7 +56,7 @@ USAGE
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --venv) shift; [[ $# -gt 0 ]] || { echo "--venv requires a value" >&2; exit 2; }; VENV_ARG="$1" ;;
-    --contracts-source) shift; [[ $# -gt 0 ]] || { echo "--contracts-source requires a value" >&2; exit 2; }; CONTRACTS_SOURCE_ARG="$1" ;;
+    --contracts-source) shift; [[ $# -gt 0 ]] || { echo "--contracts-source requires a value" >&2; exit 2; }; CONTRACTS_SOURCE_ARG="$1"; WITH_SPECGEN=1 ;;
     --comparative-eval-source) shift; [[ $# -gt 0 ]] || { echo "--comparative-eval-source requires a value" >&2; exit 2; }; COMPARATIVE_EVAL_SOURCE_ARG="$1" ;;
     --with-specgen) WITH_SPECGEN=1 ;;
     --specgen-source) shift; [[ $# -gt 0 ]] || { echo "--specgen-source requires a value" >&2; exit 2; }; SPECGEN_SOURCE_ARG="$1"; WITH_SPECGEN=1 ;;
@@ -79,18 +80,19 @@ print(Path(sys.argv[1]).expanduser().resolve())
 PY
 }
 
-CONTRACTS_SOURCE="$(resolve_path "${CONTRACTS_SOURCE_ARG:-$PARENT/agent-workflow-spec-contracts}")"
-COMPARATIVE_EVAL_SOURCE="$(resolve_path "${COMPARATIVE_EVAL_SOURCE_ARG:-$PARENT/agent-workflow-comparative-eval}")"
+CONTRACTS_SOURCE=""
 SPECGEN_SOURCE=""
+COMPARATIVE_EVAL_SOURCE="$(resolve_path "${COMPARATIVE_EVAL_SOURCE_ARG:-$PARENT/agent-workflow-comparative-eval}")"
 if [[ "$WITH_SPECGEN" -eq 1 ]]; then
+  CONTRACTS_SOURCE="$(resolve_path "${CONTRACTS_SOURCE_ARG:-$PARENT/agent-workflow-spec-contracts}")"
   SPECGEN_SOURCE="$(resolve_path "${SPECGEN_SOURCE_ARG:-$PARENT/specgen-aw}")"
 fi
 BENCHMARK_SOURCE="$(resolve_path "${BENCHMARK_SOURCE_ARG:-$PARENT/agent-workflow-benchmark}")"
 
 if [[ "$PULL_ONLY" -eq 1 || "$NO_PULL" -eq 0 ]]; then
-  pull_args=(--contracts-source "$CONTRACTS_SOURCE" --comparative-eval-source "$COMPARATIVE_EVAL_SOURCE" --benchmark-source "$BENCHMARK_SOURCE")
+  pull_args=(--comparative-eval-source "$COMPARATIVE_EVAL_SOURCE" --benchmark-source "$BENCHMARK_SOURCE")
   if [[ "$WITH_SPECGEN" -eq 1 ]]; then
-    pull_args+=(--with-specgen --specgen-source "$SPECGEN_SOURCE")
+    pull_args+=(--with-specgen --contracts-source "$CONTRACTS_SOURCE" --specgen-source "$SPECGEN_SOURCE")
   fi
   [[ "$ALLOW_DIRTY_PULL" -eq 0 ]] || pull_args+=(--allow-dirty)
   bash "$ROOT/scripts/git-pull-all.sh" "${pull_args[@]}"
@@ -124,11 +126,12 @@ else:
 PY
 }
 
-EXPECTED_CONTRACTS_VERSION="$(resolve_source_version "$CONTRACTS_SOURCE" "specgen-agent-workflow-contracts")"
+EXPECTED_CONTRACTS_VERSION=""
 EXPECTED_AGENT_WORKFLOW_VERSION="$(resolve_source_version "$ROOT" "agent-workflow")"
 EXPECTED_COMPARATIVE_EVAL_VERSION="$(resolve_source_version "$COMPARATIVE_EVAL_SOURCE" "agent-workflow-comparative-eval")"
 EXPECTED_SPECGEN_VERSION=""
 if [[ "$WITH_SPECGEN" -eq 1 ]]; then
+  EXPECTED_CONTRACTS_VERSION="$(resolve_source_version "$CONTRACTS_SOURCE" "specgen-agent-workflow-contracts")"
   EXPECTED_SPECGEN_VERSION="$(resolve_source_version "$SPECGEN_SOURCE" "specgen")"
 fi
 EXPECTED_BENCHMARK_VERSION="$(resolve_source_version "$BENCHMARK_SOURCE" "agent-workflow-benchmark")"
@@ -160,13 +163,15 @@ export PATH="$VENV/bin:$PATH" XDG_CONFIG_HOME="$VENV/.xdg/config" XDG_STATE_HOME
 mkdir -p "$XDG_CONFIG_HOME" "$XDG_STATE_HOME" "$XDG_DATA_HOME"
 
 LOCAL_COMPONENT_ARGS=(
-  "specgen-agent-workflow-contracts" "$EXPECTED_CONTRACTS_VERSION" "$CONTRACTS_SOURCE"
   "agent-workflow" "$EXPECTED_AGENT_WORKFLOW_VERSION" "$ROOT"
   "agent-workflow-comparative-eval" "$EXPECTED_COMPARATIVE_EVAL_VERSION" "$COMPARATIVE_EVAL_SOURCE"
   "agent-workflow-benchmark" "$EXPECTED_BENCHMARK_VERSION" "$BENCHMARK_SOURCE"
 )
 if [[ "$WITH_SPECGEN" -eq 1 ]]; then
-  LOCAL_COMPONENT_ARGS+=("specgen" "$EXPECTED_SPECGEN_VERSION" "$SPECGEN_SOURCE")
+  LOCAL_COMPONENT_ARGS+=(
+    "specgen-agent-workflow-contracts" "$EXPECTED_CONTRACTS_VERSION" "$CONTRACTS_SOURCE"
+    "specgen" "$EXPECTED_SPECGEN_VERSION" "$SPECGEN_SOURCE"
+  )
 fi
 
 report_repo_venv_versions() {
@@ -268,6 +273,13 @@ loaded=tuple(x.descriptor.name for x in load_plugin_registry(settings.plugins_en
 if with_specgen:
     from specgen.agent_workflow import AW_VERSION
     if AW_VERSION != expected["agent-workflow"]: raise SystemExit(f"SpecGen target {AW_VERSION}; expected {expected['agent-workflow']}")
+else:
+    for legacy in ("specgen", "specgen-agent-workflow-contracts"):
+        try:
+            observed = metadata.version(legacy)
+        except metadata.PackageNotFoundError:
+            continue
+        raise SystemExit(f"default stack unexpectedly retains legacy package {legacy}=={observed}; rerun installation to reconcile")
 if not shutil.which("codex"): raise SystemExit("direct Codex executable is not available")
 if not os.environ.get("TYPESAFE_API_KEY"): raise SystemExit("TYPESAFE_API_KEY is not configured")
 print("\nAgent-Workflow stack verification:")
@@ -277,8 +289,10 @@ PY
   "$PYTHON" -m pip check
   "$VENV/bin/agent-workflow" --version >/dev/null
   "$VENV/bin/agent-workflow" --no-plugins --help >/dev/null
-  if [[ "$WITH_SPECGEN" -eq 1 ]]; then "$VENV/bin/specgen" --help >/dev/null; fi
-  "$VENV/bin/contract-bundle" --help >/dev/null
+  if [[ "$WITH_SPECGEN" -eq 1 ]]; then
+    "$VENV/bin/specgen" --help >/dev/null
+    "$VENV/bin/contract-bundle" --help >/dev/null
+  fi
   codex --version >/dev/null
 }
 
@@ -318,16 +332,21 @@ if observed != expected: raise SystemExit(f"{wheel}: {observed}; expected {expec
 PY
   printf '%s\n' "$1"
 }
-CONTRACTS_WHEEL="$(build_wheel contracts "$CONTRACTS_SOURCE" specgen-agent-workflow-contracts "$EXPECTED_CONTRACTS_VERSION")"
+CONTRACTS_WHEEL=""
+SPECGEN_WHEEL=""
 AGENT_WORKFLOW_WHEEL="$(build_wheel core "$ROOT" agent-workflow "$EXPECTED_AGENT_WORKFLOW_VERSION")"
 COMPARATIVE_EVAL_WHEEL="$(build_wheel comparative "$COMPARATIVE_EVAL_SOURCE" agent-workflow-comparative-eval "$EXPECTED_COMPARATIVE_EVAL_VERSION")"
-SPECGEN_WHEEL=""
 if [[ "$WITH_SPECGEN" -eq 1 ]]; then
+  CONTRACTS_WHEEL="$(build_wheel contracts "$CONTRACTS_SOURCE" specgen-agent-workflow-contracts "$EXPECTED_CONTRACTS_VERSION")"
   SPECGEN_WHEEL="$(build_wheel specgen "$SPECGEN_SOURCE" specgen "$EXPECTED_SPECGEN_VERSION")"
 fi
 BENCHMARK_WHEEL="$(build_wheel benchmark "$BENCHMARK_SOURCE" agent-workflow-benchmark "$EXPECTED_BENCHMARK_VERSION")"
 install_wheel() { local name="$1" wheel="$2"; echo "installing $name from $(basename "$wheel")"; "$PYTHON" -m pip uninstall -y "$name" >/dev/null 2>&1 || true; "$PYTHON" -m pip install --no-deps --force-reinstall "$wheel"; }
-install_wheel specgen-agent-workflow-contracts "$CONTRACTS_WHEEL"
+if [[ "$WITH_SPECGEN" -eq 1 ]]; then
+  install_wheel specgen-agent-workflow-contracts "$CONTRACTS_WHEEL"
+else
+  "$PYTHON" -m pip uninstall -y specgen specgen-agent-workflow-contracts >/dev/null 2>&1 || true
+fi
 install_wheel agent-workflow "$AGENT_WORKFLOW_WHEEL"
 install_wheel agent-workflow-comparative-eval "$COMPARATIVE_EVAL_WHEEL"
 if [[ "$WITH_SPECGEN" -eq 1 ]]; then
