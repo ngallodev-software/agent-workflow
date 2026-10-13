@@ -47,13 +47,34 @@ jobs:
         run: brew install zstd
       - name: Install test dependencies
         shell: bash
-        run: python -m pip install 'setuptools>=61' 'pytest>=8,<10' 'jsonschema>=4.18,<5' 'PyYAML>=6.0.3,<7' 'mcp==1.28.1' 'build>=1.2,<2' 'specgen-agent-workflow-contracts @ git+https://github.com/ngallodev-software/agent-workflow-spec-contracts.git' 'agent-workflow-comparative-eval @ git+https://github.com/ngallodev-software/agent-workflow-comparative-eval.git@master'
+        run: python -m pip install 'setuptools>=61' 'pytest>=8,<10' 'jsonschema>=4.18,<5' 'PyYAML>=6.0.3,<7' 'mcp==1.28.1' 'build>=1.2,<2' 'agent-workflow-comparative-eval @ git+https://github.com/ngallodev-software/agent-workflow-comparative-eval.git@master'
+      - name: Verify default legacy dependency is absent
+        shell: bash
+        run: python -c "import importlib.util; assert importlib.util.find_spec('specgen_contracts') is None"
       - name: Acceptance and invariant suite
         if: matrix.suite == 'full'
         shell: bash
         run: |
             python scripts/bump-version.py --check
             ./scripts/release-check.sh
+      - name: Legacy native-job/v1 compatibility
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+        shell: bash
+        run: |
+          python -m pip install --disable-pip-version-check '.[legacy-specgen]'
+          python - <<'PY'
+          from importlib import metadata
+          from agent_workflow.shared_contracts import negotiate_bundle
+          from specgen_contracts.bundle import BUNDLE_VERSION, schema_digest
+
+          assert metadata.version("specgen-agent-workflow-contracts") == "0.2.1"
+          schema_id = "agent-workflow/prompt-pack/v2"
+          assert negotiate_bundle({
+              "bundle_version": BUNDLE_VERSION,
+              "schema_id": schema_id,
+              "schema_digest": schema_digest(schema_id),
+          })["schema_id"] == schema_id
+          PY
       - name: Cross-platform release build validation
         shell: bash
         run: ./scripts/ci-release-build.sh
