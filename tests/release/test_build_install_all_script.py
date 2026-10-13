@@ -56,13 +56,15 @@ def test_local_component_versions_are_not_hard_coded() -> None:
     text = _text()
     # Local versions must come from the source checkout after pull/re-exec.
     for name in (
-        "EXPECTED_CONTRACTS_VERSION",
         "EXPECTED_AGENT_WORKFLOW_VERSION",
         "EXPECTED_COMPARATIVE_EVAL_VERSION",
-        "EXPECTED_SPECGEN_VERSION",
         "EXPECTED_BENCHMARK_VERSION",
     ):
         assert f'{name}="$(resolve_source_version ' in text
+    assert 'EXPECTED_CONTRACTS_VERSION=""' in text
+    assert 'EXPECTED_SPECGEN_VERSION=""' in text
+    assert 'EXPECTED_CONTRACTS_VERSION="$(resolve_source_version "$CONTRACTS_SOURCE" "specgen-agent-workflow-contracts")"' in text
+    assert 'EXPECTED_SPECGEN_VERSION="$(resolve_source_version "$SPECGEN_SOURCE" "specgen")"' in text
     assert 'EXPECTED_COMPARATIVE_EVAL_VERSION="0.3.1"' not in text
     assert 'EXPECTED_COMPARATIVE_EVAL_VERSION="0.3.4"' not in text
     assert "resolve_source_version()" in text
@@ -94,26 +96,28 @@ def test_build_install_all_validates_wheel_metadata_against_source_version() -> 
     assert ".dist-info/METADATA" in text
     assert "if observed != expected" in text
     for wheel in (
-        "CONTRACTS_WHEEL",
         "AGENT_WORKFLOW_WHEEL",
         "COMPARATIVE_EVAL_WHEEL",
-        "SPECGEN_WHEEL",
         "BENCHMARK_WHEEL",
     ):
         assert f'{wheel}="$(build_wheel ' in text
+    assert 'CONTRACTS_WHEEL=""' in text
+    assert 'SPECGEN_WHEEL=""' in text
+    assert 'CONTRACTS_WHEEL="$(build_wheel contracts ' in text
+    assert 'SPECGEN_WHEEL="$(build_wheel specgen ' in text
 
 
-def test_build_install_all_uses_required_dependency_order() -> None:
+def test_build_install_all_keeps_legacy_dependencies_out_of_default_stack() -> None:
     text = _text()
-    installs = [
-        'install_wheel specgen-agent-workflow-contracts',
-        'install_wheel agent-workflow "$AGENT_WORKFLOW_WHEEL"',
-        'install_wheel agent-workflow-comparative-eval',
-        'install_wheel specgen "$SPECGEN_WHEEL"',
-        'install_wheel agent-workflow-benchmark',
-    ]
-    positions = [text.index(item) for item in installs]
-    assert positions == sorted(positions)
+    assert '"$PYTHON" -m pip uninstall -y specgen specgen-agent-workflow-contracts' in text
+    assert 'install_wheel specgen-agent-workflow-contracts "$CONTRACTS_WHEEL"' in text
+    assert 'install_wheel specgen "$SPECGEN_WHEEL"' in text
+    default_components = text[text.index("LOCAL_COMPONENT_ARGS=(") : text.index("if [[ \"$WITH_SPECGEN\" -eq 1 ]]; then", text.index("LOCAL_COMPONENT_ARGS=("))]
+    assert "specgen-agent-workflow-contracts" not in default_components
+    assert '"specgen"' not in default_components
+    optional_block = text[text.index("if [[ \"$WITH_SPECGEN\" -eq 1 ]]; then", text.index("LOCAL_COMPONENT_ARGS=(")) :]
+    assert '"specgen-agent-workflow-contracts" "$EXPECTED_CONTRACTS_VERSION" "$CONTRACTS_SOURCE"' in optional_block
+    assert '"specgen" "$EXPECTED_SPECGEN_VERSION" "$SPECGEN_SOURCE"' in optional_block
 
 
 def test_build_install_all_records_source_provenance() -> None:
@@ -129,7 +133,7 @@ def test_build_install_all_records_source_provenance() -> None:
 
 def test_build_install_all_writes_comparative_plugin_config() -> None:
     text = _text()
-    assert "SpecGen is an optional integration and is excluded by default." in text
+    assert "SpecGen and its frozen native-job/v1 contract bundle are an optional" in text
     assert 'plugins=\'["agent-workflow-benchmark"]\'' in text
     assert 'plugins=\'["agent-workflow-spec", "agent-workflow-benchmark"]\'' in text
     assert 'provider = "typesafe"' in text
@@ -197,7 +201,10 @@ def test_specgen_is_opt_in_not_default_stack_authority() -> None:
     assert 'SPECGEN_SOURCE=""' in text
     assert 'EXPECTED_SPECGEN_VERSION=""' in text
     assert 'if [[ "$WITH_SPECGEN" -eq 1 ]]; then' in text
-    assert 'LOCAL_COMPONENT_ARGS+=("specgen" "$EXPECTED_SPECGEN_VERSION" "$SPECGEN_SOURCE")' in text
+    assert '"specgen-agent-workflow-contracts" "$EXPECTED_CONTRACTS_VERSION" "$CONTRACTS_SOURCE"' in text
+    assert '"specgen" "$EXPECTED_SPECGEN_VERSION" "$SPECGEN_SOURCE"' in text
+    assert '"$VENV/bin/contract-bundle" --help' in text
+    assert 'default stack unexpectedly retains legacy package' in text
     assert 'expected_plugins = ("agent-workflow-spec","agent-workflow-benchmark") if with_specgen else ("agent-workflow-benchmark",)' in text
     assert 'if with_specgen:' in text
     assert 'from specgen.agent_workflow import AW_VERSION' in text
@@ -207,3 +214,8 @@ def test_specgen_is_opt_in_not_default_stack_authority() -> None:
 def test_specgen_source_option_implies_optional_integration() -> None:
     text = _text()
     assert 'SPECGEN_SOURCE_ARG="$1"; WITH_SPECGEN=1' in text
+
+
+def test_contracts_source_option_implies_optional_legacy_integration() -> None:
+    text = _text()
+    assert 'CONTRACTS_SOURCE_ARG="$1"; WITH_SPECGEN=1' in text
