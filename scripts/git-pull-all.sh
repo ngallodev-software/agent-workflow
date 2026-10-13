@@ -15,11 +15,12 @@ usage() {
   cat <<'USAGE'
 Usage: scripts/git-pull-all.sh [options]
 
-Fast-forward repositories used by the local Agent-Workflow stack. SpecGen is
-optional and excluded unless --with-specgen is supplied.
+Fast-forward repositories used by the local Agent-Workflow stack. SpecGen and
+its frozen shared-contract repository are optional legacy inputs and are
+excluded unless --with-specgen is supplied.
 
 Options:
-  --contracts-source PATH
+  --contracts-source PATH  (implies --with-specgen)
   --comparative-eval-source PATH
   --with-specgen
   --specgen-source PATH
@@ -39,10 +40,10 @@ exactly as they do for an ordinary `git pull --ff-only`. This script does not
 inspect, replace, suppress, or persist authentication state.
 
 Default sibling checkout layout:
-  ../agent-workflow-spec-contracts
   ../agent-workflow-comparative-eval
-  ../specgen-aw  (only with --with-specgen)
   ../agent-workflow-benchmark
+  ../agent-workflow-spec-contracts  (only with --with-specgen)
+  ../specgen-aw                     (only with --with-specgen)
 
 Agent-Workflow itself is updated last so a caller can safely re-exec a freshly
 pulled build/install script after this command returns.
@@ -62,6 +63,7 @@ while [[ $# -gt 0 ]]; do
     --contracts-source)
       shift; [[ $# -gt 0 ]] || { echo "--contracts-source requires a value" >&2; exit 2; }
       CONTRACTS_SOURCE="$1"
+      WITH_SPECGEN=1
       ;;
     --comparative-eval-source)
       shift; [[ $# -gt 0 ]] || { echo "--comparative-eval-source requires a value" >&2; exit 2; }
@@ -84,10 +86,11 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
-CONTRACTS_SOURCE="$(resolve_path "${CONTRACTS_SOURCE:-$PARENT/agent-workflow-spec-contracts}")"
-COMPARATIVE_EVAL_SOURCE="$(resolve_path "${COMPARATIVE_EVAL_SOURCE:-$PARENT/agent-workflow-comparative-eval}")"
+CONTRACTS_SOURCE=""
 SPECGEN_SOURCE=""
+COMPARATIVE_EVAL_SOURCE="$(resolve_path "${COMPARATIVE_EVAL_SOURCE:-$PARENT/agent-workflow-comparative-eval}")"
 if [[ "$WITH_SPECGEN" -eq 1 ]]; then
+  CONTRACTS_SOURCE="$(resolve_path "${CONTRACTS_SOURCE:-$PARENT/agent-workflow-spec-contracts}")"
   SPECGEN_SOURCE="$(resolve_path "${SPECGEN_SOURCE:-$PARENT/specgen-aw}")"
 fi
 BENCHMARK_SOURCE="$(resolve_path "${BENCHMARK_SOURCE:-$PARENT/agent-workflow-benchmark}")"
@@ -131,9 +134,9 @@ pull_repo() {
 # Update dependencies first. Agent-Workflow itself is last because this helper
 # may be invoked by build-install-all.sh, which re-execs the freshly pulled
 # installer after all repositories have been updated.
-pull_repo "contracts" "$CONTRACTS_SOURCE"
 pull_repo "comparative-eval" "$COMPARATIVE_EVAL_SOURCE"
 if [[ "$WITH_SPECGEN" -eq 1 ]]; then
+  pull_repo "contracts" "$CONTRACTS_SOURCE"
   pull_repo "specgen" "$SPECGEN_SOURCE"
 fi
 pull_repo "benchmark" "$BENCHMARK_SOURCE"
