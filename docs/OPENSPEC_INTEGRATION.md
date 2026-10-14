@@ -109,6 +109,13 @@ Generated jobs reject any `openspec/` entry in writable or disposable execution 
 and recursive trees remain distinct so a directory cannot accidentally be lowered as an exact
 writable file.
 
+Each pending dotted task locator produces its own stable task ID, prompt, and
+job. Completed checkboxes remain in the provenance receipt but do not produce
+jobs. Each job references only its own task in the shared import receipt.
+The explicit job policy is copied to every pending job: scope, acceptance
+commands, criteria, and review requirements are pack-wide authorizations.
+Import does not infer task-specific permissions or validators from prose.
+
 ## Planning verification is not execution acceptance
 
 OpenSpec task text is worker-visible planning input. It may describe how an author expects a task
@@ -139,25 +146,37 @@ long as the revision and imported planning bytes match.
 
 The source specification receipt is copied into run-local evidence and sealed with the run.
 
+For multiple independent tasks, prepare each job on a separate fresh worktree
+at that same imported revision. A completed task's commit is a different
+revision and cannot be reused as the next job's launch baseline. This boundary
+uses host-driven public Agent Run commands; it does not orchestrate dependent
+edits or integrate the resulting commits. The current workflow scheduler
+launches nodes against its shared workdir, rather than provisioning a fresh
+source-bound worktree for each imported job. Automatic multi-task scheduling
+is outside this qualification.
+
 ## Phase-0 execution qualification
 
 `tests/compat/openspec-phase0-smoke.sh` qualifies the real published OpenSpec
 1.13.2 surface through host acceptance, with `specgen_contracts` absent. It
-initializes and strictly validates a committed `spec-driven` change, imports
-its pack, and verifies checksums, source/task hashes, v2 scope, and the absence
-of `bundle_provenance`.
+initializes and strictly validates a committed `spec-driven` change with one
+completed and two pending tasks. It imports only the pending jobs and verifies
+checksums, stable IDs, distinct prompts/task references, source/task hashes,
+v2 scope, and the absence of `bundle_provenance`.
 
 Immediately after import, the smoke replaces `openspec` on PATH with a logging
 shim that exits 97. It checks the guard and resets the sentinel log before pack
 validation, preparation, and execution; the worker also verifies that the shim
 is selected. The completed lifecycle must leave that log empty.
 
-The fixture uses the existing external-worker lifecycle:
+The fixture runs both jobs sequentially on separate clean worktrees from the
+exact imported revision, using the existing external-worker lifecycle:
 
 1. Prepare the imported job at low tier, bind the fixture host, and start the
    generation-bound external worker.
 2. Launch the prepared command as a real process. The worker commits only
-   `src/rate_limiter.py` and calls public `agent finish --result completed`.
+   its task's source file (`src/rate_limiter.py` or `src/rate_response.py`)
+   and calls public `agent finish --result completed`.
    Agent-Workflow runs `compile-src` and derives the mapped `source-compiles`
    criterion from its passing command evidence.
 3. After observing the process exit successfully, record public `external-exit`
@@ -166,6 +185,20 @@ The fixture uses the existing external-worker lifecycle:
    and verification evidence.
 4. Record host review and acceptance through public commands and check the
    terminal summary and seal.
+
+Both jobs intentionally share an explicit two-file writable policy, a
+disposable `src/__pycache__/` tree for compiler output, and the same host-owned
+compile check. Each worker changes only its task's file.
+Separate worktrees isolate these overlapping authorizations; this is not a
+claim of task-specific access control or safe parallel conflicting edits.
+No per-task policy extension is needed for this fixture.
+
+The gate rejects launch with a different ticket, a dirty worktree, or the
+first task's advanced revision. It checks independent run identities,
+completion and verification evidence, seals, reviews, and acceptance records;
+finishing task two must not change task one's sealed evidence. The original
+source checkout and every frozen planning file remain unchanged. The logging
+OpenSpec guard must record zero calls across both executions.
 
 An external worker has a host-observed exit receipt rather than an
 Agent-Workflow-owned process-result record. The fixture does not fabricate
@@ -176,11 +209,24 @@ fixture qualifies deterministic execution rather than a production limiter or
 an independent semantic review policy.
 
 Execution preserves every frozen `openspec/` file and changes only the
-permitted source file. OpenSpec is neither invoked nor used as lifecycle
+permitted source files. OpenSpec is neither invoked nor used as lifecycle
 authority after import, and v2 needs no SpecGen/shared-contract negotiation.
 The installed-product journey provides regression coverage for the same public
 external lifecycle; the real-upstream smoke is the gate that proves contract
 package absence.
+
+Set `OPENSPEC_SMOKE_EVIDENCE_DIR` to an external directory to preserve
+the real fixture, imported pack, command outputs, run-local evidence, and
+seals for inspection in a fresh subdirectory. Without it, the smoke removes its
+temporary fixture.
+The installed-product tests use a fake upstream CLI; only the compatibility
+smoke qualifies the real published upstream surface.
+
+This qualification does not exercise autonomous workflow scheduling,
+dependent-task rebasing/integration, headless completion, production provider
+workers, independent semantic review, or deliberately rewritten imported
+job/task references. Host-supplied policy and checksum validation remain
+authority for the generated pack.
 
 ## Compatibility and retirement boundary
 
