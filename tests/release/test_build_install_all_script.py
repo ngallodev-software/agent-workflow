@@ -67,6 +67,8 @@ def test_local_component_versions_are_not_hard_coded() -> None:
     assert 'EXPECTED_SPECGEN_VERSION="$(resolve_source_version "$SPECGEN_SOURCE" "specgen")"' in text
     assert 'EXPECTED_COMPARATIVE_EVAL_VERSION="0.3.1"' not in text
     assert 'EXPECTED_COMPARATIVE_EVAL_VERSION="0.3.4"' not in text
+    assert 'EXPECTED_CONTRACTS_VERSION="$(resolve_source_version ' in text
+    assert 'if [[ "$WITH_SPECGEN" -eq 1 ]]; then' in text
     assert "resolve_source_version()" in text
     assert 'source / "VERSION"' in text
     assert 'source / "pyproject.toml"' in text
@@ -101,6 +103,7 @@ def test_build_install_all_validates_wheel_metadata_against_source_version() -> 
         "BENCHMARK_WHEEL",
     ):
         assert f'{wheel}="$(build_wheel ' in text
+    assert 'CONTRACTS_WHEEL="$(build_wheel ' in text
     assert 'CONTRACTS_WHEEL=""' in text
     assert 'SPECGEN_WHEEL=""' in text
     assert 'CONTRACTS_WHEEL="$(build_wheel contracts ' in text
@@ -219,3 +222,15 @@ def test_specgen_source_option_implies_optional_integration() -> None:
 def test_contracts_source_option_implies_optional_legacy_integration() -> None:
     text = _text()
     assert 'CONTRACTS_SOURCE_ARG="$1"; WITH_SPECGEN=1' in text
+
+
+def test_legacy_contracts_are_not_built_or_verified_by_default() -> None:
+    text = _text()
+    assert 'CONTRACTS_SOURCE=""' in text
+    assert 'EXPECTED_CONTRACTS_VERSION=""' in text
+    assert 'CONTRACTS_WHEEL=""' in text
+    assert 'if [[ "$WITH_SPECGEN" -eq 1 ]]; then\n  CONTRACTS_SOURCE=' in text
+    assert 'if [[ "$WITH_SPECGEN" -eq 1 ]]; then\n  CONTRACTS_WHEEL=' in text
+    assert 'if [[ "$WITH_SPECGEN" -eq 1 ]]; then\n  install_wheel specgen-agent-workflow-contracts' in text
+    assert '"$PYTHON" -m pip uninstall -y specgen specgen-agent-workflow-contracts' in text
+    assert 'default stack unexpectedly retains legacy package' in text
