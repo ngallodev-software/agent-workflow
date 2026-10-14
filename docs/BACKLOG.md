@@ -358,10 +358,12 @@ as legacy v1 bindings. Once PR #66 is merged, the Phase-0 import/execution
 qualification portion of this backlog item is complete; the remaining work is
 the legacy-authoring compatibility and shared-contract retirement boundary below.
 
-Remaining migration work: inventory and migrate or explicitly freeze legacy
-SpecGen authoring consumers and supported v1 jobs, approve that compatibility
-boundary, and separately qualify removal of the mandatory shared-contract
-dependency while preserving v1 support and sealed historical evidence.
+PR #66 qualified the OpenSpec execution lifecycle. The next packaging slice
+makes the historical SpecGen bundle an explicit `legacy-specgen` extra rather
+than a default runtime dependency, while retaining fail-closed v1 validation.
+Remaining migration work is to inventory external authoring consumers and
+approve a frozen support boundary for published v1 jobs; optional packaging
+does not by itself authorize archival or loss of historical support.
 OPENSPEC-001 remains open; execution qualification alone does not satisfy all
 of its Done-when conditions.
 
