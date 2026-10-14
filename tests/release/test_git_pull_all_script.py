@@ -113,3 +113,11 @@ def test_contracts_source_implies_legacy_specgen_pull() -> None:
     block = text[text.index("--contracts-source)") : text.index("--comparative-eval-source)")]
     assert 'CONTRACTS_SOURCE="$1"' in block
     assert "WITH_SPECGEN=1" in block
+
+
+def test_default_pull_does_not_require_legacy_contracts_checkout() -> None:
+    text = _text()
+    assert 'CONTRACTS_SOURCE=""' in text
+    assert 'if [[ "$WITH_SPECGEN" -eq 1 ]]; then\n  CONTRACTS_SOURCE=' in text
+    assert 'if [[ "$WITH_SPECGEN" -eq 1 ]]; then\n  pull_repo "contracts"' in text
+    assert 'CONTRACTS_SOURCE="$1"\n      WITH_SPECGEN=1' in text
