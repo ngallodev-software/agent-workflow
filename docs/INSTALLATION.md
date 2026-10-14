@@ -55,12 +55,18 @@ Use an explicit target when needed:
 bash scripts/build-install.sh --venv /path/to/agent-workflow/.venv
 ```
 
-The shared contracts source is hosted on GitHub and installed directly by the
-project dependency:
+The default Agent-Workflow installation does **not** install SpecGen or its
+shared contract bundle. OpenSpec-backed `native-job/v2` is the preferred new
+planning path. To execute historical SpecGen-backed `native-job/v1` jobs, opt into
+the immutable, digest-pinned legacy bundle explicitly:
 
 ```bash
-python -m pip install git+https://github.com/ngallodev-software/agent-workflow-spec-contracts.git
+python -m pip install 'agent-workflow[legacy-specgen]'
 ```
+
+Without the optional bundle, v1 jobs fail closed before execution with an
+actionable dependency error. Historical v1 schemas and sealed evidence are not
+rewritten.
 
 The source installer links skills into Codex by default. Opt into other
 harness roots explicitly, for example `bash scripts/install-source.sh
@@ -124,8 +130,9 @@ For external-plugin rollback, disable the affected plugin in `[plugins].enabled`
 The 0.12.x line is initially published through GitHub Releases as a preview.
 The release page carries the wheel, source distribution, platform bundles,
 `SHA256SUMS`, SBOM/provenance/test evidence, and a direct `install.sh`
-bootstrap asset. PyPI publication is intentionally deferred while the legacy
-shared-contract dependency remains a digest-pinned direct URL.
+bootstrap asset. The optional legacy SpecGen extra still uses a digest-pinned direct URL;
+publication and resolver support for that optional dependency require separate
+qualification.
 
 
 For a published release, pin the release explicitly. For version `0.12.0`:
@@ -178,8 +185,9 @@ XDG changes disappear automatically when the smoke script exits.
 
 ## Complete shared development stack
 
-For the benchmark/SpecGen development environment, install the entire qualified
-stack into one existing virtualenv:
+For the Agent-Workflow/benchmark development environment, install the
+current stack into one existing virtualenv. SpecGen and its contract bundle are
+excluded unless `--with-specgen` is requested:
 
 ```bash
 export TYPESAFE_API_KEY='...'
@@ -195,11 +203,14 @@ Default sibling source layout:
 ../agent-workflow-benchmark
 ```
 
-Override any checkout explicitly with `--contracts-source`,
-`--comparative-eval-source`, `--specgen-source`, or
-`--benchmark-source`.
+Override checkouts with `--comparative-eval-source` or
+`--benchmark-source`; `--with-specgen` enables the legacy pair, and
+`--contracts-source` / `--specgen-source` select their checkouts and imply
+that legacy mode.
 
-A normal full-stack run first updates all five source repositories with
+A normal default stack run first updates Agent-Workflow, comparative-eval,
+and benchmark (the two legacy repositories are added only with `--with-specgen`).
+It with
 `git pull --ff-only`. The helper fails closed on dirty checkouts, detached
 HEADs, missing upstreams, or divergence; it never switches branches, resets,
 cleans, stashes, rewrites remotes, or changes authentication configuration.
@@ -231,25 +242,23 @@ The lower-level update helper is also directly available:
 bash scripts/git-pull-all.sh --help
 ```
 
-The installer builds local wheels and installs this exact stack:
+The installer resolves local component versions from checked-out source,
+builds wheels, and verifies the installed distributions. The default includes
+Agent-Workflow, comparative-eval, benchmark, and frozen third-party runtimes.
+With `--with-specgen`, it additionally builds and installs the local
+SpecGen and shared-contract wheels. The default path removes previously
+installed legacy distributions from the selected development venv to avoid
+mistaking stale packages for current compatibility.
 
-```text
-specgen-agent-workflow-contracts  0.2.1
-agent-workflow                    0.12.0
-agent-workflow-comparative-eval   0.1.0
-specgen                           0.2.8
-agent-workflow-benchmark          0.3.9
-typesafe-sdk                      0.6.0
-```
-
-The generated venv-local config enables `agent-workflow-spec` and
-`agent-workflow-benchmark`, selects the built-in TypeSafe semantic provider,
+The generated venv-local config enables `agent-workflow-benchmark`
+by default (adding `agent-workflow-spec` only in legacy mode), selects the built-in TypeSafe semantic provider,
 and sets `decision_policy.mode = "comparative"`.
 `agent-workflow-comparative-eval` is a shared library and is intentionally not
 listed as a plugin.
 
 The verification gate requires `TYPESAFE_API_KEY`, a compatible comparative
-runtime, both plugins loaded, SpecGen targeting Agent-Workflow 0.12.0,
+runtime, the configured plugins loaded, SpecGen compatibility when explicitly
+enabled,
 `pip check` success, and direct `codex` execution rather than the obsolete
 `agent-workflow-codex` wrapper.
 
