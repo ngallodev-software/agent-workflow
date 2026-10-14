@@ -270,6 +270,9 @@ def test_release_evidence_contract_and_cli_outcomes_are_one_release_gate(tmp_pat
     assert "mcp==1.28.1" not in metadata["project"]["dependencies"]
     assert metadata["project"]["optional-dependencies"]["mcp"] == ["mcp==1.28.1"]
     assert "PyYAML>=6.0.3,<7" in metadata["project"]["dependencies"]
+    assert not any("specgen-agent-workflow-contracts" in req for req in metadata["project"]["dependencies"])
+    assert len(metadata["project"]["optional-dependencies"]["legacy-specgen"]) == 1
+    assert "specgen-agent-workflow-contracts" in metadata["project"]["optional-dependencies"]["legacy-specgen"][0]
     assert not any(
         requirement.startswith("specgen-agent-workflow-contracts")
         for requirement in metadata["project"]["dependencies"]
@@ -288,6 +291,8 @@ def test_release_evidence_contract_and_cli_outcomes_are_one_release_gate(tmp_pat
     )
     assert set(mcp["groups"]) == {"mcp"}
     assert set(pyyaml["groups"]) == {"runtime"}
+    legacy = next(package for package in lock["packages"] if package["name"] == "specgen-agent-workflow-contracts")
+    assert legacy["groups"] == ["legacy-specgen"]
     assert set(legacy["groups"]) == {"legacy-specgen"}
     assert legacy["source_requirements"] == legacy_specgen
 
@@ -469,3 +474,17 @@ def test_release_evidence_contract_and_cli_outcomes_are_one_release_gate(tmp_pat
     )
     assert technical_cli.returncode == 2, technical_cli.stdout + technical_cli.stderr
     assert _load_json(tmp_path / "evidence-cli-technical" / "release-evidence.json")["status"] == "technical_failure"
+
+
+def test_built_wheel_declares_legacy_contract_as_extra_only(
+    installed_product: InstalledProduct,
+) -> None:
+    from email.parser import Parser
+    with zipfile.ZipFile(installed_product.wheel) as archive:
+        name = next(name for name in archive.namelist() if name.endswith(".dist-info/METADATA"))
+        metadata = Parser().parsestr(archive.read(name).decode("utf-8"))
+    requirements = metadata.get_all("Requires-Dist") or []
+    legacy = [req for req in requirements if req.startswith("specgen-agent-workflow-contracts")]
+    assert len(legacy) == 1
+    assert 'extra == "legacy-specgen"' in legacy[0]
+    assert "legacy-specgen" in (metadata.get_all("Provides-Extra") or [])
