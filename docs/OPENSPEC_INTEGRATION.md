@@ -190,14 +190,14 @@ Current compatibility policy:
 
 - `native-job/v1`: frozen legacy SpecGen/shared-contract path;
 - `native-job/v2`: OpenSpec source-specification path, no SpecGen negotiation;
-- the shared contract package remains installed while supported v1 jobs exist;
+- the frozen shared contract package is an optional `legacy-specgen` extra; opening a v1 job without it fails closed;
 - new planning work should prefer OpenSpec rather than creating new SpecGen authoring state;
 - execution qualification does not freeze or retire legacy authoring compatibility;
 - before retirement, inventory remaining SpecGen authoring consumers and supported v1 jobs,
   complete their migration or explicitly freeze their support boundary, and obtain review and
   acceptance of that compatibility decision;
-- removal of the mandatory shared-contract dependency requires a separate packaging change with
-  v1 compatibility and sealed historical evidence preserved.
+- the mandatory shared-contract dependency is removed from the new/default path,
+  while the separate opt-in legacy path retains exact v1 bundle negotiation;
 
 SpecGen capabilities that were actually execution invariants—source binding, fail-closed lowering,
 result contracts, writable scope, evaluation/oracle identity, and review requirements—remain
