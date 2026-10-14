@@ -22,6 +22,8 @@ from tests.conftest import InstalledProduct, git_repo
 
 CHANGE = "add-rate-limit"
 TASK_ID = "openspec-add-rate-limit-1-1"
+TASK_IDS = (TASK_ID, "openspec-add-rate-limit-1-2")
+SOURCE_PATHS = ("src/rate_limiter.py", "src/rate_response.py")
 
 
 def _commit_all(repo: Path, message: str) -> str:
@@ -95,7 +97,11 @@ def _write_openspec_repository(repo: Path) -> str:
     )
     (change / "tasks.md").write_text(
         "# Tasks\n\n"
+        "## 1. Implementation\n\n"
+        "- [x] 1.0 Preserve the existing limiter module\n"
         "- [ ] 1.1 Implement the limiter in src; verification note: "
+        "run untrusted-check --from-openspec-task\n"
+        "- [ ] 1.2 Add a bounded response helper in src; verification note: "
         "run untrusted-check --from-openspec-task\n",
         encoding="utf-8",
     )
@@ -153,6 +159,7 @@ def _write_fake_openspec(
 ) -> None:
     script = f"""#!/usr/bin/env python3
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -204,6 +211,15 @@ elif args == ["validate", change, "--strict", "--json", "--no-interactive"]:
         "root": {{"path": str(cwd), "source": "nearest"}},
     }}
 elif args == ["instructions", "apply", "--change", change, "--json"]:
+    task_lines = []
+    for line in tasks_path.read_text(encoding="utf-8").splitlines():
+        match = re.match(r"^- \\[([ xX])\\] ([0-9]+(?:\\.[0-9]+)+) (.+)$", line)
+        if match:
+            task_lines.append({{
+                "id": str(len(task_lines) + 1),
+                "description": match.group(2) + " " + match.group(3),
+                "done": match.group(1).lower() == "x",
+            }})
     value = {{
         "changeName": change,
         "schemaName": "spec-driven",
@@ -213,12 +229,8 @@ elif args == ["instructions", "apply", "--change", change, "--json"]:
             "design": [str(change_root / "design.md")],
             "tasks": [str(tasks_path)],
         }},
-        "progress": {{"total": 1, "complete": 0, "remaining": 1}},
-        "tasks": [{{
-            "id": "1",
-            "description": "1.1 Implement the limiter in src; verification note: run untrusted-check --from-openspec-task",
-            "done": False,
-        }}],
+        "progress": {{"total": len(task_lines), "complete": sum(task["done"] for task in task_lines), "remaining": sum(not task["done"] for task in task_lines)}},
+        "tasks": task_lines,
         "taskTrackingConfigured": True,
         "state": "ready",
         "instruction": "Read context files and implement pending tasks.",
@@ -243,9 +255,9 @@ def _write_job_policy(path: Path) -> None:
         json.dumps(
             {
                 "scope": {
-                    "writable_paths": [],
-                    "writable_trees": ["src"],
-                    "disposable_trees": [],
+                    "writable_paths": list(SOURCE_PATHS),
+                    "writable_trees": [],
+                    "disposable_trees": ["src/__pycache__"],
                 },
                 "acceptance_commands": [
                     {
@@ -322,7 +334,7 @@ def test_openspec_import_freezes_planning_and_keeps_acceptance_host_owned(
     assert imported["provider"] == "openspec@1.13.2"
     assert imported["source_revision"] == revision
     assert imported["legacy_specgen_required"] is False
-    assert imported["tasks"] == [TASK_ID]
+    assert imported["tasks"] == list(TASK_IDS)
 
     receipt = json.loads((pack / "source-specification.json").read_text(encoding="utf-8"))
     assert receipt["schema"] == "agent-workflow/source-specification-import/v1"
@@ -335,28 +347,42 @@ def test_openspec_import_freezes_planning_and_keeps_acceptance_host_owned(
     artifact_paths = {item["path"] for item in receipt["artifacts"]}
     assert f"openspec/changes/{CHANGE}/tasks.md" in artifact_paths
     assert "openspec/specs/api/spec.md" in artifact_paths
-    assert receipt["task_map"][0]["agent_workflow_task_id"] == TASK_ID
+    assert [item["agent_workflow_task_id"] for item in receipt["task_map"]] == [
+        "openspec-add-rate-limit-1-0", *TASK_IDS
+    ]
+    assert [item["done_at_import"] for item in receipt["task_map"]] == [True, False, False]
 
     validation = installed_product.json(
         "pack", "validate", pack, "--verify-checksums", env=product_env
     )
     assert validation["ok"] is True
 
-    job_path = pack / "jobs" / f"{TASK_ID}.json"
-    job_value = json.loads(job_path.read_text(encoding="utf-8"))
+    job_values = [
+        json.loads((pack / "jobs" / f"{task_id}.json").read_text(encoding="utf-8"))
+        for task_id in TASK_IDS
+    ]
+    job_value = job_values[0]
     assert job_value["schema"] == NATIVE_JOB_V2_SCHEMA
     assert "bundle_provenance" not in job_value
-    assert job_value["scope"]["writable_paths"] == []
-    assert job_value["scope"]["writable_trees"] == ["src"]
+    assert job_value["scope"]["writable_paths"] == list(SOURCE_PATHS)
+    assert job_value["scope"]["writable_trees"] == []
     assert "openspec" not in json.dumps(job_value["scope"])
     assert [item["id"] for item in job_value["acceptance_commands"]] == ["compile-src"]
     serialized_commands = json.dumps(job_value["acceptance_commands"])
     assert "untrusted-check" not in serialized_commands
+    assert [job["job_id"] for job in job_values] == list(TASK_IDS)
+    assert [job["source_specification"]["task_refs"] for job in job_values] == [
+        [task_id] for task_id in TASK_IDS
+    ]
+    assert len({job["source_specification"]["sha256"] for job in job_values}) == 1
 
     prompt = (pack / "phase-0" / "tickets" / f"{TASK_ID}.md").read_text(encoding="utf-8")
     assert "untrusted-check --from-openspec-task" in prompt
     assert "do not infer" in prompt.lower()
     assert "do not edit" in prompt.lower() and "openspec/" in prompt.lower()
+    prompt2 = (pack / "phase-0" / "tickets" / f"{TASK_IDS[1]}.md").read_text(encoding="utf-8")
+    assert prompt != prompt2
+    assert "1.1 Implement" in prompt and "1.2 Add" in prompt2
 
     import agent_workflow.native_jobs as native_jobs
 
@@ -367,6 +393,7 @@ def test_openspec_import_freezes_planning_and_keeps_acceptance_host_owned(
             AssertionError("native-job/v2 must not negotiate the SpecGen bundle")
         ),
     )
+    job_path = pack / "jobs" / f"{TASK_ID}.json"
     job = validate_native_job(job_path, pack_root=pack)
     assert job.schema == NATIVE_JOB_V2_SCHEMA
     assert job.bundle_provenance is None
@@ -436,12 +463,16 @@ def test_imported_openspec_job_completes_through_external_public_lifecycle(
     receipt_path = pack / "source-specification.json"
     receipt_bytes = receipt_path.read_bytes()
     source_receipt = json.loads(receipt_bytes)
-    job_path = pack / "jobs" / f"{TASK_ID}.json"
-    job = json.loads(job_path.read_text(encoding="utf-8"))
+    jobs = {
+        task_id: json.loads((pack / "jobs" / f"{task_id}.json").read_text(encoding="utf-8"))
+        for task_id in TASK_IDS
+    }
+    job = jobs[TASK_ID]
     assert job["schema"] == NATIVE_JOB_V2_SCHEMA
     assert "bundle_provenance" not in job
     assert job["source_specification"]
-    assert job["scope"]["writable_trees"] == ["src"]
+    assert job["scope"]["writable_paths"] == list(SOURCE_PATHS)
+    assert job["scope"]["writable_trees"] == []
     assert source_receipt["repository"]["revision"] == revision
     assert source_receipt["repository"]["dirty"] is False
     assert hashlib.sha256(receipt_bytes).hexdigest() == job["source_specification"]["sha256"]
@@ -452,19 +483,18 @@ def test_imported_openspec_job_completes_through_external_public_lifecycle(
     tasks_path = repo / f"openspec/changes/{CHANGE}/tasks.md"
     task_bytes = tasks_path.read_bytes()
     assert task_artifact["sha256"] == hashlib.sha256(task_bytes).hexdigest()
-    task_map = source_receipt["task_map"][0]
-    source_line = (
-        "- [ ] 1.1 Implement the limiter in src; verification note: "
-        "run untrusted-check --from-openspec-task"
-    )
-    description = (
-        "1.1 Implement the limiter in src; verification note: "
-        "run untrusted-check --from-openspec-task"
-    )
-    assert task_map["source"]["text_sha256"] == hashlib.sha256(
-        (source_line + "\n").encode()
-    ).hexdigest()
-    assert task_map["description_sha256"] == hashlib.sha256(description.encode()).hexdigest()
+    task_maps = {item["agent_workflow_task_id"]: item for item in source_receipt["task_map"]}
+    assert set(task_maps) == {"openspec-add-rate-limit-1-0", *TASK_IDS}
+    for task_id, locator, description in (
+        (TASK_IDS[0], "1.1", "1.1 Implement the limiter in src; verification note: run untrusted-check --from-openspec-task"),
+        (TASK_IDS[1], "1.2", "1.2 Add a bounded response helper in src; verification note: run untrusted-check --from-openspec-task"),
+    ):
+        source_line = f"- [ ] {description}"
+        task_map = task_maps[task_id]
+        assert task_map["source"]["locator"] == locator
+        assert task_map["source"]["text_sha256"] == hashlib.sha256((source_line + "\n").encode()).hexdigest()
+        assert task_map["description_sha256"] == hashlib.sha256(description.encode()).hexdigest()
+    assert len({task_maps[task_id]["source"]["text_sha256"] for task_id in TASK_IDS}) == 2
     shim_dir = Path(product_env["PATH"].split(os.pathsep)[0])
     shim_log = tmp_path / "openspec-calls.log"
     shim = shim_dir / "openspec"
@@ -497,9 +527,39 @@ def test_imported_openspec_job_completes_through_external_public_lifecycle(
             AssertionError("native-job/v2 must not negotiate the SpecGen bundle")
         ),
     )
-    parsed_job = validate_native_job(job_path, pack_root=pack)
-    assert parsed_job.schema == NATIVE_JOB_V2_SCHEMA
-    assert parsed_job.bundle_provenance is None
+    parsed_jobs = {
+        task_id: validate_native_job(pack / "jobs" / f"{task_id}.json", pack_root=pack)
+        for task_id in TASK_IDS
+    }
+    assert all(job.schema == NATIVE_JOB_V2_SCHEMA and job.bundle_provenance is None
+               for job in parsed_jobs.values())
+
+    wrong_ticket = installed_product.run(
+        "--json", "agent-run", "prepare", "openspec-wrong-ticket", repo,
+        pack / "phase-0" / "tickets" / f"{TASK_IDS[1]}.md",
+        "--ticket", TASK_IDS[0], "--pack", pack, "--job", f"jobs/{TASK_IDS[1]}.json",
+        "--tier", "low", "--worker-mode", "external", "--interactive", "--", "python3",
+        env=env,
+    )
+    assert wrong_ticket.returncode == 2
+    assert "--ticket disagrees with native job" in wrong_ticket.stderr
+    state_root = Path(env["XDG_STATE_HOME"]) / "agent-workflow/runs"
+    assert not (state_root / "openspec-wrong-ticket").exists()
+
+    dirty_tree = tmp_path / "dirty-worktree"
+    subprocess.run(["git", "-C", str(repo), "worktree", "add", "--detach", str(dirty_tree), revision],
+                   check=True, text=True, capture_output=True)
+    (dirty_tree / "src" / "dirty.py").write_text("DIRTY = True\n", encoding="utf-8")
+    dirty = installed_product.run(
+        "--json", "agent-run", "prepare", "openspec-dirty-source", dirty_tree,
+        pack / "phase-0" / "tickets" / f"{TASK_IDS[1]}.md",
+        "--pack", pack, "--job", f"jobs/{TASK_IDS[1]}.json",
+        "--tier", "low", "--worker-mode", "external", "--interactive", "--", "python3",
+        env=env,
+    )
+    assert dirty.returncode == 2
+    assert "source worktree must be clean" in dirty.stderr
+    assert not (state_root / "openspec-dirty-source").exists()
 
     worker = tmp_path / "worker.py"
     worker.write_text(
@@ -514,11 +574,12 @@ def test_imported_openspec_job_completes_through_external_public_lifecycle(
             assert Path(shutil.which('openspec')).resolve() == (
                 Path(shutil.which('python3')).parent / 'openspec'
             ).resolve()
-            Path('src/rate_limiter.py').write_text(
-                'def allow(count, limit):\\n'
-                '    return count < limit\\n', encoding='utf-8')
-            subprocess.run(['git', 'add', '--', 'src/rate_limiter.py'], check=True)
-            subprocess.run(['git', 'commit', '-m', 'add minimal rate limiter'], check=True)
+            output = Path(sys.argv[3])
+            code = ('def response():\\n    return 429\\n' if output.name == 'rate_response.py'
+                    else 'def allow(count, limit):\\n    return count < limit\\n')
+            output.write_text(code, encoding='utf-8')
+            subprocess.run(['git', 'add', '--', output.as_posix()], check=True)
+            subprocess.run(['git', 'commit', '-m', sys.argv[4]], check=True)
             finished = subprocess.run([
                 sys.argv[1], '--json', 'agent', 'finish',
                 sys.argv[2], '--result', 'completed'
@@ -528,99 +589,136 @@ def test_imported_openspec_job_completes_through_external_public_lifecycle(
             assert finish_value['fast_path'] is True
             assert finish_value['verification'][0]['id'] == 'compile-src'
             assert finish_value['verification'][0]['ok'] is True
-            Path(sys.argv[3]).write_text(
-                finished.stdout, encoding='utf-8')
+            Path(sys.argv[5]).write_text(finished.stdout, encoding='utf-8')
             """
         ),
         encoding="utf-8",
     )
-    run_id = "openspec-import-external-journey"
-    finish_output_path = tmp_path / "finish-result.json"
-    prompt = pack / "phase-0" / "tickets" / f"{TASK_ID}.md"
-    prepared = installed_product.json(
-        "agent-run", "prepare", run_id, repo, prompt,
-        "--pack", pack, "--job", f"jobs/{TASK_ID}.json",
-        "--tier", "low", "--worker-mode", "external", "--interactive", "--", "python3", worker,
-        installed_product.cli, run_id, finish_output_path, env=env,
-    )
-    assert prepared["status"] == "prepared"
-    assert prepared["worker_mode"] == "external"
-    run_dir = Path(env["XDG_STATE_HOME"]) / "agent-workflow" / "runs" / run_id
-    binding = json.loads((run_dir / "job-binding.json").read_text(encoding="utf-8"))
-    run_receipt_path = run_dir / "jobs" / "source-specification.json"
-    assert binding["schema"] == "agent-workflow/job-binding/v2"
-    assert "bundle_provenance" not in binding
-    assert binding["source_specification"]["schema"] == source_receipt["schema"]
-    assert run_receipt_path.read_bytes() == receipt_bytes
 
-    bound = installed_product.json(
-        "agent-run", "bind-external", run_id, "phase0-fixture", "worker", env=env,
-    )
-    generation = str(bound["generation"])
-    installed_product.json(
-        "agent-run", "start-external", run_id, "phase0-fixture", "worker",
-        "--generation", generation, env=env,
-    )
-    command = json.loads((run_dir / "command.json").read_text(encoding="utf-8"))
-    worker_result = subprocess.run(
-        command["argv"], cwd=repo, env=env, text=True, capture_output=True, timeout=30,
-    )
-    assert worker_result.returncode == 0, worker_result.stdout + worker_result.stderr
-    observed_exit = installed_product.json(
-        "agent-run", "external-exit", run_id, "--generation", generation,
-        "--actor", "phase0-host", "--reason", "Observed fixture process exit zero", env=env,
-    )
-    assert observed_exit["completion_reported"] is True
-    finalized = installed_product.json("agent-run", "finalize", run_id, env=env)
-    assert finalized["status"] == "completed"
-    installed_product.json(
-        "agent-run", "review", run_id, "--actor", "phase0-host",
-        "--reason", "OpenSpec import journey host review", env=env,
-    )
-    installed_product.json(
-        "agent-run", "accept", run_id, "--actor", "phase0-host",
-        "--reason", "OpenSpec import journey host acceptance", env=env,
-    )
-    summary = installed_product.json("agent-run", "summary", run_id, env=env)
-    assert summary["execution"]["status"] == "completed"
-    assert summary["completion"]["result"] == "completed"
-    assert summary["review"]["state"] == "reviewed"
-    assert summary["acceptance"]["state"] == "accepted"
-    finish_output = json.loads(finish_output_path.read_text(encoding="utf-8"))
-    assert finish_output["fast_path"] is True
-    assert finish_output["state"] == "finalized"
-    assert finish_output["verification"][0]["id"] == "compile-src"
-    assert finish_output["verification"][0]["ok"] is True
+    results = {}
+    for index, task_id in enumerate(TASK_IDS, 1):
+        worktree = tmp_path / f"task-{index}-worktree"
+        subprocess.run(
+            ["git", "-C", str(repo), "worktree", "add", "--detach", str(worktree), revision],
+            check=True, text=True, capture_output=True,
+        )
+        run_id = f"openspec-import-task-{index}"
+        finish_path = tmp_path / f"finish-{index}.json"
+        output_name = SOURCE_PATHS[index - 1]
+        prepared = installed_product.json(
+            "agent-run", "prepare", run_id, worktree,
+            pack / "phase-0" / "tickets" / f"{task_id}.md",
+            "--pack", pack, "--job", f"jobs/{task_id}.json",
+            "--tier", "low", "--worker-mode", "external", "--interactive", "--", "python3",
+            worker, installed_product.cli, run_id, output_name, f"implement {task_id}",
+            finish_path, env=env,
+        )
+        assert prepared["status"] == "prepared" and prepared["worker_mode"] == "external"
+        run_dir = state_root / run_id
+        binding = json.loads((run_dir / "job-binding.json").read_text(encoding="utf-8"))
+        assert binding["schema"] == "agent-workflow/job-binding/v2"
+        assert binding["agent_run_id"] == run_id
+        assert binding["job_id"] == binding["ticket_id"] == task_id
+        assert binding["worktree"] == str(worktree)
+        assert binding["scope"] == jobs[task_id]["scope"]
+        assert "bundle_provenance" not in binding
+        assert binding["source_specification"]["task_refs"] == [task_id]
+        assert (run_dir / "jobs/source-specification.json").read_bytes() == receipt_bytes
 
+        bound = installed_product.json(
+            "agent-run", "bind-external", run_id, "phase0-fixture", "worker", env=env,
+        )
+        generation = str(bound["generation"])
+        installed_product.json(
+            "agent-run", "start-external", run_id, "phase0-fixture", "worker",
+            "--generation", generation, env=env,
+        )
+        command = json.loads((run_dir / "command.json").read_text(encoding="utf-8"))
+        worker_result = subprocess.run(
+            command["argv"], cwd=worktree, env=env, text=True, capture_output=True, timeout=30,
+        )
+        assert worker_result.returncode == 0, worker_result.stdout + worker_result.stderr
+        observed = installed_product.json(
+            "agent-run", "external-exit", run_id, "--generation", generation,
+            "--actor", "phase0-host", "--reason", "Observed fixture process exit zero", env=env,
+        )
+        assert observed["completion_reported"] is True
+        assert installed_product.json("agent-run", "finalize", run_id, env=env)["status"] == "completed"
+        installed_product.json(
+            "agent-run", "review", run_id, "--actor", "phase0-host",
+            "--reason", "OpenSpec import journey host review", env=env,
+        )
+        installed_product.json(
+            "agent-run", "accept", run_id, "--actor", "phase0-host",
+            "--reason", "OpenSpec import journey host acceptance", env=env,
+        )
+        summary = installed_product.json("agent-run", "summary", run_id, env=env)
+        assert summary["execution"]["status"] == "completed"
+        assert summary["completion"]["result"] == "completed"
+        assert summary["review"]["state"] == "reviewed"
+        assert summary["acceptance"]["state"] == "accepted"
+        finish = json.loads(finish_path.read_text(encoding="utf-8"))
+        assert finish["state"] == "finalized" and finish["verification"][0]["ok"] is True
+        assert subprocess.run(
+            ["git", "-C", str(worktree), "status", "--short", "--untracked-files=all"],
+            text=True, capture_output=True, check=True,
+        ).stdout == ""
+        changed = subprocess.run(
+            ["git", "-C", str(worktree), "diff", f"{revision}..HEAD", "--name-only"],
+            text=True, capture_output=True, check=True,
+        ).stdout.splitlines()
+        assert changed == [output_name]
+        sealed, digest = verify_seal_details(run_dir)
+        assert sealed["agent_run_id"] == run_id
+        assert len(digest) == 64
+        artifacts = {item["path"]: item["sha256"] for item in sealed["artifacts"]}
+        assert artifacts["jobs/source-specification.json"] == hashlib.sha256(receipt_bytes).hexdigest()
+        assert {"completion.json", "collections/completion.json"} <= set(artifacts)
+        assert "external-worker-exit.json" in artifacts and "process-result.json" not in artifacts
+        assert any(path.startswith("verification/") for path in artifacts)
+        completion = json.loads((run_dir / "completion.json").read_text(encoding="utf-8"))
+        assert completion["agent_run_id"] == run_id
+        assert completion["ticket_id"] == task_id
+        assert completion["base_revision"] == revision
+        assert completion["head_revision"] != revision
+        assert completion["changed_files"] == [output_name]
+        criterion = next(item for item in completion["criteria"] if item["id"] == "source-compiles")
+        assert criterion["result"] == "pass"
+        assert any("acceptance-command:compile-src; ok=True" in item for item in criterion["evidence"])
+        results[task_id] = (run_dir, digest, worktree)
+        if index == 1:
+            assert not (state_root / "openspec-import-task-2").exists()
+            drifted = installed_product.run(
+                "--json", "agent-run", "prepare", "openspec-advanced-source", worktree,
+                pack / "phase-0" / "tickets" / f"{TASK_IDS[1]}.md",
+                "--pack", pack, "--job", f"jobs/{TASK_IDS[1]}.json",
+                "--tier", "low", "--worker-mode", "external", "--interactive", "--", "python3",
+                env=env,
+            )
+            assert drifted.returncode == 2
+            assert "revision does not match frozen OpenSpec import" in drifted.stderr
+            assert not (state_root / "openspec-advanced-source").exists()
+
+    assert results[TASK_IDS[0]][1] != results[TASK_IDS[1]][1]
+    assert results[TASK_IDS[0]][0] != results[TASK_IDS[1]][0]
+    assert verify_seal_details(results[TASK_IDS[0]][0])[1] == results[TASK_IDS[0]][1]
     assert not shim_log.read_text(encoding="utf-8").strip()
     assert {
         path.relative_to(repo).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
-        for path in sorted(openspec_tree.rglob("*"))
-        if path.is_file()
+        for path in sorted(openspec_tree.rglob("*")) if path.is_file()
     } == frozen
-    assert (repo / "src" / "rate_limiter.py").is_file()
     assert subprocess.run(
         ["git", "-C", str(repo), "status", "--short", "--untracked-files=all"],
         text=True, capture_output=True, check=True,
     ).stdout == ""
     assert subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"],
+        text=True, capture_output=True, check=True,
+    ).stdout.strip() == revision
+    assert subprocess.run(
         ["git", "-C", str(repo), "diff", f"{revision}..HEAD", "--name-only"],
         text=True, capture_output=True, check=True,
-    ).stdout.splitlines() == ["src/rate_limiter.py"]
-    sealed, seal_digest = verify_seal_details(run_dir)
-    assert len(seal_digest) == 64
-    sealed_paths = {item["path"] for item in sealed["artifacts"]}
-    assert "jobs/source-specification.json" in sealed_paths
-    assert {"completion.json", "collections/completion.json"} <= sealed_paths
-    assert "external-worker-exit.json" in sealed_paths
-    assert "process-result.json" not in sealed_paths
-    assert any(path.startswith("verification/") for path in sealed_paths)
-    sealed_artifacts = {item["path"]: item["sha256"] for item in sealed["artifacts"]}
-    assert sealed_artifacts["jobs/source-specification.json"] == hashlib.sha256(receipt_bytes).hexdigest()
-    completion = json.loads((run_dir / "completion.json").read_text(encoding="utf-8"))
-    criterion = next(item for item in completion["criteria"] if item["id"] == "source-compiles")
-    assert criterion["result"] == "pass"
-    assert any("acceptance-command:compile-src; ok=True" in item for item in criterion["evidence"])
+    ).stdout == ""
 
 
 def test_openspec_source_drift_is_rejected_after_import(

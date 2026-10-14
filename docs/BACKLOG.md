@@ -349,14 +349,18 @@ merged in PR #49 and targets published OpenSpec 1.13.2, built-in
 content-addressed source-specification import evidence, and Agent-Workflow-owned
 `native-job/v2` / `job-binding/v2` execution contracts.
 
-PR #66 adds real Phase-0 execution qualification for an imported v2 job through
+Merged PR #66 adds real Phase-0 execution qualification for an imported v2 job through
 source-only implementation, public worker completion with passing acceptance
 command evidence, sealing, host review, and host acceptance. OpenSpec is
 replaced with a fail-fast guard after import and receives no execution-time
 calls; `specgen_contracts` is absent. Sealing validates v2 bindings as well
-as legacy v1 bindings. Once PR #66 is merged, the Phase-0 import/execution
-qualification portion of this backlog item is complete; the remaining work is
-the legacy-authoring compatibility and shared-contract retirement boundary below.
+as legacy v1 bindings. The single-task Phase-0 import/execution qualification
+is complete. Issue #72 extends that qualification to two pending tasks with
+separate exact-revision worktrees and independent sealed/accepted runs, using
+the existing shared host policy rather than introducing per-task policy.
+See `OPENSPEC_INTEGRATION.md` for the qualified boundary and limitations.
+The remaining migration work is the legacy-authoring compatibility and
+shared-contract retirement boundary below.
 
 Remaining migration work: inventory and migrate or explicitly freeze legacy
 SpecGen authoring consumers and supported v1 jobs, approve that compatibility
