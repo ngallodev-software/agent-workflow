@@ -448,9 +448,79 @@ assert digests[0] == pathlib.Path(root / "task-a-seal.txt").read_text()
 assert not pathlib.Path(root / "openspec-calls.log").read_text().strip()
 PY
 
+# Independent passes are inputs, not proof of combined behavior. The host
+# supplies a fresh command that requires both source changes in one worktree.
+python - "$root/combined-commands.json" <<'PYCOMMANDS'
+import json
+import pathlib
+import shutil
+import sys
+pathlib.Path(sys.argv[1]).write_text(json.dumps([{
+    "id": "combined-behavior",
+    "argv": [shutil.which("python3"), "-B", "-c",
+             "import sys; sys.path.insert(0, 'src'); "
+             "from rate_limiter import allow; from rate_response import response; "
+             "assert allow(1, 2) and not allow(2, 2) and response() == 429"],
+    "cwd": ".", "timeout_seconds": 30,
+}]))
+PYCOMMANDS
+integrate() {
+  local label="$1"
+  agent-workflow --json worktree integrate "$source_repo" \
+    --run openspec-upstream-smoke-1 --run openspec-upstream-smoke-2 \
+    --commands "$root/combined-commands.json" --dest "$root/integrated-$label" \
+    --output "$root/integration-$label" --actor phase0-host \
+    --reason "Verify both accepted task results together" \
+    > "$root/integrated-$label.json"
+}
+integrate result
+agent-workflow --json worktree integration-verify "$root/integration-result" > "$root/integration-verified.json"
+cp "$root/integrated-result.json" "$root/integrated-first.json"
+integrate result
+cmp "$root/integrated-first.json" "$root/integrated-result.json"
+integrate replay
+agent-workflow --json worktree integration-verify "$root/integration-replay" > "$root/integration-replay-verified.json"
+python - "$root" "$XDG_STATE_HOME" "$source_revision" <<'PYINTEGRATION'
+import hashlib
+import importlib.util
+import json
+import pathlib
+import subprocess
+import sys
+from agent_workflow.receipts import verify_seal_details
+root, state = map(pathlib.Path, sys.argv[1:3])
+base = sys.argv[3]
+first = json.loads((root / "integration-result/integration-receipt.json").read_text())
+assert first["status"] == "success"
+heads = []
+for label in ("result", "replay"):
+    worktree = root / f"integrated-{label}"
+    def git(*args):
+        return subprocess.run(["git", "-C", str(worktree), *args], check=True,
+                              text=True, capture_output=True).stdout.strip()
+    heads.append(git("rev-parse", "HEAD"))
+    assert heads[-1] != base
+    assert git("diff", base, "--name-only").splitlines() == ["src/rate_limiter.py", "src/rate_response.py"]
+    assert git("status", "--porcelain") == ""
+assert heads[0] == heads[1], "explicit replay must reproduce exact combined revision"
+seal = verify_seal_details(state / "agent-workflow/runs/openspec-upstream-smoke-1")[1]
+assert seal == (root / "task-a-seal.txt").read_text()
+assert (root / "openspec-calls.log").read_bytes() == b""
+assert importlib.util.find_spec("specgen_contracts") is None
+(root / "qualification-summary.json").write_text(json.dumps({
+    "openspec_version": "1.13.2", "specgen_contracts_present": False,
+    "post_import_openspec_calls": 0, "source_revision": base,
+    "integrated_revision": heads[0], "integration_status": first["status"],
+    "integration_receipt_sha256": hashlib.sha256(
+        (root / "integration-result/integration-receipt.json").read_bytes()).hexdigest(),
+    "limitations": ["independent task acceptance does not imply combined acceptance",
+                    "host-selected independent single-commit tasks; no autonomous scheduling"],
+}, indent=2) + "\n")
+PYINTEGRATION
+
 [[ -z "$(git -C "$source_repo" status --short --untracked-files=all)" ]]
 [[ "$(git -C "$source_repo" rev-parse HEAD)" == "$source_revision" ]]
 [[ -z "$(git -C "$source_repo" diff "$source_revision"..HEAD --name-only)" ]]
 
-echo "OpenSpec 1.13.2 Phase-0 upstream compatibility smoke passed (two independently accepted jobs)"
+echo "OpenSpec 1.13.2 Phase-0 upstream compatibility smoke passed (two accepted jobs integrated with combined acceptance)"
 [[ -z "${OPENSPEC_SMOKE_EVIDENCE_DIR:-}" ]] || echo "Evidence preserved: $root"

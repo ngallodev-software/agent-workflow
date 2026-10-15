@@ -148,9 +148,10 @@ The source specification receipt is copied into run-local evidence and sealed wi
 
 For multiple independent tasks, prepare each job on a separate fresh worktree
 at that same imported revision. A completed task's commit is a different
-revision and cannot be reused as the next job's launch baseline. This boundary
-uses host-driven public Agent Run commands; it does not orchestrate dependent
-edits or integrate the resulting commits. The current workflow scheduler
+revision and cannot be reused as the next job's launch baseline. This execution boundary
+uses host-driven public Agent Run commands. The separate host integration
+operation below combines accepted independent results; it does not orchestrate
+dependent edits. The current workflow scheduler
 launches nodes against its shared workdir, rather than provisioning a fresh
 source-bound worktree for each imported job. Automatic multi-task scheduling
 is outside this qualification.
@@ -223,9 +224,10 @@ The installed-product tests use a fake upstream CLI; only the compatibility
 smoke qualifies the real published upstream surface.
 
 This qualification does not exercise autonomous workflow scheduling,
-dependent-task rebasing/integration, headless completion, production provider
-workers, independent semantic review, or deliberately rewritten imported
-job/task references. Host-supplied policy and checksum validation remain
+dependent-task rebasing, headless completion, production provider
+workers, or independent semantic review. The host integration tests reject
+rewritten imported job/task references; generic v2 preparation semantics remain
+unchanged. Host-supplied policy and checksum validation remain
 authority for the generated pack.
 
 ## Compatibility and retirement boundary
@@ -262,3 +264,111 @@ The initial integration deliberately does not support:
 - OpenSpec archive operations as Agent-Workflow lifecycle actions.
 
 Each requires separate qualification rather than widening the v1 import receipt silently.
+
+## Host integration interface (OPENSPEC-003)
+
+The real 1.13.2 smoke now continues from the two accepted tasks to one detached
+integrated revision, passes a fresh command that imports and checks both task
+results together, verifies its archived evidence, and reproduces the exact
+revision in an explicit replay. The post-import OpenSpec guard remains empty
+through integration and replay, with `specgen_contracts` absent. Installed-product
+negative journeys cover conflicting accepted edits, cross-source/wrong-task
+inputs, duplicates, missing seals/acceptance, dirty sources, evidence tampering,
+failed/mutating commands, and ambient Git routing. Archived verification is also
+exercised after the original input worktrees are removed.
+
+Investigation found that sealed artifact readers and canonical host lifecycle
+receipts already provide task input authority. Worktree creation and bounded
+process execution also exist. `worktree closeout` observes repository state and
+remote ancestry; it does not select or apply accepted task commits. The missing
+behavior is a host operation that validates those inputs, combines their commits,
+and verifies the combined revision. It does not require another worker lifecycle.
+
+The bounded interface is:
+
+```bash
+agent-workflow --json worktree integrate /path/to/source \
+  --run TASK_A_RUN --run TASK_B_RUN \
+  --commands /path/to/combined-commands.json \
+  --dest /path/to/new-detached-worktree \
+  --output /path/to/new-integration-evidence \
+  --actor integration-host --reason 'Verify the combined result'
+agent-workflow --json worktree integration-verify /path/to/new-integration-evidence
+```
+
+The command file is a host-authored JSON array, for example:
+
+```json
+[
+  {
+    "id": "combined-behavior",
+    "argv": ["python3", "-B", "tests/check_combined.py"],
+    "cwd": ".",
+    "timeout_seconds": 60
+  }
+]
+```
+
+Commands are explicit argv arrays, use exit-code results, and run afresh against
+the combined worktree. Independent task acceptance is not equivalent to
+successful integrated acceptance. No command is inferred from OpenSpec prose.
+
+Inputs must be two distinct, sealed, canonically host-accepted v2 runs from the
+same import bytes and source revision. Each must contain exactly one non-merge
+commit directly on that revision, and its original worktree must still be clean
+at the accepted head in the same repository. The operation cross-checks sealed
+job/binding/task identities, source receipt and job hashes, source baseline,
+completion changed paths, sealed scope inventory hashes against exact Git
+blob bytes, and regular-file writable scope. A nonempty sealed binary patch
+must also match; the integration archives its own explicit host diff. Existing
+empty patch capture is tracked separately as EVIDENCE-001. Frozen planning hashes are checked at both input revisions. Symlink and
+submodule changes are outside this operation's contract.
+
+Integration creates a new detached worktree at the frozen base and cherry-picks
+in the supplied `--run` order, preserving original author/message provenance with
+`-x`. The committer identity and date are fixed so explicit replay yields the
+same commit IDs. Hooks, signing, filesystem monitors, configured merge drivers, and configured
+checkout filters are disabled for these host Git operations. Git uses a
+controlled environment so ambient repository/index routing cannot redirect it.
+The original checkout, input worktrees, branches, and task receipts are not
+rewritten. Successful integration retains its detached worktree for host
+inspection; landing or pushing it is a separate operator action.
+
+`agent-workflow/task-integration/v1` is a new host decision receipt, not a change
+to native-job, completion, review, or acceptance contracts. It records input
+seals, task/commit identities and scopes, ordered applied commits, combined tree
+and revision, exact host command policy and bounded process results, actor,
+reason, and accepted/rejected decision. Evidence includes complete sealed input
+snapshots, canonical review/acceptance receipts, original-commit Git bundles,
+and the combined-result bundle. Every artifact has a SHA-256 and size; the
+receipt has a canonical SHA-256 and all published evidence files are read-only.
+These hashes detect changes relative to the retained receipt; they are not a
+signature or a replacement for trusted host custody of the receipt digest.
+
+`integration-verify` checks the manifest, original run seals and acceptance,
+then replays the recorded commits from archived bundles in temporary Git
+storage and compares the exact combined revision/tree. It requires no original
+worker checkout or OpenSpec executable. It verifies recorded acceptance results;
+it does not rerun their commands. A fresh integration attempt reruns commands.
+
+The evidence destination is the attempt identity and exclusive creation lock.
+An identical successful request returns its verified historical receipt without
+applying commits again. Changed requests, rejected attempts, and interrupted
+attempts cannot silently reuse it. An explicit retry uses new evidence and
+worktree destinations; the same valid inputs and ordering reproduce the same
+revision. No existing target revision is ever appended to, so a task cannot be
+silently applied twice to an integration target.
+
+On conflicts, invalid inputs, or failed/mutating combined checks, the operation
+records a rejected decision and diagnostics, exits nonzero, and removes only
+its newly created worktree. The receipt records rollback results; a failed
+cleanup requires operator attention. Path errors that would place evidence in
+source/run/Git storage are refused before creating artifacts. Abrupt process
+termination can leave an incomplete attempt and its detached worktree; no
+success receipt is published and retry requires an explicit new attempt.
+
+This boundary does not provide dependent-task rebasing, multi-commit task
+integration, autonomous scheduling, parallel conflict resolution, or production
+semantic review. It requires retained input worktrees for initial validation;
+archived integration verification is independent of them. Legacy compatibility,
+SpecGen retirement, headless completion, and REL-003 acceptance remain separate.

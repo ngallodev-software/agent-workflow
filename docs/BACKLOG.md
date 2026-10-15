@@ -33,6 +33,21 @@ write authority or weakening isolation.
 public protocol with passing command evidence, while host-owned state and
 sealing/review/acceptance authority remain protected.
 
+### EVIDENCE-001 — Preserve patch capture errors instead of sealing an empty patch
+
+Observed while qualifying #74: accepted external runs from PR #73 and the current
+installed-product fixture have a zero-byte sealed `patch.diff` despite committed
+source changes. `runtime/environment.py` sets `GIT_EXTERNAL_DIFF` to an empty
+string; `run_collections.capture_patch` invokes Git diff without `--no-ext-diff`.
+The observed Git exit is 128 with `cannot run : No such file or directory`, and
+the collector substitutes empty output. This is a separate collector defect,
+not implemented in OPENSPEC-003. The integration operation instead requires
+sealed scope inventory hashes to match exact base/head Git blob bytes, and
+archives an explicit host diff using `--no-ext-diff --no-textconv`.
+
+Done when patch capture either preserves an accurate binary diff or records a
+fail-closed collector error, with normal and recovery-finalization coverage.
+
 ### TEST-001 — Isolate configuration trust fixtures from caller umask
 
 The phase-end configuration trust test
@@ -382,6 +397,21 @@ runs no longer require SpecGen planning authority; and the remaining SpecGen
 compatibility surface is explicitly frozen or retired without changing sealed
 historical evidence. Custom OpenSpec schemas/stores and multi-repository
 planning remain out of scope until separately justified.
+
+### OPENSPEC-003 — Qualify host integration of independent task results
+
+Issue #74 adds a bounded host `worktree integrate` operation over two sealed,
+accepted OpenSpec v2 single-commit results from the same frozen import. It uses
+existing task lifecycle authority, an isolated detached worktree, ordered Git
+cherry-picks, fresh explicit combined-result checks, and a content-addressed
+host decision receipt with archived input seals and replay bundles. Independent
+task acceptance does not imply integrated acceptance. See
+`OPENSPEC_INTEGRATION.md` for the interface, rollback, replay and retained limits.
+
+Implementation qualification is recorded in the associated PR; independent
+review and acceptance remain pending. This does not close OPENSPEC-001's legacy
+compatibility/retirement work, WORKER-001, or REL-003. Dependent rebasing,
+multi-commit integration and autonomous scheduling remain outside this issue.
 
 ### TYPE-001 — Expand TypeSafe only at proven semantic seams
 
