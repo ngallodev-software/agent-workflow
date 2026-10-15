@@ -236,7 +236,7 @@ See [docs/TESTING.md](docs/TESTING.md).
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md)
-- [0.9 skill-first simplification plan](docs/SKILL_FIRST_SIMPLIFICATION_PLAN.md)
+- [0.9 skill-first simplification plan](docs/internal/SKILL_FIRST_SIMPLIFICATION_PLAN.md)
 - [Installation](docs/INSTALLATION.md)
 - [Operations and recovery](docs/OPERATIONS.md)
 - [Testing strategy](docs/TESTING.md)
