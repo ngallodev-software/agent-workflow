@@ -1,0 +1,655 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-workflow/task-integration/v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "created_at",
+    "request",
+    "request_sha256",
+    "status",
+    "decision",
+    "inputs",
+    "commands",
+    "artifacts",
+    "receipt_sha256",
+    "chain_plan",
+    "purpose"
+  ],
+  "properties": {
+    "schema": {
+      "const": "agent-workflow/task-integration/v2"
+    },
+    "created_at": {
+      "type": "string"
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repo",
+        "run_ids",
+        "commands_file",
+        "commands_sha256",
+        "dest",
+        "actor",
+        "reason",
+        "chain_plan_sha256",
+        "purpose"
+      ],
+      "properties": {
+        "repo": {
+          "type": "string"
+        },
+        "run_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "commands_file": {
+          "type": "string"
+        },
+        "commands_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "dest": {
+          "type": "string"
+        },
+        "actor": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "chain_plan_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "purpose": {
+          "enum": [
+            "transition",
+            "final"
+          ]
+        }
+      }
+    },
+    "request_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "status": {
+      "enum": [
+        "success",
+        "rejected"
+      ]
+    },
+    "decision": {
+      "enum": [
+        "accepted",
+        "rejected"
+      ]
+    },
+    "inputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "run_id",
+          "seal_sha256",
+          "binding_sha256",
+          "completion_sha256",
+          "task_id",
+          "baseline",
+          "head",
+          "commit",
+          "changed_paths",
+          "scope"
+        ],
+        "properties": {
+          "run_id": {
+            "type": "string"
+          },
+          "seal_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "binding_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "completion_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "task_id": {
+            "type": "string"
+          },
+          "baseline": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "head": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "commit": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "commit",
+              "parents",
+              "tree",
+              "author",
+              "author_email",
+              "authored_at",
+              "committer",
+              "committer_email",
+              "committed_at",
+              "message"
+            ],
+            "properties": {
+              "commit": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "parents": {
+                "type": "string"
+              },
+              "tree": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "author": {
+                "type": "string"
+              },
+              "author_email": {
+                "type": "string"
+              },
+              "authored_at": {
+                "type": "string"
+              },
+              "committer": {
+                "type": "string"
+              },
+              "committer_email": {
+                "type": "string"
+              },
+              "committed_at": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          },
+          "changed_paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "scope": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "writable_paths",
+              "writable_trees",
+              "disposable_trees"
+            ],
+            "properties": {
+              "writable_paths": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "uniqueItems": true
+              },
+              "writable_trees": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "uniqueItems": true
+              },
+              "disposable_trees": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "uniqueItems": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "sha256",
+          "size"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "receipt_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "error": {
+      "type": "string"
+    },
+    "rollback": {
+      "type": "object"
+    },
+    "git_failures": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "base_revision": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "actor": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "source_specification_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "commands_policy_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "commands_policy": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "argv",
+          "cwd",
+          "timeout_seconds"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "argv": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "timeout_seconds": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "minItems": 1
+    },
+    "applied": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "original",
+          "applied",
+          "commit"
+        ],
+        "properties": {
+          "original": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "applied": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "commit": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "commit",
+              "parents",
+              "tree",
+              "author",
+              "author_email",
+              "authored_at",
+              "committer",
+              "committer_email",
+              "committed_at",
+              "message"
+            ],
+            "properties": {
+              "commit": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "parents": {
+                "type": "string"
+              },
+              "tree": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "author": {
+                "type": "string"
+              },
+              "author_email": {
+                "type": "string"
+              },
+              "authored_at": {
+                "type": "string"
+              },
+              "committer": {
+                "type": "string"
+              },
+              "committer_email": {
+                "type": "string"
+              },
+              "committed_at": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "head_revision": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "tree_revision": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "changed_paths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "bundle_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "worktree": {
+      "type": "string"
+    },
+    "chain_plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema": {
+          "const": "agent-workflow/task-chain/v1"
+        },
+        "created_at": {
+          "type": "string",
+          "minLength": 1
+        },
+        "repo": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pack": {
+          "type": "string",
+          "minLength": 1
+        },
+        "planning_revision": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "source_specification_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "tasks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "task_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "predecessors": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "uniqueItems": true
+              },
+              "job_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            },
+            "required": [
+              "task_id",
+              "predecessors",
+              "job_sha256"
+            ]
+          }
+        },
+        "order": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true,
+          "minItems": 1
+        },
+        "transition_commands": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "argv",
+              "cwd",
+              "timeout_seconds"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "argv": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1
+              },
+              "cwd": {
+                "type": "string"
+              },
+              "timeout_seconds": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          },
+          "minItems": 1
+        },
+        "final_commands": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "argv",
+              "cwd",
+              "timeout_seconds"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "argv": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1
+              },
+              "cwd": {
+                "type": "string"
+              },
+              "timeout_seconds": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          },
+          "minItems": 1
+        },
+        "actor": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "plan_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "tier": {
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "critical"
+          ]
+        }
+      },
+      "required": [
+        "schema",
+        "created_at",
+        "repo",
+        "pack",
+        "planning_revision",
+        "source_specification_sha256",
+        "tasks",
+        "order",
+        "transition_commands",
+        "final_commands",
+        "actor",
+        "reason",
+        "plan_sha256",
+        "tier"
+      ]
+    },
+    "purpose": {
+      "enum": [
+        "transition",
+        "final"
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "success"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "base_revision",
+          "head_revision",
+          "tree_revision",
+          "applied",
+          "source_specification_sha256",
+          "commands_policy_sha256",
+          "commands_policy",
+          "actor",
+          "reason",
+          "bundle_sha256",
+          "worktree",
+          "changed_paths"
+        ],
+        "properties": {
+          "decision": {
+            "const": "accepted"
+          },
+          "inputs": {
+            "minItems": 1
+          },
+          "applied": {
+            "minItems": 1
+          },
+          "commands": {
+            "minItems": 1
+          }
+        }
+      },
+      "else": {
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "decision": {
+            "const": "rejected"
+          }
+        }
+      }
+    }
+  ]
+}

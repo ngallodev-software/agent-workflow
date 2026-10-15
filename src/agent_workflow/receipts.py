@@ -48,6 +48,7 @@ SEALED_OPTIONAL_ARTIFACTS = (
     "job-binding.json",
     "jobs/native-job.json",
     "jobs/source-specification.json",
+    "jobs/execution-binding.json",
     "agent-context.json",
     "executor-context.json",
     "verification-cache.json",
@@ -478,8 +479,15 @@ def _seal_run_unlocked(run_dir: Path, *, agent_run_id: str) -> dict[str, Any]:
         if value.get("schema") not in {
             "agent-workflow/job-binding/v1",
             "agent-workflow/job-binding/v2",
+            "agent-workflow/job-binding/v3",
         }:
             raise WorkflowError(f"unsupported job binding schema: {value.get('schema')!r}")
+        if value["schema"] == "agent-workflow/job-binding/v3":
+            authority = run_dir / "jobs/execution-binding.json"
+            from .task_chains import validate_execution_binding
+            validate_execution_binding(read_contract(authority, "agent-workflow/execution-binding/v1"))
+            if sha256_file(authority) != value["execution_binding_sha256"]:
+                raise WorkflowError("execution binding checksum differs from job binding")
     task_result_collection = run_dir / "collections" / "task-result.json"
     if task_result_collection.is_file():
         read_contract(task_result_collection, "agent-workflow/task-result-collection/v1")
@@ -581,6 +589,15 @@ def _verify_seal_unlocked(
             raise WorkflowError(f"sealed artifact size mismatch: {relative_path}")
         if digest != item.get("sha256"):
             raise WorkflowError(f"sealed artifact checksum mismatch: {relative_path}")
+    if "job-binding.json" in listed:
+        binding, _ = read_sealed_json(run_dir, receipt, "job-binding.json")
+        if binding.get("schema") == "agent-workflow/job-binding/v3":
+            validate_instance(binding, "agent-workflow/job-binding/v3", artifact="sealed job binding")
+            authority, authority_hash = read_sealed_contract(run_dir, receipt, "jobs/execution-binding.json", "agent-workflow/execution-binding/v1")
+            from .task_chains import validate_execution_binding
+            validate_execution_binding(authority)
+            if authority_hash != binding["execution_binding_sha256"]:
+                raise WorkflowError("sealed execution binding checksum differs from job binding")
     return receipt, actual
 
 

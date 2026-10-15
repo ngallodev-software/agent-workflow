@@ -122,7 +122,7 @@ def parse_args(
 
     if agent_verify_command is not None:
         if normalized_rest[:2] != ["agent", "verify"]:
-            parser.error("-- COMMAND is only supported by agent-run prepare or agent verify")
+            parser.error("-- COMMAND is only supported by agent-run prepare, worktree chain-prepare or agent verify")
         verify_tokens = normalized_rest[2:]
         verify_options: list[str] = []
         agent_run_id: str | None = None
@@ -155,8 +155,8 @@ def parse_args(
             *agent_verify_command,
         ]
 
-    if explicit_command is not None and normalized_rest[:2] != ["agent-run", "prepare"]:
-        parser.error("-- COMMAND is only supported by agent-run prepare or agent verify")
+    if explicit_command is not None and normalized_rest[:2] not in (["agent-run", "prepare"], ["worktree", "chain-prepare"]):
+        parser.error("-- COMMAND is only supported by agent-run prepare, worktree chain-prepare or agent verify")
 
     args = parser.parse_args(normalized_globals + normalized_rest)
     setattr(args, "explicit_command", explicit_command)
