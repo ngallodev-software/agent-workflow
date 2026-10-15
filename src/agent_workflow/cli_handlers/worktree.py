@@ -18,6 +18,18 @@ def handle_worktree_command(
     args: argparse.Namespace,
 ) -> Any:
     """Execute one parsed worktree command and return its structured result."""
+    if args.worktree_command == "chain-create":
+        from ..task_chains import create
+        return create(settings, args.repo, pack=args.pack, dependencies=args.dependencies,
+                      commands=args.commands, final_commands=args.final_commands,
+                      output=args.output, actor=args.actor, reason=args.reason, tier=args.tier)
+    if args.worktree_command.startswith("chain-"):
+        from ..task_chains import operate
+        worker = getattr(args, "explicit_command", None)
+        if worker and worker[0] == "--":
+            worker = worker[1:]
+        return operate(settings, args.chain, action=args.worktree_command[6:],
+                       run_id=getattr(args, "run_id", None), worker=worker)
     if args.worktree_command == "create":
         return create_worktree(
             settings,

@@ -124,6 +124,7 @@ cat > "$change/tasks.md" <<'EOF'
 - [x] 1.0 Preserve the existing source module
 - [ ] 1.1 Add the limiter under src/ and verify the Python source compiles with `python3 -m compileall -q src`
 - [ ] 1.2 Add a bounded response helper under src/ and verify the Python source compiles with `python3 -m compileall -q src`
+- [ ] 1.3 Expose the response through a request entry point under src/
 EOF
 
 git -C "$source_repo" add -A
@@ -138,7 +139,7 @@ source_revision="$(git -C "$source_repo" rev-parse HEAD)"
 cat > "$policy" <<'EOF'
 {
   "scope": {
-    "writable_paths": ["src/rate_limiter.py", "src/rate_response.py"],
+    "writable_paths": ["src/rate_limiter.py", "src/rate_response.py", "src/server.py"],
     "writable_trees": [],
     "disposable_trees": ["src/__pycache__"]
   },
@@ -225,7 +226,7 @@ pack = pathlib.Path(sys.argv[2])
 assert json.loads(pathlib.Path(sys.argv[3]).read_text())["ok"] is True
 assert imported["provider"] == "openspec@1.13.2"
 assert imported["legacy_specgen_required"] is False
-assert imported["tasks"] == ["openspec-add-rate-limit-1-1", "openspec-add-rate-limit-1-2"]
+assert imported["tasks"] == ["openspec-add-rate-limit-1-1", "openspec-add-rate-limit-1-2", "openspec-add-rate-limit-1-3"]
 jobs = [json.loads((pack / "jobs" / f"{task_id}.json").read_text()) for task_id in imported["tasks"]]
 assert [job["source_specification"]["task_refs"] for job in jobs] == [[item] for item in imported["tasks"]]
 assert jobs[0]["source_specification"]["sha256"] == jobs[1]["source_specification"]["sha256"]
@@ -238,7 +239,7 @@ for task, job in zip(receipt["task_map"][1:], jobs):
     assert job["schema"] == "agent-workflow/native-job/v2"
     assert "bundle_provenance" not in job
     assert job["scope"] == {
-        "writable_paths": ["src/rate_limiter.py", "src/rate_response.py"],
+        "writable_paths": ["src/rate_limiter.py", "src/rate_response.py", "src/server.py"],
         "writable_trees": [], "disposable_trees": ["src/__pycache__"],
     }
     assert [command["id"] for command in job["acceptance_commands"]] == ["compile-src"]
@@ -372,9 +373,9 @@ source_revision = sys.argv[5]
 import_receipt = json.loads((pack / "source-specification.json").read_text())
 task_ids = ["openspec-add-rate-limit-1-1", "openspec-add-rate-limit-1-2"]
 assert [item["agent_workflow_task_id"] for item in import_receipt["task_map"]] == [
-    "openspec-add-rate-limit-1-0", *task_ids
+    "openspec-add-rate-limit-1-0", *task_ids, "openspec-add-rate-limit-1-3"
 ]
-assert [item["done_at_import"] for item in import_receipt["task_map"]] == [True, False, False]
+assert [item["done_at_import"] for item in import_receipt["task_map"]] == [True, False, False, False]
 jobs = [json.loads((pack / "jobs" / f"{task_id}.json").read_text()) for task_id in task_ids]
 assert len({job["job_id"] for job in jobs}) == 2
 assert [job["source_specification"]["task_refs"] for job in jobs] == [[item] for item in task_ids]
@@ -419,7 +420,7 @@ for index, task_id in enumerate(task_ids, 1):
     assert finish["verification"][0]["id"] == "compile-src" and finish["verification"][0]["ok"]
     assert summary["execution"]["status"] == "completed" and summary["completion"]["result"] == "completed"
     assert summary["review"]["state"] == "reviewed" and summary["acceptance"]["state"] == "accepted"
-    output = ["src/rate_limiter.py", "src/rate_response.py"][index - 1]
+    output = ["src/rate_limiter.py", "src/rate_response.py", "src/server.py"][index - 1]
     assert (root / f"worktree-{index}" / output).is_file()
     source_commits.append(subprocess.run(
         ["git", "-C", str(root / f"worktree-{index}"), "rev-parse", "HEAD"],
@@ -528,5 +529,9 @@ PYINTEGRATION
 [[ "$(git -C "$source_repo" rev-parse HEAD)" == "$source_revision" ]]
 [[ -z "$(git -C "$source_repo" diff "$source_revision"..HEAD --name-only)" ]]
 
-echo "OpenSpec 1.13.2 Phase-0 upstream compatibility smoke passed (two accepted jobs integrated with combined acceptance)"
+python "$(dirname "${BASH_SOURCE[0]}")/openspec_dependent_qualification.py" \
+  "$(command -v agent-workflow)" "$root/dependent" "$source_repo" "$pack" \
+  > "$root/dependent-qualification.json"
+[[ ! -s "$OPENSPEC_SHIM_LOG" ]]
+echo "OpenSpec 1.13.2 compatibility smoke passed (independent and three dependent accepted tasks, combined acceptance and replay)"
 [[ -z "${OPENSPEC_SMOKE_EVIDENCE_DIR:-}" ]] || echo "Evidence preserved: $root"

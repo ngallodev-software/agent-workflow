@@ -161,6 +161,7 @@ def _bind_native_job(
     workdir: Path,
     ticket_id: str | None,
     pack_id: str | None,
+    execution_binding: dict[str, Any] | None = None,
 ) -> ValidatedNativeJob:
     """Perform all native-job checks before any runtime state is created."""
     candidate = job_path
@@ -177,7 +178,9 @@ def _bind_native_job(
         # v2 source bindings are relative to the selected source worktree,
         # not to the generated prompt pack. This keeps imported packs separate
         # from normal source repositories without changing v1 semantics.
-        validate_source_specification_worktree(job, workdir)
+        validate_source_specification_worktree(
+            job, workdir, execution_revision=(execution_binding["execution_revision"] if execution_binding else None)
+        )
     else:
         expected_workdir = require_directory(
             pack_root / job.worktree_target, label="native job worktree target"
@@ -254,6 +257,7 @@ def _resolve_job_reference(
     workdir: Path,
     ticket_id: str | None,
     pack_id: str | None,
+    execution_binding: dict[str, Any] | None = None,
 ) -> tuple[ValidatedNativeJob | None, str | None, str | None]:
     if pack_root is None:
         raise WorkflowError(
@@ -264,6 +268,7 @@ def _resolve_job_reference(
     if raw.lower().endswith(".json") or candidate.is_file():
         native = _bind_native_job(
             job_path=job_reference,
+            execution_binding=execution_binding,
             pack_root=pack_root,
             prompt_path=prompt_path,
             workdir=workdir,
@@ -1102,6 +1107,7 @@ def _prepare(
     job_path: Path | None = None,
     allow_active_agent_name: bool = False,
     workflow_context: dict[str, Any] | None = None,
+    execution_binding: dict[str, Any] | None = None,
     worker_mode: str = "headless",
     retry_context: str | None = None,
 ) -> dict[str, Any]:
@@ -1175,6 +1181,7 @@ def _prepare(
     if job_path is not None:
         native_job, ticket_id, pack_id = _resolve_job_reference(
             job_reference=job_path,
+            execution_binding=execution_binding,
             pack_root=prompt_pack_root,
             prompt_path=prompt_source,
             workdir=workdir,
@@ -1277,11 +1284,19 @@ def _prepare(
 
     paths = AgentRunPaths(state_dir)
 
+    if execution_binding is not None:
+        from .task_chains import validate_execution_binding
+        validate_execution_binding(execution_binding, native_job, agent_run_id, workdir)
     job_binding = (
         _write_job_binding(state_dir, native_job, agent_run_id=agent_run_id, workdir=workdir)
         if native_job is not None
         else None
     )
+    if execution_binding is not None:
+        atomic_write_json(state_dir / "jobs/execution-binding.json", execution_binding, mode=0o444)
+        job_binding["schema"] = "agent-workflow/job-binding/v3"
+        job_binding["execution_binding_sha256"] = sha256_file(state_dir / "jobs/execution-binding.json")
+        atomic_write_json(paths.job_binding, job_binding, mode=0o444)
     handoff_dir = _create_handoff_dir(state_dir, agent_run_id)
     (handoff_dir / "control-intents").mkdir(mode=0o700)
     (handoff_dir / "steering-inbox").mkdir(mode=0o700)
@@ -2004,6 +2019,8 @@ def restart(
         if not retry_context.strip():
             raise WorkflowError("retry context must not be empty")
 
+    if (state_dir / "jobs/execution-binding.json").exists():
+        raise WorkflowError("task-chain reservations cannot be restarted as new runs; recover the recorded run")
     job_path = None
     binding_path = paths.job_binding
     if binding_path.is_file():

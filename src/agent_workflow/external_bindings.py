@@ -306,6 +306,8 @@ def start(
         raise WorkflowError(
             f"external Worker must start a prepared Agent Run (status={current!r})"
         )
+    from .task_chains import validate_launch
+    validate_launch(run)
     return transition_execution(
         settings,
         agent_run_id,
@@ -365,6 +367,8 @@ def require_dispatch_ready(run_root: Path) -> dict[str, Any]:
         raise WorkflowError(
             "external Worker dispatch refused: active binding does not match running worker"
         )
+    from .task_chains import validate_launch
+    validate_launch(root)
     return projection
 
 
