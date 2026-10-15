@@ -232,7 +232,7 @@ def _validate_diff_evidence(repo, directory, final, binding, completion):
     patch, _ = read_sealed_artifact_bytes(directory, final, "patch.diff")
     actual = _git(repo, "diff", "--no-ext-diff", "--no-textconv", "--binary", "--full-index",
                   baseline, head, binary=True).stdout
-    # Current external recovery may seal an empty patch (BACKLOG EVIDENCE-001).
+    # Historical runs may have empty patches from the collector defect (#76).
     # Scope inventories above remain the required sealed content authority.
     if patch and patch != actual:
         raise WorkflowError("sealed task patch does not match commit")

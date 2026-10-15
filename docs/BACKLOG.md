@@ -33,21 +33,6 @@ write authority or weakening isolation.
 public protocol with passing command evidence, while host-owned state and
 sealing/review/acceptance authority remain protected.
 
-### EVIDENCE-001 — Preserve patch capture errors instead of sealing an empty patch
-
-Observed while qualifying #74: accepted external runs from PR #73 and the current
-installed-product fixture have a zero-byte sealed `patch.diff` despite committed
-source changes. `runtime/environment.py` sets `GIT_EXTERNAL_DIFF` to an empty
-string; `run_collections.capture_patch` invokes Git diff without `--no-ext-diff`.
-The observed Git exit is 128 with `cannot run : No such file or directory`, and
-the collector substitutes empty output. This is a separate collector defect,
-not implemented in OPENSPEC-003. The integration operation instead requires
-sealed scope inventory hashes to match exact base/head Git blob bytes, and
-archives an explicit host diff using `--no-ext-diff --no-textconv`.
-
-Done when patch capture either preserves an accurate binary diff or records a
-fail-closed collector error, with normal and recovery-finalization coverage.
-
 ### TEST-001 — Isolate configuration trust fixtures from caller umask
 
 The phase-end configuration trust test

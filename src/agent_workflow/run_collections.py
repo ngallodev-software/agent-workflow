@@ -21,7 +21,7 @@ from .completion import (
     substantive_completion_errors,
     validate_completion_repository_closeout,
 )
-from .contracts import read_agent_run_contract, validate_instance
+from .contracts import read_agent_run_contract, read_contract, validate_instance
 from .errors import WorkflowError
 from .path import read_regular_file
 from .process import redact_bytes, run, run_bytes
@@ -327,47 +327,54 @@ def collect_task_result(
 
 
 def capture_patch(workdir: Path, run_dir: Path, path: Path) -> None:
-    """Capture tracked and untracked worktree changes as one bounded patch."""
+    """Publish a complete bounded binary patch, or fail without a patch artifact.
+
+    A failed collection must never look like a successful empty diff. The shared
+    terminal pipeline records the error and refuses to seal without patch.diff.
+    """
     paths = AgentRunPaths(run_dir)
-    baseline = None
-    try:
-        source = json.loads(paths.source_baseline.read_text(encoding="utf-8"))
-        baseline = source.get("components", {}).get("primary", {}).get("head")
-    except (OSError, json.JSONDecodeError, AttributeError):
-        pass
-    result = run_bytes(
-        [
-            "git", "-C", str(workdir), "diff", "--binary", "--full-index",
-            str(baseline or "HEAD"),
-        ],
-        check=False,
-        timeout_seconds=60,
-        max_stdout_bytes=MAX_PATCH_BYTES,
-        max_stderr_bytes=64 * 1024,
-    )
-    patch = bytearray(result.stdout if result.returncode == 0 else b"")
-    untracked = run_bytes(
-        ["git", "-C", str(workdir), "ls-files", "--others", "--exclude-standard", "-z"],
-        check=False,
-        timeout_seconds=60,
-        max_stdout_bytes=MAX_PATCH_BYTES,
-        max_stderr_bytes=64 * 1024,
-    )
-    if untracked.returncode == 0:
-        for raw in untracked.stdout.split(b"\0"):
-            if not raw:
-                continue
-            relative = raw.decode("utf-8", errors="surrogateescape")
-            addition = run_bytes(
-                [
-                    "git", "-C", str(workdir), "diff", "--no-index", "--binary",
-                    "--", "/dev/null", relative,
-                ],
-                check=False,
-                timeout_seconds=60,
-                max_stdout_bytes=MAX_PATCH_BYTES,
-                max_stderr_bytes=64 * 1024,
+    if paths.final_receipt.exists() or paths.final_receipt.is_symlink():
+        raise WorkflowError("cannot capture patch for a sealed run")
+    # Invalidate any previous unsealed attempt before collecting again.
+    path.unlink(missing_ok=True)
+    source = read_contract(paths.source_baseline, "agent-workflow/source-baseline/v1")
+    baseline = source["components"].get("primary", {}).get("head")
+    if not isinstance(baseline, str) or not baseline or baseline.startswith("-"):
+        raise WorkflowError("patch capture requires a primary source baseline Git revision")
+
+    def capture(arguments: list[str], *, expected_codes: tuple[int, ...] = (0,)) -> bytes:
+        result = run_bytes(
+            ["git", "-C", str(workdir), *arguments],
+            check=False,
+            timeout_seconds=60,
+            max_stdout_bytes=MAX_PATCH_BYTES,
+            max_stderr_bytes=64 * 1024,
+        )
+        if (result.returncode not in expected_codes or result.timed_out or result.cancelled
+                or result.stdout_truncated or result.stderr_truncated):
+            raise WorkflowError(
+                f"patch capture git {arguments!r} failed: exit={result.returncode}, "
+                f"category={result.error_category}, timeout={result.timed_out}, "
+                f"cancelled={result.cancelled}, stdout_truncated={result.stdout_truncated}, "
+                f"stderr_truncated={result.stderr_truncated}; "
+                f"stderr: {result.stderr.decode('utf-8', errors='replace').strip()}"
             )
-            if addition.returncode in {0, 1}:
-                patch.extend(addition.stdout)
-    path.write_bytes(patch)
+        return result.stdout
+
+    # Never execute repository/worker diff helpers or text converters. Retain
+    # Git's binary patch bytes, including full object IDs, without text decoding.
+    diff = ["diff", "--no-ext-diff", "--no-textconv", "--no-color", "--binary", "--full-index"]
+    patch = bytearray(capture([*diff, baseline, "--"]))
+    untracked = capture(["ls-files", "--others", "--exclude-standard", "-z"])
+    for raw in untracked.split(b"\0"):
+        if not raw:
+            continue
+        relative = raw.decode("utf-8", errors="surrogateescape")
+        addition = capture(
+            [*diff, "--no-index", "--", "/dev/null", relative],
+            expected_codes=(0, 1),  # --no-index uses 1 for a successful difference.
+        )
+        if len(patch) + len(addition) > MAX_PATCH_BYTES:
+            raise WorkflowError(f"patch capture combined output exceeds {MAX_PATCH_BYTES} bytes")
+        patch.extend(addition)
+    atomic_write_bytes(path, bytes(patch))

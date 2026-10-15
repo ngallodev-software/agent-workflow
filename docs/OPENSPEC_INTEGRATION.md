@@ -320,8 +320,13 @@ at the accepted head in the same repository. The operation cross-checks sealed
 job/binding/task identities, source receipt and job hashes, source baseline,
 completion changed paths, sealed scope inventory hashes against exact Git
 blob bytes, and regular-file writable scope. A nonempty sealed binary patch
-must also match; the integration archives its own explicit host diff. Existing
-empty patch capture is tracked separately as EVIDENCE-001. Frozen planning hashes are checked at both input revisions. Symlink and
+must also match; the integration archives its own explicit host diff. Historical
+empty patches remain supported without rewriting old seals. New normal
+and recovery-finalized runs capture accurate binary patches or fail collection
+and sealing explicitly (see [patch evidence collection](OPERATIONS.md#patch-evidence-collection)).
+The installed-product journey and real upstream smoke require nonempty patches
+whose sealed hashes match independently generated Git diffs. Frozen planning
+hashes are checked at both input revisions. Symlink and
 submodule changes are outside this operation's contract.
 
 Integration creates a new detached worktree at the frozen base and cherry-picks
