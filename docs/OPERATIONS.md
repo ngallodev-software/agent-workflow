@@ -60,6 +60,31 @@ Recommended restore sequence:
 
 Do not depend on prior UI state, a prior interactive host, or host-specific absolute paths.
 
+## Patch evidence collection
+
+Normal runner completion and recovery finalization use the same host-owned
+`capture_patch` operation. It compares the frozen primary source baseline to
+the worktree (including committed changes), then adds untracked file diffs.
+External diff helpers, text conversion, and color are disabled explicitly;
+Git binary patch bytes and full object IDs are retained without text decoding.
+A successful empty diff is a valid zero-byte `patch.diff` with its sealed digest.
+
+Every Git command must finish with its expected exit status and complete bounded
+output. `--no-index` accepts exit 1 for a difference. Git failure, timeout,
+cancellation, output truncation, missing/invalid baseline, and combined patches
+exceeding 16 MiB fail collection. No previous, empty, or partial patch is published
+for a failed attempt. The shared terminal pipeline records actionable diagnostics
+in `final-status.json` (`pump_errors`) and incident evidence, marks the run failed
+and ineligible for acceptance, and refuses sealing because required `patch.diff`
+is absent. Mutable status reports `seal_failed` and the missing artifact. Inspect
+these diagnostics, correct the cause, and use the existing recovery/retry path;
+never create a placeholder patch to force sealing.
+
+Existing sealed historical artifacts are never recaptured or rewritten. A verified
+historical seal proves retained-byte integrity, not that an old collector succeeded.
+Task integration still independently checks exact Git blobs and scope inventories,
+requires any nonempty sealed patch to match, and archives its own host diff.
+
 ## Interrupt and termination
 
 For headless workers, Agent Run control targets the Agent-Workflow-owned process group. External workers are not controlled through guessed host mechanisms; unsupported lifecycle operations fail clearly.

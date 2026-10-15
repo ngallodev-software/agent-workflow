@@ -434,6 +434,12 @@ for index, task_id in enumerate(task_ids, 1):
     assert "external-worker-exit.json" in sealed_artifacts and "process-result.json" not in sealed_artifacts
     assert any(path.startswith("verification/") for path in sealed_artifacts)
     assert sealed_artifacts["jobs/source-specification.json"] == hashlib.sha256(receipt_bytes).hexdigest()
+    expected_patch = subprocess.run(
+        ["git", "-C", str(root / f"worktree-{index}"), "diff", "--no-ext-diff", "--no-textconv",
+         "--binary", "--full-index", source_revision, "HEAD"], check=True, capture_output=True,
+    ).stdout
+    assert expected_patch and (run / "patch.diff").read_bytes() == expected_patch
+    assert sealed_artifacts["patch.diff"] == hashlib.sha256(expected_patch).hexdigest()
     completion = json.loads((run / "completion.json").read_text())
     assert completion["agent_run_id"] == run_id and completion["ticket_id"] == task_id
     assert completion["base_revision"] == source_revision

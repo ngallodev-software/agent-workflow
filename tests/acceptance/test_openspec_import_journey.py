@@ -847,6 +847,13 @@ def test_imported_openspec_job_completes_through_external_public_lifecycle(
         assert len(digest) == 64
         artifacts = {item["path"]: item["sha256"] for item in sealed["artifacts"]}
         assert artifacts["jobs/source-specification.json"] == hashlib.sha256(task_receipt_bytes).hexdigest()
+        expected_patch = subprocess.run(
+            ["git", "-C", str(worktree), "diff", "--no-ext-diff", "--no-textconv",
+             "--binary", "--full-index", task_revision, "HEAD"],
+            check=True, capture_output=True,
+        ).stdout
+        assert expected_patch and (run_dir / "patch.diff").read_bytes() == expected_patch
+        assert artifacts["patch.diff"] == hashlib.sha256(expected_patch).hexdigest()
         assert {"completion.json", "collections/completion.json"} <= set(artifacts)
         assert "external-worker-exit.json" in artifacts and "process-result.json" not in artifacts
         assert any(path.startswith("verification/") for path in artifacts)
