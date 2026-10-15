@@ -286,6 +286,22 @@ def build_parser(
     )
     closeout_verify.add_argument("receipt", type=Path)
 
+    integrate = worktree_commands.add_parser(
+        "integrate", help="integrate two accepted OpenSpec task runs"
+    )
+    integrate.add_argument("repo", type=Path)
+    integrate.add_argument("--run", action="append", required=True)
+    integrate.add_argument("--commands", type=Path, required=True)
+    integrate.add_argument("--dest", type=Path, required=True)
+    integrate.add_argument("--output", type=Path, required=True)
+    integrate.add_argument("--actor", required=True)
+    integrate.add_argument("--reason", required=True)
+
+    integration_verify = worktree_commands.add_parser(
+        "integration-verify", help="verify a self-contained task integration receipt"
+    )
+    integration_verify.add_argument("evidence_dir", type=Path)
+
     agent_run = commands.add_parser("agent-run", help="Agent Run lifecycle and durable-control commands")
     agent_run_commands = agent_run.add_subparsers(dest="agent_run_command", required=True)
 

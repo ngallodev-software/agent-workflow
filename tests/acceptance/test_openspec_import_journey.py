@@ -40,6 +40,7 @@ def _commit_all(repo: Path, message: str) -> str:
 def _write_openspec_repository(repo: Path) -> str:
     git_repo(repo)
     (repo / ".gitignore").write_text("__pycache__/\n", encoding="utf-8")
+    (repo / ".gitattributes").write_text("src/rate_limiter.py merge=qualification-sentinel\n")
     (repo / "src").mkdir()
     (repo / "src" / "limiter.py").write_text("LIMIT = 10\n", encoding="utf-8")
 
@@ -440,11 +441,167 @@ def test_openspec_import_freezes_planning_and_keeps_acceptance_host_owned(
         validate_native_job(job_path, pack_root=pack)
 
 
+def _qualify_host_integration(product, env, root, repo, revision, results, case):
+    commands = root / "combined-commands.json"
+    commands.write_text(json.dumps([{
+        "id": "combined-behavior",
+        "argv": [str(product.python), "-B", "-c",
+                 "import sys; sys.path.insert(0, 'src'); "
+                 "from rate_limiter import allow; from rate_response import response; "
+                 "assert allow(1, 2) and not allow(2, 2) and response() == 429"],
+        "cwd": ".", "timeout_seconds": 30,
+    }]))
+    run_ids = [results[task_id][0].name for task_id in TASK_IDS]
+
+    def attempt(label, *, ids=None, command_file=commands, ok=False):
+        dest, evidence = root / f"integrated-{label}", root / f"integration-{label}"
+        argv = ["worktree", "integrate", repo,
+                "--run", (ids or run_ids)[0], "--run", (ids or run_ids)[1],
+                "--commands", command_file, "--dest", dest, "--output", evidence,
+                "--actor", "integration-host", "--reason", "Explicit combined-result gate"]
+        result = product.run("--json", *argv, env=env, timeout=60)
+        (root / f"{label}.stdout").write_text(result.stdout)
+        (root / f"{label}.stderr").write_text(result.stderr)
+        assert result.returncode == (0 if ok else 2), result.stdout + result.stderr
+        receipt = json.loads((evidence / "integration-receipt.json").read_text())
+        assert receipt["status"] == ("success" if ok else "rejected")
+        if not ok:
+            assert not dest.exists(), "failed integration must roll back its own worktree"
+        return argv, receipt, dest, evidence
+
+    if case == "conflict":
+        sentinel = root / "merge-driver-was-called"
+        subprocess.run(["git", "-C", str(repo), "config", "merge.qualification-sentinel.driver",
+                        f"touch {sentinel}"], check=True)
+    if case != "success":
+        _, receipt, _, evidence = attempt(case)
+        assert receipt["status"] == "rejected"
+        if case == "conflict":
+            assert "cherry-pick failed" in receipt["error"], receipt
+            assert not sentinel.exists(), "host integration must not run repository merge drivers"
+        elif case == "wrong-task":
+            assert "identities do not match" in receipt["error"], receipt
+        else:
+            assert any(text in receipt["error"] for text in ("unavailable in repository", "repository identity", "frozen source")), receipt
+        # Rejected attempts are also immutable verified diagnostic evidence.
+        product.json("worktree", "integration-verify", evidence, env=env)
+        return
+
+    attempt("duplicate", ids=[run_ids[0], run_ids[0]])
+    (repo / "src/dirty.py").write_text("DIRTY = True\n")
+    try:
+        attempt("dirty-source")
+    finally:
+        (repo / "src/dirty.py").unlink()
+    input_tree = results[TASK_IDS[0]][2]
+    (input_tree / "src/dirty.py").write_text("DIRTY = True\n")
+    try:
+        attempt("dirty-input")
+    finally:
+        (input_tree / "src/dirty.py").unlink()
+    first_run = results[TASK_IDS[0]][0]
+    seal = first_run / "final-receipt.json"
+    hidden = root / "withheld-seal.json"
+    seal.rename(hidden)
+    try:
+        attempt("unsealed")
+    finally:
+        hidden.rename(seal)
+    accepted = next((first_run / "receipts").glob("*-accepted.json"))
+    hidden = root / "withheld-acceptance.json"
+    accepted.rename(hidden)
+    try:
+        attempt("unaccepted")
+    finally:
+        hidden.rename(accepted)
+    completion = first_run / "completion.json"
+    original, mode = completion.read_bytes(), completion.stat().st_mode & 0o777
+    completion.chmod(0o644)
+    completion.write_bytes(original + b" ")
+    completion.chmod(mode)
+    try:
+        attempt("tampered")
+    finally:
+        completion.chmod(0o644)
+        completion.write_bytes(original)
+        completion.chmod(mode)
+
+    failing = root / "failing-combined.json"
+    failing.write_text(json.dumps([{"id": "fails", "argv": [str(product.python), "-c", "raise SystemExit(9)"], "cwd": ".", "timeout_seconds": 30}]))
+    attempt("combined-failure", command_file=failing)
+    mutating = root / "mutating-combined.json"
+    mutating.write_text(json.dumps([{"id": "mutates", "argv": [str(product.python), "-c",
+        "from pathlib import Path; Path('src/rate_limiter.py').write_text('bad')"], "cwd": ".", "timeout_seconds": 30}]))
+    attempt("combined-mutation", command_file=mutating)
+
+    # Ambient Git routing cannot redirect host apply or index writes.
+    poisoned_env = dict(env, GIT_DIR=str(root / "not-a-repository"),
+                        GIT_WORK_TREE=str(root / "not-the-worktree"),
+                        GIT_INDEX_FILE=str(root / "outside-index"))
+    original_env = env
+    env = poisoned_env
+    try:
+        argv, receipt, dest, evidence = attempt("success", ok=True)
+    finally:
+        env = original_env
+    assert not (root / "outside-index").exists()
+
+    repeated = product.json(*argv, env=env)
+    assert repeated == receipt
+    verified = product.json("worktree", "integration-verify", evidence, env=env)
+    assert verified
+    head = subprocess.run(["git", "-C", str(dest), "rev-parse", "HEAD"],
+                          capture_output=True, text=True, check=True).stdout.strip()
+    assert head != revision
+    assert subprocess.run(["git", "-C", str(dest), "diff", revision, "--name-only"],
+                          capture_output=True, text=True, check=True).stdout.splitlines() == list(SOURCE_PATHS)
+    # A separate explicit attempt replays the same ordered commit selection.
+    _, replay, replay_tree, replay_evidence = attempt("replay", ok=True)
+    replay_head = subprocess.run(["git", "-C", str(replay_tree), "rev-parse", "HEAD"],
+                                capture_output=True, text=True, check=True).stdout.strip()
+    assert replay_head == head
+    product.json("worktree", "integration-verify", replay_evidence, env=env)
+    changed_request = product.run("--json", *["changed reason" if value == "Explicit combined-result gate" else value
+                                              for value in argv], env=env)
+    assert changed_request.returncode == 2
+    # Verification must detect evidence tampering, not merely parse the receipt.
+    artifact = evidence / "integration-receipt.json"
+    saved, mode = artifact.read_bytes(), artifact.stat().st_mode & 0o777
+    artifact.chmod(0o644)
+    value = json.loads(saved)
+    value["reason"] = "tampered"
+    artifact.write_text(json.dumps(value))
+    artifact.chmod(mode)
+    try:
+        assert product.run("--json", "worktree", "integration-verify", evidence, env=env).returncode == 2
+    finally:
+        artifact.chmod(0o644)
+        artifact.write_bytes(saved)
+        artifact.chmod(mode)
+    command_snapshot = evidence / "commands.json"
+    saved = command_snapshot.read_bytes()
+    command_snapshot.chmod(0o644)
+    command_snapshot.write_bytes(saved + b" ")
+    command_snapshot.chmod(0o444)
+    try:
+        assert product.run("--json", "worktree", "integration-verify", evidence, env=env).returncode == 2
+    finally:
+        command_snapshot.chmod(0o644)
+        command_snapshot.write_bytes(saved)
+        command_snapshot.chmod(0o444)
+    # Offline evidence replay must not depend on the original worker checkouts.
+    for _, _, tree in results.values():
+        subprocess.run(["git", "-C", str(repo), "worktree", "remove", str(tree)], check=True)
+    product.json("worktree", "integration-verify", evidence, env=env)
+
+
+@pytest.mark.parametrize("integration_case", ["success", "conflict", "cross-source", "wrong-task"])
 def test_imported_openspec_job_completes_through_external_public_lifecycle(
     installed_product: InstalledProduct,
     product_env: dict[str, str],
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    integration_case: str,
 ) -> None:
     repo, pack, revision = _import_fixture(installed_product, product_env, tmp_path)
     policy = tmp_path / "job-policy.json"
@@ -453,6 +610,15 @@ def test_imported_openspec_job_completes_through_external_public_lifecycle(
         "--job-policy", policy, env=product_env,
     )
     assert imported["source_revision"] == revision
+    other = None
+    if integration_case == "cross-source":
+        other_root = tmp_path / "other-import"
+        other_root.mkdir()
+        other = _import_fixture(installed_product, product_env, other_root)
+        installed_product.json(
+            "pack", "import-openspec", other[0], CHANGE, other[1],
+            "--job-policy", other_root / "job-policy.json", env=product_env,
+        )
 
     openspec_tree = repo / "openspec"
     frozen = {
@@ -527,6 +693,12 @@ def test_imported_openspec_job_completes_through_external_public_lifecycle(
             AssertionError("native-job/v2 must not negotiate the SpecGen bundle")
         ),
     )
+    if integration_case == "wrong-task":
+        # A known ref is legal in generic v2; integration must require the imported
+        # task identity rather than trust an operator-rebound ref.
+        jobs[TASK_IDS[1]]["source_specification"]["task_refs"] = [TASK_IDS[0]]
+        (pack / "jobs" / f"{TASK_IDS[1]}.json").chmod(0o644)
+        (pack / "jobs" / f"{TASK_IDS[1]}.json").write_text(json.dumps(jobs[TASK_IDS[1]]))
     parsed_jobs = {
         task_id: validate_native_job(pack / "jobs" / f"{task_id}.json", pack_root=pack)
         for task_id in TASK_IDS
@@ -575,7 +747,7 @@ def test_imported_openspec_job_completes_through_external_public_lifecycle(
                 Path(shutil.which('python3')).parent / 'openspec'
             ).resolve()
             output = Path(sys.argv[3])
-            code = ('def response():\\n    return 429\\n' if output.name == 'rate_response.py'
+            code = ('def response():\\n    return 429\\n' if sys.argv[4].endswith('1-2')
                     else 'def allow(count, limit):\\n    return count < limit\\n')
             output.write_text(code, encoding='utf-8')
             subprocess.run(['git', 'add', '--', output.as_posix()], check=True)
@@ -598,17 +770,18 @@ def test_imported_openspec_job_completes_through_external_public_lifecycle(
     results = {}
     for index, task_id in enumerate(TASK_IDS, 1):
         worktree = tmp_path / f"task-{index}-worktree"
+        task_repo, task_pack, task_revision = (other if index == 2 and other else (repo, pack, revision))
         subprocess.run(
-            ["git", "-C", str(repo), "worktree", "add", "--detach", str(worktree), revision],
+            ["git", "-C", str(task_repo), "worktree", "add", "--detach", str(worktree), task_revision],
             check=True, text=True, capture_output=True,
         )
         run_id = f"openspec-import-task-{index}"
         finish_path = tmp_path / f"finish-{index}.json"
-        output_name = SOURCE_PATHS[index - 1]
+        output_name = SOURCE_PATHS[0 if integration_case == "conflict" else index - 1]
         prepared = installed_product.json(
             "agent-run", "prepare", run_id, worktree,
-            pack / "phase-0" / "tickets" / f"{task_id}.md",
-            "--pack", pack, "--job", f"jobs/{task_id}.json",
+            task_pack / "phase-0" / "tickets" / f"{task_id}.md",
+            "--pack", task_pack, "--job", f"jobs/{task_id}.json",
             "--tier", "low", "--worker-mode", "external", "--interactive", "--", "python3",
             worker, installed_product.cli, run_id, output_name, f"implement {task_id}",
             finish_path, env=env,
@@ -622,8 +795,9 @@ def test_imported_openspec_job_completes_through_external_public_lifecycle(
         assert binding["worktree"] == str(worktree)
         assert binding["scope"] == jobs[task_id]["scope"]
         assert "bundle_provenance" not in binding
-        assert binding["source_specification"]["task_refs"] == [task_id]
-        assert (run_dir / "jobs/source-specification.json").read_bytes() == receipt_bytes
+        assert binding["source_specification"]["task_refs"] == jobs[task_id]["source_specification"]["task_refs"]
+        task_receipt_bytes = (task_pack / "source-specification.json").read_bytes()
+        assert (run_dir / "jobs/source-specification.json").read_bytes() == task_receipt_bytes
 
         bound = installed_product.json(
             "agent-run", "bind-external", run_id, "phase0-fixture", "worker", env=env,
@@ -664,7 +838,7 @@ def test_imported_openspec_job_completes_through_external_public_lifecycle(
             text=True, capture_output=True, check=True,
         ).stdout == ""
         changed = subprocess.run(
-            ["git", "-C", str(worktree), "diff", f"{revision}..HEAD", "--name-only"],
+            ["git", "-C", str(worktree), "diff", f"{task_revision}..HEAD", "--name-only"],
             text=True, capture_output=True, check=True,
         ).stdout.splitlines()
         assert changed == [output_name]
@@ -672,15 +846,15 @@ def test_imported_openspec_job_completes_through_external_public_lifecycle(
         assert sealed["agent_run_id"] == run_id
         assert len(digest) == 64
         artifacts = {item["path"]: item["sha256"] for item in sealed["artifacts"]}
-        assert artifacts["jobs/source-specification.json"] == hashlib.sha256(receipt_bytes).hexdigest()
+        assert artifacts["jobs/source-specification.json"] == hashlib.sha256(task_receipt_bytes).hexdigest()
         assert {"completion.json", "collections/completion.json"} <= set(artifacts)
         assert "external-worker-exit.json" in artifacts and "process-result.json" not in artifacts
         assert any(path.startswith("verification/") for path in artifacts)
         completion = json.loads((run_dir / "completion.json").read_text(encoding="utf-8"))
         assert completion["agent_run_id"] == run_id
         assert completion["ticket_id"] == task_id
-        assert completion["base_revision"] == revision
-        assert completion["head_revision"] != revision
+        assert completion["base_revision"] == task_revision
+        assert completion["head_revision"] != task_revision
         assert completion["changed_files"] == [output_name]
         criterion = next(item for item in completion["criteria"] if item["id"] == "source-compiles")
         assert criterion["result"] == "pass"
@@ -698,6 +872,9 @@ def test_imported_openspec_job_completes_through_external_public_lifecycle(
             assert drifted.returncode == 2
             assert "revision does not match frozen OpenSpec import" in drifted.stderr
             assert not (state_root / "openspec-advanced-source").exists()
+
+    _qualify_host_integration(installed_product, env, tmp_path, repo, revision, results,
+                              integration_case)
 
     assert results[TASK_IDS[0]][1] != results[TASK_IDS[1]][1]
     assert results[TASK_IDS[0]][0] != results[TASK_IDS[1]][0]

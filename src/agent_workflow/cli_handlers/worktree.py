@@ -10,6 +10,7 @@ from ..worktrees import create as create_worktree
 from ..worktrees import list_worktrees
 from ..worktrees import remove as remove_worktree
 from ..repository_closeout import create_repository_closeout, verify_repository_closeout
+from ..task_integration import integrate as integrate_task_runs, verify_integration
 
 
 def handle_worktree_command(
@@ -50,4 +51,11 @@ def handle_worktree_command(
         )
     if args.worktree_command == "closeout-verify":
         return verify_repository_closeout(args.receipt)
+    if args.worktree_command == "integrate":
+        return integrate_task_runs(
+            settings, args.repo, run_ids=args.run, commands_file=args.commands,
+            dest=args.dest, output=args.output, actor=args.actor, reason=args.reason,
+        )
+    if args.worktree_command == "integration-verify":
+        return verify_integration(args.evidence_dir)
     return list_worktrees(args.repo)
