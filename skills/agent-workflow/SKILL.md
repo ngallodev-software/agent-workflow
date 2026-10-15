@@ -51,7 +51,7 @@ remains independent of the optional indexing tool.
 ## Initial worker prompt
 
 For every authorized delegated/forked worker, read
-`/home/nate/.codex/skills/jev-decision-support/references/worker-prompt.md`
+`<codex-skills>/jev-decision-support/references/worker-prompt.md`
 and append its contents once to the prompt source before `delegate` or
 `agent-run prepare`. This preserves the exact launch instructions in the durable
 prompt digest. Do not rewrite prepared/sealed prompts to add the footer; steer

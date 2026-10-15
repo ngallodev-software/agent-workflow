@@ -22,7 +22,7 @@
 
 ## Summary
 
-> **Evidence & chronology:** this repository is part of the wider Agent-Workflow engineering ecosystem. A private `agent-workflow-lab-notebook` preserves dated decisions, failures, corrections, and evidence lineage; public README and portfolio claims are curated from public artifacts and reviewed notebook history. JevHunt is an independent discovery/indexing surface, not an endorsement or independent validation.
+> **Evidence & chronology:** this repository is part of the wider Agent-Workflow engineering ecosystem. Public README and portfolio claims are curated from public artifacts and reviewed against a private lab notebook of dated decisions and corrections. JevHunt is an independent discovery/indexing surface, not an endorsement or independent validation.
 
 - **What it is:** a durable orchestration layer for coding-agent work: delegation, isolated execution, evidence, review, recovery, and acceptance.
 - **Why it matters:** model work does not have to disappear into chat history or a terminal session; execution state and proof survive restart and can be reviewed independently.
