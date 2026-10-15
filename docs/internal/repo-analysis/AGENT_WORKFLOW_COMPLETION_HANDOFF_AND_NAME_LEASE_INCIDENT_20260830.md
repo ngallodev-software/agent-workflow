@@ -16,7 +16,7 @@ The incident has two independent product gaps:
    The public external-worker controls could neither retire the run nor release
    its name, forcing an operator to replace the configured pool.
 
-The active remediation register is [`../BACKLOG.md`](../BACKLOG.md):
+The active remediation register is [`docs/BACKLOG.md`](../../BACKLOG.md):
 `COMP-001` and `LEASE-001`.
 
 ## Evidence inventory
@@ -47,10 +47,10 @@ run's unreviewed source changes.
 
 The completion schema deliberately permits only `pass`, `fail`, and
 `not_verified` for criterion results
-([`schemas/completion.schema.json`](../../schemas/completion.schema.json)).
+([`schemas/completion.schema.json`](../../../schemas/completion.schema.json)).
 The semantic completion validator likewise requires `pass` for every criterion
 on a completed implementation
-([`src/agent_workflow/completion.py`](../../src/agent_workflow/completion.py)).
+([`src/agent_workflow/completion.py`](../../../src/agent_workflow/completion.py)).
 
 The workers therefore supplied evidence with an intuitive but invalid synonym,
 not a valid completion record. The system correctly withheld completion. The
@@ -58,7 +58,7 @@ operator-facing diagnosis was inconsistent: S-018 was classified
 `command_not_found` even though its recorded detail is a completion-schema
 error; S-019 was classified `completion_invalid`. The diagnostic rules currently
 match broad text patterns before the completion-specific rule
-([`src/agent_workflow/diagnostics.py`](../../src/agent_workflow/diagnostics.py)).
+([`src/agent_workflow/diagnostics.py`](../../../src/agent_workflow/diagnostics.py)).
 
 ## External prepared-run name retention
 
@@ -71,7 +71,7 @@ worker lifecycle control was unavailable, but it left each run `prepared`.
 This is a lifecycle retirement gap, not evidence that a worker process exists.
 The existing `status_agent_active()` intentionally treats a `prepared` run as
 active, and `claim_agent_name()` uses that result to reserve names
-([`src/agent_workflow/agent_identity.py`](../../src/agent_workflow/agent_identity.py)).
+([`src/agent_workflow/agent_identity.py`](../../../src/agent_workflow/agent_identity.py)).
 The replacement `luna-*` name pool was an operational workaround, not a
 product fix.
 
