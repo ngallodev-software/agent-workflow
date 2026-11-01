@@ -89,22 +89,6 @@ pipeline {
                         '''
                     }
                 }
-                stage('Shared contract bundle') {
-                    steps {
-                        sh '''
-                            compat="$WORKSPACE@tmp/contracts-compat"
-                            wheel="$WORKSPACE/dist/agent_workflow-$(tr -d '\n' < "$WORKSPACE/VERSION")-py3-none-any.whl"
-                            rm -rf "$compat"
-                            python3 -m venv "$compat/venv"
-                            test -s "$wheel"
-                            "$compat/venv/bin/pip" install --disable-pip-version-check "$wheel"
-                            git clone --depth 1 --branch v0.2.1 https://github.com/ngallodev-software/agent-workflow-spec-contracts.git "$compat/source"
-                            "$compat/venv/bin/pip" install --disable-pip-version-check "$compat/source" "pytest>=8,<10"
-                            "$compat/venv/bin/python" -m pytest -q "$compat/source/tests"
-                            "$compat/venv/bin/python" -c 'from agent_workflow.shared_contracts import negotiate_bundle; from specgen_contracts.bundle import BUNDLE_VERSION, schema_digest; assert negotiate_bundle({"bundle_version":BUNDLE_VERSION,"schema_id":"agent-workflow/prompt-pack/v2","schema_digest":schema_digest("agent-workflow/prompt-pack/v2")})["schema_id"] == "agent-workflow/prompt-pack/v2"'
-                        '''
-                    }
-                }
             }
         }
     }

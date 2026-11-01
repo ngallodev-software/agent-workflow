@@ -55,12 +55,9 @@ Use an explicit target when needed:
 bash scripts/build-install.sh --venv /path/to/agent-workflow/.venv
 ```
 
-The shared contracts source is hosted on GitHub and installed directly by the
-project dependency:
-
-```bash
-python -m pip install git+https://github.com/ngallodev-software/agent-workflow-spec-contracts.git
-```
+The runtime no longer installs or negotiates the former
+`specgen-agent-workflow-contracts` wheel. OpenSpec imports use
+Agent-Workflow-owned native-job v2 contracts.
 
 The source installer links skills into Codex by default. Opt into other
 harness roots explicitly, for example `bash scripts/install-source.sh
@@ -124,8 +121,8 @@ For external-plugin rollback, disable the affected plugin in `[plugins].enabled`
 The 0.12.x line is initially published through GitHub Releases as a preview.
 The release page carries the wheel, source distribution, platform bundles,
 `SHA256SUMS`, SBOM/provenance/test evidence, and a direct `install.sh`
-bootstrap asset. PyPI publication is intentionally deferred while the legacy
-shared-contract dependency remains a digest-pinned direct URL.
+bootstrap asset. The v0.13.0 branch is a development build; tagged release
+assets only become available once a release is published.
 
 
 For a published release, pin the release explicitly. For version `0.13.0`:
@@ -135,10 +132,10 @@ curl -fsSL https://github.com/ngallodev-software/agent-workflow/releases/downloa
   sh -s -- --version v0.13.0
 ```
 
-The tag pin is intentional: release bootstrap has no mutable-branch fallback. The
-0.12 line is the first GitHub preview release and retains the frozen
-`native-job/v1` compatibility path while new planning integrations use the
-Agent-Workflow-owned v2 boundary.
+The tag pin is intentional: release bootstrap has no mutable-branch fallback.
+**Do not run the v0.13.0 example until that tag and its release assets exist.**
+The former `native-job/v1` shared-contract compatibility path was retired
+from the v0.13.0 development branch.
 
 ## Repository-only CI assets
 
@@ -178,80 +175,37 @@ XDG changes disappear automatically when the smoke script exits.
 
 ## Complete shared development stack
 
-For the benchmark/SpecGen development environment, install the entire qualified
-stack into one existing virtualenv:
+For the Agent-Workflow development and comparative-benchmark environment,
+install the maintained stack into one existing virtualenv:
 
 ```bash
 export TYPESAFE_API_KEY='...'
 bash scripts/build-install-all.sh --venv /path/to/agent-workflow/.venv
 ```
 
-Default sibling source layout:
+Default sibling checkouts are `../agent-workflow-comparative-eval` and
+`../agent-workflow-benchmark`. Override them with
+`--comparative-eval-source` and `--benchmark-source`; the retired
+SpecGen contracts repository is not part of this installation.
 
-```text
-../agent-workflow-spec-contracts
-../agent-workflow-comparative-eval
-../specgen-aw
-../agent-workflow-benchmark
-```
-
-Override any checkout explicitly with `--contracts-source`,
-`--comparative-eval-source`, `--specgen-source`, or
-`--benchmark-source`.
-
-A normal full-stack run first updates all five source repositories with
-`git pull --ff-only`. The helper fails closed on dirty checkouts, detached
-HEADs, missing upstreams, or divergence; it never switches branches, resets,
-cleans, stashes, rewrites remotes, or changes authentication configuration.
-Agent-Workflow itself is pulled last and the installer then re-execs the freshly
-pulled script before version checks/builds.
-
-Authentication is deliberately not managed by these scripts. Each update is an
-ordinary `git pull --ff-only`, so an HTTPS remote uses the same existing Git
-credential helper/session it would use from your shell, while SSH remotes use
-the same existing SSH configuration. The scripts do not set token variables,
-disable credential helpers, inject askpass programs, or rewrite remote URLs.
-
-Useful update modes:
+The helper uses `git pull --ff-only`, preserving existing Git authentication
+and refusing dirty checkouts, detached HEADs, or missing upstreams. It updates
+Agent-Workflow last and re-executes the newly pulled installer.
 
 ```bash
-# Update all stack repositories and exit.
 bash scripts/build-install-all.sh --pull-only
-
-# Build the exact checked-out source without Git/network mutation.
 bash scripts/build-install-all.sh --no-pull --venv /path/to/.venv
-
-# Verify the installed stack without pulling or rebuilding.
 bash scripts/build-install-all.sh --verify-only --venv /path/to/.venv
 ```
 
-The lower-level update helper is also directly available:
-
-```bash
-bash scripts/git-pull-all.sh --help
-```
-
-The installer builds local wheels and installs this exact stack:
-
-```text
-specgen-agent-workflow-contracts  0.2.1
-agent-workflow                    0.13.0
-agent-workflow-comparative-eval   0.1.0
-specgen                           0.2.8
-agent-workflow-benchmark          0.3.9
-typesafe-sdk                      0.6.0
-```
-
-The generated venv-local config enables `agent-workflow-spec` and
-`agent-workflow-benchmark`, selects the built-in TypeSafe semantic provider,
-and sets `decision_policy.mode = "comparative"`.
-`agent-workflow-comparative-eval` is a shared library and is intentionally not
-listed as a plugin.
-
-The verification gate requires `TYPESAFE_API_KEY`, a compatible comparative
-runtime, both plugins loaded, SpecGen targeting Agent-Workflow 0.13.0,
-`pip check` success, and direct `codex` execution rather than the obsolete
-`agent-workflow-codex` wrapper.
+The installer builds wheels from the selected source checkouts and installs
+Agent-Workflow, comparative-eval, and the benchmark plugin. The TypeSafe SDK
+and Inspect runtime are installed at the versions pinned by the script; exact
+local component versions come from each checkout. Only the benchmark plugin
+is enabled. The optional semantic mode remains comparative in this development
+stack; neither the SpecGen plugin nor the `contract-bundle` executable is
+required. Verification checks repository/venv provenance, comparative-eval
+compatibility, `pip check`, and the direct Codex executable.
 
 Audit the already-installed stack without rebuilding:
 
