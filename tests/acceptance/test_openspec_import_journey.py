@@ -11,7 +11,6 @@ import pytest
 
 from agent_workflow.errors import WorkflowError
 from agent_workflow.native_jobs import (
-    NATIVE_JOB_SCHEMA,
     NATIVE_JOB_V2_SCHEMA,
     validate_native_job,
     validate_source_specification_worktree,
@@ -334,7 +333,6 @@ def test_openspec_import_freezes_planning_and_keeps_acceptance_host_owned(
     )
     assert imported["provider"] == "openspec@1.13.2"
     assert imported["source_revision"] == revision
-    assert imported["legacy_specgen_required"] is False
     assert imported["tasks"] == list(TASK_IDS)
 
     receipt = json.loads((pack / "source-specification.json").read_text(encoding="utf-8"))
@@ -385,19 +383,9 @@ def test_openspec_import_freezes_planning_and_keeps_acceptance_host_owned(
     assert prompt != prompt2
     assert "1.1 Implement" in prompt and "1.2 Add" in prompt2
 
-    import agent_workflow.native_jobs as native_jobs
-
-    monkeypatch.setattr(
-        native_jobs,
-        "negotiate_bundle",
-        lambda *args, **kwargs: (_ for _ in ()).throw(
-            AssertionError("native-job/v2 must not negotiate the SpecGen bundle")
-        ),
-    )
     job_path = pack / "jobs" / f"{TASK_ID}.json"
     job = validate_native_job(job_path, pack_root=pack)
     assert job.schema == NATIVE_JOB_V2_SCHEMA
-    assert job.bundle_provenance is None
     assert job.source_specification is not None
     validate_source_specification_worktree(job, repo)
 
@@ -685,14 +673,6 @@ def test_imported_openspec_job_completes_through_external_public_lifecycle(
     assert "unavailable after import" in sentinel.stderr
     shim_log.write_text("", encoding="utf-8")
 
-    import agent_workflow.native_jobs as native_jobs
-    monkeypatch.setattr(
-        native_jobs,
-        "negotiate_bundle",
-        lambda *args, **kwargs: (_ for _ in ()).throw(
-            AssertionError("native-job/v2 must not negotiate the SpecGen bundle")
-        ),
-    )
     if integration_case == "wrong-task":
         # A known ref is legal in generic v2; integration must require the imported
         # task identity rather than trust an operator-rebound ref.
@@ -703,8 +683,7 @@ def test_imported_openspec_job_completes_through_external_public_lifecycle(
         task_id: validate_native_job(pack / "jobs" / f"{task_id}.json", pack_root=pack)
         for task_id in TASK_IDS
     }
-    assert all(job.schema == NATIVE_JOB_V2_SCHEMA and job.bundle_provenance is None
-               for job in parsed_jobs.values())
+    assert all(job.schema == NATIVE_JOB_V2_SCHEMA for job in parsed_jobs.values())
 
     wrong_ticket = installed_product.run(
         "--json", "agent-run", "prepare", "openspec-wrong-ticket", repo,
@@ -1062,54 +1041,19 @@ def test_openspec_import_keeps_hidden_oracle_in_host_evaluation_policy(
 
 
 
-def test_native_job_v1_retains_legacy_bundle_negotiation(
+def test_retired_native_job_v1_is_rejected_without_specgen_contracts(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    pack = tmp_path / "legacy-pack"
+    pack = tmp_path / "old-pack"
     pack.mkdir()
-    (pack / "prompt.md").write_text("legacy\n", encoding="utf-8")
     job_path = pack / "job.json"
-    provenance = {
-        "bundle_version": "0.2.1",
-        "schema_id": "agent-workflow/prompt-pack/v1",
-        "schema_digest": "0" * 64,
-    }
     job_path.write_text(
-        json.dumps(
-            {
-                "schema": NATIVE_JOB_SCHEMA,
-                "job_id": "legacy-job",
-                "ticket_id": "legacy-ticket",
-                "bundle_provenance": provenance,
-                "prompt_path": "prompt.md",
-                "worktree_target": "src",
-                "path_policy": {
-                    "allowed_paths": ["src"],
-                    "forbidden_paths": [],
-                },
-                "acceptance_commands": [],
-                "review_requirement": {
-                    "required": False,
-                    "independent": False,
-                },
-            }
-        ),
+        json.dumps({
+            "schema": "agent-workflow/native-job/v1",
+            "job_id": "old-job",
+            "ticket_id": "old-ticket",
+        }),
         encoding="utf-8",
     )
-
-    calls: list[dict[str, object]] = []
-
-    def negotiate(value: object) -> dict[str, object]:
-        assert value == provenance
-        calls.append(dict(provenance))
-        return {"legacy": True}
-
-    import agent_workflow.native_jobs as native_jobs
-
-    monkeypatch.setattr(native_jobs, "negotiate_bundle", negotiate)
-    job = validate_native_job(job_path, pack_root=pack)
-    assert calls == [provenance]
-    assert job.schema == NATIVE_JOB_SCHEMA
-    assert job.bundle_provenance == {"legacy": True}
-    assert job.source_specification is None
+    with pytest.raises(WorkflowError, match="unsupported native job schema"):
+        validate_native_job(job_path, pack_root=pack)
