@@ -36,7 +36,7 @@ def _git(repo: Path, *args: str, check: bool = True, env: dict[str, str] | None 
     execute = run_bytes if binary else run
     options = ["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false",
                "-c", "diff.renames=false", "-c", "core.fsmonitor=false"]
-    if any(item in args for item in ("checkout", "cherry-pick", "worktree")):
+    if any(item in args for item in ("checkout", "cherry-pick", "worktree", "merge")):
         configured = run(("git", "config", "--null", "--name-only", "--get-regexp",
                           r"^(merge\..*\.driver|filter\..*\.(clean|smudge|process|required))$"),
                          cwd=repo, check=False)
@@ -121,10 +121,14 @@ def _validate_command_file(path: Path) -> list[dict[str, Any]]:
     return commands
 
 
-def _accepted_run(settings: Settings, repo: Path, run_id: str) -> dict[str, Any]:
+def _accepted_run(settings: Settings, repo: Path, run_id: str, *, allow_dependent: bool = False) -> dict[str, Any]:
     directory = run_dir(settings, run_id)
     final, seal_hash = verify_seal_details(directory)
-    binding, binding_hash = read_sealed_contract(directory, final, "job-binding.json", "agent-workflow/job-binding/v2")
+    binding, binding_hash = read_sealed_json(directory, final, "job-binding.json")
+    binding_schema = binding.get("schema")
+    if binding_schema not in ({"agent-workflow/job-binding/v2", "agent-workflow/job-binding/v3"} if allow_dependent else {"agent-workflow/job-binding/v2"}):
+        raise WorkflowError("dependent runs require the task-chain integration interface")
+    validate_instance(binding, binding_schema, artifact="sealed job binding")
     completion, completion_hash = read_sealed_contract(directory, final, "completion.json", "agent-workflow/completion/v1")
     status, _ = read_sealed_contract(directory, final, "final-status.json", "agent-workflow/agent-run-status/v1")
     collection, _ = read_sealed_contract(directory, final, "collections/completion.json", "agent-workflow/completion-collection/v1")
@@ -157,7 +161,20 @@ def _accepted_run(settings: Settings, repo: Path, run_id: str) -> dict[str, Any]
             or receipts[-1]["receipt"]["revision"] != completion["head_revision"]):
         raise WorkflowError(f"run is not host-accepted at its sealed revision: {run_id}")
     baseline = str(completion.get("base_revision") or "")
-    if source_receipt.get("repository", {}).get("revision") != baseline:
+    execution_binding = None
+    if binding_schema == "agent-workflow/job-binding/v3":
+        execution_binding, authority_hash = read_sealed_json(directory, final, "jobs/execution-binding.json")
+        from .task_chains import validate_execution_binding
+        validate_execution_binding(execution_binding)
+        if (authority_hash != binding["execution_binding_sha256"]
+                or execution_binding["run_id"] != run_id or execution_binding["task_id"] != task_id
+                or execution_binding["worktree"] != binding["worktree"]
+                or execution_binding["plan"]["source_specification_sha256"] != source_hash
+                or execution_binding["plan"]["planning_revision"] != source_receipt["repository"]["revision"]
+                or next(row for row in execution_binding["plan"]["tasks"] if row["task_id"] == task_id)["job_sha256"] != job_hash):
+            raise WorkflowError("sealed execution authority disagrees with imported job")
+    expected_baseline = execution_binding["execution_revision"] if execution_binding else source_receipt.get("repository", {}).get("revision")
+    if expected_baseline != baseline:
         raise WorkflowError(f"run baseline differs from frozen source import: {run_id}")
     head = str(completion.get("head_revision") or "")
     if not re.fullmatch(r"[0-9a-f]{40}", baseline) or not re.fullmatch(r"[0-9a-f]{40}", head):
@@ -203,7 +220,8 @@ def _accepted_run(settings: Settings, repo: Path, run_id: str) -> dict[str, Any]
             "binding_sha256": binding_hash, "completion_sha256": completion_hash,
             "binding": binding, "completion": completion, "baseline": baseline,
             "head": head, "commit": commit, "changed_paths": sorted(changed),
-            "task_id": source["task_refs"][0], "source": source, "scope": scope}
+            "task_id": source["task_refs"][0], "source": source, "scope": scope,
+            "execution_binding": execution_binding}
 
 
 def _validate_diff_evidence(repo, directory, final, binding, completion):
@@ -240,13 +258,17 @@ def _validate_diff_evidence(repo, directory, final, binding, completion):
 
 
 def integrate(settings: Settings, repo: Path, *, run_ids: list[str], commands_file: Path,
-              dest: Path, output: Path, actor: str, reason: str) -> dict[str, Any]:
+              dest: Path, output: Path, actor: str, reason: str,
+              chain_plan: dict[str, Any] | None = None, purpose: str | None = None) -> dict[str, Any]:
     """Validate accepted task commits, apply in order, and record replay evidence."""
     repo = _git_root(repo)
     dest, output, commands_file = dest.resolve(), output.resolve(), commands_file.resolve()
     receipt_path = output / "integration-receipt.json"
     request = {"repo": str(repo), "run_ids": run_ids, "commands_file": str(commands_file),
                "commands_sha256": _sha(commands_file), "dest": str(dest), "actor": actor, "reason": reason}
+    schema = "agent-workflow/task-integration/v2" if chain_plan else SCHEMA
+    if chain_plan:
+        request.update(chain_plan_sha256=chain_plan["plan_sha256"], purpose=purpose)
     request_hash = hashlib.sha256(json.dumps(request, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     if output.exists():
         if receipt_path.is_file():
@@ -265,24 +287,36 @@ def integrate(settings: Settings, repo: Path, *, run_ids: list[str], commands_fi
         raise WorkflowError("destination/evidence must be disjoint and outside source, run and Git storage")
     output.mkdir(parents=True, mode=0o700)
     worktree_created = False
-    record: dict[str, Any] = {"schema": SCHEMA, "created_at": utc_now(), "request": request,
+    record: dict[str, Any] = {"schema": schema, "created_at": utc_now(), "request": request,
         "request_sha256": request_hash, "status": "rejected", "decision": "rejected", "inputs": [], "commands": []}
+    if chain_plan:
+        record.update(chain_plan=chain_plan, purpose=purpose)
     try:
-        if len(run_ids) != 2 or len(set(run_ids)) != 2:
+        if (not run_ids or len(set(run_ids)) != len(run_ids)
+                or (not chain_plan and len(run_ids) != 2)):
             raise WorkflowError("exactly two distinct task runs are required")
         if not actor.strip() or not reason.strip():
             raise WorkflowError("actor and reason are required")
         _idle(repo)
         if not _clean(repo):
             raise WorkflowError("repository must be clean")
-        inputs = [_accepted_run(settings, repo, run_id) for run_id in run_ids]
-        if len({item["baseline"] for item in inputs}) != 1 or len({(item["source"].get("source_sha256"), item["source"].get("stored_sha256")) for item in inputs}) != 1:
+        inputs = [_accepted_run(settings, repo, run_id, allow_dependent=bool(chain_plan)) for run_id in run_ids]
+        if ((not chain_plan and len({item["baseline"] for item in inputs}) != 1)
+                or len({(item["source"].get("source_sha256"), item["source"].get("stored_sha256")) for item in inputs}) != 1):
             raise WorkflowError("input runs do not share the frozen source specification and baseline")
-        if len({item["task_id"] for item in inputs}) != 2 or len({item["head"] for item in inputs}) != 2:
+        if len({item["task_id"] for item in inputs}) != len(inputs) or len({item["head"] for item in inputs}) != len(inputs):
             raise WorkflowError("input tasks and commits must be unique")
-        if len({item["binding"].get("ticket_id") for item in inputs}) != 2 or any(item["binding"].get("job_id") != item["task_id"] for item in inputs):
+        if len({item["binding"].get("ticket_id") for item in inputs}) != len(inputs) or any(item["binding"].get("job_id") != item["task_id"] for item in inputs):
             raise WorkflowError("sealed task, ticket, and job identities do not match")
+        if chain_plan:
+            from .task_chains import validate_prefix
+            validate_prefix(chain_plan, inputs, [i["execution_binding"] for i in inputs])
         commands = _validate_command_file(commands_file)
+        if chain_plan:
+            expected_commands = chain_plan["final_commands" if purpose == "final" else "transition_commands"]
+            if (purpose not in {"transition", "final"} or commands != expected_commands
+                    or (purpose == "final" and len(inputs) != len(chain_plan["order"]))):
+                raise WorkflowError("chain commands or final task count mismatch")
         commands_bytes = read_regular_file(commands_file).data
         if hashlib.sha256(commands_bytes).hexdigest() != request["commands_sha256"]:
             raise WorkflowError("commands file changed during integration preparation")
@@ -322,7 +356,8 @@ def integrate(settings: Settings, repo: Path, *, run_ids: list[str], commands_fi
         env = _COMMIT_ENV
         record["applied"] = []
         for item in inputs:
-            result = _git(dest, "-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false", "cherry-pick", "-x", item["head"], check=False, env=env)
+            result = (_git(dest, "merge", "--ff-only", item["head"], check=False) if chain_plan else
+                      _git(dest, "-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false", "cherry-pick", "-x", item["head"], check=False, env=env))
             if not result.ok:
                 record.setdefault("git_failures", []).append({"operation": "cherry-pick", "original": item["head"], "returncode": result.returncode, "stdout": result.stdout, "stderr": result.stderr})
                 raise WorkflowError(f"cherry-pick failed for {item['head']}")
@@ -364,11 +399,25 @@ def integrate(settings: Settings, repo: Path, *, run_ids: list[str], commands_fi
             path.chmod(0o444)
     record["artifacts"] = artifacts
     record["receipt_sha256"] = hashlib.sha256(json.dumps(record, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-    validate_instance(record, SCHEMA, artifact="integration receipt")
+    validate_instance(record, schema, artifact="integration receipt")
     _write_immutable_json(receipt_path, record)
     if record["status"] != "success":
         raise WorkflowError(record["error"])
     return record
+
+
+def _verify_receipt_hash(receipt):
+    schema = receipt.get("schema")
+    if schema not in {SCHEMA, "agent-workflow/task-integration/v2"}:
+        raise WorkflowError("unsupported integration receipt")
+    validate_instance(receipt, schema, artifact="integration receipt")
+    unsigned = {key: value for key, value in receipt.items() if key != "receipt_sha256"}
+    canonical = json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()
+    if receipt["receipt_sha256"] != hashlib.sha256(canonical).hexdigest():
+        raise WorkflowError("integration receipt canonical hash mismatch")
+    request_hash = hashlib.sha256(json.dumps(receipt["request"], sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    if request_hash != receipt["request_sha256"]:
+        raise WorkflowError("integration request hash mismatch")
 
 
 def verify_integration(evidence_dir: Path) -> dict[str, Any]:
@@ -379,14 +428,8 @@ def verify_integration(evidence_dir: Path) -> dict[str, Any]:
     """
     evidence_dir = evidence_dir.resolve()
     receipt = _json(evidence_dir / "integration-receipt.json")
-    validate_instance(receipt, SCHEMA, artifact="integration receipt")
-    unsigned = {key: value for key, value in receipt.items() if key != "receipt_sha256"}
-    canonical = json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()
-    if receipt["receipt_sha256"] != hashlib.sha256(canonical).hexdigest():
-        raise WorkflowError("integration receipt canonical hash mismatch")
-    request_hash = hashlib.sha256(json.dumps(receipt["request"], sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-    if request_hash != receipt["request_sha256"]:
-        raise WorkflowError("integration request hash mismatch")
+    _verify_receipt_hash(receipt)
+    dependent = receipt["schema"] == "agent-workflow/task-integration/v2"
     paths = set()
     for item in receipt["artifacts"]:
         relative = item["path"]
@@ -402,11 +445,11 @@ def verify_integration(evidence_dir: Path) -> dict[str, Any]:
             raise WorkflowError("invalid rejected integration decision")
         return receipt
     inputs = receipt["inputs"]
-    if (receipt["decision"] != "accepted" or len(inputs) != 2
-            or len({item["run_id"] for item in inputs}) != 2
-            or len({item["task_id"] for item in inputs}) != 2
-            or len({item["head"] for item in inputs}) != 2
-            or any(item["baseline"] != receipt["base_revision"] for item in inputs)
+    if (receipt["decision"] != "accepted" or not inputs or (not dependent and len(inputs) != 2)
+            or len({item["run_id"] for item in inputs}) != len(inputs)
+            or len({item["task_id"] for item in inputs}) != len(inputs)
+            or len({item["head"] for item in inputs}) != len(inputs)
+            or (not dependent and any(item["baseline"] != receipt["base_revision"] for item in inputs))
             or [item["run_id"] for item in inputs] != receipt["request"]["run_ids"]):
         raise WorkflowError("invalid successful integration inputs/decision")
     if (_sha(evidence_dir / "commands.json") != receipt["commands_policy_sha256"]
@@ -425,6 +468,7 @@ def verify_integration(evidence_dir: Path) -> dict[str, Any]:
         git = scratch / "replay"
         git.mkdir()
         _git(git, "init", "-q")
+        authorities = []
         for item in inputs:
             archive = evidence_dir / "inputs" / item["run_id"]
             snapshot = scratch / item["run_id"]
@@ -440,9 +484,39 @@ def verify_integration(evidence_dir: Path) -> dict[str, Any]:
                     or binding["job_id"] != item["task_id"]
                     or completion["ticket_id"] != item["task_id"]
                     or completion["head_revision"] != item["head"]
-                    or source["repository"]["revision"] != item["baseline"]
+                    or (not dependent and source["repository"]["revision"] != item["baseline"])
                     or binding["scope"] != item["scope"]):
                 raise WorkflowError("archived task binding disagrees with integration receipt")
+            if dependent:
+                authority, authority_hash = read_sealed_contract(snapshot, final, "jobs/execution-binding.json", "agent-workflow/execution-binding/v1")
+                validate_instance(binding, "agent-workflow/job-binding/v3", artifact="archived job binding")
+                job, job_hash = read_sealed_contract(snapshot, final, "jobs/native-job.json", "agent-workflow/native-job/v2")
+                row = next(row for row in receipt["chain_plan"]["tasks"] if row["task_id"] == item["task_id"])
+                if (authority_hash != binding["execution_binding_sha256"]
+                        or job_hash != row["job_sha256"] or job_hash != binding["job_stored_sha256"]
+                        or job_hash != binding["job_source_sha256"]
+                        or job["source_specification"]["sha256"] != source_hash
+                        or job["source_specification"]["task_refs"] != [item["task_id"]]
+                        or job["scope"] != item["scope"]
+                        or source["repository"]["revision"] != receipt["chain_plan"]["planning_revision"]
+                        or source_hash != receipt["chain_plan"]["source_specification_sha256"]):
+                    raise WorkflowError("archived execution authority mismatch")
+                status, _ = read_sealed_contract(snapshot, final, "final-status.json", "agent-workflow/agent-run-status/v1")
+                collection, _ = read_sealed_contract(snapshot, final, "collections/completion.json", "agent-workflow/completion-collection/v1")
+                tasks = [t for t in source["task_map"] if t["agent_workflow_task_id"] == item["task_id"]]
+                baseline_evidence, _ = read_sealed_json(snapshot, final, "source-baseline.json")
+                primary = baseline_evidence["components"]["primary"]
+                if (completion["result"] != "completed" or status["status"] != "completed"
+                        or collection["validation_status"] != "valid"
+                        or len(tasks) != 1 or tasks[0]["done_at_import"]
+                        or authority["worktree"] != binding["worktree"]
+                        or binding["ticket_id"] != item["task_id"] or job["job_id"] != item["task_id"]
+                        or job["ticket_id"] != item["task_id"]
+                        or completion["base_revision"] != item["baseline"]
+                        or primary["head"] != item["baseline"] or primary["path"] != binding["worktree"]
+                        or any(v != item["run_id"] for v in (status["agent_run_id"], completion["agent_run_id"], binding["agent_run_id"]))):
+                    raise WorkflowError("archived task is not a valid bound completed execution")
+                authorities.append(authority)
             chain = lifecycle_receipts(snapshot, expected_final_receipt_sha256=digest)
             if (len(chain) < 2 or chain[-1]["receipt"]["action"] != "accepted"
                     or chain[-2]["receipt"]["action"] != "reviewed"
@@ -451,13 +525,35 @@ def verify_integration(evidence_dir: Path) -> dict[str, Any]:
             _git(git, "fetch", str(archive / "source.bundle"), "HEAD")
             if _git(git, "rev-parse", "FETCH_HEAD").stdout.strip() != item["head"]:
                 raise WorkflowError("input bundle head mismatch")
+            for artifact in source["artifacts"]:
+                if not _relative_path(artifact["path"]):
+                    raise WorkflowError("unsafe archived planning path")
+                for revision in (item["baseline"], item["head"]):
+                    blob = _git(git, "show", f"{revision}:{artifact['path']}", binary=True).stdout
+                    if hashlib.sha256(blob).hexdigest() != artifact["sha256"]:
+                        raise WorkflowError("archived frozen planning bytes changed")
             actual = _validate_diff_evidence(git, snapshot, final, binding, completion)
             if (read_regular_file(archive / "input-commit.diff").data != actual
                     or _commit(git, item["head"])["parents"] != item["baseline"]):
                 raise WorkflowError("input Git commit disagrees with source evidence/baseline")
+        if dependent:
+            from .task_chains import validate_prefix
+            validate_prefix(receipt["chain_plan"], inputs, authorities)
+            policy = receipt["chain_plan"]["final_commands" if receipt["purpose"] == "final" else "transition_commands"]
+            if (receipt["request"]["chain_plan_sha256"] != receipt["chain_plan"]["plan_sha256"]
+                    or receipt["request"]["purpose"] != receipt["purpose"]
+                    or receipt["commands_policy"] != policy
+                    or receipt["base_revision"] != receipt["chain_plan"]["planning_revision"]
+                    or (receipt["purpose"] == "final" and len(inputs) != len(receipt["chain_plan"]["order"]))):
+                raise WorkflowError("chain integration policy/identity mismatch")
+        if len(receipt["applied"]) != len(inputs):
+            raise WorkflowError("integration application count mismatch")
         _git(git, "checkout", "--detach", receipt["base_revision"])
         for item, applied in zip(inputs, receipt["applied"]):
-            _git(git, "cherry-pick", "-x", item["head"], env=_COMMIT_ENV)
+            if dependent:
+                _git(git, "merge", "--ff-only", item["head"])
+            else:
+                _git(git, "cherry-pick", "-x", item["head"], env=_COMMIT_ENV)
             if (applied["original"] != item["head"]
                     or _git(git, "rev-parse", "HEAD").stdout.strip() != applied["applied"]):
                 raise WorkflowError("deterministic integration replay mismatch")

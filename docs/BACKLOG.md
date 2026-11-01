@@ -355,9 +355,22 @@ command evidence, sealing, host review, and host acceptance. OpenSpec is
 replaced with a fail-fast guard after import and receives no execution-time
 calls; `specgen_contracts` is absent. Sealing validates v2 bindings as well
 as legacy v1 bindings. The single-task Phase-0 import/execution qualification
-is complete. Issue #72 extends that qualification to two pending tasks with
-separate exact-revision worktrees and independent sealed/accepted runs, using
-the existing shared host policy rather than introducing per-task policy.
+is complete. Merged PR #73 / issue #72 extends that qualification to two
+pending tasks with separate exact-revision worktrees and independent
+sealed/accepted runs, using the existing shared host policy. PR #75 adds
+host-owned deterministic integration and combined-result acceptance; PR #77
+makes patch collection fail closed while preserving historical seals.
+
+OPENSPEC-004 adds an explicit host-owned dependency plan and sequential
+preparation/accepted-prefix advancement using the existing Agent Run lifecycle.
+The real 1.13.2 gate now qualifies three dependent tasks, accurate sealed patches,
+separate combined acceptance, and archived replay with original Git storage
+unavailable. Planning/import/native-job contracts stay frozen; advanced
+execution authority is separate. Zero post-import OpenSpec calls and absence
+of SpecGen contracts remain real-upstream qualification requirements.
+Automatic reserved-run replacement, repair of interrupted/rejected integration
+attempts, multi-commit tasks and autonomous scheduling remain unsupported;
+none is required to freeze or retire legacy compatibility by implication.
 See `OPENSPEC_INTEGRATION.md` for the qualified boundary and limitations.
 The remaining migration work is the legacy-authoring compatibility and
 shared-contract retirement boundary below.

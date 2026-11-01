@@ -154,14 +154,15 @@ operation below combines accepted independent results; it does not orchestrate
 dependent edits. The current workflow scheduler
 launches nodes against its shared workdir, rather than provisioning a fresh
 source-bound worktree for each imported job. Automatic multi-task scheduling
-is outside this qualification.
+is outside the independent-task qualification. For dependent execution, use
+the explicit host-owned chain interface below.
 
 ## Phase-0 execution qualification
 
 `tests/compat/openspec-phase0-smoke.sh` qualifies the real published OpenSpec
 1.13.2 surface through host acceptance, with `specgen_contracts` absent. It
 initializes and strictly validates a committed `spec-driven` change with one
-completed and two pending tasks. It imports only the pending jobs and verifies
+completed and three pending tasks. It imports only the pending jobs and verifies
 checksums, stable IDs, distinct prompts/task references, source/task hashes,
 v2 scope, and the absence of `bundle_provenance`.
 
@@ -187,9 +188,10 @@ exact imported revision, using the existing external-worker lifecycle:
 4. Record host review and acceptance through public commands and check the
    terminal summary and seal.
 
-Both jobs intentionally share an explicit two-file writable policy, a
+The two independent runs share the real fixture's explicit three-file writable policy, a
 disposable `src/__pycache__/` tree for compiler output, and the same host-owned
-compile check. Each worker changes only its task's file.
+compile check. Each worker changes only its task's file; the third file is used by the
+separately authorized dependent-task qualification below.
 Separate worktrees isolate these overlapping authorizations; this is not a
 claim of task-specific access control or safe parallel conflicting edits.
 No per-task policy extension is needed for this fixture.
@@ -223,8 +225,8 @@ temporary fixture.
 The installed-product tests use a fake upstream CLI; only the compatibility
 smoke qualifies the real published upstream surface.
 
-This qualification does not exercise autonomous workflow scheduling,
-dependent-task rebasing, headless completion, production provider
+This independent-task qualification does not exercise autonomous workflow scheduling,
+dependent-task execution (qualified separately below), headless completion, production provider
 workers, or independent semantic review. The host integration tests reject
 rewritten imported job/task references; generic v2 preparation semantics remain
 unchanged. Host-supplied policy and checksum validation remain
@@ -372,8 +374,114 @@ source/run/Git storage are refused before creating artifacts. Abrupt process
 termination can leave an incomplete attempt and its detached worktree; no
 success receipt is published and retry requires an explicit new attempt.
 
-This boundary does not provide dependent-task rebasing, multi-commit task
+The independent v1 boundary does not provide dependent-task rebasing, multi-commit task
 integration, autonomous scheduling, parallel conflict resolution, or production
 semantic review. It requires retained input worktrees for initial validation;
 archived integration verification is independent of them. Legacy compatibility,
 SpecGen retirement, headless completion, and REL-003 acceptance remain separate.
+
+## Dependent tasks: host-owned sequential chains
+
+The host can now select pending tasks from one frozen import and explicitly
+supply their dependencies. This reuses Agent Run preparation, external Worker
+completion, verification, sealing, review, acceptance, and integration archives.
+It adds no Worker lifecycle or autonomous scheduler.
+
+There are two distinct source authorities:
+
+- **Planning baseline:** the immutable imported revision, source receipt digest,
+  task locators/hashes, and frozen planning bytes. Native jobs remain v2.
+- **Execution baseline:** initially the planning baseline; subsequently the exact
+  head of a verified, host-accepted integrated prefix. Workers cannot select it.
+
+An explicit `task-chain/v1` plan maps stable imported task IDs to predecessor
+IDs, pins each job digest, and freezes transition and final command policies.
+Missing references, self-dependencies and cycles are rejected. Lexicographic
+Kahn ordering makes the serial order deterministic. Every earlier task in this
+serial prefix is accepted before another task is prepared, even when there is
+no dependency edge between them. Edges express required predecessors; the host
+also authorizes this cumulative prefix through the frozen plan.
+
+`chain-prepare` creates a clean detached worktree at the authorized baseline and
+calls existing Agent Run preparation. New `job-binding/v3` receipts bind the
+SHA-256 of a separate sealed `execution-binding/v1` artifact. It records the
+unchanged import/plan, task identity, run identity, worktree, actual baseline,
+and preceding integration decision. Existing native-job/v2, job-binding/v2,
+independent task integration v1 and sealed history retain their semantics.
+
+After the existing public task lifecycle has sealed, reviewed and accepted the
+run, `chain-advance` validates its Git parent, source inventories, writable
+scope, nonempty accurate patch when present, planning bytes, and acceptance
+receipts through the existing integration authority. `task-integration/v2`
+archives the entire accepted prefix and fast-forwards its fresh worktree to
+each exact accepted commit. It never cherry-picks a dependent commit onto a
+new parent. Each task must contain exactly one regular-file commit; merge,
+symlink and submodule changes remain unsupported.
+
+Host external-start and runner-dispatch gates recheck the v3 execution baseline,
+clean worktree, byte-identical planning and accepted predecessor seals before
+Worker execution. A changed checkout after preparation is refused.
+
+A prefix decision is **not final combined acceptance**. Only `chain-accept`,
+after every selected task has advanced, runs the separately frozen combined
+commands and writes a `purpose: final` accepted integration receipt. Failed or
+mutating commands produce rejection and rollback of the attempt's own detached
+worktree. Original task worktrees, planning content, branches and seals are
+unchanged. Landing the final revision remains a separate host operation.
+
+`integration-verify` supports v1 and v2. V2 verification checks the complete
+archived prefix, source/job/execution binding digests, predecessor seal links,
+review/acceptance, Git parents and blob inventories, frozen planning bytes,
+command decisions and exact fast-forward replay from archived bundles. It
+needs neither OpenSpec nor the original repository, worktrees or workers;
+the qualification makes original Git storage unavailable during archive replay.
+As before, replay verifies recorded commands; it does not rerun them. Trusted
+host custody of the final receipt digest is required; hashes are not signatures.
+
+### Design and recovery decisions
+
+The existing exact-import-revision checks in `native_jobs` and
+`task_integration` prevented legitimate dependent execution. The sole exception
+is an internally supplied, validated host execution binding from `chain-prepare`;
+ordinary preparation still requires the original revision. Frozen planning
+bytes are checked independently of either execution revision.
+
+The chain directory is host-owned storage outside source/Git/run storage.
+An exclusive filesystem lock serializes operations. Immutable reservations are
+written before preparation side effects; immutable integration receipts record
+accepted transitions. Each command reconstructs and verifies the prefix from
+disk. `chain-status` identifies reserved runs and the last authorized revision,
+so a restarted host resumes the existing run through normal public lifecycle
+commands rather than launching another Worker. Duplicate preparation and
+advancement are refused. Missing, stale, tampered, rejected, or inconsistent
+state fails closed. All accepted predecessor live seals/worktrees are checked
+again before preparing the next task.
+
+Automatic retry/replacement of reserved runs and repair of an interrupted or
+rejected integration attempt are deliberately unsupported. Such cases retain
+diagnostic evidence and require operator diagnosis; the tool never silently
+replays Worker execution or overwrites receipts. Generic `agent-run restart`
+is refused for chain-bound runs. This phase qualifies restart *between* task
+transitions and before combined acceptance, not automatic retry of a failed
+task. Independent tasks may continue using the existing v2/v1 integration path.
+
+### Qualification
+
+The real published OpenSpec 1.13.2 smoke preserves its independent-task/replay
+qualification and adds three separately imported pending tasks: a limiter,
+a response helper that imports the limiter, and a request entry point that
+imports the helper. An explicit host plan declares A -> B and {A,B} -> C.
+Every task executes in a fresh worktree, completes publicly, seals an accurate
+nonempty patch, receives host review and acceptance, and advances through a
+verified prefix. A separate combined behavior check accepts the final result;
+archived replay reproduces the exact revision. The fail-fast OpenSpec guard
+remains active throughout, and the environment excludes `specgen_contracts`.
+Installed-product tests also cover two tasks, three tasks, failed final commands,
+invalid DAGs, unaccepted/tampered predecessors, stale baselines, dirty source,
+duplicates, disk-state recovery at each boundary and unchanged prior seals.
+
+Unsupported: speculative parallelism, concurrent conflicts, multi-repository
+worksets, dependency inference from prose, automatic checkbox mutation,
+LLM ordering/conflict resolution, rebasing/multi-commit tasks, task replacement,
+and production semantic-review policy changes. Legacy retirement and REL-003
+clean-host acceptance remain separate work.

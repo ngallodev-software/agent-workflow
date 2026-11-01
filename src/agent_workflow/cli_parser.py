@@ -302,6 +302,22 @@ def build_parser(
     )
     integration_verify.add_argument("evidence_dir", type=Path)
 
+    chain_create = worktree_commands.add_parser("chain-create", help="freeze an explicit sequential task dependency plan")
+    chain_create.add_argument("repo", type=Path)
+    chain_create.add_argument("--pack", type=Path, required=True)
+    chain_create.add_argument("--dependencies", type=Path, required=True)
+    chain_create.add_argument("--commands", type=Path, required=True, help="host acceptance commands for every integrated prefix")
+    chain_create.add_argument("--final-commands", type=Path, required=True)
+    chain_create.add_argument("--output", type=Path, required=True)
+    chain_create.add_argument("--actor", required=True)
+    chain_create.add_argument("--reason", required=True)
+    chain_create.add_argument("--tier", choices=("low", "medium", "high", "critical"), required=True)
+    for operation in ("prepare", "advance", "accept", "status"):
+        chain_parser = worktree_commands.add_parser("chain-" + operation, help="host-owned task-chain " + operation)
+        chain_parser.add_argument("chain", type=Path)
+        if operation == "prepare":
+            chain_parser.add_argument("run_id")
+
     agent_run = commands.add_parser("agent-run", help="Agent Run lifecycle and durable-control commands")
     agent_run_commands = agent_run.add_subparsers(dest="agent_run_command", required=True)
 

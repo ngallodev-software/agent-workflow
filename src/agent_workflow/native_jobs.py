@@ -198,6 +198,7 @@ def _git(workdir: Path, *args: str) -> str:
 def validate_source_specification_worktree(
     job: ValidatedNativeJob,
     workdir: Path,
+    *, execution_revision: str | None = None,
 ) -> None:
     """Bind a v2 job to a clean checkout of the imported planning revision.
 
@@ -212,7 +213,7 @@ def validate_source_specification_worktree(
     root = require_directory(absolute_path(workdir), label="native-job/v2 source worktree")
     repository = source.receipt["repository"]
     head = _git(root, "rev-parse", "HEAD")
-    if head != repository["revision"]:
+    if head != (execution_revision or repository["revision"]):
         raise WorkflowError(
             "native-job/v2 worktree revision does not match frozen OpenSpec import: "
             f"{head} != {repository['revision']}"

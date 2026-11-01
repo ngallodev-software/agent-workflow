@@ -166,3 +166,44 @@ agent-workflow commands --format markdown
 ```
 
 Use normal `--help` output when investigating a catalog/version mismatch, an argument error, or a command absent from the catalog.
+
+### Sequential imported task chains
+
+Prepare host-owned JSON files outside the source tree. Dependencies map imported
+pending task IDs to arrays of predecessor IDs, for example
+`{"openspec-add-rate-limit-1-1": [], "openspec-add-rate-limit-1-2": ["openspec-add-rate-limit-1-1"]}`.
+Transition and final commands use the existing integration command array format
+(`id`, `argv`, `cwd`, `timeout_seconds`). Freeze them before execution:
+
+```bash
+agent-workflow worktree chain-create /repo --pack /pack \
+  --dependencies /policy/dependencies.json --commands /policy/prefix.json \
+  --final-commands /policy/combined.json --output /host/chain \
+  --actor operator --tier low --reason 'Approve sequential implementation policy'
+agent-workflow worktree chain-prepare /host/chain task-a-run -- python3 /host/worker.py
+```
+
+Preparation returns the existing external Agent Run contract. Bind/start the
+external Worker, execute its prepared command, observe its exit, then use
+`external-exit`, `finalize`, `review`, and `accept` as usual. Preparation does
+not execute a Worker or grant it host acceptance authority.
+
+```bash
+agent-workflow worktree chain-advance /host/chain
+agent-workflow worktree chain-status /host/chain
+agent-workflow worktree chain-prepare /host/chain task-b-run -- python3 /host/worker.py
+# Complete, finalize, review and accept task B, then:
+agent-workflow worktree chain-advance /host/chain
+agent-workflow worktree chain-accept /host/chain
+agent-workflow worktree integration-verify /host/chain/final
+```
+
+The host chooses the Worker command; task/job policy and writable scope stay
+frozen. Run these commands as the authorized host, not inside a worker. Preserve
+the whole chain directory, task run evidence and worktrees until archived final
+verification succeeds. Pin the final receipt digest in trusted host records.
+`chain-status` reads verified durable state after restart. A reserved task must
+resume its recorded run; duplicate preparation is refused. Missing/rejected or
+interrupted evidence is a diagnostic stop, never permission to run it again.
+See [OpenSpec integration](OPENSPEC_INTEGRATION.md#dependent-tasks-host-owned-sequential-chains)
+for contracts, source authority and unsupported recovery cases.
