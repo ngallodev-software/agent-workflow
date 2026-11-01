@@ -928,16 +928,16 @@ def _prepare_evaluation(
     if native_job is None:
         scope_data = evaluation_data.get("scope", {})
     else:
-    if native_job.scope is None:
-        raise WorkflowError("native-job/v2 has no execution scope")
-    disposable_trees = list(native_job.scope.disposable_trees)
-    if ".delegations/" not in disposable_trees:
-        disposable_trees.append(".delegations/")
-    scope_data = {
-        "writable_paths": list(native_job.scope.writable_paths),
-        "writable_trees": list(native_job.scope.writable_trees),
-        "disposable_trees": disposable_trees,
-    }
+        if native_job.scope is None:
+            raise WorkflowError("native-job/v2 has no execution scope")
+        disposable_trees = list(native_job.scope.disposable_trees)
+        if ".delegations/" not in disposable_trees:
+            disposable_trees.append(".delegations/")
+        scope_data = {
+            "writable_paths": list(native_job.scope.writable_paths),
+            "writable_trees": list(native_job.scope.writable_trees),
+            "disposable_trees": disposable_trees,
+        }
     runtime = {
         "schema": "agent-workflow/evaluation-runtime/v1",
         "evaluation_path": str(evaluation.path) if evaluation is not None else None,
