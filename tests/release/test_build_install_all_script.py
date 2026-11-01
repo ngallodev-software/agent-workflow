@@ -28,10 +28,7 @@ def test_build_install_all_help_documents_stack_and_sources() -> None:
     assert result.returncode == 0, result.stderr
     for option in (
         "--venv PATH",
-        "--contracts-source PATH",
         "--comparative-eval-source PATH",
-        "--with-specgen",
-        "--specgen-source PATH",
         "--benchmark-source PATH",
         "--verify-only",
         "--no-pull",
@@ -56,10 +53,8 @@ def test_local_component_versions_are_not_hard_coded() -> None:
     text = _text()
     # Local versions must come from the source checkout after pull/re-exec.
     for name in (
-        "EXPECTED_CONTRACTS_VERSION",
         "EXPECTED_AGENT_WORKFLOW_VERSION",
         "EXPECTED_COMPARATIVE_EVAL_VERSION",
-        "EXPECTED_SPECGEN_VERSION",
         "EXPECTED_BENCHMARK_VERSION",
     ):
         assert f'{name}="$(resolve_source_version ' in text
@@ -94,10 +89,8 @@ def test_build_install_all_validates_wheel_metadata_against_source_version() -> 
     assert ".dist-info/METADATA" in text
     assert "if observed != expected" in text
     for wheel in (
-        "CONTRACTS_WHEEL",
         "AGENT_WORKFLOW_WHEEL",
         "COMPARATIVE_EVAL_WHEEL",
-        "SPECGEN_WHEEL",
         "BENCHMARK_WHEEL",
     ):
         assert f'{wheel}="$(build_wheel ' in text
@@ -106,10 +99,8 @@ def test_build_install_all_validates_wheel_metadata_against_source_version() -> 
 def test_build_install_all_uses_required_dependency_order() -> None:
     text = _text()
     installs = [
-        'install_wheel specgen-agent-workflow-contracts',
         'install_wheel agent-workflow "$AGENT_WORKFLOW_WHEEL"',
         'install_wheel agent-workflow-comparative-eval',
-        'install_wheel specgen "$SPECGEN_WHEEL"',
         'install_wheel agent-workflow-benchmark',
     ]
     positions = [text.index(item) for item in installs]
@@ -129,9 +120,7 @@ def test_build_install_all_records_source_provenance() -> None:
 
 def test_build_install_all_writes_comparative_plugin_config() -> None:
     text = _text()
-    assert "SpecGen is an optional integration and is excluded by default." in text
     assert 'plugins=\'["agent-workflow-benchmark"]\'' in text
-    assert 'plugins=\'["agent-workflow-spec", "agent-workflow-benchmark"]\'' in text
     assert 'provider = "typesafe"' in text
     assert "typesafe-api-calls.jsonl" in text
     assert 'mode = "comparative"' in text
@@ -181,7 +170,7 @@ def test_build_install_all_does_not_override_git_authentication() -> None:
 def test_build_wheel_initializes_key_before_using_it_under_nounset() -> None:
     text = _text()
     start = text.index("build_wheel() {")
-    end = text.index("CONTRACTS_WHEEL=", start)
+    end = text.index("AGENT_WORKFLOW_WHEEL=", start)
     block = text[start:end]
 
     assert 'local key="$1" source="$2"' not in block
@@ -190,20 +179,14 @@ def test_build_wheel_initializes_key_before_using_it_under_nounset() -> None:
     assert block.index('local key="$1"') < block.index('local out="$BUILD_ROOT/$key"')
 
 
-def test_specgen_is_opt_in_not_default_stack_authority() -> None:
+def test_retired_contracts_are_absent_from_install_stack() -> None:
     text = _text()
-    assert 'WITH_SPECGEN=0' in text
-    assert '--with-specgen) WITH_SPECGEN=1' in text
-    assert 'SPECGEN_SOURCE=""' in text
-    assert 'EXPECTED_SPECGEN_VERSION=""' in text
-    assert 'if [[ "$WITH_SPECGEN" -eq 1 ]]; then' in text
-    assert 'LOCAL_COMPONENT_ARGS+=("specgen" "$EXPECTED_SPECGEN_VERSION" "$SPECGEN_SOURCE")' in text
-    assert 'expected_plugins = ("agent-workflow-spec","agent-workflow-benchmark") if with_specgen else ("agent-workflow-benchmark",)' in text
-    assert 'if with_specgen:' in text
-    assert 'from specgen.agent_workflow import AW_VERSION' in text
-    assert 'if [[ "$WITH_SPECGEN" -eq 1 ]]; then "$VENV/bin/specgen" --help >/dev/null; fi' in text
-
-
-def test_specgen_source_option_implies_optional_integration() -> None:
-    text = _text()
-    assert 'SPECGEN_SOURCE_ARG="$1"; WITH_SPECGEN=1' in text
+    for retired in ("specgen-agent-workflow-contracts", "CONTRACTS_WHEEL",
+                    "SPECGEN_WHEEL", "WITH_SPECGEN", "contract-bundle"):
+        assert retired not in text
+    assert 'plugins=\'["agent-workflow-benchmark"]\'' in text
+    result = subprocess.run(["bash", str(SCRIPT), "--help"],
+                            cwd=REPO_ROOT, text=True, capture_output=True, check=False)
+    assert result.returncode == 0
+    assert "--contracts-source" not in result.stdout
+    assert "--with-specgen" not in result.stdout
