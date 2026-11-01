@@ -158,6 +158,7 @@ def _job_binding(state_dir: Path) -> dict[str, Any] | None:
     if value.get("schema") not in {
         "agent-workflow/job-binding/v1",
         "agent-workflow/job-binding/v2",
+        "agent-workflow/job-binding/v3",
     }:
         raise WorkflowError(f"unsupported job binding schema: {value.get('schema')!r}")
     return value

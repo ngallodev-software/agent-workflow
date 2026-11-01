@@ -48,7 +48,7 @@ ImportError: cannot import name 'synchronize_projection' from 'agent_workflow.st
 - Reproduction against the current checkout:
 
   ```bash
-  PYTHONPATH=/lump/apps/agent-workflow/src \
+  PYTHONPATH=<workspace>/agent-workflow/src \
     python3 -c 'import agent_workflow.delegation'
   ```
 
@@ -198,14 +198,14 @@ PY
 Observed path:
 
 ```text
-/home/nate/.local/lib/python3.13/site-packages/agent_workflow/__init__.py
+~/.local/lib/python3.13/site-packages/agent_workflow/__init__.py
 ```
 
 The source checkout uses `src/` layout. Running against source explicitly
 imports the current checkout and reproduces the stale import defect:
 
 ```bash
-PYTHONPATH=/lump/apps/agent-workflow/src python3 - <<'PY'
+PYTHONPATH=<workspace>/agent-workflow/src python3 - <<'PY'
 import agent_workflow
 print(agent_workflow.__file__)
 import agent_workflow.delegation
@@ -249,7 +249,7 @@ and reach the wrong conclusion.
 ## Suggested focused validation commands
 
 ```bash
-cd /lump/apps/agent-workflow
+cd <workspace>/agent-workflow
 
 PYTHONPATH="$PWD/src" python3 -c 'import agent_workflow.delegation'
 

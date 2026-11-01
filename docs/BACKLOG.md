@@ -133,7 +133,7 @@ acceptance remains pending Jenkins evidence.
 dispatch fail closed until the active generation has been bound and
 `start-external` has recorded the run as running. The full GitHub Actions
 matrix passed. The remaining work in this item is the independent external-host
-R6D12/Jenkins acceptance exercise; no additional source implementation is
+CI-host/Jenkins acceptance exercise; no additional source implementation is
 currently identified.
 
 ### TERM-001 — Retire external host terminals after terminal Agent Run state
@@ -334,7 +334,7 @@ launches do not close `HERDR-001`, `EXT-HOST-002`, or `TERM-001`.
 `CBM-RESCRIPT-HANG-20261002`, `CBM-CACHE-STORES-20261002`; native launch contracts,
 external binding/event journals and message-state in their run directories.
 Host start/prompt/ack captures and assignment manifest:
-`/home/nate/.local/state/agent-workflow/handoffs/CBM-THREE-VERTICALS-20261002/`.
+`<state-root>/handoffs/CBM-THREE-VERTICALS-20261002/`.
 
 ## P2 — Upstream specification integration
 
@@ -355,9 +355,22 @@ command evidence, sealing, host review, and host acceptance. OpenSpec is
 replaced with a fail-fast guard after import and receives no execution-time
 calls; `specgen_contracts` is absent. Sealing validates v2 bindings as well
 as legacy v1 bindings. The single-task Phase-0 import/execution qualification
-is complete. Issue #72 extends that qualification to two pending tasks with
-separate exact-revision worktrees and independent sealed/accepted runs, using
-the existing shared host policy rather than introducing per-task policy.
+is complete. Merged PR #73 / issue #72 extends that qualification to two
+pending tasks with separate exact-revision worktrees and independent
+sealed/accepted runs, using the existing shared host policy. PR #75 adds
+host-owned deterministic integration and combined-result acceptance; PR #77
+makes patch collection fail closed while preserving historical seals.
+
+OPENSPEC-004 adds an explicit host-owned dependency plan and sequential
+preparation/accepted-prefix advancement using the existing Agent Run lifecycle.
+The real 1.13.2 gate now qualifies three dependent tasks, accurate sealed patches,
+separate combined acceptance, and archived replay with original Git storage
+unavailable. Planning/import/native-job contracts stay frozen; advanced
+execution authority is separate. Zero post-import OpenSpec calls and absence
+of SpecGen contracts remain real-upstream qualification requirements.
+Automatic reserved-run replacement, repair of interrupted/rejected integration
+attempts, multi-commit tasks and autonomous scheduling remain unsupported;
+none is required to freeze or retire legacy compatibility by implication.
 See `OPENSPEC_INTEGRATION.md` for the qualified boundary and limitations.
 The remaining migration work is the legacy-authoring compatibility and
 shared-contract retirement boundary below.

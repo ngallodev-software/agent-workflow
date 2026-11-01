@@ -32,7 +32,7 @@ starting any headless worker, native child/forked agent or interactive Herdr age
 
 If indexing fails, is incomplete/not ready, points at the wrong root, or cannot
 remain usable for the worker, do not launch the worker as though indexed. Record
-observed CLI issues in `/lump/apps/codebase-memory-cli/BACKLOG.md` (parent-owned
+observed CLI issues in the `codebase-memory-cli` repository BACKLOG.md (parent-owned
 updates during parallel work) and retain diagnostics. Do not stop a shared daemon,
 switch account cache roots, widen allow-root or add an unrequested service merely
 to force success. Resolve the actual blocker before launch.

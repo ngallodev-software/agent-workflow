@@ -66,3 +66,21 @@ For operator display, keep worker identity, execution status, review,
 acceptance, and host projection state as separate fields. A host projection
 may be retired only after the public execution status is terminal; projection
 state must never be fed back into lifecycle or disposition authority.
+
+## Imported task chains
+
+`worktree chain-create REPO --pack PACK --dependencies JSON --commands JSON
+--final-commands JSON --output DIR --actor ACTOR --reason REASON --tier TIER` returns a frozen
+`agent-workflow/task-chain/v1` plan. `worktree chain-prepare DIR RUN -- COMMAND...`
+reserves the next task and returns the ordinary external Agent Run preparation
+result. `chain-advance DIR` returns a `task-integration/v2` transition receipt;
+`chain-accept DIR` returns a distinct final integration decision after all tasks.
+`chain-status DIR` returns plan digest, order, reservations, accepted task count,
+last execution revision and `final_accepted`. All commands are host operations.
+No dependency/execution revision parameter is exposed to Workers.
+
+New contracts: `task-chain/v1`, `execution-binding/v1`, `job-binding/v3`, and
+`task-integration/v2`. Native-job/v2 and source-specification-import/v1 remain
+unchanged. V3 job bindings require an execution artifact digest; v2 integration
+requires a frozen chain plan and transition/final purpose. `integration-verify`
+accepts both integration versions and replays entirely from archived evidence.
