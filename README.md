@@ -262,7 +262,7 @@ The core is deliberately host-independent. A future plugin may project Agent Run
 
 ## Version
 
-Version `0.13.0` is the current development version on the simplification branch.
+Version `0.13.0` builds on the first public-preview source as the current development version on the simplification branch.
 It removes the former SpecGen/shared-contract `native-job/v1` compatibility path;
 new OpenSpec imports use the Agent-Workflow-owned `native-job/v2` schema.
 Version `0.12.0` remains the most recent tagged public-preview source; no
