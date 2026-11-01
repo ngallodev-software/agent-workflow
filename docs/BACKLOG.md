@@ -133,7 +133,7 @@ acceptance remains pending Jenkins evidence.
 dispatch fail closed until the active generation has been bound and
 `start-external` has recorded the run as running. The full GitHub Actions
 matrix passed. The remaining work in this item is the independent external-host
-R6D12/Jenkins acceptance exercise; no additional source implementation is
+CI-host/Jenkins acceptance exercise; no additional source implementation is
 currently identified.
 
 ### TERM-001 — Retire external host terminals after terminal Agent Run state
@@ -334,7 +334,7 @@ launches do not close `HERDR-001`, `EXT-HOST-002`, or `TERM-001`.
 `CBM-RESCRIPT-HANG-20261002`, `CBM-CACHE-STORES-20261002`; native launch contracts,
 external binding/event journals and message-state in their run directories.
 Host start/prompt/ack captures and assignment manifest:
-`/home/nate/.local/state/agent-workflow/handoffs/CBM-THREE-VERTICALS-20261002/`.
+`<state-root>/handoffs/CBM-THREE-VERTICALS-20261002/`.
 
 ## P2 — Upstream specification integration
 
