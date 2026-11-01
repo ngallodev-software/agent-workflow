@@ -293,11 +293,7 @@ def _write_job_binding(state_dir: Path, job: ValidatedNativeJob, *, agent_run_id
     if source_sha256 != stored_sha256:
         raise WorkflowError("native job changed while its binding was being created")
     receipt: dict[str, Any] = {
-        "schema": (
-            "agent-workflow/job-binding/v2"
-            if job.source_specification is not None
-            else "agent-workflow/job-binding/v1"
-        ),
+        "schema": "agent-workflow/job-binding/v2",
         "bound_at": utc_now(),
         "agent_run_id": agent_run_id,
         "run_dir": str(state_dir),
@@ -335,40 +331,31 @@ def _write_job_binding(state_dir: Path, job: ValidatedNativeJob, *, agent_run_id
             "independent": job.review_requirement.independent,
         },
     }
-    if job.source_specification is None:
-        if job.bundle_provenance is None:
-            raise WorkflowError("native-job/v1 has no negotiated bundle provenance")
-        receipt["bundle_provenance"] = job.bundle_provenance
-        if job.path_policy is None:
-            raise WorkflowError("native-job/v1 has no path policy")
-        receipt["path_policy"] = {
-            "allowed_paths": list(job.path_policy.allowed_paths),
-            "forbidden_paths": list(job.path_policy.forbidden_paths),
-        }
-    else:
-        source = job.source_specification
-        source_stored = paths.source_specification
-        atomic_write_bytes(source_stored, source.data, mode=0o444)
-        stored_source_sha256 = sha256_file(source_stored)
-        if stored_source_sha256 != source.sha256:
-            raise WorkflowError(
-                "source specification changed while its binding was being created"
-            )
-        receipt["source_specification"] = {
-            "schema": source.schema,
-            "source_path": str(source.path),
-            "source_sha256": source.sha256,
-            "stored_path": "jobs/source-specification.json",
-            "stored_sha256": stored_source_sha256,
-            "task_refs": list(source.task_refs),
-        }
-        if job.scope is None:
-            raise WorkflowError("native-job/v2 has no execution scope")
-        receipt["scope"] = {
-            "writable_paths": list(job.scope.writable_paths),
-            "writable_trees": list(job.scope.writable_trees),
-            "disposable_trees": list(job.scope.disposable_trees),
-        }
+    source = job.source_specification
+    if source is None:
+        raise WorkflowError("native-job/v2 source specification is missing")
+    source_stored = paths.source_specification
+    atomic_write_bytes(source_stored, source.data, mode=0o444)
+    stored_source_sha256 = sha256_file(source_stored)
+    if stored_source_sha256 != source.sha256:
+        raise WorkflowError(
+            "source specification changed while its binding was being created"
+        )
+    receipt["source_specification"] = {
+        "schema": source.schema,
+        "source_path": str(source.path),
+        "source_sha256": source.sha256,
+        "stored_path": "jobs/source-specification.json",
+        "stored_sha256": stored_source_sha256,
+        "task_refs": list(source.task_refs),
+    }
+    if job.scope is None:
+        raise WorkflowError("native-job/v2 has no execution scope")
+    receipt["scope"] = {
+        "writable_paths": list(job.scope.writable_paths),
+        "writable_trees": list(job.scope.writable_trees),
+        "disposable_trees": list(job.scope.disposable_trees),
+    }
     receipt_path = paths.job_binding
     atomic_write_json(receipt_path, receipt, mode=0o444)
     return receipt
@@ -940,22 +927,17 @@ def _prepare_evaluation(
     )
     if native_job is None:
         scope_data = evaluation_data.get("scope", {})
-    elif native_job.scope is not None:
-        disposable_trees = list(native_job.scope.disposable_trees)
-        if ".delegations/" not in disposable_trees:
-            disposable_trees.append(".delegations/")
-        scope_data = {
-            "writable_paths": list(native_job.scope.writable_paths),
-            "writable_trees": list(native_job.scope.writable_trees),
-            "disposable_trees": disposable_trees,
-        }
     else:
-        if native_job.path_policy is None:
-            raise WorkflowError("native-job/v1 has no path policy")
-        scope_data = {
-            "writable_paths": list(native_job.path_policy.allowed_paths),
-            "disposable_trees": [".delegations/"],
-        }
+    if native_job.scope is None:
+        raise WorkflowError("native-job/v2 has no execution scope")
+    disposable_trees = list(native_job.scope.disposable_trees)
+    if ".delegations/" not in disposable_trees:
+        disposable_trees.append(".delegations/")
+    scope_data = {
+        "writable_paths": list(native_job.scope.writable_paths),
+        "writable_trees": list(native_job.scope.writable_trees),
+        "disposable_trees": disposable_trees,
+    }
     runtime = {
         "schema": "agent-workflow/evaluation-runtime/v1",
         "evaluation_path": str(evaluation.path) if evaluation is not None else None,
@@ -2008,10 +1990,7 @@ def restart(
     binding_path = paths.job_binding
     if binding_path.is_file():
         binding = read_contract(binding_path)
-        if binding.get("schema") not in {
-            "agent-workflow/job-binding/v1",
-            "agent-workflow/job-binding/v2",
-        }:
+        if binding.get("schema") != "agent-workflow/job-binding/v2":
             raise WorkflowError(
                 f"cannot restart: unsupported job binding schema {binding.get('schema')!r}"
             )
