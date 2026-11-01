@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.13.0 — begin the native-harness reduction
+
+- Retire the SpecGen shared-contract wheel dependency, negotiation adapter, legacy
+  `native-job/v1` and `job-binding/v1` preparation, restart, and verification paths.
+- Keep Agent-Workflow-owned OpenSpec imports on `native-job/v2` and
+  `job-binding/v2` without requiring SpecGen to be installed.
+- Simplify local-stack and release installation so the obsolete contracts
+  checkout/wheel is no longer required. This is a development version; no
+  `v0.13.0` release/tag has been published.
+- Begin an evidence-first architectural reduction; no claim of a completed
+  standalone evidence utility is made in this release entry.
+
+
 ## 0.12.0 — initial public preview
 
 This is the first tagged GitHub release of Agent-Workflow. It is intentionally

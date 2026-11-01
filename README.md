@@ -44,8 +44,7 @@ chat or terminal history. Agent-Workflow makes those boundaries durable and
 restart-safe without owning the interactive host UI.
 
 OpenSpec is the preferred upstream planning/specification source. Agent-Workflow provides a
-qualified, content-addressed OpenSpec import boundary while retaining legacy SpecGen job
-compatibility; see [OpenSpec integration](docs/OPENSPEC_INTEGRATION.md).
+qualified, content-addressed OpenSpec import boundary with no SpecGen shared-contract dependency; see [OpenSpec integration](docs/OPENSPEC_INTEGRATION.md).
 [agent-workflow-benchmark](https://github.com/ngallodev-software/agent-workflow-benchmark)
 provides the optional comparative benchmark surface; and
 [agent-workflow-benchmark-results](https://github.com/ngallodev-software/agent-workflow-benchmark-results)
@@ -263,13 +262,11 @@ The core is deliberately host-independent. A future plugin may project Agent Run
 
 ## Version
 
-Version `0.13.0` is the current tagged public-preview candidate. It includes
-the qualified OpenSpec 1.13.2 import boundary for new planning work while retaining
-the frozen SpecGen/shared-contract `native-job/v1` compatibility path. The
-`v0.13.0` tag exists, but a GitHub Release is not yet published; clean-host
-compatibility evidence remains the release-policy boundary. Deterministic lifecycle,
-review, acceptance, scope, provenance, and sealing authority remain
-Agent-Workflow-owned.
+Version `0.13.0` is the current development version on the simplification branch.
+It removes the former SpecGen/shared-contract `native-job/v1` compatibility path;
+new OpenSpec imports use the Agent-Workflow-owned `native-job/v2` schema.
+Version `0.12.0` remains the most recent tagged public-preview source; no
+`v0.13.0` tag or release is published yet.
 
 ## Repository-only CI assets
 

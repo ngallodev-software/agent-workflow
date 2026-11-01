@@ -44,7 +44,6 @@ PY
 "$PYTHON_BIN" -m pip install \
   'setuptools>=61' 'pytest>=8,<10' 'jsonschema>=4.18,<5' \
   'PyYAML>=6.0.3,<7' 'mcp==1.28.1' 'build>=1.2,<2' \
-  'specgen-agent-workflow-contracts @ https://github.com/ngallodev-software/agent-workflow-spec-contracts/releases/download/v0.2.1/specgen_agent_workflow_contracts-0.2.1-py3-none-any.whl#sha256=d254a0b13f2fd1de732dab2abd33da35db9ea365b50b3214e92308fea79d85c2' \
   "agent-workflow-comparative-eval @ git+https://github.com/ngallodev-software/agent-workflow-comparative-eval.git@${COMPARATIVE_EVAL_REVISION}"
 
 "$PYTHON_BIN" - "$COMPARATIVE_EVAL_VERSION" "$COMPARATIVE_EVAL_REVISION" <<'PY'
