@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.12.0-blue" alt="">
+  <img src="https://img.shields.io/badge/version-0.13.0-blue" alt="">
   <img src="https://img.shields.io/badge/python-%3E%3D3.11-3776AB" alt="">
   <img src="https://img.shields.io/badge/license-Apache--2.0-green" alt="">
 </p>
@@ -263,10 +263,10 @@ The core is deliberately host-independent. A future plugin may project Agent Run
 
 ## Version
 
-Version `0.12.0` is the current tagged public-preview candidate. It includes
+Version `0.13.0` is the current tagged public-preview candidate. It includes
 the qualified OpenSpec 1.13.2 import boundary for new planning work while retaining
 the frozen SpecGen/shared-contract `native-job/v1` compatibility path. The
-`v0.12.0` tag exists, but a GitHub Release is not yet published; clean-host
+`v0.13.0` tag exists, but a GitHub Release is not yet published; clean-host
 compatibility evidence remains the release-policy boundary. Deterministic lifecycle,
 review, acceptance, scope, provenance, and sealing authority remain
 Agent-Workflow-owned.
