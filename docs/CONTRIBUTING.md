@@ -66,9 +66,10 @@ git tag v0.12.0
 git push origin v0.12.0
 ```
 
-The current preview publication target is GitHub Releases. PyPI publication is
-deferred while the base package carries the digest-pinned direct URL dependency
-needed for legacy `native-job/v1` compatibility.
+The current preview publication target is GitHub Releases. PyPI publication
+remains deferred pending a separate packaging and release-policy decision; the
+digest-pinned SpecGen contract dependency and `native-job/v1` compatibility
+have been retired for the 0.13.0 development line.
 
 ## Jenkins and repository-only CI assets
 
