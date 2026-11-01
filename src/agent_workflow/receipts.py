@@ -476,11 +476,7 @@ def _seal_run_unlocked(run_dir: Path, *, agent_run_id: str) -> dict[str, Any]:
     binding = run_dir / "job-binding.json"
     if binding.is_file():
         value = read_contract(binding)
-        if value.get("schema") not in {
-            "agent-workflow/job-binding/v1",
-            "agent-workflow/job-binding/v2",
-            "agent-workflow/job-binding/v3",
-        }:
+        if value.get("schema") not in {"agent-workflow/job-binding/v2", "agent-workflow/job-binding/v3"}:
             raise WorkflowError(f"unsupported job binding schema: {value.get('schema')!r}")
         if value["schema"] == "agent-workflow/job-binding/v3":
             authority = run_dir / "jobs/execution-binding.json"

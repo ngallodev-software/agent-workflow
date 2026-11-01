@@ -803,5 +803,4 @@ def import_openspec(
         "source_specification": str(receipt_path),
         "source_specification_sha256": receipt_sha256,
         "tasks": [item["agent_workflow_task_id"] for item in pending],
-        "legacy_specgen_required": False,
     }

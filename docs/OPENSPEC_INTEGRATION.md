@@ -46,10 +46,9 @@ Agent Run
 The imported pack is self-contained for Agent-Workflow preparation and execution. OpenSpec is not
 consulted again after import.
 
-Legacy `agent-workflow/native-job/v1` remains supported and continues to negotiate the immutable
-SpecGen/Agent-Workflow shared contract bundle. The v1 schema is not reinterpreted as OpenSpec.
-New OpenSpec imports use `native-job/v2`, which is owned by Agent-Workflow and has no
-`bundle_provenance` field.
+The SpecGen/shared-contract `native-job/v1` import and negotiation path was retired
+in Agent-Workflow 0.13.0. OpenSpec imports use only the Agent-Workflow-owned
+`native-job/v2` schema, with no `bundle_provenance` field or dependency on SpecGen.
 
 ## Import
 
@@ -182,7 +181,7 @@ exact imported revision, using the existing external-worker lifecycle:
    Agent-Workflow runs `compile-src` and derives the mapped `source-compiles`
    criterion from its passing command evidence.
 3. After observing the process exit successfully, record public `external-exit`
-   and finalize the run. Sealing validates both supported job-binding versions
+   and finalize the run. Sealing validates the maintained v2/v3 job-binding formats
    and includes the byte-identical source-specification receipt, completion,
    and verification evidence.
 4. Record host review and acceptance through public commands and check the

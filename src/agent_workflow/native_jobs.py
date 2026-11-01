@@ -1,9 +1,4 @@
-"""Validation boundary for versioned, JSON-only native prompt-pack jobs.
-
-``native-job/v1`` remains the immutable SpecGen/shared-bundle compatibility
-contract. ``native-job/v2`` is Agent-Workflow-owned and binds a frozen source
-specification import without requiring the SpecGen contract bundle.
-"""
+"""Validation boundary for Agent-Workflow-owned, source-bound native jobs."""
 
 from __future__ import annotations
 
@@ -17,20 +12,10 @@ from .errors import WorkflowError
 from .eval.commands import CommandSpec, specs_from_data
 from .path import absolute_path, read_regular_file, require_directory
 from .process import run
-from .shared_contracts import negotiate_bundle
 
 
-NATIVE_JOB_SCHEMA = "agent-workflow/native-job/v1"
 NATIVE_JOB_V2_SCHEMA = "agent-workflow/native-job/v2"
 SOURCE_SPECIFICATION_SCHEMA = "agent-workflow/source-specification-import/v1"
-
-
-@dataclass(frozen=True)
-class PathPolicy:
-    """Legacy native-job/v1 path policy."""
-
-    allowed_paths: tuple[str, ...]
-    forbidden_paths: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -79,11 +64,9 @@ class ValidatedNativeJob:
     prompt_bytes: bytes
     job_bytes: bytes
     job_sha256: str
-    bundle_provenance: dict[str, Any] | None
     source_specification: SourceSpecificationBinding | None
     prompt_relative_path: str
     worktree_target: str
-    path_policy: PathPolicy | None
     scope: ExecutionScope | None
     acceptance_commands: tuple[CommandSpec, ...]
     criteria: tuple[CriterionRequirement, ...]
@@ -237,7 +220,7 @@ def validate_source_specification_worktree(
 
 
 def validate_native_job(job_path: Path, *, pack_root: Path) -> ValidatedNativeJob:
-    """Read and validate a v1 or v2 native job without starting execution."""
+    """Read and validate a v2 native job without starting execution."""
 
     root = require_directory(pack_root, label="pack root")
     path = absolute_path(job_path)
@@ -248,20 +231,15 @@ def validate_native_job(job_path: Path, *, pack_root: Path) -> ValidatedNativeJo
     job_read = read_regular_file(path)
     value = _read_json_job(path, job_read.data)
     schema = value.get("schema")
-    if schema not in {NATIVE_JOB_SCHEMA, NATIVE_JOB_V2_SCHEMA}:
+    if schema != NATIVE_JOB_V2_SCHEMA:
         raise WorkflowError(
             f"unsupported native job schema in {path}: {schema!r}; "
-            f"expected {NATIVE_JOB_SCHEMA} or {NATIVE_JOB_V2_SCHEMA}"
+            f"expected {NATIVE_JOB_V2_SCHEMA}"
         )
     assert isinstance(schema, str)
     validate_instance(value, schema, artifact=str(path))
 
-    bundle_provenance: dict[str, Any] | None = None
-    source_specification: SourceSpecificationBinding | None = None
-    if schema == NATIVE_JOB_SCHEMA:
-        bundle_provenance = negotiate_bundle(value.get("bundle_provenance"))
-    else:
-        source_specification = _source_specification(value, pack_root=root)
+    source_specification = _source_specification(value, pack_root=root)
 
     prompt_relative = str(value["prompt_path"])
     prompt_path = _resolve_relative(root, prompt_relative, "prompt_path")
@@ -271,50 +249,32 @@ def validate_native_job(job_path: Path, *, pack_root: Path) -> ValidatedNativeJo
         raise WorkflowError(f"prompt_path is not a regular file: {prompt_relative}") from exc
 
     worktree_target = str(value["worktree_target"])
-    if schema == NATIVE_JOB_SCHEMA:
-        _validate_policy_path(worktree_target, "worktree_target")
-    elif worktree_target != ".":
+    if worktree_target != ".":
         raise WorkflowError("native-job/v2 Phase-0 worktree_target must be '.'")
 
-    path_policy: PathPolicy | None = None
-    execution_scope: ExecutionScope | None = None
-    if schema == NATIVE_JOB_SCHEMA:
-        policy_data = value["path_policy"]
-        allowed = tuple(
-            _validate_policy_path(str(item), "allowed_paths entry")
-            for item in policy_data["allowed_paths"]
+    scope_data = value["scope"]
+    writable_paths = tuple(
+        _validate_policy_path(str(item), "writable_paths entry")
+        for item in scope_data.get("writable_paths", [])
+    )
+    writable_trees = tuple(
+        _validate_policy_path(str(item), "writable_trees entry")
+        for item in scope_data.get("writable_trees", [])
+    )
+    disposable_trees = tuple(
+        _validate_policy_path(str(item), "disposable_trees entry")
+        for item in scope_data.get("disposable_trees", [])
+    )
+    protected = (*writable_paths, *writable_trees, *disposable_trees)
+    if any(Path(item).parts[:1] == ("openspec",) for item in protected):
+        raise WorkflowError(
+            "native-job/v2 may not authorize OpenSpec planning artifacts as writable or disposable"
         )
-        forbidden = tuple(
-            _validate_policy_path(str(item), "forbidden_paths entry")
-            for item in policy_data.get("forbidden_paths", [])
-        )
-        if set(allowed) & set(forbidden):
-            raise WorkflowError("path_policy contains paths that are both allowed and forbidden")
-        path_policy = PathPolicy(allowed_paths=allowed, forbidden_paths=forbidden)
-    else:
-        scope_data = value["scope"]
-        writable_paths = tuple(
-            _validate_policy_path(str(item), "writable_paths entry")
-            for item in scope_data.get("writable_paths", [])
-        )
-        writable_trees = tuple(
-            _validate_policy_path(str(item), "writable_trees entry")
-            for item in scope_data.get("writable_trees", [])
-        )
-        disposable_trees = tuple(
-            _validate_policy_path(str(item), "disposable_trees entry")
-            for item in scope_data.get("disposable_trees", [])
-        )
-        protected = (*writable_paths, *writable_trees, *disposable_trees)
-        if any(Path(item).parts[:1] == ("openspec",) for item in protected):
-            raise WorkflowError(
-                "native-job/v2 may not authorize OpenSpec planning artifacts as writable or disposable"
-            )
-        execution_scope = ExecutionScope(
-            writable_paths=writable_paths,
-            writable_trees=writable_trees,
-            disposable_trees=disposable_trees,
-        )
+    execution_scope = ExecutionScope(
+        writable_paths=writable_paths,
+        writable_trees=writable_trees,
+        disposable_trees=disposable_trees,
+    )
 
     commands = tuple(specs_from_data(value["acceptance_commands"]))
     command_ids = [command.id for command in commands]
@@ -354,11 +314,9 @@ def validate_native_job(job_path: Path, *, pack_root: Path) -> ValidatedNativeJo
         prompt_bytes=prompt_read.data,
         job_bytes=job_read.data,
         job_sha256=job_read.sha256,
-        bundle_provenance=bundle_provenance,
         source_specification=source_specification,
         prompt_relative_path=prompt_relative,
         worktree_target=worktree_target,
-        path_policy=path_policy,
         scope=execution_scope,
         acceptance_commands=commands,
         criteria=criteria,
