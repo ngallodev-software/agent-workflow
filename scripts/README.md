@@ -37,8 +37,8 @@ restore the exact prior shell environment.
 
 `build-install-all.sh` builds and installs the complete local Agent-Workflow
 development/benchmark stack into one existing shared virtualenv. It installs
-the contract library, Agent-Workflow, comparative-eval, SpecGen, and the
-benchmark plugin from local wheels, pins TypeSafe, writes an isolated
-comparative-mode config, and verifies both enabled plugins plus direct Codex
-execution. It never creates a venv, never uses `pip --user`, and never leaves
+Agent-Workflow, comparative-eval, and the benchmark plugin from local
+wheels, pins TypeSafe, writes an isolated comparative-mode config, and verifies
+the benchmark plugin plus direct Codex execution. The retired SpecGen contract
+bundle is not part of this stack. It never creates a venv, never uses `pip --user`, and never leaves
 the local projects editable.
