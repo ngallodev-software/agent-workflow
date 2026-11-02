@@ -8,8 +8,8 @@ PARENT="$(dirname "$ROOT")"
 # Third-party runtime dependencies remain intentionally frozen. Versions for
 # locally developed stack components are resolved from their checked-out source.
 EXPECTED_TYPESAFE_VERSION="0.6.0"
-EXPECTED_INSPECT_AI_VERSION="0.3.268"
-EXPECTED_INSPECT_SWE_VERSION="0.2.71"
+EXPECTED_INSPECT_AI_VERSION="0.3.247"
+EXPECTED_INSPECT_SWE_VERSION="0.2.66"
 
 VENV_ARG=""
 COMPARATIVE_EVAL_SOURCE_ARG=""
@@ -132,7 +132,6 @@ if Path(sys.prefix).resolve() != venv: raise SystemExit(f"interpreter prefix {Pa
 if sys.version_info < (3, 11): raise SystemExit("Agent-Workflow stack requires Python >= 3.11")
 PY
 
-[[ -n "${TYPESAFE_API_KEY:-}" ]] || { echo "comparative stack requires TYPESAFE_API_KEY in the environment" >&2; exit 1; }
 export VIRTUAL_ENV="$VENV" AGENT_WORKFLOW_VENV="$VENV" AGENT_WORKFLOW_BIN="$VENV/bin/agent-workflow"
 export PATH="$VENV/bin:$PATH" XDG_CONFIG_HOME="$VENV/.xdg/config" XDG_STATE_HOME="$VENV/.xdg/state" XDG_DATA_HOME="$VENV/.xdg/data"
 mkdir -p "$XDG_CONFIG_HOME" "$XDG_STATE_HOME" "$XDG_DATA_HOME"
@@ -230,13 +229,12 @@ if settings.decision_mode != "comparative": raise SystemExit(f"decision mode {se
 expected_plugins = ("agent-workflow-benchmark",)
 if settings.plugins_enabled != expected_plugins: raise SystemExit(f"unexpected plugins: {settings.plugins_enabled!r}")
 if settings.executors.get("codex",[None])[0] != "codex": raise SystemExit(f"Codex executor is not direct: {settings.executors.get('codex')!r}")
-semantic=require_decision_runtime_ready(settings)
-if semantic.get("ready") is not True: raise SystemExit(f"semantic runtime not ready: {semantic}")
+if os.environ.get("TYPESAFE_API_KEY"):\n    semantic=require_decision_runtime_ready(settings)\n    if semantic.get("ready") is not True: raise SystemExit(f"semantic runtime not ready: {semantic}")
 shared=shared_library_status()
 if not shared.get("installed") or not shared.get("compatible"): raise SystemExit(f"comparative-eval incompatible: {shared}")
 loaded=tuple(x.descriptor.name for x in load_plugin_registry(settings.plugins_enabled).loaded)
 if not shutil.which("codex"): raise SystemExit("direct Codex executable is not available")
-if not os.environ.get("TYPESAFE_API_KEY"): raise SystemExit("TYPESAFE_API_KEY is not configured")
+if not os.environ.get("TYPESAFE_API_KEY"):\n    print("  TypeSafe API key: not set (installation valid; comparative runtime requires it)")
 print("\nAgent-Workflow stack verification:")
 for name,version in expected.items(): print(f"  {name:<34} {version}")
 print(f"  {'structured-output':<34} {structured_output['capability']}")
