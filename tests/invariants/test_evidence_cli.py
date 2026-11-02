@@ -58,3 +58,31 @@ def test_manifest_rejects_duplicate_and_extra_fields(tmp_path: Path) -> None:
     manifest.write_text(json.dumps({"schema": evidence.SCHEMA, "artifacts": [{**entry, "unexpected": True}]}))
     with pytest.raises(evidence.EvidenceError):
         evidence._load(manifest)
+
+
+def test_capture_never_overwrites_existing_manifest(tmp_path: Path) -> None:
+    root = tmp_path / "source"
+    root.mkdir()
+    (root / "data").write_bytes(b"data")
+    manifest = tmp_path / "manifest.json"
+    assert evidence.main(["capture", str(root), str(manifest)]) == 0
+    original = manifest.read_bytes()
+    assert evidence.main(["capture", str(root), str(manifest)]) == 1
+    assert manifest.read_bytes() == original
+
+
+def test_capture_rejects_manifest_inside_root(tmp_path: Path) -> None:
+    root = tmp_path / "source"
+    root.mkdir()
+    (root / "data").write_bytes(b"data")
+    assert evidence.main(["capture", str(root), str(root / "manifest.json")]) == 1
+
+
+def test_extra_artifact_invalidates_manifest(tmp_path: Path) -> None:
+    root = tmp_path / "source"
+    root.mkdir()
+    (root / "data").write_bytes(b"data")
+    manifest = tmp_path / "manifest.json"
+    assert evidence.main(["capture", str(root), str(manifest)]) == 0
+    (root / "extra").write_bytes(b"extra")
+    assert evidence.main(["verify", str(root), str(manifest)]) == 1
