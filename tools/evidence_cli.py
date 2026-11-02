@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Standalone, stdlib-only, offline evidence integrity manifest utility.
 
-This tool does not execute commands or establish trusted provenance.
+This tool captures file integrity and command observations, not trusted provenance.
 """
 from __future__ import annotations
 
@@ -13,6 +13,8 @@ import os
 import tempfile
 import stat
 import subprocess
+import threading
+import signal
 import time
 import sys
 from pathlib import Path, PurePosixPath
@@ -147,30 +149,54 @@ def run_receipt(argv: list[str], cwd: Path, *, timeout: float, max_bytes: int) -
         raise EvidenceError("cwd must be a directory")
     started = datetime.datetime.now(datetime.timezone.utc).isoformat()
     clock = time.monotonic()
-    # stdout/stderr are discarded beyond the cap by the OS rather than
-    # buffering unbounded child output in Python.
-    with tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
-        timed_out = False
+    buffers = {"stdout": bytearray(), "stderr": bytearray()}
+    digests = {"stdout": hashlib.sha256(), "stderr": hashlib.sha256()}
+    sizes = {"stdout": 0, "stderr": 0}
+    timed_out = False
+    try:
+        process = subprocess.Popen(
+            argv, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, shell=False, start_new_session=(os.name == "posix"),
+        )
+    except OSError as exc:
+        raise EvidenceError(f"command launch failed: {exc}") from exc
+
+    def drain(name: str, stream: object) -> None:
         try:
-            process = subprocess.Popen(argv, cwd=cwd, stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr, shell=False, start_new_session=True)
-        except OSError as exc:
-            raise EvidenceError(f"command launch failed: {exc}") from exc
-        try:
-            exit_code = process.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            timed_out = True
-            os.killpg(process.pid, 9)
-            process.wait()
-            exit_code = None
-        elapsed = time.monotonic() - clock
-        stdout.seek(0, os.SEEK_END)
-        stdout_size = stdout.tell()
-        stderr.seek(0, os.SEEK_END)
-        stderr_size = stderr.tell()
-        stdout.seek(0)
-        stderr.seek(0)
-        out = stdout.read(max_bytes)
-        err = stderr.read(max_bytes)
+            while True:
+                chunk = stream.read(65536)
+                if not chunk:
+                    break
+                sizes[name] += len(chunk)
+                digests[name].update(chunk)
+                remaining = max_bytes - len(buffers[name])
+                if remaining > 0:
+                    buffers[name].extend(chunk[:remaining])
+        finally:
+            stream.close()
+
+    threads = [threading.Thread(target=drain, args=(name, stream), daemon=True)
+               for name, stream in (("stdout", process.stdout), ("stderr", process.stderr))]
+    for thread in threads:
+        thread.start()
+    try:
+        exit_code = process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        if os.name == "posix":
+            os.killpg(process.pid, signal.SIGKILL)
+        else:
+            process.kill()
+        process.wait()
+        exit_code = None
+    for thread in threads:
+        thread.join(timeout=5)
+    if any(thread.is_alive() for thread in threads):
+        raise EvidenceError("output pipes remain open after process exit")
+    elapsed = time.monotonic() - clock
+    out, err = bytes(buffers["stdout"]), bytes(buffers["stderr"])
+    stdout_size, stderr_size = sizes["stdout"], sizes["stderr"]
+
     return {
         "schema": "agent-evidence/command-receipt/v1",
         "argv": argv,
@@ -179,8 +205,8 @@ def run_receipt(argv: list[str], cwd: Path, *, timeout: float, max_bytes: int) -
         "duration_seconds": round(elapsed, 6),
         "exit_code": exit_code,
         "timed_out": timed_out,
-        "stdout": {"size": stdout_size, "sha256_prefix": hashlib.sha256(out).hexdigest(), "captured": out.decode("utf-8", errors="replace"), "truncated": stdout_size > max_bytes},
-        "stderr": {"size": stderr_size, "sha256_prefix": hashlib.sha256(err).hexdigest(), "captured": err.decode("utf-8", errors="replace"), "truncated": stderr_size > max_bytes},
+        "stdout": {"size": stdout_size, "sha256": digests["stdout"].hexdigest(), "captured": out.decode("utf-8", errors="replace"), "truncated": stdout_size > max_bytes},
+        "stderr": {"size": stderr_size, "sha256_prefix": digests["stderr"].hexdigest(), "captured": err.decode("utf-8", errors="replace"), "truncated": stderr_size > max_bytes},
     }
 
 
