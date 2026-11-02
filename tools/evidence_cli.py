@@ -9,6 +9,7 @@ import argparse
 import hashlib
 import json
 import os
+import tempfile
 import stat
 import sys
 from pathlib import Path, PurePosixPath
@@ -88,7 +89,10 @@ def capture(root: Path) -> dict[str, object]:
     names = _files(root)
     if not names:
         raise EvidenceError("empty evidence directory")
-    return {"schema": SCHEMA, "artifacts": [_digest(root, name) for name in names]}
+    artifacts = [_digest(root, name) for name in names]
+    if _files(root) != names:
+        raise EvidenceError("evidence file set changed during capture")
+    return {"schema": SCHEMA, "artifacts": artifacts}
 
 
 def _load(manifest: Path) -> dict[str, object]:
@@ -147,10 +151,27 @@ def main(argv: list[str] | None = None) -> int:
             if destination == root or root in destination.parents:
                 raise EvidenceError("manifest must be outside evidence root")
             value = capture(root)
-            # Exclusive creation avoids silently replacing an existing manifest.
-            with args.manifest.open("x", encoding="utf-8") as stream:
-                json.dump(value, stream, sort_keys=True, separators=(",", ":"))
-                stream.write("\n")
+            # Publish complete manifests only; a crash leaves a temporary file,
+            # never a truncated manifest at the requested destination.
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            if destination.exists() or destination.is_symlink():
+                raise EvidenceError("manifest destination already exists")
+            fd, temporary = tempfile.mkstemp(prefix=".evidence-", suffix=".tmp", dir=destination.parent)
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                    json.dump(value, stream, sort_keys=True, separators=(",", ":"))
+                    stream.write("\n")
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                # Exclusive hard-link publication rejects competing writers.
+                os.link(temporary, destination)
+                directory_fd = os.open(destination.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+                try:
+                    os.fsync(directory_fd)
+                finally:
+                    os.close(directory_fd)
+            finally:
+                os.unlink(temporary)
             print(json.dumps({"schema": SCHEMA, "count": len(value["artifacts"])}, sort_keys=True))
         else:
             print(json.dumps({"verified": verify(args.root, args.manifest)}, sort_keys=True))
