@@ -68,8 +68,8 @@ def test_local_component_versions_are_not_hard_coded() -> None:
 def test_third_party_runtime_versions_remain_explicitly_frozen() -> None:
     text = _text()
     assert 'EXPECTED_TYPESAFE_VERSION="0.6.0"' in text
-    assert 'EXPECTED_INSPECT_AI_VERSION="0.3.247"' in text
-    assert 'EXPECTED_INSPECT_SWE_VERSION="0.2.66"' in text
+    assert 'EXPECTED_INSPECT_AI_VERSION="0.3.268"' in text
+    assert 'EXPECTED_INSPECT_SWE_VERSION="0.2.71"' in text
 
 
 def test_repo_venv_alignment_is_reported_before_build_and_strictly_verified() -> None:

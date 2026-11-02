@@ -8,8 +8,8 @@ PARENT="$(dirname "$ROOT")"
 # Third-party runtime dependencies remain intentionally frozen. Versions for
 # locally developed stack components are resolved from their checked-out source.
 EXPECTED_TYPESAFE_VERSION="0.6.0"
-EXPECTED_INSPECT_AI_VERSION="0.3.247"
-EXPECTED_INSPECT_SWE_VERSION="0.2.66"
+EXPECTED_INSPECT_AI_VERSION="0.3.268"
+EXPECTED_INSPECT_SWE_VERSION="0.2.71"
 
 VENV_ARG=""
 COMPARATIVE_EVAL_SOURCE_ARG=""
@@ -290,7 +290,7 @@ install_wheel agent-workflow-comparative-eval "$COMPARATIVE_EVAL_WHEEL"
 install_wheel agent-workflow-benchmark "$BENCHMARK_WHEEL"
 
 echo "installing frozen Inspect adjudication runtime"
-"$PYTHON" -m pip install --upgrade "inspect-ai==$EXPECTED_INSPECT_AI_VERSION" "inspect-swe==$EXPECTED_INSPECT_SWE_VERSION" "openai>=1.0"
+"$PYTHON" -m pip install --upgrade "inspect-ai==$EXPECTED_INSPECT_AI_VERSION" "inspect-swe==$EXPECTED_INSPECT_SWE_VERSION" "openai>=1.0" "click>=8.4.2,<9"
 "$PYTHON" "$BENCHMARK_SOURCE/scripts/compat/apply-inspect-swe-output-schema-patch.py"
 write_source_provenance
 write_stack_config
