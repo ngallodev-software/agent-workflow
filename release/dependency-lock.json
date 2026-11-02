@@ -68,22 +68,22 @@
     },
     {
       "name": "inspect-ai",
-      "version": "0.3.247",
+      "version": "0.3.268",
       "groups": [
         "eval"
       ],
       "source_requirements": [
-        "inspect-ai==0.3.247"
+        "inspect-ai==0.3.268"
       ]
     },
     {
       "name": "inspect-swe",
-      "version": "0.2.66",
+      "version": "0.2.71",
       "groups": [
         "eval"
       ],
       "source_requirements": [
-        "inspect-swe==0.2.66"
+        "inspect-swe==0.2.71"
       ]
     },
     {
