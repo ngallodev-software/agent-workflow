@@ -229,12 +229,15 @@ if settings.decision_mode != "comparative": raise SystemExit(f"decision mode {se
 expected_plugins = ("agent-workflow-benchmark",)
 if settings.plugins_enabled != expected_plugins: raise SystemExit(f"unexpected plugins: {settings.plugins_enabled!r}")
 if settings.executors.get("codex",[None])[0] != "codex": raise SystemExit(f"Codex executor is not direct: {settings.executors.get('codex')!r}")
-if os.environ.get("TYPESAFE_API_KEY"):\n    semantic=require_decision_runtime_ready(settings)\n    if semantic.get("ready") is not True: raise SystemExit(f"semantic runtime not ready: {semantic}")
+if os.environ.get("TYPESAFE_API_KEY"):
+    semantic=require_decision_runtime_ready(settings)
+    if semantic.get("ready") is not True: raise SystemExit(f"semantic runtime not ready: {semantic}")
 shared=shared_library_status()
 if not shared.get("installed") or not shared.get("compatible"): raise SystemExit(f"comparative-eval incompatible: {shared}")
 loaded=tuple(x.descriptor.name for x in load_plugin_registry(settings.plugins_enabled).loaded)
 if not shutil.which("codex"): raise SystemExit("direct Codex executable is not available")
-if not os.environ.get("TYPESAFE_API_KEY"):\n    print("  TypeSafe API key: not set (installation valid; comparative runtime requires it)")
+if not os.environ.get("TYPESAFE_API_KEY"):
+    print("  TypeSafe API key: not set (installation valid; comparative runtime requires it)")
 print("\nAgent-Workflow stack verification:")
 for name,version in expected.items(): print(f"  {name:<34} {version}")
 print(f"  {'structured-output':<34} {structured_output['capability']}")
