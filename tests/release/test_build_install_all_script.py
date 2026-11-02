@@ -197,3 +197,12 @@ def test_install_does_not_require_typesafe_key_before_build() -> None:
     assert '[[ -n "${TYPESAFE_API_KEY:-}" ]] ||' not in text
     assert 'if os.environ.get("TYPESAFE_API_KEY"):' in text
     assert 'if not os.environ.get("TYPESAFE_API_KEY"):' in text
+
+
+def test_embedded_python_verification_has_valid_syntax() -> None:
+    import ast
+    text = _text()
+    start = text.index('verify_stack() {')
+    heredoc_start = text.index("<<'PY'\n", start) + len("<<'PY'\n")
+    heredoc_end = text.index("\nPY\n", heredoc_start)
+    ast.parse(text[heredoc_start:heredoc_end])
