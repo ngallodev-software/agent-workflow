@@ -42,8 +42,8 @@ dev = [
   "setuptools>=61",
 ]
 eval = [
-  "inspect-ai==0.3.247",
-  "inspect-swe==0.2.66",
+  "inspect-ai==0.3.268",
+  "inspect-swe==0.2.71",
 ]
 stats = ["scipy>=1.11,<2"]
 typesafe = ["typesafe-sdk==0.6.0"]
