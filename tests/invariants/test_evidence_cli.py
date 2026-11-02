@@ -86,3 +86,31 @@ def test_extra_artifact_invalidates_manifest(tmp_path: Path) -> None:
     assert evidence.main(["capture", str(root), str(manifest)]) == 0
     (root / "extra").write_bytes(b"extra")
     assert evidence.main(["verify", str(root), str(manifest)]) == 1
+
+
+def test_command_receipt_bounded_stream_and_full_digest(tmp_path: Path) -> None:
+    import hashlib
+    import sys
+    data = b"x" * 200000
+    receipt = evidence.run_receipt(
+        [sys.executable, "-c", "import sys; sys.stdout.buffer.write(b'x'*200000); sys.stderr.write('oops')"],
+        tmp_path, timeout=10, max_bytes=32,
+    )
+    assert receipt["exit_code"] == 0
+    assert receipt["stdout"]["size"] == len(data)
+    assert receipt["stdout"]["sha256"] == hashlib.sha256(data).hexdigest()
+    assert receipt["stdout"]["captured"] == "x" * 32
+    assert receipt["stdout"]["truncated"] is True
+    assert receipt["stderr"]["captured"] == "oops"
+
+
+def test_command_timeout_and_no_overwrite(tmp_path: Path) -> None:
+    import sys
+    receipt = tmp_path / "run.json"
+    command = ["run", "--cwd", str(tmp_path), "--receipt", str(receipt), "--timeout", "0.1", "--",
+               sys.executable, "-c", "import time; time.sleep(10)"]
+    assert evidence.main(command) == 124
+    assert json.loads(receipt.read_text())["timed_out"] is True
+    original = receipt.read_bytes()
+    assert evidence.main(command) == 1
+    assert receipt.read_bytes() == original
