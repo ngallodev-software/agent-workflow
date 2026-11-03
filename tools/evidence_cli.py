@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
 """Standalone, stdlib-only, offline evidence integrity manifest utility.
 
-This tool does not execute commands or establish trusted provenance.
+This tool captures file integrity and command observations, not trusted provenance.
 """
 from __future__ import annotations
 
 import argparse
+import datetime
 import hashlib
 import json
 import os
 import tempfile
 import stat
+import subprocess
+import threading
+import signal
+import time
 import sys
 from pathlib import Path, PurePosixPath
 
@@ -131,6 +136,101 @@ def verify(root: Path, manifest: Path) -> int:
     return len(actual["artifacts"])
 
 
+
+
+def run_receipt(argv: list[str], cwd: Path, *, timeout: float, max_bytes: int) -> dict[str, object]:
+    """Execute one explicit command with bounded captured output; never use a shell."""
+    if not argv or any(not isinstance(a, str) or not a or "\\x00" in a for a in argv):
+        raise EvidenceError("command argv must be nonempty strings")
+    if not 0 < timeout <= 3600 or not 0 <= max_bytes <= 1048576:
+        raise EvidenceError("invalid command bounds")
+    cwd = cwd.resolve(strict=True)
+    if not cwd.is_dir():
+        raise EvidenceError("cwd must be a directory")
+    started = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    clock = time.monotonic()
+    buffers = {"stdout": bytearray(), "stderr": bytearray()}
+    digests = {"stdout": hashlib.sha256(), "stderr": hashlib.sha256()}
+    sizes = {"stdout": 0, "stderr": 0}
+    timed_out = False
+    try:
+        process = subprocess.Popen(
+            argv, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, shell=False, start_new_session=(os.name == "posix"),
+        )
+    except OSError as exc:
+        raise EvidenceError(f"command launch failed: {exc}") from exc
+
+    def drain(name: str, stream: object) -> None:
+        try:
+            while True:
+                chunk = stream.read(65536)
+                if not chunk:
+                    break
+                sizes[name] += len(chunk)
+                digests[name].update(chunk)
+                remaining = max_bytes - len(buffers[name])
+                if remaining > 0:
+                    buffers[name].extend(chunk[:remaining])
+        finally:
+            stream.close()
+
+    threads = [threading.Thread(target=drain, args=(name, stream), daemon=True)
+               for name, stream in (("stdout", process.stdout), ("stderr", process.stderr))]
+    for thread in threads:
+        thread.start()
+    try:
+        exit_code = process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        if os.name == "posix":
+            os.killpg(process.pid, signal.SIGKILL)
+        else:
+            process.kill()
+        process.wait()
+        exit_code = None
+    for thread in threads:
+        thread.join(timeout=5)
+    if any(thread.is_alive() for thread in threads):
+        raise EvidenceError("output pipes remain open after process exit")
+    elapsed = time.monotonic() - clock
+    out, err = bytes(buffers["stdout"]), bytes(buffers["stderr"])
+    stdout_size, stderr_size = sizes["stdout"], sizes["stderr"]
+
+    return {
+        "schema": "agent-evidence/command-receipt/v1",
+        "argv": argv,
+        "cwd": str(cwd),
+        "started_at": started,
+        "duration_seconds": round(elapsed, 6),
+        "exit_code": exit_code,
+        "timed_out": timed_out,
+        "stdout": {"size": stdout_size, "sha256": digests["stdout"].hexdigest(), "captured": out.decode("utf-8", errors="replace"), "truncated": stdout_size > max_bytes},
+        "stderr": {"size": stderr_size, "sha256_prefix": digests["stderr"].hexdigest(), "captured": err.decode("utf-8", errors="replace"), "truncated": stderr_size > max_bytes},
+    }
+
+
+def publish_json(destination: Path, value: dict[str, object]) -> None:
+    destination = destination.resolve()
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.exists() or destination.is_symlink():
+        raise EvidenceError("destination already exists")
+    fd, temporary = tempfile.mkstemp(prefix=".evidence-", suffix=".tmp", dir=destination.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            json.dump(value, stream, sort_keys=True, separators=(",", ":"))
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.link(temporary, destination)
+        directory_fd = os.open(destination.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    finally:
+        os.unlink(temporary)
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="action", required=True)
@@ -140,8 +240,20 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("manifest", type=Path)
     p = sub.add_parser("inspect")
     p.add_argument("manifest", type=Path)
+    p = sub.add_parser("run", help="execute explicit argv and publish a bounded command receipt")
+    p.add_argument("--cwd", type=Path, required=True)
+    p.add_argument("--receipt", type=Path, required=True)
+    p.add_argument("--timeout", type=float, default=120)
+    p.add_argument("--max-output-bytes", type=int, default=65536)
+    p.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     try:
+        if args.action == "run":
+            command = args.command[1:] if args.command[:1] == ["--"] else args.command
+            receipt = run_receipt(command, args.cwd, timeout=args.timeout, max_bytes=args.max_output_bytes)
+            publish_json(args.receipt, receipt)
+            print(json.dumps({"exit_code": receipt["exit_code"], "timed_out": receipt["timed_out"], "receipt": str(args.receipt)}, sort_keys=True))
+            return 124 if receipt["timed_out"] else (receipt["exit_code"] if isinstance(receipt["exit_code"], int) else 1)
         if args.action == "inspect":
             value = _load(args.manifest)
             print(json.dumps({"schema": SCHEMA, "count": len(value["artifacts"])}, sort_keys=True))
