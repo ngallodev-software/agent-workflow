@@ -206,9 +206,76 @@ def run_receipt(argv: list[str], cwd: Path, *, timeout: float, max_bytes: int) -
         "exit_code": exit_code,
         "timed_out": timed_out,
         "stdout": {"size": stdout_size, "sha256": digests["stdout"].hexdigest(), "captured": out.decode("utf-8", errors="replace"), "truncated": stdout_size > max_bytes},
-        "stderr": {"size": stderr_size, "sha256_prefix": digests["stderr"].hexdigest(), "captured": err.decode("utf-8", errors="replace"), "truncated": stderr_size > max_bytes},
+        "stderr": {"size": stderr_size, "sha256": digests["stderr"].hexdigest(), "captured": err.decode("utf-8", errors="replace"), "truncated": stderr_size > max_bytes},
     }
 
+
+
+RECEIPT_SCHEMA = "agent-evidence/command-receipt/v1"
+
+
+def verify_receipt(path: Path) -> dict[str, object]:
+    """Validate receipt structure and check hashes only when output is complete.
+
+    Truncated excerpts cannot authenticate the omitted bytes. Receipts are
+    unauthenticated observations and can be rewritten by their holder.
+    """
+    if path.is_symlink() or not path.is_file() or path.stat().st_size > MAX_MANIFEST_BYTES:
+        raise EvidenceError("receipt must be a regular file within size limit")
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ValueError) as exc:
+        raise EvidenceError(f"invalid receipt JSON: {exc}") from exc
+    fields = {"schema", "argv", "cwd", "started_at", "duration_seconds",
+              "exit_code", "timed_out", "stdout", "stderr"}
+    if not isinstance(value, dict) or set(value) != fields or value["schema"] != RECEIPT_SCHEMA:
+        raise EvidenceError("invalid receipt schema")
+    argv = value["argv"]
+    if not isinstance(argv, list) or not argv or any(
+        not isinstance(a, str) or not a or "\\x00" in a for a in argv
+    ):
+        raise EvidenceError("invalid receipt argv")
+    if not isinstance(value["cwd"], str) or not value["cwd"] or "\\x00" in value["cwd"]:
+        raise EvidenceError("invalid receipt cwd")
+    try:
+        stamp = datetime.datetime.fromisoformat(value["started_at"])
+    except (TypeError, ValueError) as exc:
+        raise EvidenceError("invalid receipt timestamp") from exc
+    if stamp.tzinfo is None or stamp.utcoffset() is None:
+        raise EvidenceError("receipt timestamp must include timezone")
+    duration = value["duration_seconds"]
+    if type(duration) not in (int, float) or not 0 <= duration <= 86400 or not __import__("math").isfinite(duration):
+        raise EvidenceError("invalid receipt duration")
+    if type(value["timed_out"]) is not bool:
+        raise EvidenceError("invalid timeout indicator")
+    code = value["exit_code"]
+    if code is not None and (type(code) is not int or not -255 <= code <= 255):
+        raise EvidenceError("invalid exit code")
+    if value["timed_out"] != (code is None):
+        raise EvidenceError("inconsistent timeout and exit code")
+    for name in ("stdout", "stderr"):
+        item = value[name]
+        if not isinstance(item, dict) or set(item) != {"size", "sha256", "captured", "truncated"}:
+            raise EvidenceError(f"invalid {name} structure")
+        size, digest, captured, truncated = (
+            item["size"], item["sha256"], item["captured"], item["truncated"]
+        )
+        if type(size) is not int or size < 0 or type(truncated) is not bool:
+            raise EvidenceError(f"invalid {name} size or truncation")
+        if not isinstance(digest, str) or len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
+            raise EvidenceError(f"invalid {name} digest")
+        if not isinstance(captured, str):
+            raise EvidenceError(f"invalid {name} captured output")
+        if not truncated:
+            raw = captured.encode("utf-8")
+            if len(raw) != size or hashlib.sha256(raw).hexdigest() != digest:
+                raise EvidenceError(f"{name} complete-output digest mismatch")
+        elif size <= len(captured.encode("utf-8", errors="replace")):
+            raise EvidenceError(f"{name} truncated flag inconsistent with size")
+    return {"schema": RECEIPT_SCHEMA, "validated": True,
+            "complete_streams_verified": [
+                name for name in ("stdout", "stderr") if not value[name]["truncated"]
+            ], "authenticated": False}
 
 def publish_json(destination: Path, value: dict[str, object]) -> None:
     destination = destination.resolve()
@@ -240,6 +307,8 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("manifest", type=Path)
     p = sub.add_parser("inspect")
     p.add_argument("manifest", type=Path)
+    p = sub.add_parser("verify-receipt", help="validate offline command receipt")
+    p.add_argument("receipt", type=Path)
     p = sub.add_parser("run", help="execute explicit argv and publish a bounded command receipt")
     p.add_argument("--cwd", type=Path, required=True)
     p.add_argument("--receipt", type=Path, required=True)
@@ -254,7 +323,9 @@ def main(argv: list[str] | None = None) -> int:
             publish_json(args.receipt, receipt)
             print(json.dumps({"exit_code": receipt["exit_code"], "timed_out": receipt["timed_out"], "receipt": str(args.receipt)}, sort_keys=True))
             return 124 if receipt["timed_out"] else (receipt["exit_code"] if isinstance(receipt["exit_code"], int) else 1)
-        if args.action == "inspect":
+        if args.action == "verify-receipt":
+            print(json.dumps(verify_receipt(args.receipt), sort_keys=True))
+        elif args.action == "inspect":
             value = _load(args.manifest)
             print(json.dumps({"schema": SCHEMA, "count": len(value["artifacts"])}, sort_keys=True))
         elif args.action == "capture":
