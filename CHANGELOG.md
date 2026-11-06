@@ -2,6 +2,10 @@
 
 ## 0.13.0 — begin the native-harness reduction
 
+- Name the runnable CLI (`"$AGENT_WORKFLOW_CLI" agent finish ...`) in the launch
+  prompt and common-path command card; workers no longer look for a bare `agent`.
+- Add optional `evaluation_path` to workflow task nodes so workflow-launched runs
+  can bind acceptance commands and complete through `agent finish`.
 - Retire the SpecGen shared-contract wheel dependency, negotiation adapter, legacy
   `native-job/v1` and `job-binding/v1` preparation, restart, and verification paths.
 - Keep Agent-Workflow-owned OpenSpec imports on `native-job/v2` and

@@ -32,6 +32,8 @@ Authorized TEMPLATE values are pipeline, parallel-review-fan-in, and implementat
 Approval nodes verify the subject run's canonical contiguous lifecycle receipt chain, sealed final receipt, exact completion revision, and score evidence. Mutable status pointers are not authority.
 .SH RESULT BINDINGS
 Task inputs may use strict RFC 6901 JSON Pointers into sealed completed ancestor results. Values are constrained by ancestry and byte limits, copied into a read-only binding snapshot, and sealed into child provenance. Arbitrary file reads and expression evaluation are not supported.
+.SH ACCEPTANCE COMMANDS
+A task node may set evaluation_path (relative paths resolve against the workflow working directory, like prompt_path). The file is an agent-workflow/evaluation-plan/v1 plan whose task_ids include the node ticket_id. It is bound exactly as agent-run prepare --evaluation binds it, so agent finish in the child can run the declared acceptance commands. Validation happens at launch; the plan content SHA-256 is pinned in the child run evaluation-runtime.json and provenance, as prompt content is pinned by the child run rather than by the snapshot hash. Without evaluation_path a workflow child has no bound acceptance commands and agent finish returns verification_required.
 .SH SNAPSHOT CONSISTENCY
 Every command after start must supply a snapshot whose normalized SHA-256 matches the stored started snapshot. Substitution is rejected.
 .SH FILES

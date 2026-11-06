@@ -71,6 +71,10 @@
             "type": "string",
             "minLength": 1
           },
+          "evaluation_path": {
+            "type": "string",
+            "minLength": 1
+          },
           "approval_for": {
             "type": "string",
             "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"

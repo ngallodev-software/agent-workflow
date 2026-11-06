@@ -172,6 +172,13 @@ def _validate_node(node: Mapping[str, Any], *, location: str) -> dict[str, Any]:
         if not prompt_path:
             raise WorkflowError(f"{location}: prompt_path is required")
         result.update(agent_run_id=agent_run_id, prompt_path=prompt_path)
+        evaluation_path = node.get("evaluation_path")
+        if evaluation_path is not None:
+            if not isinstance(evaluation_path, str) or not evaluation_path:
+                raise WorkflowError(
+                    f"{location}: evaluation_path must be a non-empty string"
+                )
+            result["evaluation_path"] = evaluation_path
         for name in ("ticket_id", "tier", "pack_id", "role", "agent_class", "executor", "model"):
             value = node.get(name)
             if value is not None:

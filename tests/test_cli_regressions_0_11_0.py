@@ -341,7 +341,7 @@ def test_launch_prompt_records_dirty_authorization_retry_context_and_completion_
     assert "preserve unrelated drift" in text
     assert "## Operator retry context" in text
     assert "pass/fail/not_verified" in text
-    assert "agent finish AGENT_RUN_ID --result completed" in text
+    assert '"$AGENT_WORKFLOW_CLI" agent finish "$AGENT_WORKFLOW_AGENT_RUN_ID" --result completed' in text
     assert "declared criterion IDs: P0-AC-01, P0-AC-02" in text
     assert "The deterministic protocol is used." not in text
 
@@ -1161,7 +1161,7 @@ def test_launch_prompt_is_compact_and_keeps_runtime_guardrails(tmp_path: Path) -
     assert injected < 2500
     assert "AGENT_WORKFLOW_EXECUTION_CONTEXT" in text
     assert "host-only authority" in text
-    assert "agent finish AGENT_RUN_ID --result completed" in text
+    assert '"$AGENT_WORKFLOW_CLI" agent finish "$AGENT_WORKFLOW_AGENT_RUN_ID" --result completed' in text
     assert "do not poll status, watch, or context" in text
     assert "Legacy agent verify/complete" in text
     assert "process exit and completion are not acceptance" in text
