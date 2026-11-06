@@ -245,3 +245,68 @@ def test_authorized_template_expands_to_valid_executable_snapshot(
     installed_product.run("workflow", "template", template, spec, "--output", output, env=product_env, check=True)
     validated = installed_product.json("workflow", "validate", output, env=product_env)
     assert validated["result"]["node_count"] == expected_nodes
+
+
+def test_workflow_node_binds_evaluation_plan_and_completes_through_agent_finish(
+    installed_product: InstalledProduct,
+    product_env: dict[str, str],
+    fake_agent_path: Path,
+    tmp_path: Path,
+) -> None:
+    run_dir = tmp_path / "evaluation-workflow"
+    git_repo(run_dir)
+    prompt = run_dir / "task.md"
+    prompt.write_text("Finish with a bound acceptance command.\n", encoding="utf-8")
+    plan = run_dir / "evaluation.json"
+    plan.write_text(
+        json.dumps(
+            {
+                "schema": "agent-workflow/evaluation-plan/v1",
+                "dataset_split": "development",
+                "task_ids": ["ONLY"],
+                "repetitions": 1,
+                "timeout_seconds": 30,
+                "scorers": ["acceptance_commands"],
+                "acceptance_commands": [
+                    {
+                        "id": "node-exit",
+                        "argv": [str(installed_product.python), "-c", "raise SystemExit(0)"],
+                        "cwd": ".",
+                        "timeout_seconds": 30,
+                        "result_format": "exit-code",
+                        "junit_path": None,
+                    }
+                ],
+                "sandbox": "docker",
+            }
+        ),
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "-C", str(run_dir), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(run_dir), "commit", "-qm", "prompt and plan"], check=True)
+    config = write_config(product_env, fake_agent=fake_agent_path)
+    # The worker's XDG_STATE_HOME is redirected to its handoff dir, so the worker-side
+    # CLI finds the real state through the configured path (as an operator config would).
+    state_root = Path(product_env["XDG_STATE_HOME"]) / "agent-workflow"
+    with config.open("a", encoding="utf-8") as handle:
+        handle.write(f'\n[paths]\nstate_root = "{state_root}"\n')
+    node = _node("only", "evaluation-child", prompt, [])
+    node["role"] = "implementation"
+    node["routing"] = {"task_type": "implementation", "risk": "low"}
+    node["evaluation_path"] = "evaluation.json"
+    snapshot = _write(tmp_path / "evaluation.json", _snapshot("evaluation-e2e", [node]))
+    env = dict(product_env)
+    env["FAKE_AGENT_MODE"] = "finish"
+
+    started = installed_product.json("workflow", "start", run_dir, snapshot, "--config", config, env=env)
+    assert started["scheduled"] == ["only"]
+    status = wait_for_status(env, "evaluation-child")
+    runtime = json.loads(
+        (Path(env["XDG_STATE_HOME"]) / "agent-workflow" / "runs" / "evaluation-child" / "evaluation-runtime.json").read_text()
+    )
+    assert runtime["evaluation_path"] == str((run_dir / "evaluation.json").resolve())
+    assert runtime["evaluation_sha256"]
+    resumed = installed_product.json("workflow", "resume", run_dir, snapshot, "--config", config, env=env)
+    state = installed_product.json("workflow", "status", run_dir, snapshot, "--config", config, env=env)
+    nodes = {item["node_id"]: item for item in state["result"]["nodes"]}
+    assert nodes["only"]["state"] == "completed", (status, resumed, state)

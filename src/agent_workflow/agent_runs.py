@@ -396,9 +396,9 @@ def _write_launch_prompt(
         "The complete ticket follows. Agent-Workflow owns lifecycle, deterministic policy/scope gates, acceptance-command execution/reuse, evidence collection, hashing, and sealing; do not spend model turns re-deriving those host decisions.",
         f"- run: {agent_run_id}; role: {role_id} ({role_digest})",
         "- Runtime projection: $AGENT_WORKFLOW_EXECUTION_CONTEXT. Mid-run instructions/context arrive through durable steering; do not poll status, watch, or context during normal work.",
-        "- Normal successful path: implement, commit ticket-scoped source, then run exactly one agent finish AGENT_RUN_ID --result completed. Finish runs/reuses declared acceptance commands and derives criteria mapped to those commands.",
-        "- If finish reports verification_failed, repair only the reported defects and run finish again. If it reports semantic_evidence_required, record only those listed semantic criteria with agent criterion, then rerun finish.",
-        "- Use agent limitation only for a real controlled-environment limitation. Verification, completion, and protocol bookkeeping are host-owned behind agent finish; deleted granular worker commands are not available.",
+        '- Normal successful path: implement, commit ticket-scoped source, then run exactly one `"$AGENT_WORKFLOW_CLI" agent finish "$AGENT_WORKFLOW_AGENT_RUN_ID" --result completed`. Finish runs/reuses declared acceptance commands and derives criteria mapped to those commands.',
+        '- If finish reports verification_failed, repair only the reported defects and run finish again. If it reports semantic_evidence_required, record only those listed semantic criteria with `"$AGENT_WORKFLOW_CLI" agent criterion "$AGENT_WORKFLOW_AGENT_RUN_ID" CRITERION_ID pass|fail|not_verified --evidence TEXT`, then rerun finish.',
+        '- Use `"$AGENT_WORKFLOW_CLI" agent limitation "$AGENT_WORKFLOW_AGENT_RUN_ID" ...` only for a real controlled-environment limitation. Verification, completion, and protocol bookkeeping are host-owned behind finish; deleted granular worker commands are not available.',
         "- Review/accept/reject/force-accept remain host-only authority; process exit and worker completion are not acceptance.",
     ]
     if role_instructions is not None:

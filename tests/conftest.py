@@ -306,6 +306,14 @@ if mode in {"task-complete", "task-complete-terminate"}:
         ],
         check=True,
     )
+if mode == "finish":
+    subprocess.run(
+        [
+            os.environ["AGENT_WORKFLOW_CLI"], "agent", "finish",
+            os.environ["AGENT_WORKFLOW_AGENT_RUN_ID"], "--result", "completed",
+        ],
+        check=True,
+    )
 if mode == "task-complete-mutate":
     subprocess.run(
         [

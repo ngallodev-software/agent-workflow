@@ -289,6 +289,7 @@ def render_launch_command_card(catalog: dict[str, Any], *, role: str) -> str:
     lines = [
         f"# Agent-workflow {role} common-path commands",
         "",
+        "Run every signature below with `\"$AGENT_WORKFLOW_CLI\"` in place of the leading `agent-workflow`; pass `\"$AGENT_WORKFLOW_AGENT_RUN_ID\"` as agent_run_id. There is no bare `agent` executable.",
         "Normal path is agent finish. Steering carries mid-run instructions/context; the other signatures below are exceptional evidence/acknowledgement paths.",
         "Do not run `--help` unless the catalog is missing/mismatched or a represented signature rejects an argument.",
         "",

@@ -205,6 +205,11 @@ class SchedulerService:
         prompt = Path(str(node["prompt_path"]))
         if not prompt.is_absolute():
             prompt = self.workdir / prompt
+        evaluation: Path | None = None
+        if node.get("evaluation_path"):
+            evaluation = Path(str(node["evaluation_path"]))
+            if not evaluation.is_absolute():
+                evaluation = self.workdir / evaluation
         role_id = str(node["role"]) if node.get("role") else None
         if role_id is not None:
             advice = {
@@ -219,6 +224,7 @@ class SchedulerService:
                 agent_run_id=agent_run_id,
                 workdir=self.workdir,
                 prompt_path=prompt,
+                evaluation_path=evaluation,
                 ticket_id=str(node["ticket_id"]) if node.get("ticket_id") else None,
                 pack_id=str(node["pack_id"]) if node.get("pack_id") else None,
                 retry_of=str(node["retry_of_agent_run_id"]) if node.get("retry_of_agent_run_id") else None,
@@ -262,6 +268,7 @@ class SchedulerService:
                 agent_run_id=agent_run_id,
                 workdir=self.workdir,
                 prompt_path=prompt,
+                evaluation_path=evaluation,
                 ticket_id=str(node["ticket_id"]) if node.get("ticket_id") else None,
                 pack_id=str(node["pack_id"]) if node.get("pack_id") else None,
                 retry_of=str(node["retry_of_agent_run_id"]) if node.get("retry_of_agent_run_id") else None,
