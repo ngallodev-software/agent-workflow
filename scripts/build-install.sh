@@ -284,10 +284,13 @@ if [[ "$VERIFY_ONLY" -eq 1 ]]; then
   exit 0
 fi
 
-"$PYTHON" -m pip --version >/dev/null 2>&1 || {
-  echo "pip is unavailable in selected virtualenv: $VENV" >&2
-  exit 1
-}
+if ! "$PYTHON" -m pip --version >/dev/null 2>&1; then
+  echo "pip is missing from $VENV; bootstrapping with ensurepip"
+  if ! "$PYTHON" -m ensurepip --upgrade; then
+    echo "could not bootstrap pip in $VENV; recreate it with: $PYTHON_BIN -m venv $VENV" >&2
+    exit 1
+  fi
+fi
 
 if ! "$PYTHON" -c 'import build, setuptools' >/dev/null 2>&1; then
   [[ "$BOOTSTRAP_BUILD" -eq 1 ]] || {

@@ -9,6 +9,10 @@ if [[ ! -x "$VENV/bin/python" ]]; then
   "$PYTHON_BIN" -m venv "$VENV"
 fi
 
+if ! "$VENV/bin/python" -m pip --version >/dev/null 2>&1; then
+  "$VENV/bin/python" -m ensurepip --upgrade
+fi
+
 "$VENV/bin/python" -m pip install --upgrade --editable "$ROOT[dev]"
 echo "development environment ready: $VENV/bin/python"
 echo "run: $VENV/bin/python -m pytest -q"

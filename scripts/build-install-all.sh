@@ -254,6 +254,14 @@ if [[ "$VERIFY_ONLY" -eq 1 ]]; then
   exit 0
 fi
 
+if ! "$PYTHON" -m pip --version >/dev/null 2>&1; then
+  echo "pip is missing from $VENV; bootstrapping with ensurepip"
+  if ! "$PYTHON" -m ensurepip --upgrade; then
+    echo "could not bootstrap pip in $VENV; recreate it with: $PYTHON_BIN -m venv $VENV" >&2
+    exit 1
+  fi
+fi
+
 if [[ "$BOOTSTRAP_BUILD" -eq 1 ]]; then
   "$PYTHON" -m pip install --upgrade pip build wheel "setuptools>=77" "jsonschema>=4.23,<5" "PyYAML>=6.0.3,<7" "typesafe-sdk==$EXPECTED_TYPESAFE_VERSION"
 else
