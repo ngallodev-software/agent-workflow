@@ -114,3 +114,30 @@ def test_command_timeout_and_no_overwrite(tmp_path: Path) -> None:
     original = receipt.read_bytes()
     assert evidence.main(command) == 1
     assert receipt.read_bytes() == original
+
+
+def test_verify_receipt_complete_output_and_tampering(tmp_path: Path) -> None:
+    import sys
+    receipt = tmp_path / "receipt.json"
+    assert evidence.main(["run", "--cwd", str(tmp_path), "--receipt", str(receipt),
+                          "--", sys.executable, "-c", "print('hello')"]) == 0
+    assert evidence.main(["verify-receipt", str(receipt)]) == 0
+    value = json.loads(receipt.read_text())
+    value["stdout"]["captured"] = "altered"
+    receipt.write_text(json.dumps(value))
+    assert evidence.main(["verify-receipt", str(receipt)]) == 1
+
+
+def test_verify_receipt_truncated_output_is_not_authenticated(tmp_path: Path) -> None:
+    import sys
+    receipt = tmp_path / "receipt.json"
+    assert evidence.main(["run", "--cwd", str(tmp_path), "--receipt", str(receipt),
+                          "--max-output-bytes", "4", "--",
+                          sys.executable, "-c", "print('long output')"]) == 0
+    result = evidence.verify_receipt(receipt)
+    assert result["authenticated"] is False
+    assert "stdout" not in result["complete_streams_verified"]
+    value = json.loads(receipt.read_text())
+    value["timed_out"] = True
+    receipt.write_text(json.dumps(value))
+    assert evidence.main(["verify-receipt", str(receipt)]) == 1
