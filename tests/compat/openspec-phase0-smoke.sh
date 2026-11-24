@@ -1,6 +1,79 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
+cli_path="$(command -v agent-workflow || true)"
+if [[ -z "$cli_path" ]]; then
+  echo "agent-workflow is missing from PATH; install this checkout in an isolated environment" >&2
+  exit 2
+fi
+cli_launch="$cli_path"
+while [[ -L "$cli_launch" ]]; do
+  cli_dir="$(cd -P "$(dirname "$cli_launch")" && pwd)"
+  cli_target="$(readlink "$cli_launch")"
+  if [[ "$cli_target" == /* ]]; then cli_launch="$cli_target"; else cli_launch="$cli_dir/$cli_target"; fi
+done
+IFS= read -r cli_shebang < "$cli_launch" || true
+case "$cli_shebang" in
+  '#!/usr/bin/env python'*)
+    cli_python="${cli_shebang#\#!/usr/bin/env }"
+    cli_python="${cli_python%% *}"
+    cli_python="$(command -v "$cli_python" || true)"
+    ;;
+  '#!'*python*) cli_python="${cli_shebang#\#!}" ;;
+  *)
+    cli_python="${AGENT_WORKFLOW_PYTHON:-$(command -v python3 || true)}"
+    if grep -q 'PYTHONPATH=.*ROOT/src' "$cli_launch"; then
+      cli_root="$(cd -P "$(dirname "$cli_launch")/.." && pwd)"
+      export PYTHONPATH="$cli_root/src${PYTHONPATH:+:$PYTHONPATH}"
+    fi
+    ;;
+esac
+if [[ -z "$cli_python" || ! -x "$cli_python" ]]; then
+  echo "cannot execute the Python runtime behind $cli_path; install this checkout in an isolated environment" >&2
+  exit 2
+fi
+expected_version="$(<"$repo_root/VERSION")"
+observed_version="$("$cli_path" --version 2>&1)"
+if [[ "$observed_version" != "agent-workflow $expected_version" ]]; then
+  echo "Agent-Workflow CLI mismatch: expected agent-workflow $expected_version from $repo_root, got $observed_version" >&2
+  echo "Install this checkout in an isolated environment with: python -m pip install --no-deps ." >&2
+  exit 2
+fi
+if ! "$cli_python" - "$repo_root" <<'PY'
+import hashlib
+import json
+import pathlib
+import sys
+
+import agent_workflow
+from agent_workflow.contracts import load_schema
+
+source = pathlib.Path(sys.argv[1], "src/agent_workflow").resolve()
+installed = pathlib.Path(agent_workflow.__file__).resolve().parent
+
+def files(root: pathlib.Path) -> dict[str, str]:
+    return {
+        path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in sorted(root.rglob("*"))
+        if path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc"
+    }
+
+if files(source) != files(installed):
+    print(f"Agent-Workflow source mismatch: CLI imports {installed}, expected {source}", file=sys.stderr)
+    raise SystemExit(1)
+for schema_path in sorted(pathlib.Path(sys.argv[1], "schemas").glob("*.json")):
+    expected = json.loads(schema_path.read_text(encoding="utf-8"))
+    schema_id = expected.get("$id")
+    if not schema_id or load_schema(schema_id) != expected:
+        print(f"Agent-Workflow schema mismatch: {schema_id or schema_path.name}", file=sys.stderr)
+        raise SystemExit(1)
+PY
+then
+  echo "Install this checkout in an isolated environment with: python -m pip install --no-deps ." >&2
+  exit 2
+fi
+
 expected_openspec="1.13.2"
 observed_openspec="$(openspec --version)"
 [[ "$observed_openspec" == "$expected_openspec" ]] || {
@@ -197,11 +270,10 @@ mkdir -p "$shim"
 cat > "$shim/openspec" <<'SHIM'
 #!/usr/bin/env bash
 set -eu
-printf '%s\n' "$*" >> "__LOG_PATH__"
+printf '%s\n' "$*" >> "$OPENSPEC_SHIM_LOG"
 echo "openspec is unavailable after import" >&2
 exit 97
 SHIM
-sed -i "s|__LOG_PATH__|$root/openspec-calls.log|" "$shim/openspec"
 chmod +x "$shim/openspec"
 ln -s "$(command -v python3)" "$shim/python3"
 export PATH="$shim:$PATH"
@@ -225,7 +297,6 @@ imported = json.loads(pathlib.Path(sys.argv[1]).read_text())
 pack = pathlib.Path(sys.argv[2])
 assert json.loads(pathlib.Path(sys.argv[3]).read_text())["ok"] is True
 assert imported["provider"] == "openspec@1.13.2"
-assert imported["legacy_specgen_required"] is False
 assert imported["tasks"] == ["openspec-add-rate-limit-1-1", "openspec-add-rate-limit-1-2", "openspec-add-rate-limit-1-3"]
 jobs = [json.loads((pack / "jobs" / f"{task_id}.json").read_text()) for task_id in imported["tasks"]]
 assert [job["source_specification"]["task_refs"] for job in jobs] == [[item] for item in imported["tasks"]]
@@ -381,7 +452,7 @@ assert len({job["job_id"] for job in jobs}) == 2
 assert [job["source_specification"]["task_refs"] for job in jobs] == [[item] for item in task_ids]
 assert len({job["source_specification"]["sha256"] for job in jobs}) == 1
 artifacts = {item["path"]: item["sha256"] for item in import_receipt["artifacts"]}
-tasks_path = f"openspec/changes/add-rate-limit/tasks.md"
+tasks_path = "openspec/changes/add-rate-limit/tasks.md"
 assert artifacts[tasks_path] == hashlib.sha256((source / tasks_path).read_bytes()).hexdigest()
 task_map = {item["agent_workflow_task_id"]: item for item in import_receipt["task_map"]}
 assert task_map[task_ids[0]]["source"]["text_sha256"] != task_map[task_ids[1]]["source"]["text_sha256"]

@@ -10,7 +10,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from .config import Settings
-from .contracts import validate_instance
+from .contracts import JOB_BINDING_V3, validate_instance, validate_job_binding
 from .errors import WorkflowError
 from .eval.scope import ScopePolicy, compare_scope
 from .lifecycle import lifecycle_receipts
@@ -125,10 +125,12 @@ def _accepted_run(settings: Settings, repo: Path, run_id: str, *, allow_dependen
     directory = run_dir(settings, run_id)
     final, seal_hash = verify_seal_details(directory)
     binding, binding_hash = read_sealed_json(directory, final, "job-binding.json")
-    binding_schema = binding.get("schema")
-    if binding_schema not in ({"agent-workflow/job-binding/v2", "agent-workflow/job-binding/v3"} if allow_dependent else {"agent-workflow/job-binding/v2"}):
-        raise WorkflowError("dependent runs require the task-chain integration interface")
-    validate_instance(binding, binding_schema, artifact="sealed job binding")
+    binding_schema = validate_job_binding(
+        binding,
+        allow_dependent=allow_dependent,
+        artifact="sealed job binding",
+        unsupported_message="dependent runs require the task-chain integration interface",
+    )
     completion, completion_hash = read_sealed_contract(directory, final, "completion.json", "agent-workflow/completion/v1")
     status, _ = read_sealed_contract(directory, final, "final-status.json", "agent-workflow/agent-run-status/v1")
     collection, _ = read_sealed_contract(directory, final, "collections/completion.json", "agent-workflow/completion-collection/v1")
@@ -162,7 +164,7 @@ def _accepted_run(settings: Settings, repo: Path, run_id: str, *, allow_dependen
         raise WorkflowError(f"run is not host-accepted at its sealed revision: {run_id}")
     baseline = str(completion.get("base_revision") or "")
     execution_binding = None
-    if binding_schema == "agent-workflow/job-binding/v3":
+    if binding_schema == JOB_BINDING_V3:
         execution_binding, authority_hash = read_sealed_json(directory, final, "jobs/execution-binding.json")
         from .task_chains import validate_execution_binding
         validate_execution_binding(execution_binding)
@@ -489,7 +491,7 @@ def verify_integration(evidence_dir: Path) -> dict[str, Any]:
                 raise WorkflowError("archived task binding disagrees with integration receipt")
             if dependent:
                 authority, authority_hash = read_sealed_contract(snapshot, final, "jobs/execution-binding.json", "agent-workflow/execution-binding/v1")
-                validate_instance(binding, "agent-workflow/job-binding/v3", artifact="archived job binding")
+                validate_job_binding(binding, allow_dependent=True, artifact="archived job binding")
                 job, job_hash = read_sealed_contract(snapshot, final, "jobs/native-job.json", "agent-workflow/native-job/v2")
                 row = next(row for row in receipt["chain_plan"]["tasks"] if row["task_id"] == item["task_id"])
                 if (authority_hash != binding["execution_binding_sha256"]

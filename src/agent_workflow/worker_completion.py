@@ -18,7 +18,7 @@ from typing import Any, Iterable
 from .agent_run_paths import AgentRunPaths
 from .completion import substantive_completion_errors
 from .config import Settings
-from .contracts import read_agent_run_contract, read_contract, validate_instance
+from .contracts import read_agent_run_contract, read_contract, validate_instance, validate_job_binding
 from .errors import WorkflowError
 from .git import snapshot
 from .path import read_regular_file
@@ -155,12 +155,7 @@ def _job_binding(state_dir: Path) -> dict[str, Any] | None:
     if not path.is_file():
         return None
     value = read_contract(path)
-    if value.get("schema") not in {
-        "agent-workflow/job-binding/v1",
-        "agent-workflow/job-binding/v2",
-        "agent-workflow/job-binding/v3",
-    }:
-        raise WorkflowError(f"unsupported job binding schema: {value.get('schema')!r}")
+    validate_job_binding(value, allow_legacy=True, allow_dependent=True)
     return value
 
 

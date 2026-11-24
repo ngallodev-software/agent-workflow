@@ -49,6 +49,7 @@ def test_missing_policy_file_warns_locally_and_fails_governed(tmp_path: Path) ->
         'schema_version = 1\n[security]\nmode = "local"\npolicy_files = ["missing-policy.toml"]\n',
         encoding="utf-8",
     )
+    path.chmod(0o600)
     local = load_settings(path)
     report = trust_report(local)
     assert report["ok"] is True
@@ -58,6 +59,7 @@ def test_missing_policy_file_warns_locally_and_fails_governed(tmp_path: Path) ->
         'schema_version = 1\n[security]\nmode = "governed"\npolicy_files = ["missing-policy.toml"]\n',
         encoding="utf-8",
     )
+    path.chmod(0o600)
     with pytest.raises(WorkflowError, match="untrusted policy file"):
         load_settings(path)
 

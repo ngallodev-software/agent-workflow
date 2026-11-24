@@ -10,9 +10,11 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from .contracts import (
+    JOB_BINDING_V3,
     read_contract,
     read_agent_run_contract,
     validate_instance,
+    validate_job_binding,
     validate_agent_run_contract_value,
 )
 from .errors import WorkflowError
@@ -476,9 +478,8 @@ def _seal_run_unlocked(run_dir: Path, *, agent_run_id: str) -> dict[str, Any]:
     binding = run_dir / "job-binding.json"
     if binding.is_file():
         value = read_contract(binding)
-        if value.get("schema") not in {"agent-workflow/job-binding/v2", "agent-workflow/job-binding/v3"}:
-            raise WorkflowError(f"unsupported job binding schema: {value.get('schema')!r}")
-        if value["schema"] == "agent-workflow/job-binding/v3":
+        binding_schema = validate_job_binding(value, allow_dependent=True)
+        if binding_schema == JOB_BINDING_V3:
             authority = run_dir / "jobs/execution-binding.json"
             from .task_chains import validate_execution_binding
             validate_execution_binding(read_contract(authority, "agent-workflow/execution-binding/v1"))
@@ -587,8 +588,10 @@ def _verify_seal_unlocked(
             raise WorkflowError(f"sealed artifact checksum mismatch: {relative_path}")
     if "job-binding.json" in listed:
         binding, _ = read_sealed_json(run_dir, receipt, "job-binding.json")
-        if binding.get("schema") == "agent-workflow/job-binding/v3":
-            validate_instance(binding, "agent-workflow/job-binding/v3", artifact="sealed job binding")
+        binding_schema = validate_job_binding(
+            binding, allow_legacy=True, allow_dependent=True, artifact="sealed job binding"
+        )
+        if binding_schema == JOB_BINDING_V3:
             authority, authority_hash = read_sealed_contract(run_dir, receipt, "jobs/execution-binding.json", "agent-workflow/execution-binding/v1")
             from .task_chains import validate_execution_binding
             validate_execution_binding(authority)

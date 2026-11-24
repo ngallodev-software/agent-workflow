@@ -165,6 +165,14 @@ completed and three pending tasks. It imports only the pending jobs and verifies
 checksums, stable IDs, distinct prompts/task references, source/task hashes,
 v2 scope, and the absence of `bundle_provenance`.
 
+The smoke requires Python 3.11 or newer with Agent-Workflow built/installed from
+the checkout, `jsonschema`, PyYAML, Node.js/npm, and OpenSpec 1.13.2; do not
+install `specgen_contracts`. Before the upstream run it checks the CLI version
+and compares the CLI interpreter's installed package files and loaded JSON
+Schemas with this checkout. It fails with an isolated-install command if PATH
+selects a stale or unrelated installation. CI installs the checkout with
+`python -m pip install --no-deps .`.
+
 Immediately after import, the smoke replaces `openspec` on PATH with a logging
 shim that exits 97. It checks the guard and resets the sentinel log before pack
 validation, preparation, and execution; the worker also verifies that the shim

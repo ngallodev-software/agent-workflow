@@ -140,7 +140,7 @@ def verify(root: Path, manifest: Path) -> int:
 
 def run_receipt(argv: list[str], cwd: Path, *, timeout: float, max_bytes: int) -> dict[str, object]:
     """Execute one explicit command with bounded captured output; never use a shell."""
-    if not argv or any(not isinstance(a, str) or not a or "\\x00" in a for a in argv):
+    if not argv or any(not isinstance(a, str) or not a or "\x00" in a for a in argv):
         raise EvidenceError("command argv must be nonempty strings")
     if not 0 < timeout <= 3600 or not 0 <= max_bytes <= 1048576:
         raise EvidenceError("invalid command bounds")
@@ -205,8 +205,8 @@ def run_receipt(argv: list[str], cwd: Path, *, timeout: float, max_bytes: int) -
         "duration_seconds": round(elapsed, 6),
         "exit_code": exit_code,
         "timed_out": timed_out,
-        "stdout": {"size": stdout_size, "sha256": digests["stdout"].hexdigest(), "captured": out.decode("utf-8", errors="replace"), "truncated": stdout_size > max_bytes},
-        "stderr": {"size": stderr_size, "sha256": digests["stderr"].hexdigest(), "captured": err.decode("utf-8", errors="replace"), "truncated": stderr_size > max_bytes},
+        "stdout": {"size": stdout_size, "sha256": digests["stdout"].hexdigest(), "captured": out.decode("utf-8", errors="surrogateescape"), "truncated": stdout_size > max_bytes},
+        "stderr": {"size": stderr_size, "sha256": digests["stderr"].hexdigest(), "captured": err.decode("utf-8", errors="surrogateescape"), "truncated": stderr_size > max_bytes},
     }
 
 
@@ -232,10 +232,10 @@ def verify_receipt(path: Path) -> dict[str, object]:
         raise EvidenceError("invalid receipt schema")
     argv = value["argv"]
     if not isinstance(argv, list) or not argv or any(
-        not isinstance(a, str) or not a or "\\x00" in a for a in argv
+        not isinstance(a, str) or not a or "\x00" in a for a in argv
     ):
         raise EvidenceError("invalid receipt argv")
-    if not isinstance(value["cwd"], str) or not value["cwd"] or "\\x00" in value["cwd"]:
+    if not isinstance(value["cwd"], str) or not value["cwd"] or "\x00" in value["cwd"]:
         raise EvidenceError("invalid receipt cwd")
     try:
         stamp = datetime.datetime.fromisoformat(value["started_at"])
@@ -267,10 +267,10 @@ def verify_receipt(path: Path) -> dict[str, object]:
         if not isinstance(captured, str):
             raise EvidenceError(f"invalid {name} captured output")
         if not truncated:
-            raw = captured.encode("utf-8")
+            raw = captured.encode("utf-8", errors="surrogateescape")
             if len(raw) != size or hashlib.sha256(raw).hexdigest() != digest:
                 raise EvidenceError(f"{name} complete-output digest mismatch")
-        elif size <= len(captured.encode("utf-8", errors="replace")):
+        elif size <= len(captured.encode("utf-8", errors="surrogateescape")):
             raise EvidenceError(f"{name} truncated flag inconsistent with size")
     return {"schema": RECEIPT_SCHEMA, "validated": True,
             "complete_streams_verified": [

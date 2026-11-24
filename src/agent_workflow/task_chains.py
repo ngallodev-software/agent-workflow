@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .errors import WorkflowError
-from .contracts import validate_instance
+from .contracts import JOB_BINDING_V3, validate_instance, validate_job_binding
 from .receipts import _seal_lock
 from .repository_closeout import _write_immutable_json
 from .state import run_dir
@@ -291,7 +291,7 @@ def validate_launch(directory: Path) -> None:
     if not binding_path.exists():
         return
     binding = read_contract(binding_path)
-    if binding["schema"] != "agent-workflow/job-binding/v3":
+    if validate_job_binding(binding, allow_legacy=True, allow_dependent=True) != JOB_BINDING_V3:
         return
     authority_path = directory / "jobs/execution-binding.json"
     authority = read_contract(authority_path, BINDING)

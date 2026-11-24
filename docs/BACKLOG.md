@@ -33,18 +33,6 @@ write authority or weakening isolation.
 public protocol with passing command evidence, while host-owned state and
 sealing/review/acceptance authority remain protected.
 
-### TEST-001 — Isolate configuration trust fixtures from caller umask
-
-The phase-end configuration trust test
-`test_missing_policy_file_warns_locally_and_fails_governed` fails under umask
-`0002`: its temporary config is group-writable, so governed loading rejects
-configuration trust before the intended missing-policy check. The same failure
-reproduces on unchanged master `72685b3`; umask `022` is the qualification
-workaround, not a product fix.
-
-**Done when:** the fixture explicitly establishes its intended trusted config
-permissions and reaches the missing-policy assertion under both umasks.
-
 ### HARD-010 — Reproducible dependency/supply-chain evidence
 
 The committed dependency lock is currently direct-only. Add complete transitive resolution/hashes and the independent reproducibility plus authenticated signing/attestation policy required for a stronger release claim.

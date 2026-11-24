@@ -28,7 +28,14 @@ from .config import enforce_trust
 from .compatibility import probe_executor
 from .command_catalog import write_launch_command_artifacts
 from .context_efficiency import write_executor_context
-from .contracts import read_contract, read_agent_run_contract, schema_descriptor
+from .contracts import (
+    JOB_BINDING_V2,
+    JOB_BINDING_V3,
+    read_contract,
+    read_agent_run_contract,
+    schema_descriptor,
+    validate_job_binding,
+)
 from .errors import WorkflowError
 from .eval.commands import collect_commands, specs_from_data
 from .eval.scope import ScopePolicy, collect_scope, validate_scope_policy
@@ -298,7 +305,7 @@ def _write_job_binding(state_dir: Path, job: ValidatedNativeJob, *, agent_run_id
     if source_sha256 != stored_sha256:
         raise WorkflowError("native job changed while its binding was being created")
     receipt: dict[str, Any] = {
-        "schema": "agent-workflow/job-binding/v2",
+        "schema": JOB_BINDING_V2,
         "bound_at": utc_now(),
         "agent_run_id": agent_run_id,
         "run_dir": str(state_dir),
@@ -1276,7 +1283,7 @@ def _prepare(
     )
     if execution_binding is not None:
         atomic_write_json(state_dir / "jobs/execution-binding.json", execution_binding, mode=0o444)
-        job_binding["schema"] = "agent-workflow/job-binding/v3"
+        job_binding["schema"] = JOB_BINDING_V3
         job_binding["execution_binding_sha256"] = sha256_file(state_dir / "jobs/execution-binding.json")
         atomic_write_json(paths.job_binding, job_binding, mode=0o444)
     handoff_dir = _create_handoff_dir(state_dir, agent_run_id)
@@ -2007,10 +2014,11 @@ def restart(
     binding_path = paths.job_binding
     if binding_path.is_file():
         binding = read_contract(binding_path)
-        if binding.get("schema") not in {"agent-workflow/job-binding/v2", "agent-workflow/job-binding/v3"}:
-            raise WorkflowError(
-                f"cannot restart: unsupported job binding schema {binding.get('schema')!r}"
-            )
+        validate_job_binding(
+            binding,
+            allow_dependent=True,
+            unsupported_message=f"cannot restart: unsupported job binding schema {binding.get('schema')!r}",
+        )
         source = Path(str(binding["job_source_path"]))
         expected = str(binding["job_source_sha256"])
         if not source.is_file() or sha256_file(source) != expected:

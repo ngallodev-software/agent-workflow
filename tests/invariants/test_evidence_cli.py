@@ -141,3 +141,19 @@ def test_verify_receipt_truncated_output_is_not_authenticated(tmp_path: Path) ->
     value["timed_out"] = True
     receipt.write_text(json.dumps(value))
     assert evidence.main(["verify-receipt", str(receipt)]) == 1
+
+
+
+def test_command_receipt_preserves_non_utf8_output(tmp_path: Path) -> None:
+    import hashlib
+    import sys
+    receipt = evidence.run_receipt(
+        [sys.executable, "-c", "import sys; sys.stdout.buffer.write(bytes([255])); sys.stderr.buffer.write(bytes([254]))"],
+        tmp_path, timeout=10, max_bytes=8,
+    )
+    assert receipt["stdout"]["captured"] == chr(0xDCFF)
+    assert receipt["stderr"]["captured"] == chr(0xDCFE)
+    path = tmp_path / "receipt.json"
+    path.write_text(json.dumps(receipt))
+    assert evidence.verify_receipt(path)["complete_streams_verified"] == ["stdout", "stderr"]
+    assert receipt["stdout"]["sha256"] == hashlib.sha256(bytes([255])).hexdigest()

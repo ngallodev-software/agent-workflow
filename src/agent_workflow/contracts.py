@@ -10,6 +10,10 @@ from typing import Any
 from .errors import WorkflowError
 from .path import absolute_path, inventory_tree, read_regular_file, require_directory
 
+JOB_BINDING_V1 = "agent-workflow/job-binding/v1"
+JOB_BINDING_V2 = "agent-workflow/job-binding/v2"
+JOB_BINDING_V3 = "agent-workflow/job-binding/v3"
+
 
 def _schema_roots() -> tuple[Path, ...]:
     module_path = Path(__file__).resolve()
@@ -123,6 +127,24 @@ def validate_instance(
         location = ".".join(str(part) for part in error.absolute_path) or "$"
         details.append(f"{location}: {error.message}")
     raise WorkflowError(f"invalid {artifact}: " + "; ".join(details))
+
+
+def validate_job_binding(
+    value: Any,
+    *,
+    allow_legacy: bool = False,
+    allow_dependent: bool = False,
+    artifact: str = "job binding",
+    unsupported_message: str | None = None,
+) -> str:
+    schema = value.get("schema") if isinstance(value, dict) else None
+    if schema == JOB_BINDING_V1 and allow_legacy:
+        return schema
+    supported = schema == JOB_BINDING_V2 or (schema == JOB_BINDING_V3 and allow_dependent)
+    if not supported:
+        raise WorkflowError(unsupported_message or f"unsupported job binding schema: {schema!r}")
+    validate_instance(value, schema, artifact=artifact)
+    return schema
 
 
 def read_contract(path: Path, expected_schema: str | None = None) -> dict[str, Any]:
